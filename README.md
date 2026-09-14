@@ -72,6 +72,7 @@ Production websites and apps that expose WebMCP tools to agents. Entries are ver
 - [Pixly](https://pixly.gg/) - Pay-per-uptime Minecraft server hosting. 22 tools cover the full server lifecycle: create, update, console logs, backups, restores, and world resets.
 - [Render](https://render.com/) - Cloud hosting platform. Tools search the docs and fetch the docs, llms.txt, blog, and articles indexes as markdown.
 - [Sentry](https://sentry.io/) - Application monitoring. Tools for signup, demo requests, pricing, docs search, and MCP server discovery.
+- [Site Passport](https://sitepassport.org) - Independent, pull-verified AI-agent-readiness index for WordPress sites. Registers `scan_website_agent_readiness` and `list_verified_agent_ready_sites` so an agent can run the same llms.txt, robots.txt, and schema.org scan the homepage form runs, or query the verified directory, directly.
 - [Stacktree](https://stacktr.ee) - Agent-first HTML hosting. The dashboard and docs expose site-management tools (publish, update, gate, share) over WebMCP from a command palette, so humans and in-browser agents share one tool catalog.
 - [Telnyx](https://telnyx.com/) - Communications and voice AI platform. Tools for asking questions, pricing, docs index, and site info.
 - [turva.dev](https://turva.dev/) - Agent-readiness audits for websites, APIs and Shopify storefronts. Registers `get_services`, `get_company` and `get_contact` on every content page, and `get_services` returns the services page as markdown with machine-readable pricing beside it.
