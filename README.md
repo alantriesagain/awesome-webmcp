@@ -101,6 +101,7 @@ Production websites and apps that expose WebMCP tools to agents. Entries are ver
 ### Content, Media, and Personal Sites
 
 - [Archipelago](https://warrenperez.com/en/archipelago/) - Maps a Notion workspace as a nautical chart, entirely in the browser. Four WebMCP tools let an agent draw the chart, read it back, highlight databases, and annotate islands on the same map the human is watching.
+- [chriswijnia.com](https://chriswijnia.com/) - Personal site whose pages register WebMCP tools, including a shared emoji canvas an agent can paint on ([1 Million Emojis](https://chriswijnia.com/lab/emoji)) and chess against Jev ([Chess with Jev](https://chriswijnia.com/lab/chess)).
 - [cloverbase.com](https://cloverbase.com/) - AI adoption mentorship site with site info, post listing, search, and newsletter tools. One of four sites made agent-ready in a day ([write-up](https://nz365guy.com/blog/four-websites-agent-ready-webmcp)).
 - [Cocktail.glass](https://cocktail.glass/) - Cocktail recipe catalogue. Tools search by ingredient or movie scene, find what you can make from your shelf, and pull a random recipe.
 - [Frase](https://www.frase.io/) - AI content and SEO platform. FraseCMS-hosted sites ship WebMCP automatically, with annotated forms as declarative tools plus a read-only "ask your site" tool ([explainer](https://www.frase.io/blog/what-is-webmcp)).
