@@ -108,6 +108,7 @@ Production websites and apps that expose WebMCP tools to agents. Entries are ver
 - [Frase](https://www.frase.io/) - AI content and SEO platform. FraseCMS-hosted sites ship WebMCP automatically, with annotated forms as declarative tools plus a read-only "ask your site" tool ([explainer](https://www.frase.io/blog/what-is-webmcp)).
 - [nz365guy.com](https://nz365guy.com/) - Mark Smith's blog on AI and Microsoft. Site overview, post listing, archive search, and human-confirmed subscription forms.
 - [suganthan.com](https://suganthan.com/) - Personal site made agent-ready, with an accompanying [implementation guide](https://suganthan.com/blog/webmcp-implementation-guide/).
+- [Turnfeed](https://turnfeed.theodornengoy.chatgpt.site/) - Social feed hosted on ChatGPT Sites with ChatGPT sign-in. WebMCP tools open conversations and prepare replies in a visible composer for review ([source](https://github.com/TheodorNEngoy/turnfeed-sites)).
 - [TweakTown](https://www.tweaktown.com/) - Tech news and hardware reviews. Tools search content, browse topics, and compare review data.
 - [vietanh.dev](https://www.vietanh.dev/) - Developer blog with `search_content`, `get_post`, and an `ask_viet` RAG tool. The [accompanying post](https://www.vietanh.dev/blog/2026-07-06-webmcp-agent-ready-website) covers the WebMCP attack surface.
 - [YubHub](https://yubhub.co/) - Recruitment job board with imperative and declarative tools for search, job fetch, browsing, and shortlisting ([write-up](https://dev.to/richardbaxter/implementing-webmcp-on-a-recruitment-website-19a)).
