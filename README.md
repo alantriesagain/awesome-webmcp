@@ -83,6 +83,7 @@ Production websites and apps that expose WebMCP tools to agents. Entries are ver
 
 ### Productivity and Utilities
 
+- [CareJobs.Now](https://carejobs.now/) - Free US healthcare job board whose pages register six read-only tools (`search_healthcare_jobs`, `get_healthcare_pay`, `get_healthcare_job_market`, `get_healthcare_jobs_by_state`, `list_healthcare_employers`, `get_healthcare_employer`) to search 170,000+ jobs, posted pay, states and employers.
 - [image2svg by Botmonster](https://botmonster.com/image2svg/) - Free in-browser image-to-SVG converter with WebMCP tools so an agent can run the conversion on-page.
 - [JSON-stat WebMCP Explorer](https://jsonstat.com/webmcp/) - Fetches datasets from official statistical offices such as Eurostat, then filters, pivots, sorts, and exports CSV through 12 tools.
 - [Kakeklar](https://kakeklar.no/) - Norwegian children's birthday-party planner. Tools configure a party and generate an age-aware shopping list ([source](https://github.com/webmaxru/barnebursdag-planlegger)).
