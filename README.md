@@ -115,6 +115,7 @@ Production websites and apps that expose WebMCP tools to agents. Entries are ver
 
 - [Coinranking Pro Chart](https://coinranking.com/chart/coin/Qwsogvtv82FCd+bitcoin-btc/price) - Live crypto charting with drawing and technical-analysis tools. 17 WebMCP tools let an agent read series, manage drawings, and drive the viewport.
 - [Corpus Law](https://corpuslaw.us/) - Company formation in all US states plus plain-English state and local law lookup. Eight tools for law search, formation drafts, NAICS lookup, and hand-off.
+- [Fox Davidson](https://www.foxdavidson.co.uk/) - UK mortgage broker. Six calculation and lookup tools cover stamp duty, high net worth mortgage qualification, bridging loan sts, lender comparison, contractor day rate and lender criteria, and a seventh fills the enquiry form without submitting it.
 - [Longbridge](https://longbridge.com/) - US stock-trading platform. Eight tools for stock search, snapshots, fundamentals, analysis, and news.
 - [Madrona](https://www.madrona.com/) - Venture capital firm. Eight tools list companies, insights, and team members, search content, and subscribe to the newsletter.
 - [scvd.store](https://scvd.store/) - Evidence observatory for agentic commerce over x402 payments. Tools preflight endpoints, check conformance, verify artifacts, and search the catalog.
