@@ -1,0 +1,8 @@
+AskUserQuestion request: {"subtype":"can_use_tool","tool_name":"AskUserQuestion","display_name":"AskUserQuestion","input":{"questions":[{"question":"Which color do you prefer?","header":"Color","options":[{"label":"Red","description":"The color red"},{"label":"Blue","description":"The color blue"}],"multiSelect":false}]},"tool_use_id":"toolu_01FsJLZXyjfcSX7XXEy1hfbt","requires_user_interaction":true}
+answered: Blue
+final text: Blue.
+init: session ba08eeae-e7c5-4889-ba96-1675ae86c235, model claude-haiku-4-5-20251001, permissionMode bypassPermissions, AskUserQuestion in tools: true, ExitPlanMode in tools: true
+result: success, terminal_reason completed, turns 2, cost 0.0141178, denials []
+types: system/init×1, system/status×2, stream_event/message_start×2, stream_event/content_block_start×4, system/thinking_tokens×2, stream_event/content_block_delta×25, assistant×4, stream_event/content_block_stop×4, control_request×1, user×1, stream_event/message_delta×2, stream_event/message_stop×2, rate_limit_event×1, result/success×1
+largest stdout line: 2996 bytes
+exit: {"code":0,"signal":null}

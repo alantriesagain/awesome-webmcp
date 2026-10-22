@@ -1,0 +1,9 @@
+set_model sonnet → {"subtype":"success","request_id":"probe-1"}
+apply_flag_settings effortLevel → {"subtype":"success","request_id":"probe-2"}
+assistant models: claude-haiku-4-5-20251001, claude-haiku-4-5-20251001, claude-sonnet-5
+init: session b54613c8-0a66-4dbc-a407-031f2461ab1e, model claude-haiku-4-5-20251001, permissionMode bypassPermissions, AskUserQuestion in tools: true, ExitPlanMode in tools: true
+result: success, terminal_reason completed, turns 1, cost 0.0119217, denials []
+result: success, terminal_reason completed, turns 1, cost 0.1253357, denials []
+types: system/init×2, system/status×2, stream_event/message_start×2, stream_event/content_block_start×3, system/thinking_tokens×7, stream_event/content_block_delta×15, assistant×3, stream_event/content_block_stop×3, stream_event/message_delta×2, stream_event/message_stop×2, rate_limit_event×1, result/success×2, user×1, control_response×2
+largest stdout line: 4702 bytes
+exit: {"code":0,"signal":null}

@@ -1,0 +1,4 @@
+packages:
+  - 'light'
+  - 'packages/*'
+  - 'apps/*'

@@ -1,0 +1,9 @@
+› What single color fills this image? Answer with one word.
+  [1 image]
+
+· Read /tmp/claude-1000/-tmp-code-probe-0NUMwy/1d0155fc-9e…  ▸
+
+Red.
+
+  ✓ 3.9s · $0.0143
+

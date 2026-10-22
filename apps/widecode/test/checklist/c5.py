@@ -1,0 +1,21 @@
+from common import *
+d = repo()
+app = App(d, OUT + "c5.log", LIVE, cols=200, rows=45)
+mark = len(app.text_log())
+app.type("Reply with exactly: ONE"); app.key("enter")
+idle(app, mark); time.sleep(0.3)
+print("before:", app.screen().split("\n")[-1][:110])
+mark = len(app.text_log())
+app.type("/model sonnet"); app.key("enter"); time.sleep(1)
+app.type("/effort medium"); app.key("enter"); time.sleep(1)
+log = app.text_log()[mark:]
+import re
+print("control responses:", re.findall(r'control response (\S{0,120})', log))
+mark = len(app.text_log())
+app.type("Reply with exactly: TWO"); app.key("enter")
+idle(app, mark); time.sleep(0.3)
+s = app.screen()
+print("after:", s.split("\n")[-1][:110])
+print("TWO answered:", "TWO" in chat(s))
+inits = re.findall(r'"model":"([^"]+)"', app.text_log()[mark:])
+app.close()

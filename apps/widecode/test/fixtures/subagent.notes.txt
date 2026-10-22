@@ -1,0 +1,6 @@
+subagent-tagged messages: 2, types: assistant, user
+init: session ce5bba4f-664b-4cc7-b026-ab45d3a0d389, model claude-haiku-4-5-20251001, permissionMode bypassPermissions, AskUserQuestion in tools: true, ExitPlanMode in tools: true
+result: success, terminal_reason completed, turns 2, cost 0.0786558, denials []
+types: system/init×1, system/status×2, stream_event/message_start×2, stream_event/content_block_start×4, system/thinking_tokens×4, stream_event/content_block_delta×52, assistant×4, stream_event/content_block_stop×4, system/background_tasks_changed×1, system/task_started×1, user×1, stream_event/message_delta×2, stream_event/message_stop×2, rate_limit_event×1, assistant (sub)×1, system/task_progress×1, user (sub)×1, result/success×1
+largest stdout line: 2996 bytes
+exit: {"code":0,"signal":null}

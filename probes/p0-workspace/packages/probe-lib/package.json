@@ -1,0 +1,9 @@
+{
+  "name": "@tui/probe-lib",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./index.ts", "./*": "./*" },
+  "dependencies": { "@bootstrapp/light": "workspace:*" },
+  "devDependencies": { "@types/node": "^24.0.0" }
+}

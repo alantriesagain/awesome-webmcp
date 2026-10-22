@@ -1,0 +1,6 @@
+packages:
+  - 'light'
+  - 'light/packages/native/*'
+  - 'light/packages/tui/*'
+  - 'packages/*'
+  - 'apps/*'

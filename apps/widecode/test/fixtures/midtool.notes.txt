@@ -1,0 +1,9 @@
+no second result
+user records without a tool result: 2 [["type","message","session_id","parent_tool_use_id","uuid","timestamp","isReplay"],["type","message","session_id","parent_tool_use_id","uuid","timestamp","isReplay"]]
+other record types: []
+results: DONE  BANANA
+init: session a6b1cd0c-8d3a-46f8-9284-231baa71a24f, model claude-haiku-4-5-20251001, permissionMode bypassPermissions, AskUserQuestion in tools: true, ExitPlanMode in tools: true
+result: success, terminal_reason completed, turns 3, cost 0.018335, denials []
+types: system/init×1, system/status×3, user×4, stream_event/message_start×3, stream_event/content_block_start×7, system/thinking_tokens×5, stream_event/content_block_delta×34, assistant×7, stream_event/content_block_stop×7, stream_event/message_delta×3, stream_event/message_stop×3, rate_limit_event×1, system/task_started×1, system/task_notification×1, result/success×1
+largest stdout line: 2996 bytes
+exit: {"code":0,"signal":null}

@@ -1,0 +1,6 @@
+answer: Red.
+init: session 1d0155fc-9e0c-49bc-9d49-6c588a60be0f, model claude-haiku-4-5-20251001, permissionMode bypassPermissions, AskUserQuestion in tools: true, ExitPlanMode in tools: true
+result: success, terminal_reason completed, turns 2, cost 0.0143268, denials []
+types: system/init×1, system/status×2, stream_event/message_start×2, stream_event/content_block_start×4, system/thinking_tokens×2, stream_event/content_block_delta×18, assistant×4, stream_event/content_block_stop×4, user×1, stream_event/message_delta×2, stream_event/message_stop×2, rate_limit_event×1, result/success×1
+largest stdout line: 2996 bytes
+exit: {"code":0,"signal":null}

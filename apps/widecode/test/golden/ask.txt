@@ -1,0 +1,12 @@
+› Use the AskUserQuestion tool to ask me which color I prefer, with exactly two
+  options: Red and Blue. After I answer, reply with just the color I chose.
+
+◆ Claude asks  answered
+  Which color do you prefer?
+    • Red · The color red
+    • Blue · The color blue
+
+Blue.
+
+  ✓ 3.8s · $0.0141
+

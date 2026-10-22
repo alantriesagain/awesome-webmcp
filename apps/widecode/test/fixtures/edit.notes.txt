@@ -1,0 +1,7 @@
+tool calls: Write, Edit
+tool_use_result keys: type|filePath|content|structuredPatch|originalFile|userModified ; filePath|oldString|newString|originalFile|structuredPatch|userModified|replaceAll
+init: session 7bffb215-7f4e-485c-9d55-44f7fa5c2de9, model claude-haiku-4-5-20251001, permissionMode bypassPermissions, AskUserQuestion in tools: true, ExitPlanMode in tools: true
+result: success, terminal_reason completed, turns 3, cost 0.0180918, denials []
+types: system/init×1, system/status×3, stream_event/message_start×3, stream_event/content_block_start×7, system/thinking_tokens×3, stream_event/content_block_delta×28, assistant×7, stream_event/content_block_stop×7, stream_event/message_delta×3, stream_event/message_stop×3, rate_limit_event×1, user×2, result/success×1
+largest stdout line: 2996 bytes
+exit: {"code":0,"signal":null}

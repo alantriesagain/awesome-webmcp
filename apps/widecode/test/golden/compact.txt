@@ -1,0 +1,14 @@
+› Reply with exactly the word PONG and nothing else.
+
+PONG
+
+  ✓ 1.8s · $0.0111
+
+› /compact
+
+· Conversation compacted · 19k → 2k tokens
+
+· Summary of the earlier conversation
+
+  ✓ 9.6s · $0.0187
+

@@ -1,0 +1,18 @@
+› Run the shell command `sleep 6; echo STEP-ONE` with the Bash tool, then run
+  `echo STEP-TWO` with the Bash tool, then reply DONE.
+
+I'll run these commands sequentially since the second depends on the first
+completing.
+
+· Bash sleep 6; echo STEP-ONE  ▸
+
+› Also, at the end, say the word BANANA.
+
+· Bash echo STEP-TWO  ▸
+
+DONE
+
+BANANA
+
+  ✓ 13.8s · $0.0183
+

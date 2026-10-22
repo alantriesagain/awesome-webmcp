@@ -1,0 +1,16 @@
+from common import *
+d = repo()
+app = App(d, OUT + "c10.log", LIVE, cols=200, rows=45)
+def right(s):
+    return "\n".join(l[100:].rstrip() for l in s.split("\n")[:14])
+mark = len(app.text_log())
+app.type("Use the Edit tool to change the line 'const line10 = 10;' in src/app.js to 'const line10 = 100;'. Then say done.")
+app.key("enter")
+idle(app, mark); time.sleep(1.2)
+s = app.screen()
+print("----- files and code after Claude's edit"); print(right(s))
+subprocess.run(["git", "-C", d, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "line10"], check=True)
+time.sleep(1.5)
+s = app.screen()
+print("----- after a commit outside the app"); print(right(s))
+app.close()

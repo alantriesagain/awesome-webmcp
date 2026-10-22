@@ -1,0 +1,6 @@
+{"dir":"out","raw":"{\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"/tmp/x\",\"session_id\":\"11111111-2222-3333-4444-555555555555\",\"tools\":[\"Write\"],\"model\":\"fake\",\"permissionMode\":\"bypassPermissions\"}"}
+{"dir":"in","raw":"{\"type\":\"user\",\"session_id\":\"\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"write it\"}]},\"parent_tool_use_id\":null}"}
+{"dir":"out","raw":"{\"type\":\"stream_event\",\"event\":{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Writing.\"}},\"parent_tool_use_id\":null}"}
+{"dir":"out","raw":"{\"type\":\"control_request\",\"request_id\":\"req-1\",\"request\":{\"subtype\":\"can_use_tool\",\"tool_name\":\"Write\",\"input\":{\"file_path\":\"/tmp/x/a.txt\",\"content\":\"héllo \\\"quoted\\\"\\n\"},\"tool_use_id\":\"toolu_1\"}}"}
+{"dir":"in","raw":"{\"type\":\"control_response\",\"response\":{\"subtype\":\"success\",\"request_id\":\"req-1\",\"response\":{\"behavior\":\"allow\",\"updatedInput\":{\"file_path\":\"/tmp/x/a.txt\",\"content\":\"héllo \\\"quoted\\\"\\n\"}}}}"}
+{"dir":"out","raw":"{\"duration_api_ms\":10,\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"session_id\":\"11111111-2222-3333-4444-555555555555\",\"result\":\"done\"}"}

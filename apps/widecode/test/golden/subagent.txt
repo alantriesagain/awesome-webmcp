@@ -1,0 +1,20 @@
+› Use the Agent tool (subagent_type general-purpose) to have a subagent read
+  notes.txt and report its first line. Then tell me what it reported.
+
+· Agent general-purpose: Read notes.txt and report first l…  ▸
+
+I've launched a general-purpose agent to read notes.txt and report the first
+line. It's running in the background—I'll be notified when it completes and will
+share what it found with you.
+
+  ✓ 4.8s · $0.0787
+
+◇ Claude continued on its own
+
+The agent completed its task. It read notes.txt and reported that the first line
+is:
+
+alpha
+
+  ✓ 1.4s · $0.0924
+

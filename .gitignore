@@ -1,0 +1,12 @@
+node_modules/
+dist/
+**/native/out/
+.scriptc/
+*.ll
+*.log
+__pycache__/
+*.pyc
+apps/widecode/src/runtime/builtin.ts
+apps/widecode/src/runtime/docs.ts
+apps/widecode/src/runtime/build-info.ts
+probes/out/

@@ -1,0 +1,8 @@
+user replays: 2 [["type","message","session_id","parent_tool_use_id","uuid","timestamp","isReplay"],["type","message","session_id","parent_tool_use_id","uuid","timestamp","isReplay"]]
+results: 7 28 29 30 31 32 33 34 35 36 37 38 39 40 | BANANA
+init: session 36c69de5-7f05-4b56-96b0-82c6657995ac, model claude-haiku-4-5-20251001, permissionMode bypassPermissions, AskUserQuestion in tools: true, ExitPlanMode in tools: true
+result: success, terminal_reason completed, turns 1, cost 0.0096597, denials []
+result: success, terminal_reason completed, turns 1, cost 0.0138567, denials []
+types: system/init×2, system/status×2, user×2, stream_event/message_start×2, stream_event/content_block_start×4, system/thinking_tokens×4, stream_event/content_block_delta×21, assistant×4, stream_event/content_block_stop×4, stream_event/message_delta×2, stream_event/message_stop×2, rate_limit_event×1, result/success×2
+largest stdout line: 3289 bytes
+exit: {"code":0,"signal":null}

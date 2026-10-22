@@ -1,0 +1,12 @@
+› Create a file called list.txt containing the lines one, two, three (one per
+  line) with the Write tool, then use the Edit tool to change two into TWO. Then
+  say done.
+
+I'll create the file and then edit it.
+
+· 2 tools · Write, Edit  ▸
+
+Done.
+
+  ✓ 6.0s · $0.0181
+

@@ -1,0 +1,30 @@
+// P14: step through template instantiation to find the native segfault seen in p13.
+import { TRoot, TAnchor, dumpTree } from "../packages/tdom/src/index.ts";
+import { ChildPart, TemplateInstance, getTemplate, html, type Value } from "../packages/html/src/index.ts";
+
+const root = new TRoot();
+const result = html`<text>${"x"}</text>`;
+console.log("1: result values", result.values.length);
+const template = getTemplate(result.strings);
+console.log("2: template root children", template.root.children.length);
+const again = getTemplate(result.strings);
+console.log("3: cache hit", again === template);
+const instance = new TemplateInstance(template, null);
+console.log("4: instance created");
+const nodes = instance.clone();
+console.log("5: cloned nodes", nodes.length, "parts", instance.parts.length);
+for (const n of nodes) root.append(n);
+console.log("6: appended ->", dumpTree(root, true).split("\n").join(" / "));
+instance.commit(result.values);
+console.log("7: committed ->", dumpTree(root, true).split("\n").join(" / "));
+const start = new TAnchor();
+const end = new TAnchor();
+root.append(start);
+root.append(end);
+const part = new ChildPart(start, end, null, 0);
+console.log("8: part created");
+const v: Value = result;
+part.commit(v);
+console.log("9: part committed template ->", dumpTree(root, false).split("\n").join(" / "));
+part.commit(html`<text>${"y"}</text>`);
+console.log("10: part committed other template ->", dumpTree(root, false).split("\n").join(" / "));

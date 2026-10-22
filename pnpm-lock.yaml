@@ -1,0 +1,223 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    devDependencies:
+      '@light/cli':
+        specifier: workspace:*
+        version: link:light/packages/native/cli
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  apps/desktop:
+    dependencies:
+      '@bootstrapp/light':
+        specifier: workspace:*
+        version: link:../../light
+      '@light/lib':
+        specifier: workspace:*
+        version: link:../../light/packages/native/lib
+      '@widecode/agent':
+        specifier: workspace:*
+        version: link:../../packages/agent
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+
+  apps/widecode:
+    dependencies:
+      '@bootstrapp/light':
+        specifier: workspace:*
+        version: link:../../light
+      '@light/highlight':
+        specifier: workspace:*
+        version: link:../../light/packages/native/highlight
+      '@light/kernel':
+        specifier: workspace:*
+        version: link:../../light/packages/tui/kernel
+      '@light/lib':
+        specifier: workspace:*
+        version: link:../../light/packages/native/lib
+      '@light/markdown':
+        specifier: workspace:*
+        version: link:../../light/packages/tui/markdown
+      '@light/plugins':
+        specifier: workspace:*
+        version: link:../../light/packages/native/plugins
+      '@light/ui':
+        specifier: workspace:*
+        version: link:../../light/packages/tui/ui
+      '@light/workspace':
+        specifier: workspace:*
+        version: link:../../light/packages/native/workspace
+      '@widecode/agent':
+        specifier: workspace:*
+        version: link:../../packages/agent
+      '@widecode/chat':
+        specifier: workspace:*
+        version: link:../../packages/chat
+      '@widecode/code':
+        specifier: workspace:*
+        version: link:../../packages/code
+      '@widecode/conversation':
+        specifier: workspace:*
+        version: link:../../packages/conversation
+      '@widecode/screen':
+        specifier: workspace:*
+        version: link:../../packages/screen
+    devDependencies:
+      '@light/test':
+        specifier: workspace:*
+        version: link:../../light/packages/tui/test
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+
+  packages/agent:
+    dependencies:
+      '@light/lib':
+        specifier: workspace:*
+        version: link:../../light/packages/native/lib
+    devDependencies:
+      '@light/test':
+        specifier: workspace:*
+        version: link:../../light/packages/tui/test
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+
+  packages/chat:
+    dependencies:
+      '@bootstrapp/light':
+        specifier: workspace:*
+        version: link:../../light
+      '@light/kernel':
+        specifier: workspace:*
+        version: link:../../light/packages/tui/kernel
+      '@light/ui':
+        specifier: workspace:*
+        version: link:../../light/packages/tui/ui
+      '@widecode/code':
+        specifier: workspace:*
+        version: link:../code
+      '@widecode/conversation':
+        specifier: workspace:*
+        version: link:../conversation
+      '@widecode/screen':
+        specifier: workspace:*
+        version: link:../screen
+    devDependencies:
+      '@light/test':
+        specifier: workspace:*
+        version: link:../../light/packages/tui/test
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+
+  packages/code:
+    dependencies:
+      '@bootstrapp/light':
+        specifier: workspace:*
+        version: link:../../light
+      '@light/highlight':
+        specifier: workspace:*
+        version: link:../../light/packages/native/highlight
+      '@light/ui':
+        specifier: workspace:*
+        version: link:../../light/packages/tui/ui
+      '@light/workspace':
+        specifier: workspace:*
+        version: link:../../light/packages/native/workspace
+      '@widecode/conversation':
+        specifier: workspace:*
+        version: link:../conversation
+    devDependencies:
+      '@light/test':
+        specifier: workspace:*
+        version: link:../../light/packages/tui/test
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+
+  packages/conversation:
+    dependencies:
+      '@bootstrapp/light':
+        specifier: workspace:*
+        version: link:../../light
+      '@light/lib':
+        specifier: workspace:*
+        version: link:../../light/packages/native/lib
+      '@light/markdown':
+        specifier: workspace:*
+        version: link:../../light/packages/tui/markdown
+      '@light/ui':
+        specifier: workspace:*
+        version: link:../../light/packages/tui/ui
+      '@widecode/agent':
+        specifier: workspace:*
+        version: link:../agent
+    devDependencies:
+      '@light/test':
+        specifier: workspace:*
+        version: link:../../light/packages/tui/test
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+
+  packages/screen:
+    dependencies:
+      '@bootstrapp/light':
+        specifier: workspace:*
+        version: link:../../light
+      '@light/kernel':
+        specifier: workspace:*
+        version: link:../../light/packages/tui/kernel
+      '@light/lib':
+        specifier: workspace:*
+        version: link:../../light/packages/native/lib
+      '@light/ui':
+        specifier: workspace:*
+        version: link:../../light/packages/tui/ui
+      '@widecode/agent':
+        specifier: workspace:*
+        version: link:../agent
+    devDependencies:
+      '@light/test':
+        specifier: workspace:*
+        version: link:../../light/packages/tui/test
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+
+packages:
+
+  '@types/node@26.6.5':
+    resolution: {integrity: sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg==}
+
+  typescript@6.0.3:
+    resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+  undici-types@8.9.0:
+    resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
+
+snapshots:
+
+  '@types/node@26.6.5':
+    dependencies:
+      undici-types: 8.9.0
+
+  typescript@6.0.3: {}
+
+  undici-types@8.9.0: {}

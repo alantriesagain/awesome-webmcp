@@ -1,0 +1,26 @@
+› Plan how to add a line 'delta' to notes.txt. Keep the plan to two sentences,
+  then present it with ExitPlanMode. After approval, make the change and say
+  done.
+
+This is a trivial one-line task, so I'll skip exploration and go straight to
+exiting plan mode.
+
+· ToolSearch select:ExitPlanMode  ▸
+
+I'll add a line containing "delta" to the end of notes.txt, creating the file if
+it doesn't already exist.
+
+◆ Plan ready for your approval  answered
+
+Now I'll check if notes.txt exists and add the line.
+
+· Read notes.txt  ▸
+
+Now I'll add "delta" to the file.
+
+· Edit notes.txt +1 -0  ▸
+
+Done. Added "delta" as a new line at the end of notes.txt.
+
+  ✓ 9.0s · $0.1485
+

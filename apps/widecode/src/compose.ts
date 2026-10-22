@@ -1,0 +1,242 @@
+// widecode put together: the host, the shell, the native widgets the plugins mount (the chat and
+// code columns, the Tools tab) and the JS plugins, built-in (plugins, in the binary), the user's and
+// the project's. `start` hands the kernel config.json's "plugins" and the state file, adds any
+// extra compiled plugins after the JS ones (the tests' and the entry's), and starts them after what
+// each requires, leaving out the ones switched off. What it returns holds the widgets for the
+// entry, the selftest and the tests; plugins never reach each other this way, only through the host.
+import { Conversation } from "@widecode/conversation/conversation.ts";
+import { Host } from "./controllers/host.ts";
+import { BUILTIN_PLUGINS } from "./runtime/builtin.ts";
+import { JsRuntime } from "./runtime/runtime.ts";
+import { Plugin } from "@light/kernel/plugin.ts";
+import { NoStateFile, StateFile } from "@light/kernel/settings.ts";
+import { mergeColumns, mergePlugins } from "./services/harness.ts";
+import { registerShellCommands } from "./commands.ts";
+import { PluginDefault } from "./services/store.ts";
+import { Workspace } from "@light/workspace/workspace.ts";
+import { ChatWidget } from "./views/chat-widget.ts";
+import { CodeWidget } from "./views/code-widget.ts";
+import { ToolsWidget } from "./views/tools-widget.ts";
+import { Screen } from "@bootstrapp/light/native/tui";
+import { Shell } from "./views/shell.ts";
+
+export class Widecode {
+  readonly host: Host;
+  readonly shell: Shell;
+  /** The chat column's widget, mounted by the chat plugin. */
+  readonly chat: ChatWidget;
+  /** The code column's widget, mounted by the code plugin. */
+  readonly code: CodeWidget;
+  /** The tools column's Tools tab, mounted by the tools plugin. */
+  readonly tools: ToolsWidget;
+  /** The JS plugins: built-in, the user's, the project's. */
+  readonly js: JsRuntime;
+  /** The project plugins folder in `js.dirs` ("" before one is): a folder switch replaces it. */
+  private projectDir = "";
+
+  constructor(host: Host, shell: Shell) {
+    this.host = host;
+    this.shell = shell;
+    this.chat = new ChatWidget(host);
+    this.code = new CodeWidget(host);
+    this.tools = new ToolsWidget(host);
+    this.js = new JsRuntime(host);
+    this.js.builtins = BUILTIN_PLUGINS.slice();
+    this.js.code = this.code;
+    this.js.chat = this.chat;
+    this.js.tools = this.tools;
+    this.projectDir = host.harness.pluginsDir();
+    // Another folder opened: its own project plugins replace this one's, and its harness follows.
+    host.folderOpened.add("widecode", () => this.folderOpened());
+  }
+
+  private prepared = false;
+  /** The permission rules as the agent last got them, so a change fires harnessChanged. */
+  private lastPermissions = "";
+
+  /** The JS plugins in the kernel, not started. */
+  private prepare(): void {
+    if (this.prepared) return;
+    this.prepared = true;
+    this.js.load();
+  }
+
+  /** Each plugin's section as a new config.json gets it, the JS plugins' included. */
+  defaults(): PluginDefault[] {
+    this.prepare();
+    return this.host.kernel.plugins.map((p) => new PluginDefault(p.id, p.defaults()));
+  }
+
+  /** Start: `plugins` is config.json's "plugins" (null for none), `state` what plugins keep, `extra` compiled plugins added after the JS ones. The keymap /keymap kept comes before the one the host was given (config.json's), before any plugin reads it. */
+  start(plugins: unknown, state: StateFile, extra: Plugin[]): void {
+    const k = this.host.kernel;
+    this.host.session.userPlugins = plugins;
+    k.settings.load(mergePlugins(plugins, this.host.harness.config().plugins));
+    this.lastPermissions = this.host.session.permissions().rulesJson();
+    k.settings.useStateFile(state);
+    const kept = k.settings.state("keymap");
+    if (typeof kept === "string" && kept.length > 0) this.host.keys.keymap = kept;
+    this.prepare();
+    for (const p of extra) k.use(p);
+    k.start();
+    for (const p of k.problems) this.host.note("plugin " + p);
+    this.shell.finish();
+    registerShellCommands(this);
+  }
+
+  /** The columns' widths: the user's config with the project's over it; answers what could not be used. */
+  configureColumns(columns: unknown): string {
+    this.host.session.userColumns = columns;
+    const note = this.shell.sizes.configure(mergeColumns(columns, this.host.harness.config().columns));
+    this.host.screen.layout.value = this.host.screen.layout.peek() + 1;
+    return note;
+  }
+
+  /** The painted `screen` as text: the named columns (every column for []) each cropped to its cells, the band under them included, the rows' trailing blanks dropped. */
+  screenText(screen: Screen, columns: string[]): string {
+    const ids = this.host.screen.columns.map((c) => c.id);
+    const widths = this.shell.widths();
+    let used = 0;
+    for (const w of widths) used += w;
+    const starts: number[] = [];
+    const ends: number[] = [];
+    let x = 0;
+    for (let i = 0; i < ids.length; i++) {
+      const w = widths[i] === 0 ? Math.max(0, screen.w - used) : widths[i];
+      if (columns.length === 0 || columns.includes(ids[i])) {
+        starts.push(x);
+        ends.push(x + w);
+      }
+      x += w;
+    }
+    const rows: string[] = [];
+    for (let y = 0; y < screen.h; y++) {
+      let row = "";
+      for (let i = 0; i < starts.length; i++) row += screen.rowText(y, starts[i], ends[i]);
+      rows.push(row.replace(/\s+$/, ""));
+    }
+    while (rows.length > 0 && rows[rows.length - 1].length === 0) rows.pop();
+    return rows.join("\n");
+  }
+
+  /** The project's config read again over the user's: a plugin whose section or on/off changed starts again, the columns follow; answers a notice ("" for none). */
+  applyHarness(): string {
+    const k = this.host.kernel;
+    const cfg = this.host.harness.config();
+    const ids: string[] = [];
+    for (const d of this.js.defs) if (!ids.includes(d.id)) ids.push(d.id);
+    const offBefore = k.settings.switchedOff();
+    const sectionsBefore: string[] = ids.map((id) => JSON.stringify(k.settings.section(id)));
+    k.settings.load(mergePlugins(this.host.session.userPlugins, cfg.plugins));
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      if (offBefore.has(id) !== k.settings.isOff(id) || sectionsBefore[i] !== JSON.stringify(k.settings.section(id))) this.js.reloadPlugin(id);
+    }
+    const note = this.shell.sizes.configure(mergeColumns(this.host.session.userColumns, cfg.columns));
+    this.host.screen.layout.value = this.host.screen.layout.peek() + 1;
+    const permissions = this.host.session.permissions();
+    if (permissions.rulesJson() !== this.lastPermissions) {
+      this.lastPermissions = permissions.rulesJson();
+      this.host.harnessChanged.fire();
+    }
+    return [cfg.notice, permissions.notice, note].filter((t) => t.length > 0).join("; ");
+  }
+
+  /** The project's own plugins folder among the plugin folders, watched; `sync` loads its files now. A folder switch drops the folder before it. */
+  useProjectPlugins(sync: boolean): void {
+    const dir = this.host.harness.pluginsDir();
+    if (dir !== this.projectDir) {
+      this.dropProjectPlugins();
+      this.projectDir = dir;
+    }
+    if (!this.js.dirs.includes(dir)) this.js.dirs.push(dir);
+    this.js.watchFolders();
+    if (sync) this.js.syncFolder(dir);
+  }
+
+  /** Stop the plugins of the project folder before this one and forget the folder. */
+  private dropProjectPlugins(): void {
+    const old = this.projectDir;
+    if (old.length === 0) return;
+    this.js.forgetFolder(old);
+    this.js.dirs = this.js.dirs.filter((d) => d !== old);
+  }
+
+  /**
+   * The folder changed (`/open`): the previous project's plugins go, the new folder's harness is
+   * put in use when it is trusted, and the watchers follow the new folders.
+   */
+  private folderOpened(): void {
+    const h = this.host;
+    // The agent chosen here carries over when the new folder brings it too.
+    const wanted = h.conversation.agent.id();
+    if (h.session.trusted.peek()) {
+      this.useProjectPlugins(true);
+      this.watchHarness();
+      const note = this.applyHarness();
+      if (note.length > 0) h.screen.tell(note);
+      if (wanted.length > 0 && h.conversation.agent.id() !== wanted) {
+        const why = h.session.useAgent(wanted);
+        if (why.length > 0) {
+          h.session.useAgent("");
+          h.screen.tell(why + "; " + h.conversation.agent.name() + " talks here");
+        }
+      }
+      h.conversation.prepare();
+    } else {
+      this.dropProjectPlugins();
+      this.projectDir = h.harness.pluginsDir();
+      this.js.watchFolders();
+    }
+    h.harnessChanged.fire();
+  }
+
+  /** Put the folder's harness in use without keeping the trust (`--trust`): its plugins, config and prompt. Answers what to tell ("" for nothing). */
+  useHarnessNow(): string {
+    this.host.session.setTrusted(true);
+    this.useProjectPlugins(true);
+    this.watchHarness();
+    const note = this.applyHarness();
+    this.host.harnessChanged.fire();
+    return note;
+  }
+
+  /** Trust the folder from now on: the agent works here (one that starts at launch starts now), and its harness is put in use: its plugins, its prompt, its config. Answers what to tell ("" without a store). */
+  trust(): string {
+    const h = this.host;
+    const store = h.session.store;
+    if (store === null) return "";
+    store.trust(h.workspace.folder);
+    const wasTrusted = h.session.trusted.peek();
+    const note = this.useHarnessNow();
+    if (!wasTrusted) h.conversation.prepare();
+    return "trusted: " + h.conversation.agent.name() + " works here and the folder's harness is in use" + (note.length > 0 ? " (" + note + ")" : "");
+  }
+
+  /** Follow the project's harness folder: its plugins reload as they change, its config is applied, its prompt reaches the agent at the next start. */
+  watchHarness(): void {
+    const h = this.host;
+    h.harness.onChange = (what: string) => {
+      if (!h.harness.trusted) return;
+      if (what === "plugins") this.useProjectPlugins(true);
+      else if (what === "config") {
+        const note = this.applyHarness();
+        h.screen.tell(note.length > 0 ? note : "the harness config applied");
+      } else h.harnessChanged.fire();
+    };
+    h.harness.watch();
+  }
+}
+
+/** widecode over `workspace` and `conversation`, not started. */
+export const composeWidecode = (workspace: Workspace, conversation: Conversation): Widecode => {
+  const host = new Host(workspace, conversation);
+  return new Widecode(host, new Shell(host));
+};
+
+/** widecode started with config.json's "plugins" (null for none) and nothing kept (tests). */
+export const createWidecode = (workspace: Workspace, conversation: Conversation, plugins: unknown): Widecode => {
+  const w = composeWidecode(workspace, conversation);
+  w.start(plugins, new NoStateFile(), []);
+  return w;
+};

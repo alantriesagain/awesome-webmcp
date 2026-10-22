@@ -1,0 +1,8 @@
+AskUserQuestion input: {"questions":[{"question":"Which fruits do you like?","header":"Fruits","options":[{"label":"Apple","description":"A crisp, sweet red fruit"},{"label":"Pear","description":"A soft, juicy green fruit"},{"label":"Plum","description":"A small, purple or yellow fruit"}],"multiSelect":true},{"question":"What is your favourite color?","header":"Color","options":[{"label":"Red","description":"A warm, bold color"},{"label":"Blue","description":"A cool, calm color"}],"multiSelect":false}]}
+answered: {"Which fruits do you like?":["Apple","Pear"],"What is your favourite color?":"my own words: purple"}
+final text: You like Apple and Pear, and your favourite color is purple.
+init: session ad9afc86-ae8d-4baf-8edb-367dd74d88c3, model claude-haiku-4-5-20251001, permissionMode bypassPermissions, AskUserQuestion in tools: true, ExitPlanMode in tools: true
+result: success, terminal_reason completed, turns 2, cost 0.015555600000000001, denials []
+types: system/init×1, system/status×2, stream_event/message_start×2, stream_event/content_block_start×4, system/thinking_tokens×4, stream_event/content_block_delta×69, assistant×4, stream_event/content_block_stop×4, control_request×1, user×1, stream_event/message_delta×2, stream_event/message_stop×2, rate_limit_event×1, result/success×1
+largest stdout line: 2996 bytes
+exit: {"code":0,"signal":null}

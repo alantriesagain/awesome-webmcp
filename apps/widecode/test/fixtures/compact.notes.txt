@@ -1,0 +1,7 @@
+compaction records: status:requesting | status:compacting | status | compact_boundary {"trigger":"manual","pre_tokens":19427,"post_tokens":1879,"cumulative_dropped_tokens":17548,"duration_ms":9558}
+init: session 1fd4c126-4c43-44c0-b64b-79f2502c1908, model claude-haiku-4-5-20251001, permissionMode bypassPermissions, AskUserQuestion in tools: true, ExitPlanMode in tools: true
+result: success, terminal_reason completed, turns 1, cost 0.0110621, denials []
+result: success, terminal_reason undefined, turns 0, cost 0.018704, denials []
+types: system/init×2, system/status×3, stream_event/message_start×1, stream_event/content_block_start×2, stream_event/content_block_delta×3, assistant×2, stream_event/content_block_stop×2, stream_event/message_delta×1, stream_event/message_stop×1, rate_limit_event×1, result/success×2, system/compact_boundary×1, user×2
+largest stdout line: 3289 bytes
+exit: {"code":0,"signal":null}

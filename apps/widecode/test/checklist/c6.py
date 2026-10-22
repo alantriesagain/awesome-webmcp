@@ -1,0 +1,30 @@
+from common import *
+import struct, zlib
+d = repo()
+def png(path, w, h, rgb):
+    raw = b"".join(b"\x00" + bytes(rgb) * w for _ in range(h))
+    def chunk(t, data): return struct.pack(">I", len(data)) + t + data + struct.pack(">I", zlib.crc32(t + data) & 0xffffffff)
+    open(path, "wb").write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+png(d + "/red.png", 64, 64, (220, 20, 30))
+app = App(d, OUT + "c6.log", LIVE, cols=200, rows=45)
+app.type("What single color fills @red")
+s = app.screen()
+sugg = [l for l in s.split("\n") if "@red.png" in l]
+print("suggestion strip:", sugg[0][:60] if sugg else None)
+app.key("tab")
+app.type("? Answer with one word.")
+s = app.screen()
+comp = [l for l in s.split("\n") if "What single color" in l]
+print("composer:", comp[-1][:80] if comp else None)
+mark = len(app.text_log())
+app.key("enter")
+idle(app, mark); time.sleep(0.3)
+s = app.screen()
+show("image turn", s)
+print("status note:", s.split("\n")[-1][-40:])
+mark = len(app.text_log())
+app.type("In one sentence, what does @READ"); app.key("tab"); app.type(" say?")
+app.key("enter")
+idle(app, mark); time.sleep(0.3)
+show("file turn", app.screen())
+app.close()

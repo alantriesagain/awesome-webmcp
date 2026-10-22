@@ -1,0 +1,6 @@
+› Reply with exactly the word PONG and nothing else.
+
+PONG
+
+  ✓ 2.0s · $0.0112
+

@@ -1,0 +1,23 @@
+initialize: {"loadSession":true,"mcpCapabilities":{"http":true,"sse":true},"promptCapabilities":{"embeddedContext":true,"image":true},"sessionCapabilities":{"close":{},"fork":{},"list":{},"resume":{}}}
+models (86): opencode/big-pickle, opencode/cat-jam-free, opencode/claude-fable-5, opencode/claude-fable-5-1, opencode/claude-haiku-4-5, opencode/claude-haiku-5-5, opencode/claude-opus-4-5, opencode/claude-opus-4-6, opencode/claude-opus-4-7, opencode/claude-opus-4-8, opencode/claude-opus-5, opencode/claude-opus-5-5, …
+modes: build, plan
+effort: none
+model opencode/big-pickle: set
+prompt "Reply with exactly the word PONG and not": {"stopReason":"end_turn","usage":{"inputTokens":4937,"outputTokens":4,"totalTokens":11094,"thoughtTokens":9,"cachedReadTokens":6144},"_meta":{}}
+prompt "Use the bash tool to run exactly: ls -1.": {"stopReason":"end_turn","usage":{"inputTokens":92,"outputTokens":3,"totalTokens":11176,"thoughtTokens":9,"cachedReadTokens":11072},"_meta":{}}
+prompt "Use the edit tool to change the line bet": {"stopReason":"end_turn","usage":{"inputTokens":105,"outputTokens":3,"totalTokens":11375,"thoughtTokens":3,"cachedReadTokens":11264},"_meta":{}}
+cancelled prompt: {"stopReason":"cancelled","usage":{"inputTokens":0,"outputTokens":0,"totalTokens":0},"_meta":{}}
+session/list: {"sessions":[{"sessionId":"ses_ebb87dcfcffeoOAcYRCUeKCaEu","cwd":"/tmp/PROJECT","title":"PONG","updatedAt":"2026-10-16T11:28:21.036Z"}]}
+session/load: ok
+updates seen: agent_message_chunk, agent_thought_chunk, available_commands_update, config_option_update, tool_call, tool_call_update, usage_update, user_message_chunk
+own listing: [
+  {
+    "id": "ses_ebb87dcfcffeoOAcYRCUeKCaEu",
+    "title": "PONG",
+    "updated": 1792150101036,
+    "created": 1792150086403,
+    "projectId": "d0629eb5edf1e6b37780040d375f83b5c557bb9b",
+    "directory": "/tmp/PROJECT"
+  }
+]
+

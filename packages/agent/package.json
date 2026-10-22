@@ -1,0 +1,18 @@
+{
+  "name": "@widecode/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The claude -p sidecar: the CLI spawned over stream-json, its envelopes decoded into typed events.",
+  "exports": {
+    ".": "./index.ts",
+    "./*": "./*"
+  },
+  "dependencies": {
+    "@light/lib": "workspace:*"
+  },
+  "devDependencies": {
+    "@light/test": "workspace:*",
+    "@types/node": "^26.6.5"
+  }
+}

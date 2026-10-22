@@ -1,0 +1,10 @@
+set_permission_mode plan → {"subtype":"success","request_id":"probe-1","response":{"mode":"plan"}}
+ExitPlanMode request: {"subtype":"can_use_tool","tool_name":"ExitPlanMode","display_name":"ExitPlanMode","input":{},"tool_use_id":"toolu_01BuHyjaMGKazEwMeaZVmyfk","requires_user_interaction":true}
+approved with setMode bypassPermissions
+mode signals: status:plan, init:plan, status:requesting, status:requesting, status:bypassPermissions, status:requesting, status:requesting, status:requesting
+notes.txt now: "alpha\nbeta\ngamma\ndelta\n"
+init: session 6bcf699b-230b-42e1-baf8-b968eee09bc7, model claude-haiku-4-5-20251001, permissionMode plan, AskUserQuestion in tools: true, ExitPlanMode in tools: true
+result: success, terminal_reason completed, turns 5, cost 0.14846610000000002, denials []
+types: control_response×1, system/status×7, system/init×1, stream_event/message_start×5, stream_event/content_block_start×10, stream_event/content_block_delta×70, assistant×10, stream_event/content_block_stop×10, user×4, stream_event/message_delta×5, stream_event/message_stop×5, rate_limit_event×2, control_request×1, result/success×1
+largest stdout line: 2983 bytes
+exit: {"code":0,"signal":null}
