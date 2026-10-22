@@ -348,10 +348,11 @@ export class ChatModel {
         this.touch(req);
       }
     // A closed turn's requests are no longer open; the ones before it go for good (the turn's own
-    // stay, so a repeated request event still finds the item it opened).
+    // stay, so a repeated request event still finds the item it opened), except one still open
+    // there, the app's own asked after a turn, which waits for its answer.
     for (const id of Array.from(this.requests.keys())) {
       const req = this.requests.get(id);
-      if (req !== undefined && req.turn !== turn) this.requests.delete(id);
+      if (req !== undefined && req.turn !== turn && req.state !== "open") this.requests.delete(id);
     }
     if (result !== null) turn.result = result;
     turn.rev++;
@@ -580,11 +581,16 @@ export class ChatModel {
     return this.tools.get(toolId) ?? this.tasks.get(taskId) ?? null;
   }
 
-  /** A request for the user (a question, a plan to approve) under the open turn; a repeated id in that turn is the same request. */
+  /**
+   * A request for the user (a question, a plan to approve) under the open turn; a repeated id in that
+   * turn is the same request. With no turn open and no message queued it is the app's own (the
+   * onboarding's questions): it goes after the last turn, as a notice does, and opens no turn, which
+   * nothing would close.
+   */
   openRequest(requestId: string, name: string, toolUseId: string, input: unknown): Item {
-    const turn = this.turn();
+    const container = this.current === null && this.pending.length === 0 ? this.idleTurn().after : this.turn().body;
     const found = this.requests.get(requestId);
-    if (found !== undefined && found.turn === turn) return found;
+    if (found !== undefined && found.turn === container.turn) return found;
     const item = new Item(REQUEST, "r:" + requestId);
     item.requestId = requestId;
     item.name = name;
@@ -593,7 +599,7 @@ export class ChatModel {
     item.state = "open";
     if (this.requests.size >= MAX_REQUESTS) for (const old of this.requests.keys()) { this.requests.delete(old); break; }
     this.requests.set(requestId, item);
-    this.add(turn.body, item, "");
+    this.add(container, item, "");
     return item;
   }
 

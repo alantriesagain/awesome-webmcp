@@ -59,6 +59,17 @@ const main = async (): Promise<void> => {
   ok("a request of an earlier turn is forgotten", asked.openRequest("r-2", "Ask", "call-2", null) !== old);
   asked.closeTurn(null);
 
+  // The app's own request with no turn open (the onboarding's): after the last turn, no turn opened, nothing running.
+  const idle = new ChatModel();
+  const own = idle.openRequest("ask1", "Trust", "", null);
+  ok("an idle request opens no turn and runs nothing", idle.current === null && !idle.running && idle.turns.length === 1 && idle.turns[0].notes);
+  ok("it sits after the turn, open", idle.turns[0].after.children.includes(own) && idle.openRequests().length === 1);
+  idle.openTurn("go", 0, true);
+  idle.closeTurn(null);
+  ok("and stays open through a later turn's close", own.state === "open" && idle.openRequests().includes(own));
+  idle.settle("ask1", "answered");
+  ok("until answered, nothing running then either", own.state === "answered" && idle.openRequests().length === 0 && !idle.running);
+
   // Taking a queued message moves what the chat draws.
   const queue = new ChatModel();
   queue.send("hello", 0);
