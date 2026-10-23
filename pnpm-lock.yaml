@@ -22,7 +22,7 @@ importers:
     dependencies:
       '@bootstrapp/light':
         specifier: workspace:*
-        version: link:../../light
+        version: link:../../light/packages/light
       '@light/lib':
         specifier: workspace:*
         version: link:../../light/packages/native/lib
@@ -38,7 +38,7 @@ importers:
     dependencies:
       '@bootstrapp/light':
         specifier: workspace:*
-        version: link:../../light
+        version: link:../../light/packages/light
       '@light/highlight':
         specifier: workspace:*
         version: link:../../light/packages/native/highlight
@@ -100,7 +100,7 @@ importers:
     dependencies:
       '@bootstrapp/light':
         specifier: workspace:*
-        version: link:../../light
+        version: link:../../light/packages/light
       '@light/kernel':
         specifier: workspace:*
         version: link:../../light/packages/tui/kernel
@@ -128,7 +128,7 @@ importers:
     dependencies:
       '@bootstrapp/light':
         specifier: workspace:*
-        version: link:../../light
+        version: link:../../light/packages/light
       '@light/highlight':
         specifier: workspace:*
         version: link:../../light/packages/native/highlight
@@ -153,7 +153,7 @@ importers:
     dependencies:
       '@bootstrapp/light':
         specifier: workspace:*
-        version: link:../../light
+        version: link:../../light/packages/light
       '@light/lib':
         specifier: workspace:*
         version: link:../../light/packages/native/lib
@@ -178,7 +178,7 @@ importers:
     dependencies:
       '@bootstrapp/light':
         specifier: workspace:*
-        version: link:../../light
+        version: link:../../light/packages/light
       '@light/kernel':
         specifier: workspace:*
         version: link:../../light/packages/tui/kernel
