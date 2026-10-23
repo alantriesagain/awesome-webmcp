@@ -848,9 +848,12 @@ class Reader {
 /** Tools whose permission prompts are their own request (a question, a plan); any other prompt is a permission to grant or refuse. */
 const INTERACTIVE = ["AskUserQuestion", "ExitPlanMode"];
 
+const ALLOW_ALL = "Allow all for this session";
+
 const PERMISSION_OPTIONS = [
   { label: "Allow once", description: "this call runs" },
   { label: "Allow for this session", description: "and the same call again without asking" },
+  { label: ALLOW_ALL, description: "this call and every one after it, without asking, until /new; plan mode stays" },
   { label: "Deny", description: "the agent is told you refused" },
 ];
 
@@ -891,9 +894,10 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string): widecode.
   /** widecode's MCP server as this plugin's agent sees it, and whether the CLI restarts at the turn's end to pick up a change to the harness. */
   let server: { url: string; headers: { name: string; value: string }[]; tools: { name: string; category: string }[]; file: string } | null = null;
   let restartWanted = false;
-  /** The permission prompts open in the request panel, by the CLI's request id, with the folder each may add ("" for none, else as shown); the calls the user allowed for the session (tool and argument); the folders added to the session's, given again to each start. */
+  /** The permission prompts open in the request panel, by the CLI's request id, with the folder each may add ("" for none, else as shown); the calls the user allowed for the session (tool and argument), or every call (`allowAll`); the folders added to the session's, given again to each start. */
   const permissions = new Map<string, { tool: string; input: unknown; key: string; folder: string; shown: string }>();
   const allowedThisSession = new Set<string>();
+  let allowAll = false;
   const allowedFolders: string[] = [];
   /** The folder to offer for a path outside the session's: the git repository holding it, else its own folder; "" when that would be the home folder or the root. */
   const folderOf = (path: string): string => {
@@ -1082,14 +1086,17 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string): widecode.
         const id = str(r.request_id);
         const argument = argumentOf(tool, q.input);
         const key = tool + "\n" + argument;
-        if (allowedThisSession.has(key)) {
+        if (allowAll) {
+          write(allowResponse(id, q.input));
+          api.note("claude: allowed " + tool + " (all allowed for this session)");
+        } else if (allowedThisSession.has(key)) {
           write(allowResponse(id, q.input));
           api.note("claude: allowed " + tool + " again (allowed for this session)");
         } else {
           const outside = folderOf(outsidePath(q));
           const folder = allowedFolders.includes(outside) ? "" : outside;
           const shown = shownPath(folder);
-          const options = folder.length === 0 ? PERMISSION_OPTIONS : [PERMISSION_OPTIONS[0], PERMISSION_OPTIONS[1], { label: folderSessionLabel(shown), description: "the folder joins this session's: reading there stops asking" }, { label: folderKeptLabel(shown), description: "the same, kept in this folder's .claude/settings.local.json for later sessions" }, PERMISSION_OPTIONS[2]];
+          const options = folder.length === 0 ? PERMISSION_OPTIONS : [PERMISSION_OPTIONS[0], PERMISSION_OPTIONS[1], { label: folderSessionLabel(shown), description: "the folder joins this session's: reading there stops asking" }, { label: folderKeptLabel(shown), description: "the same, kept in this folder's .claude/settings.local.json for later sessions" }, PERMISSION_OPTIONS[2], PERMISSION_OPTIONS[3]];
           permissions.set(id, { tool, input: q.input, key, folder, shown });
           emit({ type: "request", id, name: tool, callId: str(q.tool_use_id), input: q.input, category: "permission", questions: [{ question: tool + " " + argument + ": allow it?", header: "Permission", options }] });
         }
@@ -1323,6 +1330,18 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string): widecode.
           if (label === "Allow for this session") allowedThisSession.add(p.key);
           write(allowResponse(request.id, p.input));
           api.note("claude: " + p.tool + " allowed by the user" + (label === "Allow for this session" ? " for this session" : ""));
+        } else if (label === ALLOW_ALL) {
+          allowAll = true;
+          write(allowResponse(request.id, p.input));
+          api.note("claude: " + p.tool + " allowed by the user, and every call after it for this session");
+          // The prompts still open (calls asked about together) are allowed with it.
+          for (const [id, other] of Array.from(permissions.entries())) {
+            permissions.delete(id);
+            write(allowResponse(id, other.input));
+            emit({ type: "cancelRequest", id, state: "answered" });
+            api.note("claude: allowed " + other.tool + " (all allowed for this session)");
+          }
+          flush();
         } else if (p.folder.length > 0 && (label === folderSessionLabel(p.shown) || label === folderKeptLabel(p.shown))) {
           const kept = label === folderKeptLabel(p.shown);
           if (!kept) allowedFolders.push(p.folder);
@@ -1342,6 +1361,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string): widecode.
       folder = api.state.active().folder;
       resumed = sid;
       sides = [];
+      allowAll = false;
       const w = windowOf(sid, -1);
       history = w.lines.length > HISTORY_MAX ? w.lines.slice(w.lines.length - HISTORY_MAX) : w.lines;
       live = [];
@@ -1385,6 +1405,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string): widecode.
       proc = null;
       unanswered();
       sides = [];
+      allowAll = false;
       resumed = "";
       historyStart = 0;
       history = [];

@@ -442,7 +442,11 @@ const applyEvent = (model: ChatModel, info: StatusInfo, e: Ev): boolean => {
     model.ownKnown = e.partial !== true;
     model.bump();
   } else if (type === "request") requestOf(model, str(e.id), e);
-  else if (type === "cancelRequest") model.cancelRequest(str(e.id));
+  // Answered without the panel (an answer the user gave before covers it), else withdrawn by the agent.
+  else if (type === "cancelRequest") {
+    if (str(e.state) === "answered") model.settle(str(e.id), "answered");
+    else model.cancelRequest(str(e.id));
+  }
   else if (type === "usage") {
     if (str(e.model).length > 0) info.modelId = str(e.model);
     if (str(e.version).length > 0) info.version = str(e.version);

@@ -386,13 +386,16 @@ turn's end, through the same stop and `--resume` as a prompt change.
 A `can_use_tool` for a tool that is not a question or a plan is a permission the request panel puts
 to the user: the tool and its argument (a command, a path, a pattern, a URL), with Allow once (the
 call runs), Allow for this session (the same tool with the same argument runs again without asking
-while widecode runs) and Deny (the CLI is told the user denied the tool). Esc or the turn ending
-denies. Under bypass the CLI asks only what no mode auto-approves (an ask rule, a critical-path
-removal, an MCP tool that needs the user); in a mode that asks, every prompt comes to the panel.
+while widecode runs), Allow all for this session (this call and every later prompt are allowed
+without the panel until /new or another session is opened, plan mode included; the prompts open
+beside it are allowed with it and show as answered; a question and a plan to approve are still
+asked) and Deny (the CLI is told the user denied the tool). Esc or the turn ending denies. Under
+bypass the CLI asks only what no mode auto-approves (an ask rule, a critical-path removal, an MCP
+tool that needs the user); in a mode that asks (plan mode is one), every prompt comes to the panel.
 
 A prompt about a path outside the session's folders (in a mode that asks, a `cd` into another
 repository or a read of a file there; the CLI names the path as `blocked_path`, or `workingDir` as
-the reason) adds two answers before Deny, for the git repository holding the path (else the path's
+the reason) adds two answers before Allow all, for the git repository holding the path (else the path's
 own folder, never the home folder or the root). Allow <folder> for this session runs the call and
 adds the folder to the session's (`updatedPermissions` `addDirectories`), so reading there stops
 asking; widecode passes it again with `--add-dir` to each start while it runs. Allow <folder> from

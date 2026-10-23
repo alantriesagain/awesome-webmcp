@@ -375,7 +375,8 @@ declare namespace widecode {
     | { type: "taskUpdate"; id: string; taskId?: string; status?: string; lastTool?: string; description?: string; summary?: string; done?: boolean }
     | { type: "thinkingTokens"; parent?: string; key: string; tokens: number }
     | { type: "request"; id: string; name?: string; callId?: string; input?: unknown; category: "question" | "plan" | "permission"; questions?: { question: string; header?: string; multi?: boolean; options: { label: string; description?: string }[] }[]; plan?: string }
-    | { type: "cancelRequest"; id: string }
+    /** Request `id` is no longer open: withdrawn by the agent, or `answered` without the panel (an answer the user gave before covers it). */
+    | { type: "cancelRequest"; id: string; state?: "answered" }
     | { type: "usage"; model?: string; version?: string; contextUsed?: number; contextSize?: number; costUsd?: number; inputTokens?: number; outputTokens?: number };
 
   /** A view in the code column, as its plugin drives it. */
