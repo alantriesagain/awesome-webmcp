@@ -243,7 +243,7 @@ export const startWidecode = async (term: Terminal, folder: string, selftest: st
     for (const a of host.session.agents) o.agents.push(new AgentChoice(a.id(), a.name()));
     const models = host.kernel.settings.section("models");
     const list = isRecord(models) ? (models as { list?: unknown }).list : null;
-    if (Array.isArray(list) && host.kernel.commands.find("/model") !== null) for (const m of list) if (typeof m === "string" && m.trim().length > 0) o.models.push(m.trim());
+    if (Array.isArray(list) && host.kernel.commands.find("/model") !== null) for (const m of list as unknown[]) if (typeof m === "string" && m.trim().length > 0) o.models.push(m.trim());
     o.onAgent = (id: string) => host.kernel.commands.run("/agent " + id);
     o.onModel = (name: string) => host.kernel.commands.run("/model " + name);
     o.onTrust = trust;
