@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Daemon, DaemonOptions, DaemonPaths, Peer, Registry, isPrivateAddress, newIdentity, newToken, pktLine } from "@widecode/peers";
+import { Daemon, DaemonOptions, DaemonPaths, Peer, Registry, isPrivateAddress, newIdentity, newToken, pktLine, plainAddress, urlHost } from "@widecode/peers";
 import { SpawnOptions, spawnCapped } from "@light/lib/process.ts";
 import { done, eq, eqn, ok } from "@light/test/assert.ts";
 
@@ -46,6 +46,8 @@ const commit = async (repo: string, file: string, text: string, message: string)
   ok("loopback is private", isPrivateAddress("127.0.0.1") && isPrivateAddress("::1") && isPrivateAddress("::ffff:127.0.0.1"));
   ok("the private ranges", isPrivateAddress("10.1.2.3") && isPrivateAddress("192.168.15.51") && isPrivateAddress("172.16.0.9") && isPrivateAddress("172.31.255.1") && isPrivateAddress("fe80::1") && isPrivateAddress("fd12::1"));
   ok("public addresses are not", !isPrivateAddress("8.8.8.8") && !isPrivateAddress("172.32.0.1") && !isPrivateAddress("2a00::1") && !isPrivateAddress("nonsense"));
+  eq("a mapped IPv4 is recorded as IPv4", plainAddress("::ffff:192.168.1.5"), "192.168.1.5");
+  eq("an IPv6 host is bracketed in a URL", urlHost("fe80::1") + " " + urlHost("10.0.0.2"), "[fe80::1] 10.0.0.2");
 }
 
 const main = async (): Promise<void> => {
@@ -171,7 +173,7 @@ const main = async (): Promise<void> => {
   const dumb = await fetch(url + "/info/refs", { headers: { authorization: "Bearer " + token } });
   eqn("the dumb protocol is not served", dumb.status, 403);
   ok("the server logged who fetched", logLines.some((l: string) => l.startsWith("upload-pack mac live")));
-  ok("the peer's address was recorded", registry.peerById(peer.id)!.address === "127.0.0.1" || registry.peerById(peer.id)!.address === "::ffff:127.0.0.1");
+  eq("the peer's address was recorded, plain", registry.peerById(peer.id)!.address, "127.0.0.1");
 
   daemon.stop();
   rmSync(root, { recursive: true, force: true });

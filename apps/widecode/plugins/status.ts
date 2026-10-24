@@ -44,13 +44,14 @@ const DEBOUNCE_MS = 300;
 const DEFAULT_LINES = [
   [["project"], ["context"], ["cost"], ["title"]],
   [["model", "effort"], ["limit5h"], ["duration"], ["note"]],
-  [["mode"], ["limitWeek"], ["cache"]],
+  [["mode"], ["limitWeek"], ["cache"], ["peers"]],
 ];
 /** Under the tools column, beside its tabs' links: what Claude is doing and for how long, and its calls. */
 const DEFAULT_TOOLS_LINES = [[["activity"]], [["tools"]], [["calls", "thinking"]]];
 /** The defaults earlier versions wrote, replaced by the current one where untouched: a shape of plain segments, and the lines as written. */
 const PREVIOUS_DEFAULT = "project branch model effort mode title spacer note|context limit5h limitWeek cache|activity tools calls thinking cost duration";
 const PREVIOUS_LINES = [
+  JSON.stringify([["project", "context", "cost", "title"], [["model", "effort"], "limit5h", "duration", "note"], ["mode", "limitWeek", "cache"]]),
   JSON.stringify([["project", "context", "cache", "cost", "title"], ["branch", "limit5h", "tools", "duration", "activity"], [["model", "effort"], "limitWeek", ["calls", "thinking"], "mode", "note"]]),
   JSON.stringify([["project", "context", "cache", "cost", "title"], ["branch", "limit5h", "tools", "duration", "activity"], [["model", "effort"], "limitWeek", "calls", "mode", "note"]]),
 ];

@@ -6,6 +6,7 @@ import { PreludePart } from "@light/plugins/prelude.ts";
 import { NAMESPACE_AGENTS, NAMESPACE_CONVERSATION, NAMESPACE_AGENT } from "../api/agent.ts";
 import { NAMESPACE_FS } from "../api/fs.ts";
 import { NAMESPACE_GIT } from "../api/git.ts";
+import { NAMESPACE_PEERS } from "../api/peers.ts";
 import { NAMESPACE_PLUGINS, NAMESPACE_HARNESS } from "../api/plugins.ts";
 import { NAMESPACE_PROCESS } from "../api/process.ts";
 import { NAMESPACE_SESSIONS, NAMESPACE_STORE, NAMESPACE_TITLES } from "../api/sessions.ts";
@@ -21,6 +22,7 @@ import { answerWidgets } from "../api/widgets.ts";
 import { answerUi } from "../api/ui.ts";
 import { answerState } from "../api/state.ts";
 import { answerGit } from "../api/git.ts";
+import { answerPeers } from "../api/peers.ts";
 import { answerProcess } from "../api/process.ts";
 import { answerFs } from "../api/fs.ts";
 import { answerTools } from "../api/tools.ts";
@@ -67,6 +69,7 @@ export const PARTS: PreludePart[] = [
   NAMESPACE_LANGUAGES,
   NAMESPACE_FILES,
   NAMESPACE_GIT,
+  NAMESPACE_PEERS,
   NAMESPACE_SESSIONS,
   NAMESPACE_STORE,
   NAMESPACE_TITLES,
@@ -92,6 +95,7 @@ export const API_ANSWERS: ApiNamespace[] = [
   new ApiNamespace(["ui", "keys", "commands", "languages", "files", "clipboard"], answerUi),
   new ApiNamespace(["state", "settings"], answerState),
   new ApiNamespace(["git"], answerGit),
+  new ApiNamespace(["peers"], answerPeers),
   new ApiNamespace(["process"], answerProcess),
   new ApiNamespace(["fs"], answerFs),
   new ApiNamespace(["tools"], answerTools),

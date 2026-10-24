@@ -302,8 +302,14 @@ export const bearerOf = (req: IncomingMessage): string => {
   return auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
 };
 
-/** The address a request came from, "" when the runtime does not say. */
+/** `address` as a peer is recorded: an IPv4 mapped into IPv6 (`::ffff:1.2.3.4`) as its IPv4. */
+export const plainAddress = (address: string): string => (address.startsWith("::ffff:") ? address.slice(7) : address);
+
+/** `address` as a URL names it: an IPv6 address in brackets. */
+export const urlHost = (address: string): string => (address.includes(":") ? "[" + address + "]" : address);
+
+/** The address a request came from (an IPv4 mapped into IPv6 as its IPv4), "" when the runtime does not say. */
 export const remoteAddressOf = (req: IncomingMessage): string => {
   const a = req.socket.remoteAddress;
-  return typeof a === "string" ? a : "";
+  return typeof a === "string" ? plainAddress(a) : "";
 };

@@ -10,7 +10,7 @@ import { basename, join } from "node:path";
 import { writeAtomic } from "@light/lib/fs.ts";
 import { errorMessage, listOf, num, parseJson, recordOf, str, strs } from "@light/lib/json.ts";
 import { ProcessRun, SpawnOptions, spawnCapped } from "@light/lib/process.ts";
-import { GitServer, bearerOf, isPrivateAddress, json, plain, remoteAddressOf, RequestUrl } from "./git-http.ts";
+import { GitServer, bearerOf, isPrivateAddress, json, plain, remoteAddressOf, RequestUrl, urlHost } from "./git-http.ts";
 import { Identity, loadOrCreateIdentity, newToken, saveIdentity } from "./identity.ts";
 import { JoinRequest, PairOffer, acceptJoin, joinPeer, newPairCode } from "./pairing.ts";
 import { Peer, Registry, SharedRepo } from "./registry.ts";
@@ -125,6 +125,32 @@ const listenOn = (server: Server, port: number, host: string): Promise<number> =
       const address = server.address();
       done(address !== null && typeof address === "object" ? address.port : 0);
     });
+  });
+
+/** Whether `p` answers 200 within `ms`; a slow or failed request is false and left to end on its own. */
+const raceOk = (p: Promise<Response>, ms: number): Promise<boolean> =>
+  new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(false);
+      }
+    }, ms);
+    p.then(
+      (res: Response) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(res.status === 200);
+      },
+      () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(false);
+      },
+    );
   });
 
 const readBody = (req: IncomingMessage): Promise<string> =>
@@ -251,6 +277,14 @@ export class Daemon {
     return lines.length > 0 ? lines[lines.length - 1].trim() : "";
   }
 
+  /** The root of the checkout holding `path`, "" when git does not say. */
+  async toplevelOf(path: string): Promise<string> {
+    const o = new SpawnOptions();
+    o.timeoutMs = 10000;
+    const run: ProcessRun = await spawnCapped(this.git, ["-C", path, "rev-parse", "--show-toplevel"], o);
+    return run.ok ? run.text.trim() : "";
+  }
+
   async isBare(path: string): Promise<boolean> {
     const o = new SpawnOptions();
     o.timeoutMs = 10000;
@@ -266,6 +300,10 @@ export class Daemon {
     const bare = await this.isBare(path);
     if (mode === "hosted" && !bare) return "a hosted repository is a bare one; this is a checkout: " + path;
     if (mode !== "hosted" && bare) return "a bare repository is hosted, not served live: " + path;
+    if (!bare) {
+      const top = await this.toplevelOf(path);
+      if (top.length > 0) path = top;
+    }
     const label = name.length > 0 ? name : basename(path).replace(/\.git$/, "");
     if (mode === "hosted" && !/^[A-Za-z0-9._-]+$/.test(label)) return "a hosted repository's name is letters, digits, dots, dashes and underscores: " + label;
     const repo = new SharedRepo(repoId, path, label, mode, branches, allow);
@@ -295,6 +333,36 @@ export class Daemon {
     if (port > 0) p.port = port;
     p.lastSeenMs = nowMs;
     this.registry.save();
+  }
+
+  /** Ask `peer` whether it is there (its `/ping`, two seconds at most); its last-seen time moves when it answers. */
+  async pingPeer(peer: Peer, nowMs: number): Promise<boolean> {
+    if (peer.address.length === 0 || peer.port <= 0) return false;
+    const ok = await raceOk(fetch("http://" + urlHost(peer.address) + ":" + String(peer.port) + "/ping"), 2000);
+    if (ok) this.seen(peer.id, "", 0, nowMs);
+    return ok;
+  }
+
+  /** Every peer pinged at once; the ids of those that answered. */
+  async refreshPeers(nowMs: number): Promise<string[]> {
+    const results = await Promise.all(this.registry.peers.map((p: Peer) => this.pingPeer(p, nowMs)));
+    const online: string[] = [];
+    this.registry.peers.forEach((p: Peer, i: number) => {
+      if (results[i]) online.push(p.id);
+    });
+    return online;
+  }
+
+  /** What `peer` offers us (its `/repos`, with our token), as the JSON text it answered; "" when it did not. */
+  async peerRepos(peer: Peer): Promise<string> {
+    if (peer.address.length === 0 || peer.port <= 0) return "";
+    try {
+      const res = await fetch("http://" + urlHost(peer.address) + ":" + String(peer.port) + "/repos", { headers: { authorization: "Bearer " + peer.tokenWePresent } });
+      if (res.status !== 200) return "";
+      return await res.text();
+    } catch {
+      return "";
+    }
   }
 
   /** The daemon as the sessions see it. */
@@ -372,6 +440,18 @@ export class Daemon {
         case "/api/seen":
           this.seen(str(body["id"]), str(body["address"]), num(body["port"], 0), now);
           return json(res, 200, { ok: true });
+        case "/api/peers/refresh":
+          return json(res, 200, { online: await this.refreshPeers(now) });
+        case "/api/peer/repos": {
+          const peer = this.registry.peerById(str(body["peerId"]));
+          if (peer === null) return json(res, 404, { error: "no such peer" });
+          const text = await this.peerRepos(peer);
+          if (text.length === 0) return json(res, 502, { error: peer.name + " did not answer" });
+          this.seen(peer.id, "", 0, now);
+          res.writeHead(200, { "content-type": "application/json", "cache-control": "no-cache" });
+          res.end(text);
+          return;
+        }
         case "/api/rename": {
           const name = str(body["name"]).trim();
           if (name.length === 0) return json(res, 400, { error: "a name is needed" });

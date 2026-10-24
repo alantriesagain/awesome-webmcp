@@ -2,9 +2,9 @@
 // read as promises (branches, the log, a commit's files, the bases), each settled for the plugin.
 import { PreludePart } from "@light/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
-import { Branch, Commit, CommitFile, LOG_MAX, readBranches, readCommitAt, readCommitFiles, readDefaultBranch, readHeadCommit, readLog, readMergeBase } from "@light/workspace/git-log.ts";
+import { AheadBehind, Branch, Commit, CommitFile, LOG_MAX, readAheadBehind, readBranches, readCommitAt, readCommitFiles, readDefaultBranch, readHeadCommit, readLog, readMergeBase, readRootCommit } from "@light/workspace/git-log.ts";
 import { HostAnswer } from "@light/plugins/engine.ts";
-import { str, num, json, refuse, commitOf, commitText, branchText, fileText, listText } from "./values.ts";
+import { str, num, json, refuse, commitOf, commitText, branchText, fileText, listText, objectText } from "./values.ts";
 
 /** Plugin call `name` with its arguments `a`, answered; null for a call of another namespace. */
 export const answerGit = (rt: JsRuntime, name: string, a: unknown[]): HostAnswer | null => {
@@ -27,6 +27,10 @@ export const answerGit = (rt: JsRuntime, name: string, a: unknown[]): HostAnswer
       return rt.settled(str(a[0]), num(a[1]), readHeadCommit(ws.repo, ws.folder).then((sha: string) => json(sha)));
     case "git.commitAt":
       return rt.settled(str(a[0]), num(a[2]), readCommitAt(ws.repo, ws.folder, num(a[1])).then((sha: string) => json(sha)));
+    case "git.aheadBehind":
+      return rt.settled(str(a[0]), num(a[3]), readAheadBehind(ws.repo, ws.folder, str(a[1]), str(a[2])).then((r: AheadBehind) => objectText(["ahead", "behind"], [String(r.ahead), String(r.behind)])));
+    case "git.rootCommit":
+      return rt.settled(str(a[0]), num(a[1]), readRootCommit(ws.repo, ws.folder).then((sha: string) => json(sha)));
   }
   return null;
 };
@@ -39,4 +43,6 @@ export const NAMESPACE_GIT = new PreludePart("git", `        branches: () => lat
         mergeBase: (ref) => later("git.mergeBase", id, String(ref)),
         head: () => later("git.head", id),
         commitAt: (ms) => later("git.commitAt", id, Number(ms)),
+        aheadBehind: (a, b) => later("git.aheadBehind", id, String(a), String(b)),
+        rootCommit: () => later("git.rootCommit", id),
 `);

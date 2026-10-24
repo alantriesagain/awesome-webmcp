@@ -772,6 +772,23 @@ declare namespace widecode {
       head(): Promise<string>;
       /** The commit HEAD's history was on at `ms` (epoch ms; "" for none). */
       commitAt(ms: number): Promise<string>;
+      /** How many commits `a` has that `b` lacks and the reverse (-1 and -1 when either ref is unknown). */
+      aheadBehind(a: string, b: string): Promise<{ ahead: number; behind: number }>;
+      /** The repository's oldest root commit, what the same repository is called on another machine ("" without one). */
+      rootCommit(): Promise<string>;
+    };
+    /** The LAN git bridge (the peers plugin): this machine's daemon, started when needed, and a peer's copy as a remote of this folder. */
+    peers: {
+      /** A daemon answering: the one running, or one started now (`widecode --peers-daemon`); false when none could. */
+      ensure(): Promise<boolean>;
+      /** `method` `path` on the daemon's control API, `body` sent as JSON: the status (0 when nothing answered) and the text. */
+      request(method: string, path: string, body?: unknown): Promise<{ status: number; text: string }>;
+      /** Share this folder's repository (at its root) with the paired peers, live: the share's key, or why not. */
+      share(): Promise<{ key: string; error: string }>;
+      /** Peer `peerId`'s copy at `key` as a remote of this folder's repository, named after the peer, its token in the local git config: the remote's name, "" when the peer is unknown. */
+      remote(peerId: string, key: string): Promise<string>;
+      /** `git fetch --prune <remote>` in this folder, never prompting: the exit code and what git said. */
+      fetch(remote: string): Promise<{ code: number; out: string; err: string }>;
     };
     sessions: {
       /** The folder's sessions with the agent, newest first. */

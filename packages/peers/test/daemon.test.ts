@@ -66,6 +66,12 @@ const main = async (): Promise<void> => {
   const after = await client.request("GET", "/api/state", null);
   ok("the state lists the peer without its tokens", after.ok && after.text.includes('"name":"mac"') && !after.text.includes(onA!.tokenTheyPresent) && !after.text.includes(onA!.tokenWePresent));
 
+  const refreshed = await client.request("POST", "/api/peers/refresh", null);
+  ok("refresh pings the peers and names those online", refreshed.ok && refreshed.text.includes(b.identity.id));
+  const noOffer = await client.request("POST", "/api/peer/repos", { peerId: b.identity.id });
+  ok("a peer's offers come through the daemon", noOffer.ok && noOffer.text.includes('"repos":[]'));
+  const unknownPeer = await client.request("POST", "/api/peer/repos", { peerId: "nobody" });
+  eqn("an unknown peer is 404", unknownPeer.status, 404);
   const shareNothing = await client.request("POST", "/api/share", { path: join(root, "nowhere") });
   eqn("sharing a missing folder is 400", shareNothing.status, 400);
   const forgot = await client.request("POST", "/api/forget", { peerId: b.identity.id });

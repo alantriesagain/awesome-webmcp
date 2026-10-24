@@ -6,6 +6,7 @@
 import { createHmac, randomInt } from "node:crypto";
 import { num, parseJson, recordOf, str } from "@light/lib/json.ts";
 import { Identity, newToken, peerIdOf } from "./identity.ts";
+import { urlHost } from "./git-http.ts";
 import { Peer, Registry, sameSecret } from "./registry.ts";
 
 export const PAIR_CODE_LIFE_MS = 120000;
@@ -127,7 +128,7 @@ export const joinPeer = async (registry: Registry, identity: Identity, myPort: n
   let status = 0;
   let text = "";
   try {
-    const res = await fetch("http://" + address + ":" + String(port) + "/pair", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body.toJson()) });
+    const res = await fetch("http://" + urlHost(address) + ":" + String(port) + "/pair", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body.toJson()) });
     status = res.status;
     text = await res.text();
   } catch (err) {
