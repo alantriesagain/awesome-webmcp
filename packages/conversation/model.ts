@@ -147,6 +147,8 @@ export class Item {
   summary = "";
   paths: string[] = [];
   command = "";
+  /** The programs the command runs (`command.ts`), for its line and the counts. */
+  programs: string[] = [];
   written = "";
   todos: Todo[] = [];
   agentType = "";
@@ -409,6 +411,13 @@ export class ChatModel {
   }
 
   /** How many calls of each tool the session holds, by the name the agent's list of tools gives it. */
+  /** The commands the session's calls ran, in order. */
+  commands(): string[] {
+    const out: string[] = [];
+    for (const item of this.tools.values()) if (item.command.length > 0) out.push(item.command);
+    return out;
+  }
+
   callCounts(): Map<string, number> {
     const out = new Map<string, number>();
     for (const item of this.tools.values()) {

@@ -113,10 +113,14 @@ export class ToolsSource extends ModelSource {
     l.add(name, "").bold = true;
     const room = width - 5 - stringWidth(name) - (time.length > 0 ? time.length + 2 : 0);
     const summary = toolSummary(item, this.ctx).replace(/\s+/g, " ").trim();
-    const shown = room > 2 && summary.length > 0 ? " " + clipText(summary, room - 1) : "";
+    // The programs the command ran, after what it does, when the row has room for both.
+    const tag = item.programs.length > 0 ? " · " + item.programs.join(", ") : "";
+    const fits = tag.length > 0 && room > stringWidth(summary) + stringWidth(tag) + 2;
+    const shown = room > 2 && summary.length > 0 ? " " + clipText(summary, room - 1 - (fits ? stringWidth(tag) : 0)) : "";
     l.add(shown, palette.dim);
+    if (fits) l.add(tag, palette.dim).italic = true;
     if (time.length > 0) {
-      const used = 5 + stringWidth(name) + stringWidth(shown);
+      const used = 5 + stringWidth(name) + stringWidth(shown) + (fits ? stringWidth(tag) : 0);
       l.add(" ".repeat(Math.max(1, width - used - time.length)) + time, state === RUNNING ? palette.warn : palette.dim);
     }
     if (index === this.selected) {

@@ -57,6 +57,11 @@ widecode.plugin({
           out.push({ head: true, text: server, source: "", fg: "", note: "MCP" + (status.length > 0 && status !== "connected" ? " · " + status : ""), noteFg: STATUS[status] ?? DIM, calls: 0 });
           for (const t of got.tools) if (t.server === server) out.push(tool(t));
         }
+        // The programs the session's commands ran, most run first.
+        if (got.programs.length > 0) {
+          out.push({ head: true, text: "Programs", source: "", fg: "", note: "", noteFg: DIM, calls: 0 });
+          for (const p of got.programs) out.push({ head: false, text: p.program, source: "", fg: "", note: "", noteFg: "", calls: p.calls });
+        }
       }
       lines = out;
       count = got.tools.length;

@@ -80,7 +80,7 @@ const main = async (): Promise<void> => {
       },
     }),
   );
-  ok("its calls counted, an MCP tool's by its whole name", await until(() => tab(w).endsWith("Claude|   Bash  ×2|   Read| claude.ai Claude Docs  MCP|   query  ×1|   read| broken  MCP · failed| gone  MCP|   ping")));
+  ok("its calls counted, an MCP tool's by its whole name, the programs its commands ran after them", await until(() => tab(w).endsWith("Claude|   Bash  ×2|   Read| claude.ai Claude Docs  MCP|   query  ×1|   read| broken  MCP · failed| gone  MCP|   ping| Programs|   ls  ×1|   pwd  ×1")));
   eq("and how many were used", tab(w).split("|")[0], " 5 tools · 2 used");
   eq("as the model keeps them", c.model.available.map((t) => (t.server.length > 0 ? t.server + "/" : "") + t.name).join(",") + " " + c.model.servers.map((s) => s.name + ":" + s.status).join(","), "Bash,Read,claude.ai Claude Docs/query,claude.ai Claude Docs/read,gone/ping claude.ai Claude Docs:connected,broken:failed");
 

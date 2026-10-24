@@ -14,6 +14,7 @@ import { stamp, took } from "@light/ui/duration.ts";
 import { Line, Run } from "@bootstrapp/light/native/tui/lines.ts";
 import { stringWidth } from "@bootstrapp/light/native/tui/width.ts";
 import { callState, FAILED, RUNNING, STOPPED } from "./calls.ts";
+import { programCounts } from "./command.ts";
 import { clipText, expandTabs, wrap } from "@light/ui/text.ts";
 import { renderMarkdown } from "@light/markdown/markdown.ts";
 import { EDIT, Item, NOTICE, PLAN, PROMPT, QUESTION, REQUEST, TEXT, THINKING, TOOL, Turn } from "./model.ts";
@@ -254,11 +255,18 @@ const groupLine = (calls: Item[], ctx: RenderContext, width: number): Line => {
   if (calls.length === 1) {
     const summary = toolSummary(calls[0], ctx).replace(/\s+/g, " ").trim();
     l.add(calls[0].name, palette.dim).bold = true;
-    if (summary.length > 0) l.add(" " + clipText(summary, Math.max(8, Math.min(SUMMARY_CELLS, width - calls[0].name.length - 24))), palette.dim);
+    const room = Math.max(8, Math.min(SUMMARY_CELLS, width - calls[0].name.length - 24));
+    const tag = calls[0].programs.length > 0 ? " · " + calls[0].programs.join(", ") : "";
+    // The programs after what the command does, in the summary's room, when it leaves them some.
+    const tagged = tag.length > 0 && summary.length + tag.length <= room;
+    if (summary.length > 0) l.add(" " + clipText(summary, room - (tagged ? tag.length : 0)), palette.dim);
+    if (tagged) l.add(tag, palette.dim).italic = true;
   } else {
     l.add(String(calls.length) + " tools", palette.dim);
     const tools = names.map((n: string, i: number) => n + (counts[i] > 1 ? " ×" + String(counts[i]) : "")).join(", ");
     l.add(" · " + clipText(tools, Math.max(8, width - 32)), palette.dim);
+    const ran = programCounts(calls.map((c) => c.command)).map((p) => p.program + (p.calls > 1 ? " ×" + String(p.calls) : "")).join(", ");
+    if (ran.length > 0) l.add(" · " + clipText(ran, Math.max(8, width - 60)), palette.dim).italic = true;
   }
   if (running > 0) l.add(" · " + String(running) + " running", palette.warn);
   if (failed > 0) l.add(" · " + String(failed) + " failed", palette.bad);

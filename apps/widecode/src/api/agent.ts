@@ -5,6 +5,7 @@
 import { PreludePart } from "@light/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
 import { Option } from "@widecode/conversation/agent.ts";
+import { programCounts } from "@widecode/conversation/command.ts";
 import { agentDescription, agentStatus, agentType, agentsOf } from "@widecode/conversation/agents.ts";
 import { applyEvents } from "@widecode/conversation/events.ts";
 import { Ask } from "@widecode/conversation/requests.ts";
@@ -70,7 +71,10 @@ export const answerAgent = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
       for (const t of m.available) tools.push(objectText(["name", "server", "access", "scope", "calls"], [json(t.name), json(t.server), json(t.access), json(t.scope), String(counts.get(t.id) ?? 0)]));
       const servers: string[] = [];
       for (const s of m.servers) servers.push(objectText(["name", "status"], [json(s.name), json(s.status)]));
-      return answerText(objectText(["known", "ownKnown", "tools", "servers"], [json(m.availableKnown), json(m.ownKnown), "[" + tools.join(",") + "]", "[" + servers.join(",") + "]"]));
+      // The programs the session's commands ran, most run first.
+      const programs: string[] = [];
+      for (const p of programCounts(m.commands())) programs.push(objectText(["program", "calls"], [json(p.program), String(p.calls)]));
+      return answerText(objectText(["known", "ownKnown", "tools", "servers", "programs"], [json(m.availableKnown), json(m.ownKnown), "[" + tools.join(",") + "]", "[" + servers.join(",") + "]", "[" + programs.join(",") + "]"]));
     }
     case "agent.agents": {
       // The session's subagents: each call's id, kind, task, where it stands, and what it is doing or said.

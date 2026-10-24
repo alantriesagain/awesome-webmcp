@@ -848,7 +848,7 @@ declare namespace widecode {
        * the MCP server it comes from ("" for the agent's own), and its MCP servers; `ownKnown` false
        * when the agent lists none of its own.
        */
-      tools(): { known: boolean; ownKnown: boolean; tools: { name: string; server: string; access: string; scope: string; calls: number }[]; servers: { name: string; status: string }[] };
+      tools(): { known: boolean; ownKnown: boolean; tools: { name: string; server: string; access: string; scope: string; calls: number }[]; servers: { name: string; status: string }[]; programs: { program: string; calls: number }[] };
     };
     settings: {
       /** The plugin's section of config.json, null when it has none. */

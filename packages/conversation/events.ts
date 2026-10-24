@@ -4,6 +4,7 @@
 // them for plugins. A block is named by the parent call it is under ("" for the turn) and its key
 // (the adapter's own: a message and its index, a call's id).
 import { ChatModel, Item, PatchHunk, ServerInfo, TaskInfo, Todo, ToolInfo, ToolResult, TurnResult, AGENT, EDIT, READ, RUN, SEARCH, TEXT, THINKING, TOOL } from "./model.ts";
+import { programsOf } from "./command.ts";
 import { isRecord, listOf, num, str, strs, text } from "@light/lib/json.ts";
 import { Choice, Question } from "./requests.ts";
 import { StatusInfo } from "./status-info.ts";
@@ -175,7 +176,10 @@ const facts = (item: Item, e: Ev): void => {
   if (typeof e.category === "string") item.category = e.category;
   if (typeof e.summary === "string") item.summary = e.summary;
   if (e.paths !== undefined) item.paths = strs(e.paths);
-  if (typeof e.command === "string") item.command = e.command;
+  if (typeof e.command === "string") {
+    item.command = e.command;
+    item.programs = programsOf(e.command);
+  }
   if (typeof e.written === "string") item.written = e.written;
   if (typeof e.tool === "string") item.tool = e.tool;
   if (e.todos !== undefined) {
