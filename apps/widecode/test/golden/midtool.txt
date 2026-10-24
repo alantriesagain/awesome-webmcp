@@ -4,11 +4,11 @@
 I'll run these commands sequentially since the second depends on the first
 completing.
 
-· Bash sleep 6; echo STEP-ONE  ▸
+· Sleep for 6 seconds then echo STEP-ONE  ▸
 
 › Also, at the end, say the word BANANA.
 
-· Bash echo STEP-TWO  ▸
+· Echo STEP-TWO  ▸
 
 DONE
 

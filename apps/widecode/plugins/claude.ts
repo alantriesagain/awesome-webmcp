@@ -102,7 +102,7 @@ const describe = (call: Call, folder: string): widecode.CallFacts => {
   const path = str(input.file_path) || str(input.notebook_path) || str(input.path);
   const shown = relative(path);
   let summary = "";
-  if (name === "Bash") summary = firstLine(str(input.command));
+  if (name === "Bash") summary = str(input.description).trim().length > 0 ? str(input.description).trim() : firstLine(str(input.command));
   else if (name === "Read") summary = shown + (num(input.offset) > 0 ? " from line " + String(num(input.offset)) : "");
   else if (name === "Edit" || name === "MultiEdit") summary = shown + (call.hasResult || str(input.new_string).length > 0 ? "  " + editCounts(call, input) : "");
   else if (name === "Write") summary = shown + "  " + String(countLines(str(input.content))) + " lines";
