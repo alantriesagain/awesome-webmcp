@@ -133,6 +133,12 @@ These share the "something went away while a callback was running" theme.
 - [x] **`SessionController.open` can prepare an agent that is about to be retired.** The old agent
       is attached but not started; the folder's plugins load, `folderOpened` re-chooses it, and the
       conversation prepares after that.
+- [ ] **Subagents launched from a widecode session stall before their first tool result.** Three
+      Explore agents (Claude Code's Agent tool, in the background) each wrote one sentence and ran no
+      tool for 42 minutes, took no notice of a message sent to them, and had to be killed. Suspects:
+      the subagent event stream (`parent_tool_use_id`, `--forward-subagent-text`) or stdin while a
+      subagent runs. Reproduce with one trivial background Agent call, then bisect. (`plugins/claude.ts`,
+      `packages/agent`)
 
 ## Milestone D: QuickJS execution
 
