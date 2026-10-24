@@ -3,7 +3,9 @@
 // nothing saved) from the session's first prompt and the start of the first reply. Requests queue
 // and run two at a time; each session is asked once (`/title` asks again). A failure leaves the
 // session untitled.
+import { homedir } from "node:os";
 import { ProcessRun, spawnCapped, SpawnOptions } from "@light/lib/process.ts";
+import { claudeExecutable } from "./claude.ts";
 /** `text` cut to `cells` characters (a title's text is short and single-line). */
 const clipText = (text: string, cells: number): string => (text.length <= cells ? text : text.slice(0, Math.max(0, cells - 1)) + "…");
 
@@ -49,7 +51,8 @@ class TitleJob {
 }
 
 export class Titler {
-  executable = "claude";
+  /** The CLI as `--claude` named it; empty, the one the agent itself starts (PATH, then ~/.local/bin/claude). */
+  executable = "";
   model = "haiku";
   /** Titles are on (the sessions plugin's setting). */
   enabled = true;
@@ -91,7 +94,7 @@ export class Titler {
     let input = "Title this session.\n<user_request>\n" + job.prompt.slice(0, PROMPT_MAX) + "\n</user_request>";
     if (job.reply.trim().length > 0) input += "\n<assistant_answer>\n" + job.reply.slice(0, REPLY_MAX) + "\n</assistant_answer>";
     input += "\nThe title (3 to 6 words, describing what the user wanted):";
-    const args = ["-u", "CLAUDECODE", "-u", "CLAUDE_CODE_ENTRYPOINT", this.executable, "-p", "--model", this.model, "--effort", "low", "--no-session-persistence", "--tools", "", "--system-prompt", SYSTEM, input];
+    const args = ["-u", "CLAUDECODE", "-u", "CLAUDE_CODE_ENTRYPOINT", claudeExecutable(this.executable, process.env["PATH"] ?? "", homedir()), "-p", "--model", this.model, "--effort", "low", "--no-session-persistence", "--tools", "", "--system-prompt", SYSTEM, input];
     const o = new SpawnOptions();
     o.timeoutMs = TIMEOUT_MS;
     o.maxBytes = ANSWER_MAX;
