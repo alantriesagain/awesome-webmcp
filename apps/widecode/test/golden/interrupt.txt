@@ -1,6 +1,6 @@
 › Run the shell command `sleep 30` with the Bash tool, then say finished.
 
-· Sleep for 30 seconds · 1 failed  ▸
+· Bash Sleep for 30 seconds · 1 failed  ▸
 
 · Interrupted
 

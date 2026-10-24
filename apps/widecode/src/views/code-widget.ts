@@ -5,7 +5,7 @@
 // edits, reloading when the folder or the base changes) and binds the keys.
 import { agentDescription, agentStatus, agentType, findAgent } from "@widecode/conversation/agents.ts";
 import { findCall } from "@widecode/conversation/calls.ts";
-import { toolName, toolSummary, RenderContext } from "@widecode/conversation/render.ts";
+import { toolSummary, RenderContext } from "@widecode/conversation/render.ts";
 import { AGENT, Item } from "@widecode/conversation/model.ts";
 import { Column } from "@widecode/screen/contributions.ts";
 import { CodeTarget } from "@widecode/code/target.ts";
@@ -73,8 +73,7 @@ export class CodeWidget extends CodeTarget {
     ctx.folder = h.workspace.folder;
     const summary = toolSummary(item, ctx).replace(/\s+/g, " ");
     const source = new CallSource(h, id);
-    const name = toolName(item);
-    this.pane.showAgent(source, name + (name.length > 0 && summary.length > 0 ? " · " : "") + summary, false);
+    this.pane.showAgent(source, item.name + (summary.length > 0 ? " · " + summary : ""), false);
     this.pane.onPress = null;
     h.note("call " + id);
     h.fileShown.fire();

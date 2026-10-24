@@ -243,7 +243,7 @@ const main = async (): Promise<void> => {
     ok("the rewound branch is dropped", !text.includes("rewound"));
     ok("the kept branch and the compacted part are in order", text.indexOf("first prompt") < text.indexOf("kept prompt") && text.indexOf("kept prompt") < text.indexOf("Conversation compacted") && text.indexOf("Conversation compacted") < text.indexOf("after compact"));
     const ls = findCall(model, "t1");
-    ok("the tool call got its result", text.includes("· ls") && ls !== null && ls.result !== null && ls.result.text === "a.txt");
+    ok("the tool call got its result", text.includes("· Bash ls") && ls !== null && ls.result !== null && ls.result.text === "a.txt");
     ok("a transcript's compaction: how and how much", text.includes("· Conversation compacted automatically · 980k → 27k tokens"));
   }
 
@@ -253,11 +253,11 @@ const main = async (): Promise<void> => {
     receive({ type: "user", uuid: "u1", message: { role: "user", content: "check formatting" } });
     receive({ type: "assistant", uuid: "a1", parentUuid: "u1", message: { id: "m1", role: "assistant", content: [{ type: "thinking", thinking: "The user wants a check.\nI will loop over the files." }, { type: "thinking", thinking: "" }, { type: "tool_use", id: "t1", name: "Bash", input: { command: long } }] } });
     const shown = render(calls, "");
-    const head = shown.split("\n").find((l: string) => l.startsWith("· for f in")) ?? "";
+    const head = shown.split("\n").find((l: string) => l.startsWith("· Bash for f in")) ?? "";
     ok("a long command is cut short on its turn's line", head.includes("…") && !head.includes("all-checked") && head.length < 80);
     const call = calls.turns[0].body.children[2];
     const card = (): string => itemLines(call, new RenderContext(), [], 80).map(textOf).join("\n");
-    ok("drawn on its own, a call's line cuts it short too", card().startsWith("● for f in") && !card().includes("all-checked"));
+    ok("drawn on its own, a call's line cuts it short too", card().startsWith("● Bash for f in") && !card().includes("all-checked"));
     eq("thinking with words is its first line; without words, nothing", shown.split("\n").filter((l: string) => l.startsWith("✻")).join("|"), "✻ The user wants a check. …");
     for (const item of calls.turns[0].body.children) {
       item.expanded = true;

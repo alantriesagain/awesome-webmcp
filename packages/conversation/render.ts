@@ -55,9 +55,6 @@ export const toolSummary = (item: Item, ctx: RenderContext): string => {
   return item.input === null && item.partial.length > 0 ? clipText(item.partial.replace(/\s+/g, " "), 80) : "";
 };
 
-/** The tool's name on a call's line: none for a command, whose line says what it does, not which shell ran it. */
-export const toolName = (item: Item): string => (item.command.length > 0 ? "" : item.name);
-
 const statusMark = (item: Item): Run => {
   const state = callState(item);
   // ● and not ⏺: VTE terminals draw ⏺ as a two-cell emoji over the name after it.
@@ -136,10 +133,9 @@ export const callPage = (item: Item, ctx: RenderContext, width: number, state: s
   const head = new Line();
   head.runs.push(statusMark(item));
   head.decor = 1;
-  const name = toolName(item);
-  head.add(name, "").bold = true;
+  head.add(item.name, "").bold = true;
   const summary = toolSummary(item, ctx);
-  if (summary.length > 0) head.add((name.length > 0 ? " " : "") + clipText(summary, Math.max(8, width - name.length - 4)), palette.dim);
+  if (summary.length > 0) head.add(" " + clipText(summary, Math.max(8, width - item.name.length - 4)), palette.dim);
   out.push(head);
   out.push(line([new Run("  ", "")], state, palette.dim));
   out.push(new Line());
@@ -170,10 +166,9 @@ export const itemLines = (item: Item, ctx: RenderContext, indent: Run[], width: 
     for (const r of indent) head.runs.push(r);
     head.runs.push(statusMark(item));
     head.decor = head.runs.length;
-    const name = toolName(item);
-    head.add(name, "").bold = true;
+    head.add(item.name, "").bold = true;
     const summary = toolSummary(item, ctx);
-    if (summary.length > 0) head.add((name.length > 0 ? " " : "") + clipText(summary, Math.max(8, Math.min(SUMMARY_CELLS, width - name.length - 6))), palette.dim);
+    if (summary.length > 0) head.add(" " + clipText(summary, Math.max(8, Math.min(SUMMARY_CELLS, width - item.name.length - 6))), palette.dim);
     const task = item.task;
     if (task !== null && task.status === "running" && task.lastTool.length > 0) head.add("  · " + task.lastTool, palette.warn);
     if (item.children.length > 0 || item.result !== null || item.input !== null) head.add(item.expanded ? "  ▾" : "  ▸", palette.dim);
@@ -258,9 +253,8 @@ const groupLine = (calls: Item[], ctx: RenderContext, width: number): Line => {
   l.decor = 1;
   if (calls.length === 1) {
     const summary = toolSummary(calls[0], ctx).replace(/\s+/g, " ").trim();
-    const name = toolName(calls[0]);
-    l.add(name, palette.dim).bold = true;
-    if (summary.length > 0) l.add((name.length > 0 ? " " : "") + clipText(summary, Math.max(8, Math.min(SUMMARY_CELLS, width - name.length - 24))), palette.dim);
+    l.add(calls[0].name, palette.dim).bold = true;
+    if (summary.length > 0) l.add(" " + clipText(summary, Math.max(8, Math.min(SUMMARY_CELLS, width - calls[0].name.length - 24))), palette.dim);
   } else {
     l.add(String(calls.length) + " tools", palette.dim);
     const tools = names.map((n: string, i: number) => n + (counts[i] > 1 ? " ×" + String(counts[i]) : "")).join(", ");

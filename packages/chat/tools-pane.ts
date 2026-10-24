@@ -11,7 +11,7 @@ import { span } from "@light/ui/duration.ts";
 import { spinnerAt } from "@bootstrapp/light/native/tui/ticks.ts";
 import { callMs, callState, DONE, FAILED, RUNNING } from "@widecode/conversation/calls.ts";
 import { ChatModel, Item, PROMPT, TOOL } from "@widecode/conversation/model.ts";
-import { toolName, toolSummary } from "@widecode/conversation/render.ts";
+import { toolSummary } from "@widecode/conversation/render.ts";
 import { ChatHost } from "./host.ts";
 import { ModelSource } from "@widecode/conversation/model-source.ts";
 import { Line } from "@bootstrapp/light/native/tui/lines.ts";
@@ -109,11 +109,11 @@ export class ToolsSource extends ModelSource {
     const mark = state === RUNNING ? spinnerAt(now) : "●";
     l.add("   " + mark + " ", state === RUNNING ? palette.warn : state === DONE ? palette.ok : state === FAILED ? palette.bad : palette.dim);
     l.decor = 1;
-    const name = toolName(item);
+    const name = item.name;
     l.add(name, "").bold = true;
     const room = width - 5 - stringWidth(name) - (time.length > 0 ? time.length + 2 : 0);
     const summary = toolSummary(item, this.ctx).replace(/\s+/g, " ").trim();
-    const shown = room > 2 && summary.length > 0 ? (name.length > 0 ? " " : "") + clipText(summary, room - 1) : "";
+    const shown = room > 2 && summary.length > 0 ? " " + clipText(summary, room - 1) : "";
     l.add(shown, palette.dim);
     if (time.length > 0) {
       const used = 5 + stringWidth(name) + stringWidth(shown);

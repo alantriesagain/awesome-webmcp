@@ -2,12 +2,9 @@
 // inside it), "thinking", "writing", "compacting", or "" between turns; and the step it is on (the
 // running call or the thinking), whose start its clock counts from.
 import { ChatModel, Item, TEXT, THINKING, TOOL } from "./model.ts";
-import { RenderContext, toolName, toolSummary } from "./render.ts";
+import { RenderContext, toolSummary } from "./render.ts";
 
 const NO_FOLDER = new RenderContext();
-
-/** A call as the line says it: its tool and its summary, or the one it has. */
-const joined = (name: string, summary: string): string => (name.length > 0 && summary.length > 0 ? name + " " + summary : name + summary);
 
 /** What Claude is doing now: the running tool and its summary, or "". */
 export const activityOf = (m: ChatModel): string => {
@@ -19,8 +16,8 @@ export const activityOf = (m: ChatModel): string => {
     const item = items[i];
     if (item.kind === TOOL && item.result === null) {
       const nested = item.children.length > 0 ? item.children[item.children.length - 1] : null;
-      if (nested !== null && nested.kind === TOOL && nested.result === null) return item.name + " › " + joined(toolName(nested), toolSummary(nested, NO_FOLDER));
-      return joined(toolName(item), toolSummary(item, NO_FOLDER));
+      if (nested !== null && nested.kind === TOOL && nested.result === null) return item.name + " › " + nested.name + " " + toolSummary(nested, NO_FOLDER);
+      return item.name + " " + toolSummary(item, NO_FOLDER);
     }
     if (item.kind === THINKING && !item.done) return "thinking";
     if (item.kind === TEXT && !item.done) return "writing";

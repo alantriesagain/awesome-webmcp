@@ -67,14 +67,14 @@ const main = async (): Promise<void> => {
     if (running.length === 0 && rows().some((l) => l.includes("Sleep for 6 seconds"))) running = rows();
   }
   const runningRow = running.find((l) => l.includes("Sleep for 6 seconds")) ?? "";
-  ok("a running call: a spinner, what its command does, its clock", SPINNER.includes(runningRow.trim()[0]) && /Sleep for 6 seconds then echo STEP-ONE +\d+\.\ds$/.test(runningRow));
+  ok("a running call: a spinner, its tool and what its command does, its clock", SPINNER.includes(runningRow.trim()[0]) && /Bash Sleep for 6 seconds then echo STEP-ONE +\d+\.\ds$/.test(runningRow));
   const all = rows();
   eq(
     "the calls under the message each answers, the one sent meanwhile between them",
     all.map((l) => l.replace(/ +\d+\.\ds$/, "").replace(/\s+$/, "")).join(" | "),
-    " › Run the shell command `sleep 6; echo STEP-ONE` with the… |    ● Sleep for 6 seconds then echo STEP-ONE |  |  › Also, at the end, say the word BANANA. |    ● Echo STEP-TWO",
+    " › Run the shell command `sleep 6; echo STEP-ONE` with the… |    ● Bash Sleep for 6 seconds then echo STEP-ONE |  |  › Also, at the end, say the word BANANA. |    ● Bash Echo STEP-TWO",
   );
-  ok("finished, each with its time", all.filter((l) => /● .* \d+\.\ds$/.test(l)).length === 2);
+  ok("finished, each with its time", all.filter((l) => /● Bash .* \d+\.\ds$/.test(l)).length === 2);
   eq("the count, and the link's badge", panel.info().map((r: Run) => r.text).join("") + " / " + panel.badge().map((r: Run) => r.text).join(""), " 2 calls / 2");
   ok("the tools column shows the Tools tab first", w.host.screen.shownIn("tools") === "calls");
   eq("a seventh of the terminal, 32 to 44 cells, the Agents tab's too", [200, 260, 330].map((cols) => String(panel.width(cols)) + "/" + String(w.host.screen.findPanel("agents")?.width(cols) ?? 0)).join(" "), "32/32 37/37 44/44");
@@ -84,12 +84,12 @@ const main = async (): Promise<void> => {
   press("down");
   ok("↓ selects the calls in turn", panel.source.selected === 4);
   press("enter");
-  ok("Enter shows the call in the code column", w.host.roles.code.inAgent() && w.code.pane.agent.peek() === "Echo STEP-TWO");
+  ok("Enter shows the call in the code column", w.host.roles.code.inAgent() && w.code.pane.agent.peek() === "Bash · Echo STEP-TWO");
   const view = w.code.pane.view;
   view.source.prepare(80);
   const page: string[] = [];
   for (let i = 0; i < view.source.count(); i++) page.push(view.source.line(i, 80).runs.map((r: Run) => r.text).join(""));
-  ok("its line, where it stands and for how long", page[0].startsWith("● Echo STEP-TWO") && /^ {2}done · \d+\.\ds$/.test(page[1]));
+  ok("its line, where it stands and for how long", page[0].startsWith("● Bash Echo STEP-TWO") && /^ {2}done · \d+\.\ds$/.test(page[1]));
   ok("its command whole and its output", page.some((l) => l.includes("⎿ echo STEP-TWO")) && page.some((l) => l.includes("STEP-TWO") && !l.includes("echo")));
   w.host.screen.focus("code");
   press("escape");
