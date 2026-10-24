@@ -1,0 +1,24 @@
+# @widecode/peers
+
+The LAN git bridge: widecode shares a machine's repositories with the machines it paired with, in place and read-only, and the other side fetches. One daemon per machine serves while no session runs; the sessions drive it over a local control API. Nothing is written into a repository: the identity, the registry and the daemon's state live under the store (`~/.widecode/peers/`).
+
+| File | Role |
+|---|---|
+| `identity.ts` | The machine's ed25519 keypair, made once (`identity.json`, user-readable only); the peer id is the public key's SHA-256; tokens are 32 random bytes as base64url |
+| `registry.ts` | `peers.json`: the paired peers (key, the token they present, the token we present, last address) and the shared repositories (the root commit as the identity other machines match, the path, `live` or `hosted`, a branch filter, an allow list; a share's key is `r/<rootCommit>` or `h/<name>`); `peerByToken` compares in constant time |
+| `pairing.ts` | The code the host shows for two minutes, the joiner's proof (an HMAC of its public key under the code), the exchange of keys and mutual tokens, `joinPeer` as the client |
+| `git-http.ts` | The smart HTTP protocol as `git http-backend` serves it: `GET /r/<id>/info/refs?service=…` and `POST /r/<id>/git-upload-pack` piped through `git upload-pack --stateless-rpc`; `git-receive-pack` for hosted repositories; `Git-Protocol` passed through; gzipped bodies inflated; `transfer.hideRefs` keeps a repository to its branch filter and hides remote-tracking refs, stashes and notes; `GET /repos` lists what a peer may fetch |
+| `daemon.ts` | `startDaemon`: the LAN listener (`/pair` without a token while a code is shown, `/ping`, everything else with a token, private addresses only) and the loopback control API (`/api/state`, `/api/pair/start`, `/api/pair/join`, `/api/share`, `/api/unshare`, `/api/forget`, `/api/rename`, `/api/stop`); the state file `daemon.json` (pid, ports, the control token); one daemon per machine |
+| `client.ts` | `DaemonClient`: the session's side, reading the state file, asking the control API, starting the daemon detached when none answers |
+
+## How a fetch flows
+
+A peer's remote in a checkout is `http://<address>:<port>/r/<rootCommit>` for a live checkout, or `/h/<name>` for a hosted repository (so a checkout and a hosted mirror of the same repository can both be served), with the token in `http.<that url>.extraHeader = Authorization: Bearer …` of the local `.git/config`, never in the URL. git asks for the advertisement, the daemon answers the service header then `git upload-pack --stateless-rpc --advertise-refs <path>`, git posts its wants and haves, the daemon pipes them into `git upload-pack --stateless-rpc <path>` and the pack comes back. The served checkout's working tree and index are never touched; a fetch reads objects and refs only.
+
+## What is and is not sent
+
+Local branches and tags of a shared repository, or the branches its filter names; never the index, the working tree, stashes, notes or remote-tracking refs. A request from an address outside the private ranges is refused. A peer sees only the repositories whose allow list names it, or that have none. Revoking a peer removes its token; its next request is a 401.
+
+## Tests
+
+`packages/peers/test/`: the registry and identity round trips, pairing (a proof that holds, a wrong code, an expired one), and the git server end to end with a real `git clone` over the loopback, with and without the token, with a branch filter, with protocol v2, with a gzipped request, and a push into a hosted bare repository. Run with `light-native test @widecode/peers`; every test prints the same under node and natively.

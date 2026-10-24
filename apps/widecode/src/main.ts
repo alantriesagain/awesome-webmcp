@@ -13,6 +13,8 @@
 //   --version           the build (its version and time), then exit
 //   --selftest <name>   a scripted check (selftest.ts); --fake-fixture <file> for the fake CLI,
 //   --ephemeral         sessions are not saved (--no-session-persistence)
+//   --peers-daemon      run the LAN git bridge's daemon instead of the app (@widecode/peers cli.ts;
+//                       --port, --name, --bind), with no terminal; the peers plugin starts it
 // F12 writes the screen's text to the log, and /log says where it is. The log follows the run: its
 // start, sessions and turns, every few minutes that it is alive, how it ended (quit, a signal, the
 // exit code), and an uncaught error with the trail of what ran last and the screen as it was. The terminal's title is the session's, or the folder's
@@ -25,12 +27,20 @@ import { errorMessage } from "@light/lib/json.ts";
 import { resolve } from "node:path";
 import { argValue, hasArg, log, logPath, nameLog, openLog } from "@light/lib/log.ts";
 import { Terminal } from "@bootstrapp/light/native/tui";
+import { peersDaemonMain } from "@widecode/peers/cli.ts";
+import { Store } from "./services/store.ts";
 import { BUILD, StartupHooks, startWidecode } from "./startup.ts";
 
 if (hasArg("--version")) {
   console.log(BUILD);
   process.exit(0);
 }
+
+// The daemon shares nothing with the app below: no terminal, no folder, its own log.
+if (hasArg("--peers-daemon")) void peersDaemonMain(Store.defaultRoot(), process.argv.slice(2), BUILD).then((code: number) => process.exit(code));
+else runApp();
+
+function runApp(): void {
 
 const logArg = argValue("--log");
 nameLog("widecode");
@@ -79,3 +89,4 @@ startWidecode(term, folder, selftest, logArg, hooks).catch((err: unknown) => {
   log("cannot start: " + (errorMessage(err, "error")));
   process.exit(1);
 });
+}

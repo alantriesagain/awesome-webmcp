@@ -1,0 +1,413 @@
+// The daemon: one per machine, the widecode binary run with --peers-daemon. It listens on the LAN
+// for peers (pairing without a token while a code is shown; everything else with one) and on the
+// loopback for the sessions of this machine (the control API behind its own token, in the state
+// file). It keeps the identity and the registry, computes a repository's id (its oldest root
+// commit) when one is shared, and goes away when its state file is removed or on SIGTERM.
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { hostname, networkInterfaces } from "node:os";
+import { basename, join } from "node:path";
+import { writeAtomic } from "@light/lib/fs.ts";
+import { errorMessage, listOf, num, parseJson, recordOf, str, strs } from "@light/lib/json.ts";
+import { ProcessRun, SpawnOptions, spawnCapped } from "@light/lib/process.ts";
+import { GitServer, bearerOf, isPrivateAddress, json, plain, remoteAddressOf, RequestUrl } from "./git-http.ts";
+import { Identity, loadOrCreateIdentity, newToken, saveIdentity } from "./identity.ts";
+import { JoinRequest, PairOffer, acceptJoin, joinPeer, newPairCode } from "./pairing.ts";
+import { Peer, Registry, SharedRepo } from "./registry.ts";
+
+export const DEFAULT_PORT = 7337;
+const MAX_BODY = 1048576;
+
+/** Where the bridge keeps its files under the store. */
+export class DaemonPaths {
+  readonly dir: string;
+  readonly identity: string;
+  readonly registry: string;
+  readonly state: string;
+  readonly hosted: string;
+
+  constructor(storeRoot: string) {
+    this.dir = join(storeRoot, "peers");
+    this.identity = join(this.dir, "identity.json");
+    this.registry = join(this.dir, "peers.json");
+    this.state = join(this.dir, "daemon.json");
+    this.hosted = join(this.dir, "hosted");
+  }
+}
+
+export class DaemonOptions {
+  /** The LAN port asked for; another is taken when it is busy. */
+  port = DEFAULT_PORT;
+  /** The address the LAN listener binds: every interface, or the loopback alone (tests). */
+  bind = "0.0.0.0";
+  /** The name to announce; "" keeps the identity's. */
+  name = "";
+  git = "git";
+}
+
+/** The state file: how a session finds the running daemon. */
+export class DaemonState {
+  readonly pid: number;
+  readonly port: number;
+  readonly localPort: number;
+  readonly token: string;
+  readonly startedMs: number;
+
+  constructor(pid: number, port: number, localPort: number, token: string, startedMs: number) {
+    this.pid = pid;
+    this.port = port;
+    this.localPort = localPort;
+    this.token = token;
+    this.startedMs = startedMs;
+  }
+
+  toJson(): unknown {
+    const v: unknown = { pid: this.pid, port: this.port, localPort: this.localPort, token: this.token, startedMs: this.startedMs };
+    return v;
+  }
+
+  static parse(text: string): DaemonState | null {
+    const r = recordOf(parseJson(text));
+    if (r === null) return null;
+    const pid = num(r["pid"], 0);
+    const localPort = num(r["localPort"], 0);
+    const token = str(r["token"]);
+    if (pid <= 0 || localPort <= 0 || token.length === 0) return null;
+    return new DaemonState(pid, num(r["port"], 0), localPort, token, num(r["startedMs"], 0));
+  }
+}
+
+export const readDaemonState = (paths: DaemonPaths): DaemonState | null => (existsSync(paths.state) ? DaemonState.parse(readFileSync(paths.state, "utf8")) : null);
+
+/** Whether the daemon a state file names is there: its process lives and its control API answers with the file's token. */
+export const daemonAnswers = async (state: DaemonState): Promise<boolean> => {
+  if (!processAlive(state.pid)) return false;
+  try {
+    const res = await fetch("http://127.0.0.1:" + String(state.localPort) + "/api/state", { headers: { authorization: "Bearer " + state.token } });
+    return res.status === 200;
+  } catch {
+    return false;
+  }
+};
+
+/** Whether the process a state file names is alive. */
+export const processAlive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** The machine's private IPv4 addresses, for the pairing screen. */
+export const lanAddresses = (): string[] => {
+  const out: string[] = [];
+  const all = networkInterfaces();
+  for (const name of Object.keys(all)) {
+    const list = all[name];
+    if (list === undefined) continue;
+    for (const i of list) if (i.family === "IPv4" && !i.internal && isPrivateAddress(i.address)) out.push(i.address);
+  }
+  return out;
+};
+
+const listenOn = (server: Server, port: number, host: string): Promise<number> =>
+  new Promise((resolve) => {
+    let settled = false;
+    const done = (p: number): void => {
+      if (settled) return;
+      settled = true;
+      resolve(p);
+    };
+    server.on("error", () => done(0));
+    server.listen(port, host, () => {
+      const address = server.address();
+      done(address !== null && typeof address === "object" ? address.port : 0);
+    });
+  });
+
+const readBody = (req: IncomingMessage): Promise<string> =>
+  new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on("data", (c: Buffer) => {
+      size += c.length;
+      if (size <= MAX_BODY) chunks.push(c);
+    });
+    req.on("end", () => resolve(size > MAX_BODY ? "" : Buffer.concat(chunks).toString("utf8")));
+  });
+
+export class Daemon {
+  readonly paths: DaemonPaths;
+  readonly identity: Identity;
+  readonly registry: Registry;
+  readonly gitServer: GitServer;
+  readonly localToken = newToken();
+  readonly startedMs = Date.now();
+  git = "git";
+  offer: PairOffer | null = null;
+  port = 0;
+  localPort = 0;
+  private lan: Server | null = null;
+  private local: Server | null = null;
+  private stateWritten = false;
+  /** Hears a line for the log. */
+  onLog: ((line: string) => void) | null = null;
+  /** Hears that the daemon stopped (the state file went away, or stop was asked). */
+  onStop: (() => void) | null = null;
+
+  constructor(paths: DaemonPaths, identity: Identity, registry: Registry) {
+    this.paths = paths;
+    this.identity = identity;
+    this.registry = registry;
+    this.gitServer = new GitServer(registry);
+    this.gitServer.onLog = (line: string) => this.note(line);
+  }
+
+  note(line: string): void {
+    const fn = this.onLog;
+    if (fn !== null) fn(line);
+  }
+
+  /** Listen on the LAN and on the loopback, then write the state file. */
+  async start(o: DaemonOptions): Promise<string> {
+    this.git = o.git;
+    this.gitServer.git = o.git;
+    if (o.name.length > 0 && o.name !== this.identity.name) {
+      this.identity.name = o.name;
+      saveIdentity(this.paths.identity, this.identity);
+    }
+    let lan = createServer((req: IncomingMessage, res: ServerResponse) => this.lanRequest(req, res));
+    let port = await listenOn(lan, o.port, o.bind);
+    if (port === 0 && o.port !== 0) {
+      lan.close();
+      lan = createServer((req: IncomingMessage, res: ServerResponse) => this.lanRequest(req, res));
+      port = await listenOn(lan, 0, o.bind);
+    }
+    if (port === 0) return "cannot listen on the LAN";
+    this.lan = lan;
+    this.port = port;
+    const local = createServer((req: IncomingMessage, res: ServerResponse) => {
+      void this.localRequest(req, res);
+    });
+    const localPort = await listenOn(local, 0, "127.0.0.1");
+    if (localPort === 0) {
+      lan.close();
+      return "cannot listen on the loopback";
+    }
+    this.local = local;
+    this.localPort = localPort;
+    mkdirSync(this.paths.dir, { recursive: true, mode: 0o700 });
+    writeAtomic(this.paths.state, JSON.stringify(new DaemonState(process.pid, port, localPort, this.localToken, this.startedMs).toJson(), null, 2) + "\n");
+    chmodSync(this.paths.state, 0o600);
+    this.stateWritten = true;
+    this.note("listening on " + o.bind + ":" + String(port) + ", control on 127.0.0.1:" + String(localPort) + ", id " + this.identity.id.slice(0, 8) + " " + this.identity.name);
+    return "";
+  }
+
+  /** Whether the state file is still ours (a stop removes it; another daemon may have replaced it). */
+  ownsState(): boolean {
+    const s = readDaemonState(this.paths);
+    return s !== null && s.pid === process.pid && s.token === this.localToken;
+  }
+
+  stop(): void {
+    const lan = this.lan;
+    const local = this.local;
+    this.lan = null;
+    this.local = null;
+    if (lan !== null) lan.close();
+    if (local !== null) local.close();
+    if (this.stateWritten && this.ownsState()) rmSync(this.paths.state, { force: true });
+    this.stateWritten = false;
+    const fn = this.onStop;
+    if (fn !== null) fn();
+  }
+
+  pairStart(nowMs: number): PairOffer {
+    const offer = new PairOffer(newPairCode(), nowMs);
+    this.offer = offer;
+    this.note("pairing: code shown, live " + String(Math.round((offer.expiresMs - nowMs) / 1000)) + " s");
+    return offer;
+  }
+
+  pairCancel(): void {
+    this.offer = null;
+  }
+
+  /** Join the host at `address:port` with `code`: the peer recorded, or why not. */
+  pairJoin(address: string, port: number, code: string, nowMs: number): Promise<Peer | string> {
+    return joinPeer(this.registry, this.identity, this.port, address, port, code, nowMs);
+  }
+
+  /** The oldest root commit of the repository at `path`, "" when it is not one (or has no commit). */
+  async rootCommitOf(path: string): Promise<string> {
+    const o = new SpawnOptions();
+    o.timeoutMs = 20000;
+    const run: ProcessRun = await spawnCapped(this.git, ["-C", path, "rev-list", "--max-parents=0", "HEAD"], o);
+    if (!run.ok) return "";
+    const lines = run.text.split("\n").filter((l: string) => l.trim().length > 0);
+    return lines.length > 0 ? lines[lines.length - 1].trim() : "";
+  }
+
+  async isBare(path: string): Promise<boolean> {
+    const o = new SpawnOptions();
+    o.timeoutMs = 10000;
+    const run: ProcessRun = await spawnCapped(this.git, ["-C", path, "rev-parse", "--is-bare-repository"], o);
+    return run.ok && run.text.trim() === "true";
+  }
+
+  /** Share the repository at `path`: the record, or why not. A hosted one must be bare; a live one must not. */
+  async share(path: string, name: string, mode: string, branches: string[] | null, allow: string[] | null): Promise<SharedRepo | string> {
+    if (!existsSync(path) || !statSync(path).isDirectory()) return "not a folder: " + path;
+    const repoId = await this.rootCommitOf(path);
+    if (repoId.length === 0) return "not a git repository with a commit: " + path;
+    const bare = await this.isBare(path);
+    if (mode === "hosted" && !bare) return "a hosted repository is a bare one; this is a checkout: " + path;
+    if (mode !== "hosted" && bare) return "a bare repository is hosted, not served live: " + path;
+    const label = name.length > 0 ? name : basename(path).replace(/\.git$/, "");
+    if (mode === "hosted" && !/^[A-Za-z0-9._-]+$/.test(label)) return "a hosted repository's name is letters, digits, dots, dashes and underscores: " + label;
+    const repo = new SharedRepo(repoId, path, label, mode, branches, allow);
+    this.registry.share(repo);
+    this.registry.save();
+    this.note("sharing " + repo.key + " (" + label + ", " + repo.mode + ") at " + path);
+    return repo;
+  }
+
+  unshare(key: string): boolean {
+    const gone = this.registry.unshare(key);
+    if (gone) this.registry.save();
+    return gone;
+  }
+
+  forget(peerId: string): boolean {
+    const gone = this.registry.removePeer(peerId);
+    if (gone) this.registry.save();
+    return gone;
+  }
+
+  /** A peer was seen at `address:port` (discovery, or a request of its own). */
+  seen(peerId: string, address: string, port: number, nowMs: number): void {
+    const p = this.registry.peerById(peerId);
+    if (p === null) return;
+    if (address.length > 0) p.address = address;
+    if (port > 0) p.port = port;
+    p.lastSeenMs = nowMs;
+    this.registry.save();
+  }
+
+  /** The daemon as the sessions see it. */
+  stateJson(nowMs: number): unknown {
+    const peers = this.registry.peers.map((p: Peer) => p.toPublicJson());
+    const repos = this.registry.repos.map((s: SharedRepo) => s.toJson());
+    const offer = this.offer !== null && this.offer.live(nowMs) ? this.offer.toJson() : null;
+    const v: unknown = { id: this.identity.id, name: this.identity.name, port: this.port, addresses: lanAddresses(), startedMs: this.startedMs, peers, repos, pairing: offer };
+    return v;
+  }
+
+  private lanRequest(req: IncomingMessage, res: ServerResponse): void {
+    const from = remoteAddressOf(req);
+    if (from.length > 0 && !isPrivateAddress(from)) {
+      this.note("refused " + from + " (not a private address)");
+      return plain(res, 403, "the bridge serves the local network only");
+    }
+    const url = new RequestUrl(req.url ?? "/");
+    if (url.path === "/pair") {
+      if (req.method !== "POST") return plain(res, 405, "only POST");
+      void readBody(req).then((text: string) => {
+        const body = JoinRequest.parse(text);
+        const answer = body === null ? null : acceptJoin(this.registry, this.identity, this.port, this.offer, Date.now(), body, from);
+        if (answer === null) {
+          this.note("pairing: a join from " + from + " refused");
+          return plain(res, 403, this.offer === null ? "no pairing code is shown here" : "the code does not match");
+        }
+        this.offer = null;
+        this.note("pairing: " + body!.name + " joined from " + from);
+        json(res, 200, answer.toJson());
+      });
+      return;
+    }
+    if (url.path === "/ping") return json(res, 200, { id: this.identity.id, name: this.identity.name });
+    const token = bearerOf(req);
+    const peer = token.length > 0 ? this.registry.peerByToken(token) : null;
+    if (peer === null) {
+      this.note("401 " + from + " " + url.path);
+      return plain(res, 401, "unauthorized");
+    }
+    this.seen(peer.id, from, 0, Date.now());
+    if (!this.gitServer.serve(req, res, peer)) plain(res, 404, "not found");
+  }
+
+  private async localRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const token = bearerOf(req);
+    if (token !== this.localToken) return plain(res, 401, "unauthorized");
+    const url = new RequestUrl(req.url ?? "/");
+    const now = Date.now();
+    if (req.method === "GET" && url.path === "/api/state") return json(res, 200, this.stateJson(now));
+    if (req.method !== "POST") return plain(res, 405, "only POST");
+    const body = recordOf(parseJson(await readBody(req))) ?? {};
+    try {
+      switch (url.path) {
+        case "/api/pair/start":
+          return json(res, 200, { pairing: this.pairStart(now).toJson(), port: this.port, addresses: lanAddresses() });
+        case "/api/pair/cancel":
+          this.pairCancel();
+          return json(res, 200, { ok: true });
+        case "/api/pair/join": {
+          const r = await this.pairJoin(str(body["address"]), num(body["port"], DEFAULT_PORT), str(body["code"]), now);
+          if (typeof r === "string") return json(res, 400, { error: r });
+          this.note("pairing: joined " + r.name + " at " + r.address + ":" + String(r.port));
+          return json(res, 200, { peer: r.toPublicJson() });
+        }
+        case "/api/share": {
+          const r = await this.share(str(body["path"]), str(body["name"]), str(body["mode"]), Array.isArray(body["branches"]) ? strs(body["branches"]) : null, Array.isArray(body["allow"]) ? strs(body["allow"]) : null);
+          if (typeof r === "string") return json(res, 400, { error: r });
+          return json(res, 200, { repo: r.toJson() });
+        }
+        case "/api/unshare":
+          return json(res, 200, { ok: this.unshare(str(body["key"])) });
+        case "/api/forget":
+          return json(res, 200, { ok: this.forget(str(body["peerId"])) });
+        case "/api/seen":
+          this.seen(str(body["id"]), str(body["address"]), num(body["port"], 0), now);
+          return json(res, 200, { ok: true });
+        case "/api/rename": {
+          const name = str(body["name"]).trim();
+          if (name.length === 0) return json(res, 400, { error: "a name is needed" });
+          this.identity.name = name;
+          saveIdentity(this.paths.identity, this.identity);
+          return json(res, 200, { ok: true });
+        }
+        case "/api/stop":
+          json(res, 200, { ok: true });
+          setTimeout(() => this.stop(), 50);
+          return;
+      }
+    } catch (err) {
+      return json(res, 500, { error: errorMessage(err, "error") });
+    }
+    plain(res, 404, "not found");
+  }
+}
+
+/** A list of unknowns as peers' public records, for the client side. */
+export const peersOf = (v: unknown): unknown[] => listOf(v);
+
+/**
+ * Start the machine's daemon over the store at `storeRoot`: the Daemon, or why not (another one
+ * is running, or nothing could listen). The identity is made on the first start.
+ */
+export const startDaemon = async (storeRoot: string, o: DaemonOptions, onLog: ((line: string) => void) | null = null): Promise<Daemon | string> => {
+  const paths = new DaemonPaths(storeRoot);
+  const running = readDaemonState(paths);
+  if (running !== null && (await daemonAnswers(running))) return "another daemon is running (pid " + String(running.pid) + ", port " + String(running.port) + ")";
+  mkdirSync(paths.dir, { recursive: true, mode: 0o700 });
+  const identity = loadOrCreateIdentity(paths.identity, hostname().replace(/\.local$/, ""));
+  const registry = new Registry(paths.registry);
+  registry.load();
+  const daemon = new Daemon(paths, identity, registry);
+  daemon.onLog = onLog;
+  const why = await daemon.start(o);
+  return why.length > 0 ? why : daemon;
+};

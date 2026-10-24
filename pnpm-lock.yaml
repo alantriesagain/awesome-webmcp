@@ -72,6 +72,9 @@ importers:
       '@widecode/conversation':
         specifier: workspace:*
         version: link:../../packages/conversation
+      '@widecode/peers':
+        specifier: workspace:*
+        version: link:../../packages/peers
       '@widecode/screen':
         specifier: workspace:*
         version: link:../../packages/screen
@@ -166,6 +169,19 @@ importers:
       '@widecode/agent':
         specifier: workspace:*
         version: link:../agent
+    devDependencies:
+      '@light/test':
+        specifier: workspace:*
+        version: link:../../light/packages/tui/test
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+
+  packages/peers:
+    dependencies:
+      '@light/lib':
+        specifier: workspace:*
+        version: link:../../light/packages/native/lib
     devDependencies:
       '@light/test':
         specifier: workspace:*

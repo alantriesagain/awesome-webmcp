@@ -5,18 +5,19 @@
   "description": "The Claude Code frontend for wide terminals: chat, files and code side by side; a native core and JS plugins.",
   "dependencies": {
     "@bootstrapp/light": "workspace:*",
-    "@widecode/agent": "workspace:*",
-    "@widecode/chat": "workspace:*",
-    "@widecode/code": "workspace:*",
-    "@widecode/conversation": "workspace:*",
     "@light/highlight": "workspace:*",
     "@light/kernel": "workspace:*",
     "@light/lib": "workspace:*",
     "@light/markdown": "workspace:*",
     "@light/plugins": "workspace:*",
-    "@widecode/screen": "workspace:*",
     "@light/ui": "workspace:*",
-    "@light/workspace": "workspace:*"
+    "@light/workspace": "workspace:*",
+    "@widecode/agent": "workspace:*",
+    "@widecode/chat": "workspace:*",
+    "@widecode/code": "workspace:*",
+    "@widecode/conversation": "workspace:*",
+    "@widecode/peers": "workspace:*",
+    "@widecode/screen": "workspace:*"
   },
   "devDependencies": {
     "@light/test": "workspace:*",
