@@ -18,6 +18,8 @@ import { FakeClient } from "./model/fake.ts";
 import { ModelInfo, ModelRegistry, NO_THINKING, Provider } from "./model/registry.ts";
 import { HarnessPaths } from "./paths.ts";
 import { scanSkills, skillsJson } from "./prompt/skills.ts";
+import { findBrowser } from "./tools/browser.ts";
+import { WebSettings, searchOrder } from "./tools/web.ts";
 import { SessionStore, sessionsJson } from "./session/store.ts";
 import { ToolSet, builtInTools } from "./tools/tool.ts";
 
@@ -30,6 +32,22 @@ const argValue = (args: string[], name: string): string | null => {
 export const toolsListing = (mode: string): string => {
   const names = new ToolSet(builtInTools()).forMode(mode).tools.map((t) => t.name);
   return '{"tools":{' + names.map((n) => JSON.stringify(n) + ":true").join(",") + '},"permission":[]}';
+};
+
+/** The search APIs a key is kept for, beside the model providers. */
+const SEARCH_KEYS = ["brave", "tavily"];
+
+/** What the web tools have on this machine: the browser found, the search backends with their settings and keys. */
+export const webSettings = (config: HarnessConfig, auth: Auth, paths: HarnessPaths): WebSettings => {
+  const w = new WebSettings();
+  w.browser = findBrowser(config.browserCommand, paths.userHome);
+  w.profileRoot = join(paths.root(), "browser");
+  w.httpKind = config.http;
+  w.searxng = config.searxng;
+  w.braveKey = auth.keyFor(new Provider("brave", "Brave Search", "", "BRAVE_API_KEY", false));
+  w.tavilyKey = auth.keyFor(new Provider("tavily", "Tavily", "", "TAVILY_API_KEY", false));
+  w.order = searchOrder(config.searchOrder, w);
+  return w;
 };
 
 /** Whether `args` ask for the harness or one of its side commands. */
@@ -102,8 +120,8 @@ export const harnessMain = (storeRoot: string, args: string[], build: string): P
   const authFor = argValue(args, "--harness-auth");
   if (authFor !== null) {
     const r = registryFor(config, false);
-    if (r.provider(authFor) === null) {
-      process.stderr.write("no provider " + authFor + "; one of " + r.providers.map((p) => p.id).join(", ") + "\n");
+    if (r.provider(authFor) === null && !SEARCH_KEYS.includes(authFor)) {
+      process.stderr.write("no provider " + authFor + "; one of " + r.providers.map((p) => p.id).concat(SEARCH_KEYS).join(", ") + "\n");
       return done(2);
     }
     process.stderr.write("the key for " + authFor + " (not shown as you type it): ");
@@ -145,6 +163,8 @@ export const harnessMain = (storeRoot: string, args: string[], build: string): P
     const server = new AcpServer();
     server.tracePath = argValue(args, "--log") ?? "";
     const agent = new AcpAgent(server, client, new ToolSet(builtInTools()), registry, config, build, process.platform, paths);
+    agent.web = webSettings(config, auth, paths);
+    log("the web: " + (agent.web.browser.length > 0 ? "the browser " + agent.web.browser : "no browser, curl") + "; search " + (agent.web.order.length > 0 ? agent.web.order.join(", ") : "none"));
     server.onIncoming = (m: Incoming) => {
       try {
         agent.receive(m);

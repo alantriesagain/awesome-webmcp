@@ -336,9 +336,10 @@ risks); each slice below is one commit with its tests.
 - [x] **Skills, context files and widecode's tools.** The skills scan, the `Skill` tool, AGENTS.md
       and CLAUDE.md, `--harness-skills`; widecode's MCP tools called over HTTP (AskUser's question
       in the request panel from the harness; the date and plan mode's note in an uncached block).
-- [ ] **The web.** `browser.ts`, `WebFetch` through headless Chromium with the curl fallback,
-      `html.ts`, `WebSearch` with the chain (searxng, google, brave, tavily, anthropic; duckduckgo
-      opt-in).
+- [x] **The web.** `browser.ts`, `WebFetch` through headless Chromium with the curl fallback,
+      `html.ts`, `WebSearch` with the chain (searxng, google, brave, tavily; duckduckgo opt-in).
+      Google refuses a fresh headless profile as unusual traffic from this machine (October 2026),
+      so a search here needs SearXNG or a key; Anthropic's server-side search is left for later.
 - [ ] **The selftest and the docs.** The `harness` selftest, README.md "The harness", PLUGINS.md's
       wording of the harness folder, `light-native coverage --apps` with the daemon's code.
 - [ ] **Later.** The OpenAI-compatible client; a `browser` tool over the DevTools protocol; subagents;

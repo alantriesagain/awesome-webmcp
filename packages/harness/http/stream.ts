@@ -161,7 +161,8 @@ export class HttpStream {
       const end = new HttpEnd();
       const args = ["-sS", "-N", "-i", "-X", r.method, "-H", "Expect:", "--max-time", String(Math.ceil(r.totalMs / 1000))];
       for (const pair of r.headers) args.push("-H", pair[0] + ": " + pair[1]);
-      args.push("--data-binary", "@-", r.url);
+      if (r.method !== "GET") args.push("--data-binary", "@-");
+      args.push(r.url);
       let child: ChildProcess;
       try {
         child = spawn("curl", args, { stdio: ["pipe", "pipe", "pipe"] });

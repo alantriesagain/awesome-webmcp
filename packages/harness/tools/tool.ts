@@ -13,6 +13,7 @@ import { lsTool } from "./ls.ts";
 import { McpLink } from "./mcp.ts";
 import { readTool } from "./read.ts";
 import { skillTool } from "./skill.ts";
+import { WebSettings, webFetchTool, webSearchTool } from "./web.ts";
 import { writeTool } from "./write.ts";
 
 export class ToolContext {
@@ -26,6 +27,8 @@ export class ToolContext {
   trusted = false;
   home = "";
   harnessRoot = "";
+  /** What WebFetch and WebSearch have: the browser, the search backends. */
+  web = new WebSettings();
 
   constructor(cwd: string, mode: string, reads: Set<string>) {
     this.cwd = cwd;
@@ -120,6 +123,8 @@ const EDIT_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string"
 const GREP_SCHEMA = '{"type":"object","properties":{"pattern":{"type":"string","description":"A regular expression"},"path":{"type":"string","description":"The folder or file to search, relative to the folder (the folder by default)"},"include":{"type":"string","description":"A glob the file names must match (\"*.ts\")"},"ignoreCase":{"type":"boolean"},"context":{"type":"integer","description":"Lines of context around each match"}},"required":["pattern"]}';
 const GLOB_SCHEMA = '{"type":"object","properties":{"pattern":{"type":"string","description":"A glob over relative paths (\"src/**/*.ts\"; a bare name matches at any depth)"},"path":{"type":"string","description":"The folder to search (the folder by default)"}},"required":["pattern"]}';
 const SKILL_SCHEMA = '{"type":"object","properties":{"name":{"type":"string","description":"The name of the skill, as the system prompt lists it"}},"required":["name"]}';
+const FETCH_SCHEMA = '{"type":"object","properties":{"url":{"type":"string","description":"The page, an http or https address"},"prompt":{"type":"string","description":"What you want from the page, in a few words"}},"required":["url"]}';
+const SEARCH_SCHEMA = '{"type":"object","properties":{"query":{"type":"string","description":"What to search for"},"limit":{"type":"integer","description":"How many results (8 by default, 20 at most)"}},"required":["query"]}';
 const LS_SCHEMA = '{"type":"object","properties":{"path":{"type":"string","description":"The folder to list (the folder by default)"}},"required":[]}';
 const READ_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"The file to read, absolute or relative to the folder"},"offset":{"type":"integer","description":"The line to start from, 1-based"},"limit":{"type":"integer","description":"How many lines to read (2000 by default)"}},"required":["file_path"]}';
 const BASH_SCHEMA = '{"type":"object","properties":{"command":{"type":"string","description":"The command, run by bash in the folder"},"timeout":{"type":"integer","description":"A timeout in milliseconds (120000 by default, 600000 at most)"},"description":{"type":"string","description":"What the command does, in a few words"}},"required":["command"]}';
@@ -134,6 +139,8 @@ export const builtInTools = (): Tool[] => [
   new Tool("Glob", "Find files by a glob over their relative paths, newest first, 500 at most.", GLOB_SCHEMA, "search", false),
   new Tool("LS", "List a folder's entries (folders end with a slash).", LS_SCHEMA, "read", false),
   new Tool("Skill", "Load a skill's instructions by name (the system prompt lists the skills): follow them for the task.", SKILL_SCHEMA, "read", false),
+  new Tool("WebFetch", "Fetch a web page through a headless browser (its scripts run) and get its main content as markdown, 50,000 characters at most. http and https addresses only.", FETCH_SCHEMA, "fetch", false),
+  new Tool("WebSearch", "Search the web: numbered results with their titles, addresses and snippets. Read a result with WebFetch.", SEARCH_SCHEMA, "fetch", false),
 ];
 
 const READ_ONLY = ["Read", "Grep", "Glob", "LS", "Skill", "WebFetch", "WebSearch"];
@@ -215,6 +222,10 @@ export class ToolSet {
         return lsTool(input, ctx);
       case "Skill":
         return skillTool(input, ctx);
+      case "WebFetch":
+        return webFetchTool(input, ctx, abort);
+      case "WebSearch":
+        return webSearchTool(input, ctx, abort);
       default: {
         // An MCP server's tool: `mcp__<server>__<tool>`.
         const m = /^mcp__([A-Za-z0-9_-]+?)__(.+)$/.exec(name);

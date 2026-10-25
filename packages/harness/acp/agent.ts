@@ -30,6 +30,7 @@ import { SessionFile, SessionStore, sessionsJson } from "../session/store.ts";
 import { titleFor } from "../session/title.ts";
 import { McpLink, McpListing } from "../tools/mcp.ts";
 import { Tool, ToolOutcome, ToolSet } from "../tools/tool.ts";
+import { WebSettings } from "../tools/web.ts";
 import { Choice, ConfigOptions } from "./options.ts";
 import { AcpServer, Incoming } from "./server.ts";
 import { DiffBlock, chunkUpdate, commandsUpdate, modeUpdate, toolCallEnd, toolCallUpdate, usageUpdate } from "./updates.ts";
@@ -116,6 +117,8 @@ export class AcpAgent {
   readonly build: string;
   readonly platform: string;
   readonly paths: HarnessPaths;
+  /** What the web tools have (the browser, the search backends), set by the daemon. */
+  web = new WebSettings();
   private readonly sessions = new Map<string, HarnessSession>();
 
   constructor(server: AcpServer, client: ModelClient, tools: ToolSet, registry: ModelRegistry, config: HarnessConfig, build: string, platform: string, paths: HarnessPaths) {
@@ -270,6 +273,7 @@ export class AcpAgent {
     s.loop.trusted = s.trusted;
     s.loop.home = this.paths.userHome;
     s.loop.harnessRoot = this.paths.root();
+    s.loop.web = this.web;
     const m = this.registry.model(s.options.model);
     s.window = m !== null ? m.window : DEFAULT_WINDOW;
     s.loop.window = s.window;

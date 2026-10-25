@@ -4,10 +4,12 @@
 // each session and prompt.
 //
 //   "harness": { "model": "anthropic/claude-sonnet-5", "effort": "high", "compactAt": 200000, "http": "node",
+//     "search": { "order": ["searxng", "google", "brave", "tavily"], "searxng": "http://127.0.0.1:8080" },
+//     "browser": { "command": "" },
 //     "providers": { "mine": { "name": "Mine", "baseUrl": "https://host/anthropic", "keyEnv": "MINE_API_KEY",
 //       "models": [{ "id": "big", "name": "Big", "context": 200000, "output": 32000, "price": [1, 4] }] } } }
 import { readTextOr } from "@light/lib/fs.ts";
-import { listOf, num, parseJson, recordOf, str } from "@light/lib/json.ts";
+import { listOf, num, parseJson, recordOf, str, strs } from "@light/lib/json.ts";
 import { BUDGET, ModelInfo, ModelRegistry, NO_THINKING, Provider } from "./model/registry.ts";
 
 export class HarnessConfig {
@@ -20,6 +22,10 @@ export class HarnessConfig {
   http = "node";
   /** The section's `providers`, as JSON text ("" for none), applied to a registry with `addProviders`. */
   providersJson = "";
+  /** `search.order` (the backends WebSearch tries, [] for the default), `search.searxng` (an instance's address), `browser.command` (the browser, "" to find one). */
+  searchOrder: string[] = [];
+  searxng = "";
+  browserCommand = "";
 
   /** The section as config.json at `path` has it; defaults where it says nothing. */
   static read(path: string): HarnessConfig {
@@ -35,6 +41,13 @@ export class HarnessConfig {
     if (http === "curl" || http === "node") c.http = http;
     const providers = recordOf(section["providers"]);
     if (providers !== null) c.providersJson = JSON.stringify(providers);
+    const search = recordOf(section["search"]);
+    if (search !== null) {
+      c.searchOrder = strs(search["order"]);
+      c.searxng = str(search["searxng"]);
+    }
+    const browser = recordOf(section["browser"]);
+    if (browser !== null) c.browserCommand = str(browser["command"]);
     return c;
   }
 

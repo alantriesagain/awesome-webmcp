@@ -14,6 +14,7 @@ import { messagesTokens } from "./tokens.ts";
 import { ModelClient, ModelRequest, StreamEnd, StreamListener } from "../model/client.ts";
 import { CANCELLED, END_TURN, FAILED, MAX_TOKENS, Message, Part, TEXT, THINKING, TOOL_CALL, TOOL_RESULT, TOOL_USE, Usage, textPart } from "../model/message.ts";
 import { McpLink } from "../tools/mcp.ts";
+import { WebSettings } from "../tools/web.ts";
 import { Tool, ToolContext, ToolOutcome, ToolSet } from "../tools/tool.ts";
 import { turnNote } from "../prompt/system.ts";
 
@@ -59,6 +60,8 @@ export class LoopSession {
   trusted = false;
   home = "";
   harnessRoot = "";
+  /** What the web tools have. */
+  web = new WebSettings();
   /** The context's size after the last request (its real count), and how many messages there were then. */
   contextTokens = 0;
   sinceIndex = 0;
@@ -298,6 +301,7 @@ export class AgentLoop {
     ctx.trusted = s.trusted;
     ctx.home = s.home;
     ctx.harnessRoot = s.harnessRoot;
+    ctx.web = s.web;
     const sequential = calls.some((c) => {
       const t = tools.find(c.part.name);
       return t === null || t.mutating;
