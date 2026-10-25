@@ -26,6 +26,7 @@ const main = async (): Promise<void> => {
   o.port = 0;
   o.bind = "127.0.0.1";
   o.discovery = false;
+  o.syncMs = 0;
   o.name = "desk";
   const a = await startDaemon(storeA, o);
   ok("the first daemon starts", typeof a !== "string");
@@ -47,6 +48,7 @@ const main = async (): Promise<void> => {
   ob.port = 0;
   ob.bind = "127.0.0.1";
   ob.discovery = false;
+  ob.syncMs = 0;
   ob.name = "mac";
   const b = await startDaemon(storeB, ob);
   ok("a second machine's daemon starts over its own store", typeof b !== "string");
@@ -92,6 +94,36 @@ const main = async (): Promise<void> => {
   eq("the other machine pushes into it", pushed.err, "");
   const stateAfter = await client.request("GET", "/api/state", null);
   ok("after the push the hosted repository has its id", stateAfter.ok && a.registry.repoByKey("h/mirror")!.repoId.length === 40);
+  // Sync: b shares src live; a shares a clone of it; a's sync of b fetches b's copy into that clone
+  // (a remote named after b, the token in its config) and counts the current branch against b's.
+  const sharedSrc = await b.share(src, "", "live", null, null);
+  ok("b shares src", typeof sharedSrc !== "string");
+  const srcA = join(root, "src-a");
+  spawnSync("git", ["clone", "-q", src, srcA], { encoding: "utf8" });
+  const sharedA = await a.share(srcA, "", "live", null, null);
+  ok("a shares its clone of it", typeof sharedA !== "string");
+  const level = await client.request("POST", "/api/peer/sync", { peerId: b.identity.id });
+  ok("a sync answers with the peer's repositories", level.ok && level.text.includes('"local":"' + srcA + '"'));
+  ok("level: nothing to fetch, nothing ahead", level.text.includes('"ahead":0') && level.text.includes('"behind":0') && level.text.includes('"branch":"main"') && level.text.includes('"remote":"mac"'));
+  eq("the remote named after the peer points at its copy", spawnSync("git", ["-C", srcA, "remote", "get-url", "mac"], { encoding: "utf8" }).stdout.trim(), "http://127.0.0.1:" + String(b.port) + "/" + (typeof sharedSrc === "string" ? "" : sharedSrc.key));
+  spawnSync("sh", ["-c", "echo y > '" + src + "/b.txt' && git -C '" + src + "' add . && git -C '" + src + "' -c user.email=t@t -c user.name=t commit -qm 'second, on b'"], { encoding: "utf8" });
+  const behind = await client.request("POST", "/api/peer/sync", { peerId: b.identity.id });
+  ok("after a commit on b's side the sync counts it", behind.ok && behind.text.includes('"behind":1') && behind.text.includes('"subject":"second, on b"'));
+  eq("the working tree of a's clone is untouched", spawnSync("git", ["-C", srcA, "status", "--short"], { encoding: "utf8" }).stdout.trim() + spawnSync("git", ["-C", srcA, "log", "-1", "--format=%s"], { encoding: "utf8" }).stdout.trim(), "first");
+  ok("the state carries the sync", (await client.request("GET", "/api/state", null)).text.includes('"syncs":[{"peerId":"' + b.identity.id + '"'));
+  // A repository b has and a lacks is listed as such, and /api/clone brings it here, shared live.
+  const other = join(root, "other");
+  mkdirSync(other);
+  spawnSync("sh", ["-c", "git init -q -b main '" + other + "' && echo z > '" + other + "/c.txt' && git -C '" + other + "' add . && git -C '" + other + "' -c user.email=t@t -c user.name=t commit -qm other"], { encoding: "utf8" });
+  const sharedOther = await b.share(other, "", "live", null, null);
+  const notHere = await client.request("POST", "/api/peer/sync", { peerId: b.identity.id, key: typeof sharedOther === "string" ? "" : sharedOther.key });
+  ok("a repository this machine lacks has no local path", notHere.ok && notHere.text.includes('"name":"other"') && notHere.text.includes('"local":""'));
+  ok("a sync limited to one key keeps the others' last state", notHere.text.includes('"name":"src"') && notHere.text.includes('"behind":1'));
+  const cloned = await client.request("POST", "/api/clone", { peerId: b.identity.id, key: typeof sharedOther === "string" ? "" : sharedOther.key, path: join(root, "other-a") });
+  ok("clone answers with the share", cloned.ok && cloned.text.includes('"path":"' + join(root, "other-a") + '"'));
+  ok("the clone is here, shared live, its origin named after the peer", existsSync(join(root, "other-a", "c.txt")) && a.registry.repoByPath(join(root, "other-a")) !== null && spawnSync("git", ["-C", join(root, "other-a"), "remote"], { encoding: "utf8" }).stdout.trim() === "mac");
+  ok("and the sync now sees it here, level", (await client.request("POST", "/api/peer/sync", { peerId: b.identity.id })).text.includes('"local":"' + join(root, "other-a") + '"'));
+  eqn("cloning onto a folder with files is 400", (await client.request("POST", "/api/clone", { peerId: b.identity.id, key: typeof sharedOther === "string" ? "" : sharedOther.key, path: srcA })).status, 400);
   const shareNothing = await client.request("POST", "/api/share", { path: join(root, "nowhere") });
   eqn("sharing a missing folder is 400", shareNothing.status, 400);
   const forgot = await client.request("POST", "/api/forget", { peerId: b.identity.id });

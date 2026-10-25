@@ -1,16 +1,21 @@
 // Peers: the LAN git bridge's tab and segment. The tab is a short list: this machine with what it
-// shares (◆ marks this folder's repository), the machines paired with it (● online, ○ not, and how
-// the current branch stands against their copy: ↓ what they have that we lack), the machines nearby
-// that are not paired yet, and, while a code is shown, the pairing code with its time left. The
-// details live in the code column: the row under the cursor opens a page there (this machine's id,
-// addresses, shares with their paths and the URLs peers use, the way another machine joins; a
-// peer's address, remote, branches against ours and what it offers). Enter opens the page, f
-// fetches the peer under the cursor, s shares or unshares this folder, p shows a code, x forgets a
-// peer, r reads again. `/peers` opens the tab; `/peers pair`, `/peers join <host[:port]> <code>`,
-// `/peers share [path]`, `/peers unshare`, `/peers host <name|path>`, `/peers fetch <peer>`, `/peers forget
-// <peer>`, `/peers name <name>` and `/peers stop` do the same from the composer. The daemon
-// (widecode --peers-daemon) does the serving and is started when this plugin needs it; auto-fetch
-// keeps ahead and behind live. Nothing here touches a working tree: a fetch writes refs only.
+// shares (◆ marks this folder's repository), then each machine paired with it (● online, ○ not)
+// and, under it, every repository that machine offers with how this machine's copy stands against
+// it (↓ what they have that we lack, ↑ what we have that they lack, level, or "not here" when this
+// machine has no copy), then the machines nearby that are not paired, and, while a code is shown,
+// the pairing code with its time left. The last row says what the keys do for the row under the
+// cursor. The details live in the code column: the row under the cursor opens a page there (this
+// machine's id, addresses, shares with their paths and the URLs peers use, the way another machine
+// joins; a peer's address, remote and repositories; a repository's commits to fetch and how to take
+// them). Enter opens the page, f fetches from the peer (or the one repository) under the cursor, c
+// clones a repository this machine lacks beside this folder, s shares or unshares this folder, p
+// shows a code, x forgets a peer, r reads again. `/peers` opens the tab; `/peers pair`, `/peers join
+// <host[:port]> <code>`, `/peers share [path]`, `/peers unshare`, `/peers host <name|path>`,
+// `/peers fetch <peer> [repo]`, `/peers clone <peer> <repo> [path]`, `/peers forget <peer>`,
+// `/peers name <name>` and `/peers stop` do the same from the composer. The daemon
+// (widecode --peers-daemon) does the serving and the fetching: every shared checkout of this
+// machine is fetched from each peer's copy (a remote named after the peer), so the counts are of the
+// whole machine, not of this folder alone. Nothing here touches a working tree: a fetch writes refs only.
 
 type Run = widecode.Run;
 type Row = widecode.Row;
@@ -25,15 +30,13 @@ const AUTO_FETCH_MS = 120000;
 const ONLINE_MS = 180000;
 
 interface RowSpec {
-  kind: "section" | "gap" | "me" | "repo" | "share" | "peer" | "peer-note" | "nearby" | "code" | "hint" | "empty";
+  kind: "section" | "gap" | "me" | "repo" | "share" | "peer" | "peer-repo" | "peer-note" | "nearby" | "code" | "hint" | "empty";
   section?: string;
   peer?: number;
   repo?: number;
   near?: number;
   text?: string;
 }
-
-type RemoteBranch = { name: string; ref: string; sha: string; commitMs: number; local: boolean; ahead: number; behind: number };
 
 /** `text` cut into lines of at most `cells`, at spaces where there are any. */
 const wrap = (text: string, cells: number): string[] => {
@@ -60,12 +63,29 @@ interface Shared {
   allow: string[] | null;
 }
 
-interface Offered {
+interface FreshCommit {
+  short: string;
+  subject: string;
+}
+
+/** A repository a peer offers, against this machine's copy as the daemon last synced it. */
+interface RepoView {
   key: string;
   repoId: string;
   name: string;
   mode: string;
-  tips: Record<string, string>;
+  /** This machine's checkout of it ("" for none). */
+  local: string;
+  remote: string;
+  /** The local checkout's current branch, what the counts are about. */
+  branch: string;
+  theirsHasBranch: boolean;
+  ahead: number;
+  behind: number;
+  fresh: FreshCommit[];
+  theirBranches: string[];
+  fetchedMs: number;
+  error: string;
 }
 
 interface PeerView {
@@ -75,14 +95,10 @@ interface PeerView {
   port: number;
   lastSeenMs: number;
   online: boolean;
-  repos: Offered[];
-  /** The remote of this folder's repository that points at this peer's copy ("" until set). */
-  remote: string;
-  fetching: boolean;
-  fetchedMs: number;
-  fetchError: string;
-  ahead: number;
-  behind: number;
+  repos: RepoView[];
+  syncedMs: number;
+  syncing: boolean;
+  syncError: string;
 }
 
 interface Pairing {
@@ -107,14 +123,24 @@ const sharedOf = (v: unknown): Shared => {
   return { key: u.str(r.key), repoId: u.str(r.repoId), name: u.str(r.name), path: u.str(r.path), mode: u.str(r.mode), branches: strList(r.branches), allow: strList(r.allow) };
 };
 
-const offeredOf = (v: unknown): Offered => {
+const repoOf = (v: unknown): RepoView => {
   const r = rec(v);
-  const tips: Record<string, string> = {};
-  for (const b of list(r.branches)) {
-    const br = rec(b);
-    if (u.str(br.name).length > 0) tips[u.str(br.name)] = u.str(br.sha);
-  }
-  return { key: u.str(r.key), repoId: u.str(r.repoId), name: u.str(r.name), mode: u.str(r.mode), tips };
+  return {
+    key: u.str(r.key),
+    repoId: u.str(r.repoId),
+    name: u.str(r.name),
+    mode: u.str(r.mode),
+    local: u.str(r.local),
+    remote: u.str(r.remote),
+    branch: u.str(r.branch),
+    theirsHasBranch: r.theirsHasBranch === true,
+    ahead: u.num(r.ahead, -1),
+    behind: u.num(r.behind, -1),
+    fresh: list(r.fresh).map((c) => ({ short: u.str(rec(c).short), subject: u.str(rec(c).subject) })),
+    theirBranches: strList(r.theirBranches) ?? [],
+    fetchedMs: u.num(r.fetchedMs, 0),
+    error: u.str(r.error),
+  };
 };
 
 const parse = (text: string): unknown => {
@@ -149,7 +175,6 @@ widecode.plugin({
     let discovery = false;
     let daemon = "starting";
     let myRepoId = "";
-    let branch = "";
     let rows: RowSpec[] = [];
     let selected = 0;
     let refreshing = false;
@@ -161,36 +186,66 @@ widecode.plugin({
       for (const s of shared) if (s.mode === "live" && s.repoId === myRepoId && myRepoId.length > 0) return s;
       return null;
     };
-    /** The peer's copy of this folder's repository: a hosted one first (it takes pushes too), else its live checkout. */
-    const match = (p: PeerView): Offered | null => {
-      let live: Offered | null = null;
-      for (const o of p.repos) {
-        if (myRepoId.length === 0 || o.repoId !== myRepoId) continue;
-        if (o.mode === "hosted") return o;
-        if (live === null) live = o;
-      }
-      return live;
-    };
+    const isMine = (repoId: string): boolean => myRepoId.length > 0 && repoId === myRepoId;
     const peerNamed = (name: string): PeerView | null => {
       for (const p of peers) if (p.name === name || p.id === name || p.id.startsWith(name)) return p;
       return null;
     };
+    const repoNamed = (p: PeerView, name: string): RepoView | null => {
+      for (const r of p.repos) if (r.name === name || r.key === name) return r;
+      return null;
+    };
+    /** A peer's repositories in the tab's order: this folder's first, then those this machine has, then the rest, by name. */
+    const sortedRepos = (p: PeerView): RepoView[] => {
+      const rank = (r: RepoView): number => (isMine(r.repoId) ? 0 : r.local.length > 0 ? 1 : 2);
+      return p.repos.slice().sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+    };
+    const behindOf = (p: PeerView): number => p.repos.reduce((n, r) => n + Math.max(0, r.behind), 0);
 
-    /** What a peer's row says on the right: the current branch against its copy, or what is going on. */
-    const tagOf = (p: PeerView): { text: string; fg: string } => {
-      if (p.fetching) return { text: "…", fg: DIM };
-      if (p.fetchError.length > 0) return { text: "!", fg: T.bad };
-      if (p.remote.length === 0 || p.ahead < 0) return { text: "", fg: "" };
-      if (p.behind > 0) return { text: "↓" + String(p.behind) + (p.ahead > 0 ? " ↑" + String(p.ahead) : ""), fg: T.warn };
-      if (p.ahead > 0) return { text: "↑" + String(p.ahead), fg: T.ok };
-      return { text: "level", fg: DIM };
+    /** What a repository row says on the right: how this machine's copy stands against the peer's. */
+    const repoTag = (r: RepoView): { text: string; fg: string } => {
+      if (r.error.length > 0) return { text: "!", fg: T.bad };
+      if (r.local.length === 0) {
+        if (isMine(r.repoId)) return { text: "share · s", fg: DIM };
+        return { text: r.mode === "hosted" ? "hosted" : "not here", fg: DIM };
+      }
+      if (r.fetchedMs === 0) return { text: "", fg: "" };
+      if (r.branch.length === 0) return { text: "detached", fg: DIM };
+      if (!r.theirsHasBranch) return { text: "no " + r.branch, fg: DIM };
+      if (r.behind > 0) return { text: "↓" + String(r.behind) + (r.ahead > 0 ? " ↑" + String(r.ahead) : ""), fg: T.warn };
+      if (r.ahead > 0) return { text: "↑" + String(r.ahead), fg: T.ok };
+      if (r.ahead === 0 && r.behind === 0) return { text: "level", fg: DIM };
+      return { text: "", fg: "" };
     };
 
-    /** A short line under a peer: what is going on, or why there is nothing to fetch; "" for none. */
+    /** A sentence on how this machine's copy stands against the peer's. */
+    const standing = (r: RepoView): string => {
+      if (r.error.length > 0) return "the last fetch failed: " + r.error;
+      if (r.local.length === 0) return isMine(r.repoId) ? "this folder's repository, not shared yet: s shares it, and the daemon compares and fetches" : r.mode === "hosted" ? "a bare repository on their side that takes pushes" : "no copy on this machine";
+      if (r.fetchedMs === 0) return "not fetched yet";
+      if (r.branch.length === 0) return "HEAD is detached here, nothing to count against";
+      if (!r.theirsHasBranch) return "they have no branch " + r.branch;
+      const parts: string[] = [];
+      if (r.behind > 0) parts.push("they have " + commits(r.behind) + " you do not");
+      if (r.ahead > 0) parts.push("you have " + commits(r.ahead) + " they do not");
+      return parts.length > 0 ? parts.join(" · ") : "level";
+    };
+
+    /** What a peer's row says on the right. */
+    const peerTag = (p: PeerView): { text: string; fg: string } => {
+      if (p.syncing) return { text: "…", fg: DIM };
+      if (!p.online) return { text: "offline", fg: DIM };
+      if (p.syncError.length > 0) return { text: "!", fg: T.bad };
+      const behind = behindOf(p);
+      if (behind > 0) return { text: "↓" + String(behind), fg: T.warn };
+      if (p.syncedMs > 0) return { text: u.age(Date.now() - p.syncedMs), fg: DIM };
+      return { text: "", fg: "" };
+    };
+
+    /** A short line under a peer's repositories: what went wrong, or that it offers nothing; "" for none. */
     const peerNote = (p: PeerView): string => {
-      if (p.fetching) return "fetching…";
-      if (p.fetchError.length > 0) return p.fetchError;
-      if (p.online && p.repos.length > 0 && match(p) === null) return "no copy of this folder";
+      if (p.syncError.length > 0) return p.syncError;
+      if (p.online && p.repos.length === 0 && p.syncedMs > 0) return "offers nothing yet";
       return "";
     };
 
@@ -208,6 +263,7 @@ widecode.plugin({
         if (peers.length === 0 && nearby.length === 0) out.push({ kind: "empty", text: "none paired yet" });
         peers.forEach((p, i) => {
           out.push({ kind: "peer", peer: i });
+          sortedRepos(p).forEach((r) => out.push({ kind: "peer-repo", peer: i, text: r.key }));
           const note = peerNote(p);
           if (note.length > 0) out.push({ kind: "peer-note", peer: i, text: note });
         });
@@ -224,7 +280,34 @@ widecode.plugin({
       if (selected >= rows.length) selected = Math.max(0, rows.length - 1);
     };
 
+    /** The repository a `peer-repo` row stands for. */
+    const repoAt = (r: RowSpec | undefined): { peer: PeerView; repo: RepoView } | null => {
+      if (r === undefined || r.kind !== "peer-repo") return null;
+      const p = peers[r.peer ?? 0];
+      if (p === undefined) return null;
+      for (const x of p.repos) if (x.key === r.text) return { peer: p, repo: x };
+      return null;
+    };
+
     const sectionTitle = (name: string): string => (name === "me" ? "This machine" : name === "peers" ? "Peers" + (peers.length > 0 ? " · " + String(peers.length) : "") : "Pairing");
+
+    /** What the keys do for the row under the cursor, short enough for the narrowest tab. */
+    const hintFor = (r: RowSpec | undefined): string => {
+      if (r === undefined) return "↵ open · p pair";
+      if (r.kind === "repo") return isMine(shared[r.repo ?? 0].repoId) && shared[r.repo ?? 0].mode === "live" ? "↵ open · s unshare" : "↵ open";
+      if (r.kind === "share") return "↵ or s shares this folder";
+      if (r.kind === "peer" || r.kind === "peer-note") return "↵ open · f fetch · x forget";
+      if (r.kind === "peer-repo") {
+        const at = repoAt(r);
+        if (at === null) return "↵ open";
+        if (at.repo.local.length > 0) return at.repo.behind > 0 ? "↵ commits · f fetch" : "↵ open · f fetch";
+        if (isMine(at.repo.repoId)) return "↵ open · s share";
+        return at.repo.mode === "hosted" ? "↵ open" : "↵ open · c clone";
+      }
+      if (r.kind === "nearby") return "↵ how to pair";
+      if (r.kind === "code") return "↵ open · p new code";
+      return peers.length > 0 ? "↵ open · f fetch · p pair" : "↵ open · p pair · s share";
+    };
 
     /** A row: `lead`, `name` clipped to what is left, and a short `tag` on the right. */
     const pairRow = (bg: string, lead: Run, name: string, nameFg: string, bold: boolean, tag: string, tagFg: string, width: number): Row => {
@@ -252,26 +335,33 @@ widecode.plugin({
       }
       if (r.kind === "repo") {
         const s = shared[r.repo ?? 0];
-        const mine = s.repoId === myRepoId && s.mode === "live" && myRepoId.length > 0;
+        const mine = isMine(s.repoId) && s.mode === "live";
         return pairRow(bg, { text: "   " + (mine ? "◆ " : "• "), fg: mine ? T.link : DIM }, s.name, mine ? T.link : "", mine, s.mode === "hosted" ? "hosted" : "live", DIM, width);
       }
       if (r.kind === "share") return { bg, runs: [{ text: "   ○ ", fg: DIM }, { text: "share this folder", fg: T.link }, { text: "  s", fg: DIM }] };
       if (r.kind === "peer") {
         const p = peers[r.peer ?? 0];
-        const tag = tagOf(p);
+        const tag = peerTag(p);
         return pairRow(bg, { text: "   " + (p.online ? "● " : "○ "), fg: p.online ? T.ok : DIM }, p.name, "", true, tag.text, tag.fg, width);
       }
-      if (r.kind === "peer-note") return plain("  " + (r.text ?? ""), peers[r.peer ?? 0].fetchError.length > 0 ? T.bad : DIM);
+      if (r.kind === "peer-repo") {
+        const at = repoAt(r);
+        if (at === null) return plain("", "");
+        const mine = isMine(at.repo.repoId);
+        const tag = repoTag(at.repo);
+        const here = at.repo.local.length > 0 || mine;
+        return pairRow(bg, { text: "     " + (mine ? "◆ " : "• "), fg: mine ? T.link : here ? "" : DIM }, at.repo.name, mine ? T.link : here ? "" : DIM, false, tag.text, tag.fg, width);
+      }
+      if (r.kind === "peer-note") return plain("  " + (r.text ?? ""), peers[r.peer ?? 0].syncError.length > 0 ? T.bad : DIM);
       if (r.kind === "nearby") return pairRow(bg, { text: "   ○ ", fg: DIM }, nearby[r.near ?? 0].name, "", false, "nearby", DIM, width);
       if (r.kind === "code") {
         const left = pairing !== null ? Math.max(0, Math.round((pairing.expiresMs - now) / 1000)) : 0;
         return { bg, runs: [{ text: "   ", fg: "" }, { text: pairing !== null ? pairing.code : "", fg: T.link, bold: true }, { text: "  " + String(Math.floor(left / 60)) + ":" + String(left % 60).padStart(2, "0"), fg: left < 20 ? T.warn : DIM }] };
       }
-      if (r.kind === "hint") return plain("↵ details · f fetch · p pair", DIM);
+      if (r.kind === "hint") return plain(hintFor(rows[selected]), DIM);
       return plain(r.text ?? "", DIM);
     };
 
-    const remoteBranches = new Map<string, RemoteBranch[]>();
     let detailWidth = 80;
 
     /** The details page for the row under the cursor, `width` cells wide. */
@@ -287,40 +377,75 @@ widecode.plugin({
         const parts = wrap(value, Math.max(10, w - 12));
         parts.forEach((part, i) => out.push({ runs: [{ text: " " + (i === 0 ? name.padEnd(11, " ") : "           "), fg: DIM }, { text: part, fg: fg ?? "" }] }));
       };
+      const action = (key: string, text: string, ...why: string[]): void => {
+        wrap(text, Math.max(10, w - 8)).forEach((part, i) => out.push({ runs: [{ text: i === 0 ? " › " : "   ", fg: DIM }, { text: (i === 0 ? key : "").padEnd(4, " "), fg: T.link, bold: true }, { text: part, fg: "" }] }));
+        for (const line of why) for (const part of wrap(line, Math.max(10, w - 8))) put("       " + part, DIM);
+      };
       const joinLine = (): string => "/peers join " + (me.addresses[0] ?? "<this machine's address>") + (me.port > 0 && me.port !== DEFAULT_PORT ? ":" + String(me.port) : "") + " " + (pairing !== null && pairing.expiresMs > Date.now() ? pairing.code : "<code>");
+      const offerUrl = (p: PeerView, r: RepoView): string => "http://" + p.address + ":" + String(p.port) + "/" + r.key;
+      const repoLine = (r: RepoView): void => {
+        const mine = isMine(r.repoId);
+        const tag = repoTag(r);
+        out.push({ runs: [{ text: " " + (mine ? "◆ " : "• "), fg: mine ? T.link : DIM }, { text: u.clip(r.name, 24).padEnd(25, " "), fg: mine ? T.link : r.local.length > 0 ? "" : DIM }, { text: tag.text.padEnd(10, " "), fg: tag.fg }, { text: r.local.length > 0 ? (r.branch.length > 0 ? r.branch + "  " : "") + r.local : r.mode === "hosted" ? "hosted, takes pushes" : "live", fg: DIM }] });
+      };
       const r = rows[selected];
       const kind = r === undefined ? "me" : r.kind;
+      if (kind === "peer-repo") {
+        const at = repoAt(r);
+        if (at === null) return out;
+        const p = at.peer;
+        const x = at.repo;
+        const mine = isMine(x.repoId);
+        put(p.name + " · " + x.name, "", true);
+        blank();
+        field("theirs", (x.mode === "hosted" ? "a bare repository that takes pushes" : "a live checkout, read-only") + " · " + offerUrl(p, x));
+        field("here", x.local.length > 0 ? x.local + (mine ? " (this folder)" : "") : mine ? "this folder, not shared yet" : "no copy on this machine", x.local.length > 0 || mine ? "" : DIM);
+        if (x.remote.length > 0) field("remote", x.remote + ", in that checkout");
+        if (x.branch.length > 0) field("branch", x.branch + (x.theirsHasBranch ? "" : " (not on their side)"));
+        field("standing", standing(x), x.error.length > 0 ? T.bad : x.behind > 0 ? T.warn : "");
+        if (x.fetchedMs > 0) field("fetched", u.age(Date.now() - x.fetchedMs) + " ago");
+        if (x.fresh.length > 0) {
+          blank();
+          put("Commits to fetch (" + String(x.behind) + (x.fresh.length < x.behind ? ", the newest " + String(x.fresh.length) : "") + ")", DIM);
+          for (const c of x.fresh) out.push({ runs: [{ text: "  " + c.short + "  ", fg: DIM }, { text: u.clip(c.subject, Math.max(10, w - 12)), fg: "" }] });
+        }
+        if (x.theirBranches.length > 0) {
+          blank();
+          put("Their branches: " + x.theirBranches.join(", "), DIM);
+        }
+        blank();
+        if (x.local.length > 0) {
+          action("f", "fetch it from " + p.name + " now");
+          if (x.behind > 0 && x.remote.length > 0 && x.branch.length > 0) {
+            if (mine) action("b", "in the Git tab, cycles the compare base to " + x.remote + "/" + x.branch + ": the diff and the log of what they have");
+            action("", "to take their commits, in " + x.local + ":", "git merge " + x.remote + "/" + x.branch, "git rebase " + x.remote + "/" + x.branch);
+          }
+          if (x.ahead > 0 && x.mode === "hosted" && x.remote.length > 0 && x.branch.length > 0) action("", "to give them yours, in " + x.local + ":", "git push " + x.remote + " " + x.branch);
+        } else if (mine) action("s", "share this folder's repository; the daemon then compares it with theirs and fetches");
+        else if (x.mode !== "hosted") action("c", "clone it beside this folder, shared here once it is", "/peers clone " + p.name + " " + x.name + " [path] chooses the path");
+        else action("", "to push into it, from a checkout here:", "git push " + offerUrl(p, x) + " <branch> (the token is in the config once that checkout is shared)");
+        return out;
+      }
       if (kind === "peer" || kind === "peer-note") {
         const p = peers[r?.peer ?? 0];
         put(p.name, "", true);
         blank();
-        field("state", (p.online ? "online" : p.lastSeenMs > 0 ? "not seen for " + u.age(Date.now() - p.lastSeenMs) : "never seen") + (p.fetching ? " · fetching…" : ""), p.online ? T.ok : DIM);
+        field("state", (p.online ? "online" : p.lastSeenMs > 0 ? "not seen for " + u.age(Date.now() - p.lastSeenMs) : "never seen") + (p.syncing ? " · fetching…" : ""), p.online ? T.ok : DIM);
         field("address", p.address.length > 0 ? p.address + ":" + String(p.port) : "unknown");
         field("id", p.id);
-        const mine = match(p);
-        field("remote", p.remote.length > 0 ? p.remote + " (in this folder's repository)" : mine !== null ? "not set up yet" : p.repos.length === 0 ? "nothing offered yet" : "none: it offers no copy of this folder's repository");
-        if (p.fetchedMs > 0) field("fetched", u.age(Date.now() - p.fetchedMs) + " ago" + (p.fetchError.length > 0 ? " · failed: " + p.fetchError : ""), p.fetchError.length > 0 ? T.bad : "");
-        const list = remoteBranches.get(p.remote) ?? [];
-        if (p.remote.length > 0 && list.length > 0) {
-          blank();
-          put("Branches, theirs against ours", DIM);
-          for (const b of list) {
-            const track = b.local ? (b.behind > 0 ? "↓" + String(b.behind) : "") + (b.ahead > 0 ? (b.behind > 0 ? " " : "") + "↑" + String(b.ahead) : "") + (b.ahead === 0 && b.behind === 0 ? "level" : "") : "not here";
-            out.push({ runs: [{ text: " " + u.clip(b.name, 24).padEnd(25, " "), fg: b.name === branch ? T.link : "" }, { text: track.padEnd(10, " "), fg: b.behind > 0 ? T.warn : b.local ? T.ok : DIM }, { text: b.sha.slice(0, 7) + "  " + (b.commitMs > 0 ? u.age(Date.now() - b.commitMs) : ""), fg: DIM }] });
-          }
-        }
-        if (p.repos.length > 0) {
-          blank();
-          put("Offers", DIM);
-          for (const o of p.repos) {
-            const same = myRepoId.length > 0 && o.repoId === myRepoId;
-            out.push({ runs: [{ text: " " + (same ? "◆ " : "• "), fg: same ? T.link : DIM }, { text: u.clip(o.name, 24).padEnd(25, " "), fg: same ? T.link : "" }, { text: o.mode === "hosted" ? "hosted, takes pushes" : same ? "live, this folder's" : "live", fg: DIM }] });
-            put("    http://" + p.address + ":" + String(p.port) + "/" + o.key, DIM);
-          }
+        if (p.syncedMs > 0) field("fetched", u.age(Date.now() - p.syncedMs) + " ago" + (p.syncError.length > 0 ? " · failed: " + p.syncError : ""), p.syncError.length > 0 ? T.bad : "");
+        else if (p.syncError.length > 0) field("fetched", "never · " + p.syncError, T.bad);
+        blank();
+        if (p.repos.length === 0) put("Offers nothing yet" + (p.online ? "" : " that this machine has seen"), DIM);
+        else {
+          const behind = behindOf(p);
+          put("Repositories (" + String(p.repos.length) + ")" + (behind > 0 ? " · " + commits(behind) + " to fetch" : ""), DIM);
+          for (const x of sortedRepos(p)) repoLine(x);
         }
         blank();
-        put("› f   fetch from it now", "");
-        put("› x   forget it: its token stops opening this machine", "");
+        action("f", "fetch every repository it offers that this machine has");
+        action("↵", "on a repository: its commits to fetch and how to take them");
+        action("x", "forget it: its token stops opening this machine");
         return out;
       }
       if (kind === "nearby") {
@@ -346,30 +471,31 @@ widecode.plugin({
         field("id", me.id);
       }
       blank();
-      put("Shared" + (shared.length > 0 ? "" : ": nothing yet"), DIM);
+      put("Shared" + (shared.length > 0 ? " (" + String(shared.length) + ")" : ": nothing yet"), DIM);
       for (const sh of shared) {
-        const mine = sh.repoId === myRepoId && sh.mode === "live" && myRepoId.length > 0;
+        const mine = isMine(sh.repoId) && sh.mode === "live";
         out.push({ runs: [{ text: " " + (mine ? "◆ " : "• "), fg: mine ? T.link : DIM }, { text: u.clip(sh.name, 24).padEnd(25, " "), fg: mine ? T.link : "", bold: mine }, { text: sh.mode === "hosted" ? "hosted, takes pushes" : mine ? "live, this folder" : "live", fg: DIM }] });
         put("    " + sh.path, DIM);
         put("    " + (sh.branches !== null ? "branches " + sh.branches.join(", ") : "every branch") + " · " + (sh.allow !== null ? String(sh.allow.length) + " peers allowed" : "every paired peer"), DIM);
         put("    http://" + (me.addresses[0] ?? "<address>") + ":" + String(me.port) + "/" + sh.key, DIM);
       }
-      if (myShare() === null && myRepoId.length > 0 && daemon === "running") put("› s   share this folder's repository", "");
       blank();
       put("Pairing", DIM);
       if (pairing !== null && pairing.expiresMs > Date.now()) {
         const left = Math.max(0, Math.round((pairing.expiresMs - Date.now()) / 1000));
         out.push({ runs: [{ text: " code  ", fg: DIM }, { text: pairing.code, fg: T.link, bold: true }, { text: "  " + String(Math.floor(left / 60)) + ":" + String(left % 60).padStart(2, "0") + " left", fg: left < 20 ? T.warn : DIM }] });
         put("on the other machine: " + joinLine(), "");
-      } else put("› p   show a code for two minutes; the other machine joins with " + joinLine(), "");
-      put("› /peers join <host:port> <code>", "");
-      put("      join a machine showing a code; a nearby machine's name works as the host", DIM);
-      put("› /peers share <path>", "");
-      put("      share another checkout of this machine", DIM);
-      put("› /peers host <name>", "");
-      put("      a bare repository paired machines push into", DIM);
+      } else action("p", "show a code for two minutes; the other machine joins with " + joinLine());
+      action("", "/peers join <host:port> <code>", "join a machine showing a code; a nearby machine's name works as the host");
       blank();
-      for (const part of wrap("A machine that cannot be reached while it sees this one has port " + String(me.port > 0 ? me.port : DEFAULT_PORT) + "/tcp closed by its firewall (on Linux with ufw: sudo ufw allow " + String(me.port > 0 ? me.port : DEFAULT_PORT) + "/tcp).", w)) put(part, DIM);
+      put("Sharing", DIM);
+      if (myShare() === null && myRepoId.length > 0 && daemon === "running") action("s", "share this folder's repository, live: paired machines fetch it, and this machine's copy is compared with theirs");
+      else if (myShare() !== null) action("s", "stop sharing this folder's repository");
+      action("", "/peers share <path>", "share another checkout of this machine");
+      action("", "/peers host <name>", "a bare repository paired machines push into");
+      action("", "/peers clone <peer> <repo> [path]", "a copy of what a peer offers that this machine lacks, shared here once cloned");
+      blank();
+      for (const part of wrap("Every shared checkout is fetched from each peer's copy (a remote named after the peer, refs only; no working tree is touched), so a row's ↓ counts what they have on its current branch that this machine lacks. A machine that cannot be reached while it sees this one has port " + String(me.port > 0 ? me.port : DEFAULT_PORT) + "/tcp closed by its firewall (on Linux with ufw: sudo ufw allow " + String(me.port > 0 ? me.port : DEFAULT_PORT) + "/tcp).", w)) put(part, DIM);
       return out;
     };
 
@@ -385,6 +511,10 @@ widecode.plugin({
     const titleFor = (r: RowSpec | undefined): string => {
       if (r === undefined) return "Peers";
       if (r.kind === "peer" || r.kind === "peer-note") return "Peer · " + peers[r.peer ?? 0].name;
+      if (r.kind === "peer-repo") {
+        const at = repoAt(r);
+        return at === null ? "Peers" : at.peer.name + " · " + at.repo.name;
+      }
       if (r.kind === "nearby") return "Nearby · " + nearby[r.near ?? 0].name;
       return "Peers · this machine";
     };
@@ -404,11 +534,12 @@ widecode.plugin({
       rows: (from, count, width) => rows.slice(from, from + count).map((r, i) => line(r, from + i, width)),
       badge: () => {
         const best = bestPeer();
-        return best !== null && best.behind > 0 ? [{ text: "↓" + String(best.behind), fg: T.warn }] : [];
+        return best !== null ? [{ text: "↓" + String(behindOf(best)), fg: T.warn }] : [];
       },
       info: () => [{ text: " " + (daemon === "running" ? String(peers.filter((p) => p.online).length) + " online · sharing " + String(shared.length) : daemon === "starting" ? "starting the daemon…" : daemon === "not running" ? "idle" : daemon), fg: daemon === "running" ? DIM : T.warn }],
       press: (row) => {
         selected = row;
+        panel.refresh();
         act("enter");
       },
       shown: () => {
@@ -423,10 +554,10 @@ widecode.plugin({
       },
     });
 
-    /** The online peer whose copy of this folder's branch is furthest ahead of ours. */
+    /** The online peer with the most commits this machine lacks, over every repository; null when none has any. */
     const bestPeer = (): PeerView | null => {
       let best: PeerView | null = null;
-      for (const p of peers) if (p.remote.length > 0 && p.behind > 0 && (best === null || p.behind > best.behind)) best = p;
+      for (const p of peers) if (behindOf(p) > 0 && (best === null || behindOf(p) > behindOf(best))) best = p;
       return best;
     };
 
@@ -435,7 +566,7 @@ widecode.plugin({
       draw: () => {
         if (daemon !== "running" || peers.length === 0) return [];
         const best = bestPeer();
-        if (best !== null) return [{ text: best.name + " ↓" + String(best.behind), fg: T.warn }];
+        if (best !== null) return [{ text: best.name + " ↓" + String(behindOf(best)), fg: T.warn }];
         const online = peers.filter((p) => p.online).length;
         return [{ text: String(online) + "/" + String(peers.length) + " peers", fg: online > 0 ? T.ok : DIM }];
       },
@@ -446,6 +577,15 @@ widecode.plugin({
       layout();
       panel.refresh();
       if (detail.shown()) detail.refresh();
+    };
+
+    /** A peer's sync as the daemon answered it, taken into the view. */
+    const applySync = (p: PeerView, v: unknown): void => {
+      const s = rec(v);
+      p.syncedMs = u.num(s.atMs, 0);
+      p.syncError = u.str(s.error);
+      if (s.running === true && p.syncedMs === 0) return;
+      p.repos = list(s.repos).map(repoOf);
     };
 
     const readState = async (): Promise<boolean> => {
@@ -465,6 +605,8 @@ widecode.plugin({
       });
       const pr = rec(r.pairing);
       pairing = u.str(pr.code).length > 0 ? { code: u.str(pr.code), expiresMs: u.num(pr.expiresMs, 0) } : null;
+      const syncs = new Map<string, unknown>();
+      for (const v of list(r.syncs)) syncs.set(u.str(rec(v).peerId), rec(v).sync);
       const now = Date.now();
       const next: PeerView[] = [];
       for (const v of list(r.peers)) {
@@ -473,7 +615,7 @@ widecode.plugin({
         if (id.length === 0) continue;
         const old = peers.find((p) => p.id === id);
         const lastSeenMs = u.num(pv.lastSeenMs, 0);
-        next.push({
+        const p: PeerView = {
           id,
           name: u.str(pv.name),
           address: u.str(pv.address),
@@ -481,60 +623,69 @@ widecode.plugin({
           lastSeenMs,
           online: now - lastSeenMs < ONLINE_MS,
           repos: old !== undefined ? old.repos : [],
-          remote: old !== undefined ? old.remote : "",
-          fetching: old !== undefined ? old.fetching : false,
-          fetchedMs: old !== undefined ? old.fetchedMs : 0,
-          fetchError: old !== undefined ? old.fetchError : "",
-          ahead: old !== undefined ? old.ahead : -1,
-          behind: old !== undefined ? old.behind : -1,
-        });
+          syncedMs: old !== undefined ? old.syncedMs : 0,
+          syncing: old !== undefined ? old.syncing : false,
+          syncError: old !== undefined ? old.syncError : "",
+        };
+        const sync = syncs.get(id);
+        if (sync !== undefined) applySync(p, sync);
+        next.push(p);
       }
       peers = next;
       return true;
     };
 
-    const readOffers = async (p: PeerView): Promise<void> => {
-      const a = await req("POST", "/api/peer/repos", { peerId: p.id });
-      if (a.status !== 200) return;
-      p.repos = list(rec(parse(a.text)).repos).map(offeredOf);
-      const mine = match(p);
-      if (mine !== null && p.remote.length === 0) p.remote = await api.peers.remote(p.id, mine.key);
+    /** What a fetch brought, told in one line. */
+    const fetchedLine = (p: PeerView, key: string): string => {
+      const had = p.repos.filter((r) => r.local.length > 0 && (key.length === 0 || r.key === key));
+      if (had.length === 0) return "fetched from " + p.name + ": it offers no repository this machine has" + (p.repos.some((r) => isMine(r.repoId)) ? " shared (s shares this folder)" : "");
+      if (had.length === 1) return "fetched " + had[0].name + " from " + p.name + (had[0].branch.length > 0 ? " · " + had[0].branch + ": " : ": ") + standing(had[0]);
+      return "fetched from " + p.name + ": " + had.map((r) => r.name + " " + (repoTag(r).text.length > 0 ? repoTag(r).text : "fetched")).join(" · ");
     };
 
-    const measure = async (p: PeerView): Promise<void> => {
-      if (p.remote.length === 0) return;
-      remoteBranches.set(p.remote, await api.git.remoteBranches(p.remote));
-      if (branch.length === 0) return;
-      const r = await api.git.aheadBehind("HEAD", p.remote + "/" + branch);
-      p.ahead = r.ahead;
-      p.behind = r.behind;
-    };
-
-    const fetchPeer = async (p: PeerView, say: boolean): Promise<void> => {
-      if (p.fetching) return;
-      if (p.remote.length === 0) {
-        await readOffers(p);
-        if (p.remote.length === 0) {
-          if (say) api.tell(p.name + " offers no copy of this repository");
-          return;
-        }
+    /**
+     * The daemon fetches `p`'s copies into this machine's shared checkouts (one, at `key`) and counts
+     * the current branch of each against theirs; the view takes the answer. A request made while one
+     * is in flight for the same peer runs after it, so it sees what changed meanwhile.
+     */
+    const inFlight = new Map<string, Promise<void>>();
+    const syncPeer = async (p: PeerView, key: string, say: boolean): Promise<void> => {
+      for (let running = inFlight.get(p.id); running !== undefined; running = inFlight.get(p.id)) await running;
+      const job = runSync(p, key, say);
+      inFlight.set(p.id, job);
+      try {
+        await job;
+      } finally {
+        if (inFlight.get(p.id) === job) inFlight.delete(p.id);
       }
-      p.fetching = true;
+    };
+
+    const runSync = async (p: PeerView, key: string, say: boolean): Promise<void> => {
+      p.syncing = true;
       redraw();
-      const r = await api.peers.fetch(p.remote);
-      p.fetching = false;
-      p.fetchedMs = Date.now();
-      p.fetchError = r.code === 0 ? "" : u.clip((r.err.length > 0 ? r.err : "exit " + String(r.code)).split("\n")[0], 60);
-      if (r.code === 0) await measure(p);
-      api.note("peers: fetch " + p.remote + " -> " + String(r.code) + (r.err.length > 0 ? " " + r.err.split("\n")[0] : ""));
-      if (say) api.tell(r.code === 0 ? "fetched " + p.remote + (p.behind > 0 ? ": " + commits(p.behind) + " you do not have on " + branch : p.ahead > 0 ? ": you are " + commits(p.ahead) + " ahead on " + branch : ": nothing new on " + branch) : "fetch from " + p.name + " failed: " + p.fetchError);
+      const a = await req("POST", "/api/peer/sync", { peerId: p.id, key });
+      // The state may have been read again meanwhile: the answer lands on the peer's current view.
+      const live = peers.find((x) => x.id === p.id) ?? p;
+      p.syncing = false;
+      live.syncing = false;
+      if (a.status !== 200) {
+        live.syncError = a.status === 0 ? "the daemon is not running" : u.clip(u.str(rec(rec(parse(a.text)).sync).error) || a.text.split("\n")[0], 80);
+        api.note("peers: fetch from " + live.name + " failed: " + live.syncError);
+        if (say) api.tell("fetch from " + live.name + " failed: " + live.syncError);
+        redraw();
+        return;
+      }
+      applySync(live, rec(parse(a.text)).sync);
+      api.note("peers: fetched from " + live.name + ": " + live.repos.filter((r) => r.local.length > 0).map((r) => r.name + " " + repoTag(r).text).join(", "));
+      if (say) api.tell(fetchedLine(live, key));
       redraw();
     };
 
     /**
-     * Read everything again: the daemon's state, each online peer's offers, and (when due) a fetch of
-     * each. `start` asks the app to start the daemon when none answers (the user opened the tab or
-     * used /peers); a timer's refresh starts one only when the bridge is already in use here.
+     * Read everything again: the daemon's state (with each peer's last sync), and (when due) a fetch
+     * from each online peer. `start` asks the app to start the daemon when none answers (the user
+     * opened the tab or used /peers); a timer's refresh starts one only when the bridge is already
+     * in use here.
      */
     const refresh = async (pings: boolean, start: boolean): Promise<void> => {
       if (refreshing) return;
@@ -549,7 +700,6 @@ widecode.plugin({
           }
         }
         if (myRepoId.length === 0) myRepoId = await api.git.rootCommit();
-        branch = api.state.folder().branch;
         if (pings) await req("POST", "/api/peers/refresh");
         if (!(await readState())) {
           redraw();
@@ -557,11 +707,9 @@ widecode.plugin({
         }
         redraw();
         for (const p of peers) {
-          if (!p.online) continue;
-          if (p.repos.length === 0 || p.remote.length === 0) await readOffers(p);
-          const due = autoFetch && p.remote.length > 0 && (p.fetchedMs === 0 || Date.now() - p.fetchedMs > AUTO_FETCH_MS);
-          if (due) await fetchPeer(p, false);
-          else await measure(p);
+          if (!p.online || p.syncing) continue;
+          const due = autoFetch && (p.syncedMs === 0 || Date.now() - p.syncedMs > AUTO_FETCH_MS);
+          if (due) await syncPeer(p, "", false);
         }
         redraw();
       } finally {
@@ -614,6 +762,7 @@ widecode.plugin({
       const r = await api.peers.share();
       if (r.error.length > 0) return api.tell("could not share this folder: " + r.error);
       api.tell("sharing this folder's repository with the paired machines (" + r.key + ")");
+      for (const p of peers) p.syncedMs = 0;
       await refresh(false, true);
     };
 
@@ -624,6 +773,7 @@ widecode.plugin({
       if (a.status !== 200) return api.tell("could not share " + path + ": " + u.str(rec(parse(a.text)).error));
       const r = rec(rec(parse(a.text)).repo);
       api.tell("sharing " + u.str(r.name) + " with the paired machines (" + u.str(r.key) + ")");
+      for (const p of peers) p.syncedMs = 0;
       await refresh(false, true);
     };
 
@@ -640,11 +790,23 @@ widecode.plugin({
       await refresh(false, true);
     };
 
+    /** Clone `r` from `p` (to `path`, else beside this folder), shared here once it is. */
+    const clone = async (p: PeerView, r: RepoView, path: string): Promise<void> => {
+      if (!(await up())) return;
+      if (r.local.length > 0) return api.tell(r.name + " is here already: " + r.local);
+      api.tell("cloning " + r.name + " from " + p.name + "…");
+      const a = await api.peers.clone(p.id, r.key, r.name, path);
+      if (a.error.length > 0) return api.tell("could not clone " + r.name + " from " + p.name + ": " + a.error);
+      api.tell("cloned " + r.name + " from " + p.name + " to " + a.path + ", shared here as well");
+      await refresh(false, true);
+    };
+
     const unshareHere = async (): Promise<void> => {
       const s = myShare();
       if (s === null) return api.tell("this folder's repository is not shared");
       await req("POST", "/api/unshare", { key: s.key });
       api.tell("no longer sharing " + s.name);
+      for (const p of peers) p.syncedMs = 0;
       await refresh(false, false);
     };
 
@@ -654,10 +816,10 @@ widecode.plugin({
       await refresh(false, false);
     };
 
-    /** The peer the cursor is on (its row or its note), else the first online one. */
+    /** The peer the cursor is on (its row, a repository of it, or its note), else the first online one. */
     const peerAtCursor = (): PeerView | null => {
       const r = rows[selected];
-      if (r !== undefined && (r.kind === "peer" || r.kind === "peer-note")) return peers[r.peer ?? 0];
+      if (r !== undefined && (r.kind === "peer" || r.kind === "peer-note" || r.kind === "peer-repo")) return peers[r.peer ?? 0];
       for (const p of peers) if (p.online) return p;
       return peers[0] ?? null;
     };
@@ -710,12 +872,31 @@ widecode.plugin({
     api.keys.action({
       id: "peers.fetch",
       scope: "peers",
-      help: "fetch from the peer under the cursor",
+      help: "fetch from the peer (or the one repository) under the cursor",
       key: "char:f",
       run: () => {
+        const at = repoAt(rows[selected]);
+        if (at !== null) {
+          if (at.repo.local.length === 0) api.tell(isMine(at.repo.repoId) ? "share this folder first (s): the daemon then fetches it" : at.repo.mode === "hosted" ? "nothing here to fetch it into" : "nothing here to fetch it into: c clones it");
+          else void syncPeer(at.peer, at.repo.key, true);
+          return true;
+        }
         const p = peerAtCursor();
         if (p === null) api.tell("no peer to fetch from: p pairs one");
-        else void fetchPeer(p, true);
+        else void syncPeer(p, "", true);
+        return true;
+      },
+    });
+    api.keys.action({
+      id: "peers.clone",
+      scope: "peers",
+      help: "clone the repository under the cursor beside this folder",
+      key: "char:c",
+      run: () => {
+        const at = repoAt(rows[selected]);
+        if (at === null) api.tell("c clones a peer's repository this machine lacks: put the cursor on one");
+        else if (at.repo.mode === "hosted" && at.repo.local.length === 0) api.tell("a hosted repository is pushed into, not cloned here");
+        else void clone(at.peer, at.repo, "");
         return true;
       },
     });
@@ -747,7 +928,7 @@ widecode.plugin({
       key: "char:x",
       run: () => {
         const r = rows[selected];
-        if (r !== undefined && (r.kind === "peer" || r.kind === "peer-note")) void forget(peers[r.peer ?? 0]);
+        if (r !== undefined && (r.kind === "peer" || r.kind === "peer-note" || r.kind === "peer-repo")) void forget(peers[r.peer ?? 0]);
         else api.tell("x forgets the peer under the cursor");
         return true;
       },
@@ -765,7 +946,7 @@ widecode.plugin({
 
     api.commands.add({
       name: "/peers",
-      usage: "[pair | join <host[:port]> <code> | share [path] | unshare | host <name|path> | fetch <peer> | forget <peer> | name <name> | stop]",
+      usage: "[pair | join <host[:port]> <code> | share [path] | unshare | host <name|path> | fetch <peer> [repo] | clone <peer> <repo> [path] | forget <peer> | name <name> | stop]",
       help: "the machines on this network sharing repositories with this one",
       run: (arg) => {
         const parts = arg.trim().split(/\s+/);
@@ -778,10 +959,15 @@ widecode.plugin({
         if (verb === "share") return void (rest.length > 0 ? sharePath(rest) : shareHere());
         if (verb === "unshare") return void unshareHere();
         if (verb === "host") return void host(rest);
-        if (verb === "fetch" || verb === "forget") {
-          const p = peerNamed(rest);
-          if (p === null) return api.tell(rest.length > 0 ? "no peer named " + rest : "/peers " + verb + " <peer>");
-          return void (verb === "fetch" ? fetchPeer(p, true) : forget(p));
+        if (verb === "fetch" || verb === "forget" || verb === "clone") {
+          const p = peerNamed(parts[1] ?? "");
+          if (p === null) return api.tell((parts[1] ?? "").length > 0 ? "no peer named " + parts[1] : "/peers " + verb + " <peer>" + (verb === "clone" ? " <repo> [path]" : verb === "fetch" ? " [repo]" : ""));
+          if (verb === "forget") return void forget(p);
+          const r = parts.length > 2 ? repoNamed(p, parts[2]) : null;
+          if (parts.length > 2 && r === null) return api.tell(p.name + " offers no repository named " + parts[2] + (p.repos.length > 0 ? ": " + p.repos.map((x) => x.name).join(", ") : ""));
+          if (verb === "fetch") return void syncPeer(p, r !== null ? r.key : "", true);
+          if (r === null) return api.tell("/peers clone " + p.name + " <repo> [path]" + (p.repos.length > 0 ? ": " + p.repos.map((x) => x.name).join(", ") : ""));
+          return void clone(p, r, parts[3] ?? "");
         }
         if (verb === "name") {
           if (rest.length === 0) return api.tell("/peers name <name>");
@@ -800,9 +986,9 @@ widecode.plugin({
           });
           return;
         }
-        api.tell("/peers " + verb + "? pair, join, share, unshare, host, fetch, forget, name or stop");
+        api.tell("/peers " + verb + "? pair, join, share, unshare, host, fetch, clone, forget, name or stop");
       },
-      complete: (arg) => ["pair", "join ", "share", "unshare", "host ", "fetch ", "forget ", "name ", "stop"].filter((v) => v.startsWith(arg.trim())),
+      complete: (arg) => ["pair", "join ", "share", "unshare", "host ", "fetch ", "clone ", "forget ", "name ", "stop"].filter((v) => v.startsWith(arg.trim())),
     });
 
     api.every(refreshMs, () => {

@@ -2,10 +2,12 @@
 // The peers plugin over two daemons on the loopback: this machine's (the app finds it through the
 // store's state file, so nothing is spawned) and another machine's, which shares a clone of this
 // folder's repository with one more commit. The tab shows this machine, its port and the share
-// offer; /peers share shares the folder; the other machine pairs in with a code; its copy is
-// matched by root commit, a remote named after it is written with the token in the local git
-// config, the auto-fetch brings its commit, and the row says ↓1; /peers fetch says so too; /peers
-// forget removes it and its token stops working.
+// offer; /peers share shares the folder; the other machine pairs in with a code; the daemon's sync
+// matches its copy by root commit, writes a remote named after it with the token in the local git
+// config and fetches, and the repository's row under the peer says ↓1; the page in the code column
+// lists the commit to fetch; /peers fetch says so too; a repository the peer has and this machine
+// lacks shows as "not here" and /peers clone brings it; /peers forget removes the peer and its token
+// stops working.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -55,6 +57,7 @@ const main = async (): Promise<void> => {
   oa.bind = "127.0.0.1";
   oa.name = "desk";
   oa.discovery = false;
+  oa.syncMs = 0;
   const a = await startDaemon(storeA, oa);
   if (typeof a === "string") throw new Error(a);
   const ob = new DaemonOptions();
@@ -62,6 +65,7 @@ const main = async (): Promise<void> => {
   ob.bind = "127.0.0.1";
   ob.name = "mac";
   ob.discovery = false;
+  ob.syncMs = 0;
   const b = await startDaemon(storeB, ob);
   if (typeof b === "string") throw new Error(b);
   const sharedB = await b.share(repoB, "", "live", null, null);
@@ -111,18 +115,30 @@ const main = async (): Promise<void> => {
   ok("the other machine joined", typeof joined !== "string");
 
   key("char", "r");
-  await until(() => has("● mac") && rows().some((r) => r.includes("↓1")), 600);
-  ok("the peer shows online", rows().some((r) => r.includes("● mac")));
-  ok("its copy of this repository is matched by root commit: no note under it", !has("no copy of this folder"));
-  ok("the auto-fetch brought its commit: ↓1", rows().some((r) => r.includes("● mac") && r.includes("↓1")));
+  await until(() => has("● mac") && rows().some((r) => r.includes("◆ repo") && r.includes("↓1")), 600);
+  ok("the peer shows online, with the commits to fetch over its repositories", rows().some((r) => r.includes("● mac") && r.includes("↓1")));
+  ok("under it, its copy of this folder's repository, matched by root commit, says ↓1", rows().some((r) => r.includes("◆ repo") && r.includes("↓1")));
+  const repoRow = rows().findIndex((r) => r.includes("◆ repo") && r.includes("↓1"));
+  tab!.press(repoRow, 4);
+  const page = (): string[] => {
+    const view = app.code.pane.view;
+    view.source.prepare(100);
+    const out: string[] = [];
+    for (let i = 0; i < view.source.count(); i++) out.push(view.source.line(i, 100).runs.map((x) => x.text).join(""));
+    return out;
+  };
+  await until(() => page().some((l) => l.includes("Commits to fetch (1)")));
+  ok("the page in the code column lists the commit to fetch", page().some((l) => l.includes("Commits to fetch (1)")) && page().some((l) => l.includes("second, elsewhere")));
+  ok("and how to take it", page().some((l) => l.includes("git merge mac/main")));
+  ok("the hint row says what the keys do here", has("↵ commits · f fetch"));
   ok("a remote named after the peer points at its copy", git("-C " + repo + " remote get-url mac") === "http://127.0.0.1:" + String(b.port) + "/" + (typeof sharedB === "string" ? "" : sharedB.key));
   const token = a.registry.peerById(b.identity.id)!.tokenWePresent;
   ok("the token is in the local git config, for the peer's base URL", git("-C " + repo + " config --get-all http.http://127.0.0.1:" + String(b.port) + "/.extraHeader") === "Authorization: Bearer " + token);
   eq("the commit is a remote-tracking ref, the working tree untouched", git("-C " + repo + " log -1 --format=%s mac/main") + " · " + git("-C " + repo + " status --short"), "second, elsewhere · ");
 
   app.host.kernel.commands.run("/peers fetch mac");
-  await until(() => message().startsWith("fetched mac"));
-  ok("/peers fetch says what the peer has", message().includes("1 commit you do not have on main"));
+  await until(() => message().startsWith("fetched repo from mac"));
+  ok("/peers fetch says what the peer has", message().includes("main: they have 1 commit you do not"));
   ok("the Git badge and the segment see it", tab !== null && tab.badge().some((r) => r.text === "↓1"));
 
   // Another repository of this machine, shared by its path from this session.
@@ -137,6 +153,23 @@ const main = async (): Promise<void> => {
   app.host.kernel.commands.run("/peers share " + repoB);
   await until(() => message().includes("already shared"));
   ok("a second checkout of this folder's repository is refused with the reason", message().includes("already shared from " + repo));
+
+  // A repository the other machine has and this one lacks: listed under it as not here, cloned beside this folder.
+  const repoD = join(root, "theirs-only");
+  mkdirSync(repoD);
+  git("init -q " + repoD);
+  writeFileSync(join(repoD, "d.txt"), "theirs\n");
+  git("-C " + repoD + " add . && git -C " + repoD + " -c user.email=t@t -c user.name=t commit -qm theirs");
+  const sharedD = await b.share(repoD, "", "live", null, null);
+  ok("the other machine shares one more repository", typeof sharedD !== "string");
+  app.host.kernel.commands.run("/peers fetch mac");
+  await until(() => rows().some((r) => r.includes("• theirs-only") && r.includes("not here")));
+  ok("it is listed under the peer as not here", rows().some((r) => r.includes("• theirs-only") && r.includes("not here")));
+  app.host.kernel.commands.run("/peers clone mac theirs-only " + join(root, "cloned"));
+  await until(() => message().startsWith("cloned theirs-only"), 600);
+  ok("/peers clone brings it, shared here", message().includes("to " + join(root, "cloned") + ", shared here as well") && existsSync(join(root, "cloned", "d.txt")) && a.registry.repoByPath(join(root, "cloned")) !== null);
+  await until(() => rows().some((r) => r.includes("• theirs-only") && r.includes("level")));
+  ok("and its row now says level", rows().some((r) => r.includes("• theirs-only") && r.includes("level")));
 
   // Hosting a bare repository by name: it shows as hosted, taking pushes at its key.
   app.host.kernel.commands.run("/peers host mirror");

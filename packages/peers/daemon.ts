@@ -4,7 +4,7 @@
 // file). It keeps the identity and the registry, computes a repository's id (its oldest root
 // commit) when one is shared, and goes away when its state file is removed or on SIGTERM.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { hostname, networkInterfaces } from "node:os";
 import { basename, join } from "node:path";
 import { writeAtomic } from "@light/lib/fs.ts";
@@ -16,9 +16,12 @@ import { JoinRequest, PairOffer, acceptJoin, joinPeer, newPairCode } from "./pai
 import { Peer, Registry, SharedRepo } from "./registry.ts";
 import { Advertiser, Browser, Seen } from "./discovery.ts";
 import { peerRequest } from "./peer-request.ts";
+import { Offer, PeerSync, RepoSync, ensureRemote, parseOffers, peerBase, remoteNameOf, syncOffers } from "./sync.ts";
 
 export const DEFAULT_PORT = 7337;
 const MAX_BODY = 1048576;
+/** A peer seen within this long is online. */
+export const ONLINE_MS = 180000;
 
 /** Where the bridge keeps its files under the store. */
 export class DaemonPaths {
@@ -49,6 +52,8 @@ export class DaemonOptions {
   discovery = true;
   /** How often the network is browsed, in ms. */
   browseMs = 30000;
+  /** How often each online peer's repositories are synced (fetched into this machine's shared checkouts), in ms; 0 leaves that to the sessions' asking. */
+  syncMs = 120000;
 }
 
 /** The state file: how a session finds the running daemon. */
@@ -159,7 +164,11 @@ export class Daemon {
   nearby: Seen[] = [];
   readonly advertiser = new Advertiser();
   readonly browser = new Browser();
+  /** Each peer's repositories as last synced, by peer id. */
+  readonly syncs = new Map<string, PeerSync>();
   private browsing: ReturnType<typeof setInterval> | null = null;
+  private syncing: ReturnType<typeof setInterval> | null = null;
+  private syncMs = 0;
   private lan: Server | null = null;
   private local: Server | null = null;
   private stateWritten = false;
@@ -222,7 +231,85 @@ export class Daemon {
         void this.browse();
       }, o.browseMs);
     }
+    this.syncMs = o.syncMs;
+    if (o.syncMs > 0)
+      this.syncing = setInterval(() => {
+        void this.syncDue(Date.now());
+      }, Math.max(10000, Math.min(o.syncMs, 60000)));
     return "";
+  }
+
+  /** Every online peer whose last sync is older than the interval, synced one after another. */
+  async syncDue(nowMs: number): Promise<void> {
+    for (const p of this.registry.peers) {
+      if (nowMs - p.lastSeenMs > ONLINE_MS) continue;
+      const had = this.syncs.get(p.id);
+      if (had !== undefined && (had.running || nowMs - had.atMs < this.syncMs)) continue;
+      await this.syncPeer(p, "");
+    }
+  }
+
+  /**
+   * `peer`'s repositories against this machine's: its offers read, each one this machine shares a
+   * live copy of fetched into that checkout (as a remote named after the peer, its token in the
+   * checkout's config), the current branch counted against theirs. `key` limits it to one offer, the
+   * others keeping their last state. A second asker waits for the sync in flight.
+   */
+  async syncPeer(peer: Peer, key: string): Promise<PeerSync> {
+    let sync = this.syncs.get(peer.id);
+    if (sync === undefined) {
+      sync = new PeerSync();
+      this.syncs.set(peer.id, sync);
+    }
+    if (sync.running && sync.job !== null) return sync.job;
+    const job = this.runSync(peer, key, sync);
+    sync.job = job;
+    return job;
+  }
+
+  private async runSync(peer: Peer, key: string, sync: PeerSync): Promise<PeerSync> {
+    sync.running = true;
+    try {
+      const text = await this.peerRepos(peer);
+      if (text.length === 0) {
+        sync.error = peer.name + " did not answer";
+        return sync;
+      }
+      this.seen(peer.id, "", 0, Date.now());
+      const offers = parseOffers(parseJson(text)).filter((o: Offer) => key.length === 0 || o.key === key);
+      const fresh = await syncOffers(this.git, peer, offers, this.registry.repos, (line: string) => this.note(line));
+      sync.repos = key.length === 0 ? fresh : sync.repos.filter((r: RepoSync) => r.key !== key).concat(fresh);
+      sync.error = "";
+      sync.atMs = Date.now();
+    } finally {
+      sync.running = false;
+      sync.job = null;
+    }
+    return sync;
+  }
+
+  /**
+   * `peer`'s offer at `key` cloned to `path` (an absent or empty directory), the peer's copy as the
+   * clone's origin named after it, its token in the clone's config, the clone shared live here and
+   * synced. Answers the share, or why not.
+   */
+  async clone(peer: Peer, key: string, path: string): Promise<SharedRepo | string> {
+    if (path.length === 0 || !path.startsWith("/")) return "an absolute path is needed";
+    if (existsSync(path) && readdirSync(path).length > 0) return path + " exists and is not empty";
+    if (peer.address.length === 0 || peer.port <= 0) return peer.name + " has no address yet";
+    const base = peerBase(peer);
+    const remote = remoteNameOf(peer.name, peer.id);
+    const o = new SpawnOptions();
+    o.timeoutMs = 600000;
+    const run = await spawnCapped("env", ["GIT_TERMINAL_PROMPT=0", this.git, "-c", "credential.helper=", "-c", "http." + base + ".extraHeader=Authorization: Bearer " + peer.tokenWePresent, "clone", "--origin", remote, base + key, path], o);
+    if (!run.ok) return (run.error.length > 0 ? run.error : run.err).split("\n").filter((l: string) => l.length > 0).pop() ?? "git clone failed";
+    const kept = await ensureRemote(this.git, path, remote, base + key, base, peer.tokenWePresent);
+    if (kept.length > 0) return kept;
+    const shared = await this.share(path, "", "live", null, null);
+    if (typeof shared === "string") return shared;
+    this.note("cloned " + peer.name + "'s " + key + " to " + path);
+    await this.syncPeer(peer, "");
+    return shared;
   }
 
   /** One look at the network: paired machines seen are marked, the others listed as nearby. */
@@ -257,6 +344,10 @@ export class Daemon {
   }
 
   stop(): void {
+    if (this.syncing !== null) {
+      clearInterval(this.syncing);
+      this.syncing = null;
+    }
     this.advertiser.stop();
     if (this.browsing !== null) clearInterval(this.browsing);
     this.browsing = null;
@@ -381,6 +472,7 @@ export class Daemon {
   forget(peerId: string): boolean {
     const gone = this.registry.removePeer(peerId);
     if (gone) this.registry.save();
+    this.syncs.delete(peerId);
     return gone;
   }
 
@@ -432,7 +524,9 @@ export class Daemon {
     const repos = this.registry.repos.map((s: SharedRepo) => s.toJson());
     const offer = this.offer !== null && this.offer.live(nowMs) ? this.offer.toJson() : null;
     const nearby = this.nearby.map((s: Seen) => s.toJson());
-    const v: unknown = { id: this.identity.id, name: this.identity.name, port: this.port, addresses: lanAddresses(), startedMs: this.startedMs, discovery: this.advertiser.running, peers, repos, nearby, pairing: offer };
+    const syncs: unknown[] = [];
+    for (const [peerId, sync] of this.syncs) syncs.push({ peerId, sync: sync.toJson() });
+    const v: unknown = { id: this.identity.id, name: this.identity.name, port: this.port, addresses: lanAddresses(), startedMs: this.startedMs, discovery: this.advertiser.running, peers, repos, nearby, syncs, pairing: offer };
     return v;
   }
 
@@ -455,6 +549,8 @@ export class Daemon {
         this.offer = null;
         this.note("pairing: " + body!.name + " joined from " + from);
         json(res, 200, answer.toJson());
+        const joined = this.registry.peerByToken(answer.tokenForYou);
+        if (this.syncMs > 0 && joined !== null) setTimeout(() => void this.syncPeer(joined, ""), 1000);
       });
       return;
     }
@@ -497,6 +593,7 @@ export class Daemon {
           const r = await this.pairJoin(str(body["address"]), num(body["port"], DEFAULT_PORT), str(body["code"]), now);
           if (typeof r === "string") return json(res, 400, { error: r });
           this.note("pairing: joined " + r.name + " at " + r.address + ":" + String(r.port));
+          if (this.syncMs > 0) void this.syncPeer(r, "");
           return json(res, 200, { peer: r.toPublicJson() });
         }
         case "/api/share": {
@@ -519,6 +616,19 @@ export class Daemon {
         case "/api/peers/refresh": {
           if (this.browsing !== null) await this.browse();
           return json(res, 200, { online: await this.refreshPeers(now), nearby: this.nearby.map((s: Seen) => s.toJson()) });
+        }
+        case "/api/peer/sync": {
+          const peer = this.registry.peerById(str(body["peerId"]));
+          if (peer === null) return json(res, 404, { error: "no such peer" });
+          const sync = await this.syncPeer(peer, str(body["key"]));
+          return json(res, sync.error.length > 0 && sync.atMs === 0 ? 502 : 200, { peerId: peer.id, sync: sync.toJson() });
+        }
+        case "/api/clone": {
+          const peer = this.registry.peerById(str(body["peerId"]));
+          if (peer === null) return json(res, 404, { error: "no such peer" });
+          const r = await this.clone(peer, str(body["key"]), str(body["path"]));
+          if (typeof r === "string") return json(res, 400, { error: r });
+          return json(res, 200, { repo: r.toJson() });
         }
         case "/api/peer/repos": {
           const peer = this.registry.peerById(str(body["peerId"]));

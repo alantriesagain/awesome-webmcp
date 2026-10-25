@@ -17,8 +17,8 @@ process.env.WIDECODE_HOME = storeA;
 const sh = (c) => spawnSync("sh", ["-c", c], { encoding: "utf8" });
 sh(`git init -q -b main ${repo} && echo one > ${repo}/a.txt && git -C ${repo} add . && git -C ${repo} -c user.email=t@t -c user.name=t commit -qm first`);
 sh(`git clone -q ${repo} ${repoB} && echo two > ${repoB}/b.txt && git -C ${repoB} add . && git -C ${repoB} -c user.email=t@t -c user.name=t commit -qm "second, elsewhere"`);
-const oa = new DaemonOptions(); oa.port = 0; oa.bind = "127.0.0.1"; oa.name = "alanleal-730QDA"; oa.discovery = false;
-const ob = new DaemonOptions(); ob.port = 0; ob.bind = "127.0.0.1"; ob.name = "Alans-MacBook-Pro"; ob.discovery = false;
+const oa = new DaemonOptions(); oa.port = 0; oa.bind = "127.0.0.1"; oa.name = "alanleal-730QDA"; oa.discovery = false; oa.syncMs = 0;
+const ob = new DaemonOptions(); ob.port = 0; ob.bind = "127.0.0.1"; ob.name = "Alans-MacBook-Pro"; ob.discovery = false; ob.syncMs = 0;
 const a = await startDaemon(storeA, oa); const b = await startDaemon(storeB, ob);
 await b.share(repoB, "", "live", null, null); await b.host("mirror", "");
 const ws = await openWorkspace(repo, 100);
@@ -44,4 +44,6 @@ tab.press(rows(30).findIndex((r) => r.includes("alanleal-730QDA")), 4); await wa
 frame("This machine (80 cells)", pageRows(80), 80);
 tab.press(rows(30).findIndex((r) => r.includes("● Alans")), 4); await wait(300);
 frame("Peer (80 cells)", pageRows(80), 80);
+tab.press(rows(30).findIndex((r) => r.includes("◆ repo-b")), 4); await wait(300);
+frame("Repository (80 cells)", pageRows(80), 80);
 unmount(app.shell); ws.close(); a.stop(); b.stop(); rmSync(root, { recursive: true, force: true });

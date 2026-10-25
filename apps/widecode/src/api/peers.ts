@@ -1,13 +1,14 @@
 // The plugin API's `peers` calls, answered for the runtime (runtime.ts dispatches by namespace):
 // the LAN git bridge's daemon reached over its control API (started by the real app when the bridge
-// is in use or asked for, and by nothing else), this
-// folder's repository shared through it, and a peer's copy set up as a remote of this folder, its
-// token written to the local git config (never into a URL, never handed to the plugin).
+// is in use or asked for, and by nothing else), this folder's repository shared through it, a
+// peer's offer cloned beside this folder, and the peers whose remote (the daemon's doing, their
+// token in the checkout's git config and never in a URL or in the plugin's hands) is in this folder.
 import { PreludePart } from "@light/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
 import { HostAnswer } from "@light/plugins/engine.ts";
 import { SpawnOptions, spawnCapped } from "@light/lib/process.ts";
-import { DaemonClient, Registry, urlHost } from "@widecode/peers";
+import { dirname, join } from "node:path";
+import { DaemonClient, Registry, remoteNameOf } from "@widecode/peers";
 import { Store } from "../services/store.ts";
 import { str, num, json, objectText, listText } from "./values.ts";
 
@@ -39,11 +40,6 @@ const gitIn = async (folder: string, args: string[]): Promise<{ code: number; ou
   return { code: run.error.length > 0 ? -1 : run.code, out: run.text, err: run.error.length > 0 ? run.error : run.err };
 };
 
-const remoteNameOf = (peerName: string, peerId: string): string => {
-  const clean = peerName.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[-.]+|[-.]+$/g, "");
-  return clean.length > 0 ? clean : "peer-" + peerId.slice(0, 8);
-};
-
 const requestText = async (rt: JsRuntime, method: string, path: string, body: unknown): Promise<string> => {
   const c = clientOf(rt);
   if (c.state === null) await c.probe();
@@ -67,22 +63,22 @@ const shareHere = async (rt: JsRuntime): Promise<string> => {
   return objectText(["key", "error"], [json(key), json("")]);
 };
 
-/** Peer `peerId`'s copy at `key` as a remote of this folder's repository: the remote's name, "" when the peer is unknown or git refused. */
-const setRemote = async (rt: JsRuntime, peerId: string, key: string): Promise<string> => {
+/** Peer `peerId`'s offer at `key` cloned by the daemon to `path`, beside this folder as `name` when none is given: where, or why not. */
+const cloneOffer = async (rt: JsRuntime, peerId: string, key: string, name: string, path: string): Promise<string> => {
   const c = clientOf(rt);
-  const registry = new Registry(c.paths.registry);
-  registry.load();
-  const peer = registry.peerById(peerId);
-  if (peer === null || peer.address.length === 0 || peer.port <= 0 || peer.tokenWePresent.length === 0) return json("");
-  const base = "http://" + urlHost(peer.address) + ":" + String(peer.port) + "/";
-  const name = remoteNameOf(peer.name, peer.id);
-  const folder = rt.host.workspace.folder;
-  const url = await gitIn(folder, ["config", "--get", "remote." + name + ".url"]);
-  if (url.code !== 0) await gitIn(folder, ["remote", "add", name, base + key]);
-  else if (url.out.trim() !== base + key) await gitIn(folder, ["remote", "set-url", name, base + key]);
-  await gitIn(folder, ["config", "--unset-all", "http." + base + ".extraHeader"]);
-  const set = await gitIn(folder, ["config", "--add", "http." + base + ".extraHeader", "Authorization: Bearer " + peer.tokenWePresent]);
-  return json(set.code === 0 ? name : "");
+  if (c.state === null) await c.probe();
+  const to = path.length > 0 ? (path.startsWith("/") ? path : join(rt.host.workspace.folder, path)) : join(dirname(rt.host.workspace.folder), name);
+  const body: unknown = { peerId, key, path: to };
+  const a = await c.request("POST", "/api/clone", body);
+  if (a.ok) return objectText(["path", "error"], [json(to), json("")]);
+  let why = a.status === 0 ? "the peers daemon is not running" : a.text;
+  try {
+    const v = JSON.parse(a.text) as { error?: unknown };
+    if (typeof v.error === "string") why = v.error;
+  } catch {
+    why = a.status === 0 ? "the peers daemon is not running" : a.text;
+  }
+  return objectText(["path", "error"], [json(to), json(why)]);
 };
 
 const ONLINE_MS = 180000;
@@ -105,11 +101,6 @@ const peerRemotes = async (rt: JsRuntime): Promise<string> => {
   return listText(out);
 };
 
-const fetchRemote = async (rt: JsRuntime, remote: string): Promise<string> => {
-  const r = await gitIn(rt.host.workspace.folder, ["fetch", "--prune", remote]);
-  return objectText(["code", "out", "err"], [String(r.code), json(r.out), json(r.err)]);
-};
-
 /** Plugin call `name` with its arguments `a`, answered; null for a call of another namespace. */
 export const answerPeers = (rt: JsRuntime, name: string, a: unknown[]): HostAnswer | null => {
   switch (name) {
@@ -125,10 +116,8 @@ export const answerPeers = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
       return rt.settled(str(a[0]), num(a[4]), requestText(rt, str(a[1]), str(a[2]), a[3] === undefined ? null : a[3]));
     case "peers.share":
       return rt.settled(str(a[0]), num(a[1]), shareHere(rt));
-    case "peers.remote":
-      return rt.settled(str(a[0]), num(a[3]), setRemote(rt, str(a[1]), str(a[2])));
-    case "peers.fetch":
-      return rt.settled(str(a[0]), num(a[2]), fetchRemote(rt, str(a[1])));
+    case "peers.clone":
+      return rt.settled(str(a[0]), num(a[5]), cloneOffer(rt, str(a[1]), str(a[2]), str(a[3]), str(a[4])));
     case "peers.remotes":
       return rt.settled(str(a[0]), num(a[1]), peerRemotes(rt));
   }
@@ -139,7 +128,6 @@ export const answerPeers = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
 export const NAMESPACE_PEERS = new PreludePart("peers", `        ensure: (start) => later("peers.ensure", id, start === true),
         request: (method, path, body) => later("peers.request", id, String(method), String(path), body === undefined ? null : body),
         share: () => later("peers.share", id),
-        remote: (peerId, key) => later("peers.remote", id, String(peerId), String(key)),
-        fetch: (remote) => later("peers.fetch", id, String(remote)),
+        clone: (peerId, key, name, path) => later("peers.clone", id, String(peerId), String(key), String(name), path === undefined ? "" : String(path)),
         remotes: () => later("peers.remotes", id),
 `);

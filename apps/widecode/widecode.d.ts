@@ -779,7 +779,7 @@ declare namespace widecode {
       /** The branches of `remote` as fetched here, each against the local branch of its name (`ahead` and `behind` -1 without one). */
       remoteBranches(remote: string): Promise<{ name: string; ref: string; sha: string; commitMs: number; local: boolean; ahead: number; behind: number }[]>;
     };
-    /** The LAN git bridge (the peers plugin): this machine's daemon, started when needed, and a peer's copy as a remote of this folder. */
+    /** The LAN git bridge (the peers plugin): this machine's daemon, started when needed; the daemon keeps every shared checkout fetched from each peer. */
     peers: {
       /**
        * A daemon answering: the one running, or one the real app starts now (`widecode --peers-daemon`)
@@ -791,10 +791,8 @@ declare namespace widecode {
       request(method: string, path: string, body?: unknown): Promise<{ status: number; text: string }>;
       /** Share this folder's repository (at its root) with the paired peers, live: the share's key, or why not. */
       share(): Promise<{ key: string; error: string }>;
-      /** Peer `peerId`'s copy at `key` as a remote of this folder's repository, named after the peer, its token in the local git config: the remote's name, "" when the peer is unknown. */
-      remote(peerId: string, key: string): Promise<string>;
-      /** `git fetch --prune <remote>` in this folder, never prompting: the exit code and what git said. */
-      fetch(remote: string): Promise<{ code: number; out: string; err: string }>;
+      /** Clone peer `peerId`'s offer at `key` to `path` (beside this folder as `name` when ""), shared live here once cloned: where it went, or why not. */
+      clone(peerId: string, key: string, name: string, path?: string): Promise<{ path: string; error: string }>;
       /** The paired peers that have a remote named after them in this folder's repository, and whether each was seen in the last minutes. */
       remotes(): Promise<{ id: string; name: string; remote: string; online: boolean; lastSeenMs: number }[]>;
     };
