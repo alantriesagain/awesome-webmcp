@@ -359,8 +359,50 @@ risks); each slice below is one commit with its tests.
       its cost counted; the acp plugin draws it as an agent.
 - [x] **Images.** A prompt's images and a Read of an image file, for a model that reads them
       (`vision`); to Anthropic as content blocks, to a chat completions API as a user message.
-- [ ] **Later.** A `browser` tool over the DevTools protocol; branching from an earlier entry; the
-      native `fetch` behind `HttpStream`; prices refreshed from the providers.
+
+Pending, roughly in order of value (October 2026):
+
+- [ ] **Keyless web search.** Google refuses a fresh headless browser's queries as unusual traffic
+      from this machine (both the headless shell and Chromium's new headless mode, two queries), so
+      WebSearch works here only with SearXNG or a Brave or Tavily key. pi's `pi-web-access` gets
+      keyless search from Exa's hosted MCP endpoint; the harness has the MCP client to call it. Add
+      it as a backend before Google in the default order (queries go to a third party: say so in
+      the README; check its keyless rate limits), and Jina Reader as WebFetch's fallback for a page
+      that blocks the browser.
+- [ ] **Google, best effort.** Keep it out of the default order, or try what lowers detection: a
+      persistent profile under the store keeping Google's cookies, `--disable-blink-features=
+      AutomationControlled`, a headed browser under a virtual display. Few queries while trying:
+      the network's reputation counts.
+- [ ] **Anthropic's server-side web search** as a backend when the model is Anthropic's: the
+      `web_search` server tool in the request, its result blocks kept and replayed as a fetch call.
+- [ ] **A screenshot from WebFetch.** Chromium's one-shot `--screenshot` with a window size, the image
+      attached for a model that reads images (the images slice carries it).
+- [ ] **MCP servers in config for the harness.** `harness.mcpServers` beside the client's: HTTP first
+      (`McpLink` exists), then stdio (spawn, JSON-RPC per line). This gives a stateful browser at once
+      through Playwright's server (`npx @playwright/mcp --port 8931`), at the cost of Node and the
+      package on the machine.
+- [ ] **A native stateful browser tool**, for driving the user's own web app. First a probe: a
+      WebSocket client natively (scriptc lowers the HTTP client's `upgrade` event, per its source;
+      `--remote-debugging-pipe` is out, the runtime hands a child no extra descriptors). Then a
+      DevTools client (ids, events, a session per tab), the browser's lifetime per session (started
+      on first use, closed with the session, restarted after a crash, a fresh profile by default),
+      the actions in Playwright MCP's shape (navigate, back, a snapshot of the accessibility tree
+      with refs, click and type by ref, keys, select, scroll, wait for text, evaluate, screenshot,
+      tabs), the guards (deny rules by domain, mutating, out of plan mode), and a test over a local
+      page with a form.
+- [ ] **OpenCode Zen, live.** With a key: check that its Anthropic endpoint takes `x-api-key`,
+      whether it takes cache breakpoints (`anthropicExtras`, off by default for it), the model ids
+      against `opencode models opencode`, and the prices; then a benchmark run over its models.
+- [ ] **A long call's progress to the client.** The loop hears a Bash call's output as it comes and a
+      subagent's calls, but the agent does not forward `onToolOutput`: send them as
+      `tool_call_update` content while the call runs.
+- [ ] **The benchmark, further.** Harder tasks (both DeepSeek models pass all eight), more repeats, a
+      Claude Code driver over stream-json (it runs on the user's subscription: the user's call),
+      opencode's cost from its `usage_update` since its prompt answer reports part of its usage.
+- [ ] **Branching from an earlier entry** of a session (the file's tree has it; the UI has no way to
+      ask for it yet).
+- [ ] **The native `fetch` behind `HttpStream`**, once a streaming probe passes.
+- [ ] **Prices refreshed** from the providers (most of Zen's are unknown, so its cost shows as none).
 
 ## Deferred or skip
 
@@ -459,3 +501,14 @@ risks); each slice below is one commit with its tests.
 - `f3b14da`, `0d09b70` Milestone F: titles, model naming and `StatusInfo` in `@widecode/agent`.
 - A child process covers the bad log path; `util.throttle` completes the prelude helpers.
 - The rejection path has a native C driver; the node stand-in stays simple.
+- `3e904d4`, `517aa43`, `509ed84` Milestone J: the harness as a daemon speaking ACP, the Anthropic
+  client, the tools, the line diff, an entry kept static.
+- `657ab06`, `ee55287` Milestone J: sessions as JSONL files with replay, fork, titles; compaction.
+- `5c70011`, `a547f9f` Milestone J: skills, AGENTS.md and CLAUDE.md, widecode's MCP tools; WebFetch
+  and WebSearch through a headless browser.
+- `57cd6fa` Milestone J: the `harness` selftest and the README's section; two tests' expectations
+  and teardown, one wait raised.
+- `3d53538` The OpenAI-compatible client and OpenCode Zen; the Grep and Glob schemas made valid JSON.
+- `1208ed2` The benchmark: eight tasks, a runner over ACP, the first live run.
+- `53fe3cd`, `f9338f7`, `b001d9d` A deny list from `permissions.deny`, subagents, images.
+- `7f7e773` The busy test reads its tool line without its clocks' seconds.
