@@ -286,6 +286,7 @@ The machines on one network share repositories with each other, fetch-first, no 
 - [x] **The Git tab's peers.** The paired peers with a remote here, their branches against ours, Enter for their log, the `peer` compare base, the badge. (`2f1b796`)
 - [x] **Hosted repositories.** `/peers host <name>` makes a bare repository under the store that paired peers push into; empty until the first push gives it its id.
 - [ ] **Later.** TLS pinned by peer id; an in-process mDNS responder over dgram; a push from the tab; the daemon as a login item.
+- [ ] **To watch: a daemon's `fetch` to a peer that stopped answering.** On the Mac, one daemon kept answering "did not answer" for a peer whose daemon had been restarted, while curl and a fresh process reached it; a restart fixed it. The reasons are logged now (`ping …`, `repos of …` lines); if it comes back, suspect the native runtime reusing a connection the other side closed, and retry once on a closed connection. (`packages/peers/daemon.ts`)
 
 ## Deferred or skip
 
