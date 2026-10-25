@@ -132,27 +132,29 @@ const listenOn = (server: Server, port: number, host: string): Promise<number> =
     });
   });
 
-/** Whether `p` answers 200 within `ms`; a slow or failed request is false and left to end on its own. */
-const raceOk = (p: Promise<Response>, ms: number): Promise<boolean> =>
+/** Whether `p` answers 200 within `ms`; a slow or failed request is false (said to `why`) and left to end on its own. */
+const raceOk = (p: Promise<Response>, ms: number, why: (text: string) => void): Promise<boolean> =>
   new Promise((resolve) => {
     let settled = false;
     const timer = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        resolve(false);
-      }
+      if (settled) return;
+      settled = true;
+      why("no answer within " + String(ms) + " ms");
+      resolve(false);
     }, ms);
     p.then(
       (res: Response) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        if (res.status !== 200) why("status " + String(res.status));
         resolve(res.status === 200);
       },
-      () => {
+      (err: unknown) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        why(errorMessage(err, "failed"));
         resolve(false);
       },
     );
@@ -420,7 +422,8 @@ export class Daemon {
   /** Ask `peer` whether it is there (its `/ping`, two seconds at most); its last-seen time moves when it answers. */
   async pingPeer(peer: Peer, nowMs: number): Promise<boolean> {
     if (peer.address.length === 0 || peer.port <= 0) return false;
-    const ok = await raceOk(fetch("http://" + urlHost(peer.address) + ":" + String(peer.port) + "/ping"), 2000);
+    const url = "http://" + urlHost(peer.address) + ":" + String(peer.port) + "/ping";
+    const ok = await raceOk(fetch(url), 2000, (why: string) => this.note("ping " + peer.name + " at " + url + ": " + why));
     if (ok) this.seen(peer.id, "", 0, nowMs);
     return ok;
   }
@@ -438,11 +441,16 @@ export class Daemon {
   /** What `peer` offers us (its `/repos`, with our token), as the JSON text it answered; "" when it did not. */
   async peerRepos(peer: Peer): Promise<string> {
     if (peer.address.length === 0 || peer.port <= 0) return "";
+    const url = "http://" + urlHost(peer.address) + ":" + String(peer.port) + "/repos";
     try {
-      const res = await fetch("http://" + urlHost(peer.address) + ":" + String(peer.port) + "/repos", { headers: { authorization: "Bearer " + peer.tokenWePresent } });
-      if (res.status !== 200) return "";
+      const res = await fetch(url, { headers: { authorization: "Bearer " + peer.tokenWePresent } });
+      if (res.status !== 200) {
+        this.note("repos of " + peer.name + " at " + url + ": status " + String(res.status) + " " + (await res.text()).trim().slice(0, 120));
+        return "";
+      }
       return await res.text();
-    } catch {
+    } catch (err) {
+      this.note("repos of " + peer.name + " at " + url + ": " + errorMessage(err, "no answer"));
       return "";
     }
   }
