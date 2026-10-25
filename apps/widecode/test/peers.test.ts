@@ -92,28 +92,28 @@ const main = async (): Promise<void> => {
 
   app.host.screen.focus("side");
   app.host.screen.showPanel("peers");
-  await until(() => has("serving on :" + String(a.port)));
-  ok("this machine, its port and its name", has("This machine · desk") && has("serving on :" + String(a.port)));
+  await until(() => rows().some((r) => r.includes("desk") && r.includes(":" + String(a.port))));
+  ok("this machine: its name and port on one row", has("This machine") && rows().some((r) => r.includes("desk") && r.includes(":" + String(a.port))));
   ok("the folder is not shared yet: an offer", has("share this folder"));
-  ok("no peer yet", has("no peer paired yet"));
+  ok("no peer yet", has("none paired yet"));
 
   app.host.kernel.commands.run("/peers share");
-  await until(() => rows().some((r) => r.includes("● repo") && r.includes("this folder")));
-  ok("/peers share: the repository is listed as shared, live, this folder", rows().some((r) => r.includes("● repo") && r.includes("live") && r.includes("this folder")));
+  await until(() => rows().some((r) => r.includes("◆ repo") && r.includes("live")));
+  ok("/peers share: the repository is listed as shared, live, marked as this folder's", rows().some((r) => r.includes("◆ repo") && r.includes("live")) && !has("share this folder"));
   eq("the daemon shares it at its root", a.registry.repos[0].path, repo);
 
   // The other machine pairs in with the code this one shows.
   app.host.kernel.commands.run("/peers pair");
-  await until(() => has("code ") && message().includes("pairing code"));
+  await until(() => a.offer !== null && has(a.offer.code) && message().includes("pairing code"));
   const code = a.offer !== null ? a.offer.code : "";
-  eq("a six-digit code is shown and told (code, in the message, in the hint)", String(/^[0-9]{6}$/.test(code)) + " " + String(message().includes(code)) + " " + String(has("/peers join")), "true true true");
+  eq("a six-digit code is shown and told (code, in the message, the join line told)", String(/^[0-9]{6}$/.test(code)) + " " + String(message().includes(code)) + " " + String(message().includes("/peers join")), "true true true");
   const joined = await b.pairJoin("127.0.0.1", a.port, code, Date.now());
   ok("the other machine joined", typeof joined !== "string");
 
   key("char", "r");
   await until(() => has("● mac") && rows().some((r) => r.includes("↓1")), 600);
-  ok("the peer shows online", rows().some((r) => r.includes("● mac") && r.includes("online")));
-  ok("its copy of this repository is matched by root commit", rows().some((r) => r.includes("repo-b") && r.includes("same as this folder")));
+  ok("the peer shows online", rows().some((r) => r.includes("● mac")));
+  ok("its copy of this repository is matched by root commit: no note under it", !has("no copy of this folder"));
   ok("the auto-fetch brought its commit: ↓1", rows().some((r) => r.includes("● mac") && r.includes("↓1")));
   ok("a remote named after the peer points at its copy", git("-C " + repo + " remote get-url mac") === "http://127.0.0.1:" + String(b.port) + "/" + (typeof sharedB === "string" ? "" : sharedB.key));
   const token = a.registry.peerById(b.identity.id)!.tokenWePresent;
@@ -128,7 +128,7 @@ const main = async (): Promise<void> => {
   // Hosting a bare repository by name: it shows as hosted, taking pushes at its key.
   app.host.kernel.commands.run("/peers host mirror");
   await until(() => rows().some((r) => r.includes("mirror") && r.includes("hosted")));
-  ok("/peers host: a hosted repository under the store", rows().some((r) => r.includes("mirror") && r.includes("takes pushes at h/mirror")) && existsSync(join(storeA, "peers", "hosted", "mirror.git", "HEAD")));
+  ok("/peers host: a hosted repository under the store", rows().some((r) => r.includes("mirror") && r.includes("hosted")) && existsSync(join(storeA, "peers", "hosted", "mirror.git", "HEAD")));
 
   // Before the forget, the other machine fetches from this one with the token this one gave it.
   const theirToken = b.registry.peerById(a.identity.id)!.tokenWePresent;
@@ -140,7 +140,7 @@ const main = async (): Promise<void> => {
   ok("the other machine can fetch from this one", before.code === 0 && before.text.includes("refs/heads/main"));
   app.host.kernel.commands.run("/peers forget mac");
   await until(() => !has("● mac") && message().includes("forgot mac"));
-  ok("forgotten: gone from the tab", !has("mac ·"));
+  ok("forgotten: gone from the tab", !has("● mac") && !has("○ mac"));
   const after = await spawnCapped("env", ["GIT_TERMINAL_PROMPT=0", "git", "-c", "credential.helper=", "-c", "http.extraHeader=Authorization: Bearer " + theirToken, "ls-remote", ours], o);
   ok("and its token no longer opens this machine's door", after.code !== 0);
 

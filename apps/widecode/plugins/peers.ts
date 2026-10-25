@@ -1,16 +1,16 @@
-// Peers: the LAN git bridge's tab and segment. The tab shows this machine (its name and id, the
-// port it serves on, the repositories it shares), the machines paired with it (online or last
-// seen, the repositories they offer matched to this folder's by root commit, the current branch's
-// ahead and behind against their copy once fetched) and pairing (the six-digit code shown here, or
-// the one to type from the other side); machines announcing themselves on the network that are not
-// paired yet are listed as nearby, and a join may name one. Enter fetches the peer under the cursor, s shares or
-// unshares this folder's repository, p shows a code, x forgets the peer under the cursor, r reads
-// again. `/peers` opens the tab; `/peers pair`, `/peers join <host[:port]> <code>`, `/peers share`,
-// `/peers unshare`, `/peers host <name|path>` (a bare repository peers may push into), `/peers fetch
-// <peer>`, `/peers forget <peer>`, `/peers name <name>` and
-// `/peers stop` do the same from the composer. The daemon (widecode --peers-daemon) does the serving
-// and is started when this plugin needs it; auto-fetch keeps ahead and behind live. Nothing here
-// touches a working tree: a fetch writes refs only.
+// Peers: the LAN git bridge's tab and segment. The tab is a short list: this machine with what it
+// shares (◆ marks this folder's repository), the machines paired with it (● online, ○ not, and how
+// the current branch stands against their copy: ↓ what they have that we lack), the machines nearby
+// that are not paired yet, and, while a code is shown, the pairing code with its time left. The
+// details live in the code column: the row under the cursor opens a page there (this machine's id,
+// addresses, shares with their paths and the URLs peers use, the way another machine joins; a
+// peer's address, remote, branches against ours and what it offers). Enter opens the page, f
+// fetches the peer under the cursor, s shares or unshares this folder, p shows a code, x forgets a
+// peer, r reads again. `/peers` opens the tab; `/peers pair`, `/peers join <host[:port]> <code>`,
+// `/peers share`, `/peers unshare`, `/peers host <name|path>`, `/peers fetch <peer>`, `/peers forget
+// <peer>`, `/peers name <name>` and `/peers stop` do the same from the composer. The daemon
+// (widecode --peers-daemon) does the serving and is started when this plugin needs it; auto-fetch
+// keeps ahead and behind live. Nothing here touches a working tree: a fetch writes refs only.
 
 type Run = widecode.Run;
 type Row = widecode.Row;
@@ -25,7 +25,7 @@ const AUTO_FETCH_MS = 120000;
 const ONLINE_MS = 180000;
 
 interface RowSpec {
-  kind: "section" | "me" | "serving" | "repo" | "share" | "peer" | "peer-repo" | "nearby" | "pairing" | "hint" | "empty";
+  kind: "section" | "gap" | "me" | "repo" | "share" | "peer" | "peer-note" | "nearby" | "code" | "hint" | "empty";
   section?: string;
   peer?: number;
   repo?: number;
@@ -33,10 +33,28 @@ interface RowSpec {
   text?: string;
 }
 
+type RemoteBranch = { name: string; ref: string; sha: string; commitMs: number; local: boolean; ahead: number; behind: number };
+
+/** `text` cut into lines of at most `cells`, at spaces where there are any. */
+const wrap = (text: string, cells: number): string[] => {
+  const out: string[] = [];
+  let rest = text;
+  while (u.width(rest) > cells) {
+    let at = -1;
+    for (let i = 0; i < rest.length && u.width(rest.slice(0, i)) <= cells; i++) if (rest[i] === " ") at = i;
+    if (at <= 0) at = Math.max(1, cells);
+    out.push(rest.slice(0, at).trimEnd());
+    rest = rest.slice(at).trimStart();
+  }
+  out.push(rest);
+  return out;
+};
+
 interface Shared {
   key: string;
   repoId: string;
   name: string;
+  path: string;
   mode: string;
   branches: string[] | null;
   allow: string[] | null;
@@ -86,7 +104,7 @@ const strList = (v: unknown): string[] | null => (Array.isArray(v) ? (v as unkno
 
 const sharedOf = (v: unknown): Shared => {
   const r = rec(v);
-  return { key: u.str(r.key), repoId: u.str(r.repoId), name: u.str(r.name), mode: u.str(r.mode), branches: strList(r.branches), allow: strList(r.allow) };
+  return { key: u.str(r.key), repoId: u.str(r.repoId), name: u.str(r.name), path: u.str(r.path), mode: u.str(r.mode), branches: strList(r.branches), allow: strList(r.allow) };
 };
 
 const offeredOf = (v: unknown): Offered => {
@@ -158,112 +176,248 @@ widecode.plugin({
       return null;
     };
 
+    /** What a peer's row says on the right: the current branch against its copy, or what is going on. */
+    const tagOf = (p: PeerView): { text: string; fg: string } => {
+      if (p.fetching) return { text: "…", fg: DIM };
+      if (p.fetchError.length > 0) return { text: "!", fg: T.bad };
+      if (p.remote.length === 0 || p.ahead < 0) return { text: "", fg: "" };
+      if (p.behind > 0) return { text: "↓" + String(p.behind) + (p.ahead > 0 ? " ↑" + String(p.ahead) : ""), fg: T.warn };
+      if (p.ahead > 0) return { text: "↑" + String(p.ahead), fg: T.ok };
+      return { text: "level", fg: DIM };
+    };
+
+    /** A short line under a peer: what is going on, or why there is nothing to fetch; "" for none. */
+    const peerNote = (p: PeerView): string => {
+      if (p.fetching) return "fetching…";
+      if (p.fetchError.length > 0) return p.fetchError;
+      if (p.online && p.repos.length > 0 && match(p) === null) return "no copy of this folder";
+      return "";
+    };
+
     const layout = (): void => {
       const out: RowSpec[] = [];
       out.push({ kind: "section", section: "me" });
       if (!folded.has("me")) {
-        out.push({ kind: "serving" });
+        out.push({ kind: "me" });
         shared.forEach((_s, i) => out.push({ kind: "repo", repo: i }));
-        if (myShare() === null && myRepoId.length > 0) out.push({ kind: "share" });
+        if (myShare() === null && myRepoId.length > 0 && daemon === "running") out.push({ kind: "share" });
       }
+      out.push({ kind: "gap" });
       out.push({ kind: "section", section: "peers" });
       if (!folded.has("peers")) {
-        if (peers.length === 0 && nearby.length === 0) out.push({ kind: "empty", text: discovery ? "no peer paired yet, none announcing itself nearby" : "no peer paired yet" });
+        if (peers.length === 0 && nearby.length === 0) out.push({ kind: "empty", text: "none paired yet" });
         peers.forEach((p, i) => {
           out.push({ kind: "peer", peer: i });
-          p.repos.forEach((_o, k) => out.push({ kind: "peer-repo", peer: i, repo: k }));
+          const note = peerNote(p);
+          if (note.length > 0) out.push({ kind: "peer-note", peer: i, text: note });
         });
         nearby.forEach((_n, i) => out.push({ kind: "nearby", near: i }));
       }
-      out.push({ kind: "section", section: "pairing" });
-      if (!folded.has("pairing")) {
-        if (pairing !== null && pairing.expiresMs > Date.now()) out.push({ kind: "pairing" });
-        out.push({ kind: "hint", text: pairing !== null && pairing.expiresMs > Date.now() ? "on the other machine: /peers join " + (me.addresses[0] ?? "<this address>") + ":" + String(me.port) + " " + pairing.code : "p shows a code for another machine to join with" });
-        out.push({ kind: "hint", text: "/peers join <host:port> <code> joins a machine showing one" + (nearby.length > 0 ? " (a nearby name works: /peers join " + nearby[0].name + " <code>)" : "") });
-        out.push({ kind: "hint", text: "a machine that cannot be joined or fetched from has port " + String(me.port > 0 ? me.port : DEFAULT_PORT) + "/tcp closed by its firewall (ufw allow " + String(me.port > 0 ? me.port : DEFAULT_PORT) + "/tcp on Linux)" });
+      if (pairing !== null && pairing.expiresMs > Date.now()) {
+        out.push({ kind: "gap" });
+        out.push({ kind: "section", section: "pairing" });
+        if (!folded.has("pairing")) out.push({ kind: "code" });
       }
+      out.push({ kind: "gap" });
+      out.push({ kind: "hint" });
       rows = out;
       if (selected >= rows.length) selected = Math.max(0, rows.length - 1);
     };
 
-    const sectionTitle = (name: string): string => {
-      if (name === "me") return me.name.length > 0 ? "This machine · " + me.name : "This machine";
-      if (name === "peers") return "Peers (" + String(peers.length) + ")";
-      return "Pairing";
+    const sectionTitle = (name: string): string => (name === "me" ? "This machine" : name === "peers" ? "Peers" + (peers.length > 0 ? " · " + String(peers.length) : "") : "Pairing");
+
+    /** A row: `lead`, `name` clipped to what is left, and a short `tag` on the right. */
+    const pairRow = (bg: string, lead: Run, name: string, nameFg: string, bold: boolean, tag: string, tagFg: string, width: number): Row => {
+      const room = Math.max(3, width - u.width(lead.text) - (tag.length > 0 ? u.width(tag) + 1 : 0));
+      const shown = u.clip(name, room);
+      const runs: Run[] = [lead, { text: shown, fg: nameFg, bold }];
+      const pad = room - u.width(shown);
+      if (pad > 0) runs.push({ text: " ".repeat(pad), fg: "" });
+      if (tag.length > 0) runs.push({ text: " " + tag, fg: tagFg });
+      return { bg, runs };
     };
 
     const line = (r: RowSpec, index: number, width: number): Row => {
-      const bg = index === selected ? SELECTED_BG : "";
+      const bg = index === selected && r.kind !== "gap" ? SELECTED_BG : "";
       const now = Date.now();
-      const text = (s: string, fg: string, bold?: boolean): Row => ({ bg, runs: [{ text: "   " + u.clip(s, Math.max(1, width - 3)), fg, bold }] });
+      const plain = (text: string, fg: string): Row => ({ bg, runs: [{ text: "   " + u.clip(text, Math.max(1, width - 3)), fg }] });
+      if (r.kind === "gap") return { bg: "", runs: [{ text: "", fg: "" }] };
       if (r.kind === "section") {
         const open = !folded.has(r.section ?? "");
         return { bg, runs: [{ text: " " + (open ? "▾ " : "▸ "), fg: DIM }, { text: u.clip(sectionTitle(r.section ?? ""), Math.max(1, width - 3)), fg: "", bold: true }] };
       }
-      if (r.kind === "serving") {
-        if (daemon !== "running") return text(daemon === "starting" ? "starting the daemon…" : daemon === "not running" ? "the daemon is not running: it starts when this tab is opened or /peers is used" : "daemon " + daemon, T.warn);
-        return text("serving on :" + String(me.port) + (me.addresses.length > 0 ? " · " + me.addresses.join(" ") : "") + " · id " + me.id.slice(0, 8) + (discovery ? "" : " · not announced"), DIM);
+      if (r.kind === "me") {
+        if (daemon !== "running") return plain(daemon === "starting" ? "starting…" : daemon === "not running" ? "idle · Enter starts it" : daemon, T.warn);
+        return pairRow(bg, { text: "   ", fg: "" }, me.name, "", false, ":" + String(me.port), DIM, width);
       }
       if (r.kind === "repo") {
         const s = shared[r.repo ?? 0];
-        const mine = s.repoId === myRepoId && s.mode === "live";
-        const tail = (s.branches !== null ? " · " + s.branches.join(",") : "") + (s.allow !== null ? " · " + String(s.allow.length) + " allowed" : "") + (mine ? " · this folder" : "") + (s.mode === "hosted" ? " · takes pushes at " + s.key : "");
-        return { bg, runs: [{ text: "   ● ", fg: T.ok }, { text: u.clip(s.name, Math.max(4, width - 8 - u.width(tail))), fg: mine ? T.link : "", bold: mine }, { text: " " + s.mode, fg: DIM }, { text: tail, fg: DIM }] };
+        const mine = s.repoId === myRepoId && s.mode === "live" && myRepoId.length > 0;
+        return pairRow(bg, { text: "   " + (mine ? "◆ " : "• "), fg: mine ? T.link : DIM }, s.name, mine ? T.link : "", mine, s.mode === "hosted" ? "hosted" : "live", DIM, width);
       }
-      if (r.kind === "share") return { bg, runs: [{ text: "   ○ ", fg: DIM }, { text: "share this folder", fg: T.link }, { text: " (s)", fg: DIM }] };
+      if (r.kind === "share") return { bg, runs: [{ text: "   ○ ", fg: DIM }, { text: "share this folder", fg: T.link }, { text: "  s", fg: DIM }] };
       if (r.kind === "peer") {
         const p = peers[r.peer ?? 0];
-        const state = p.fetching ? "fetching…" : p.online ? "online" : p.lastSeenMs > 0 ? "seen " + u.age(now - p.lastSeenMs) + " ago" : "never seen";
-        const track = p.remote.length > 0 && p.ahead >= 0 ? (p.behind > 0 ? "↓" + String(p.behind) : "") + (p.ahead > 0 ? (p.behind > 0 ? " " : "") + "↑" + String(p.ahead) : "") : "";
-        const tail = (track.length > 0 ? " " + track : "") + (p.fetchedMs > 0 ? " · fetched " + u.age(now - p.fetchedMs) + " ago" : "") + (p.fetchError.length > 0 ? " · " + p.fetchError : "");
-        const name = u.clip(p.name, Math.max(4, width - 8 - u.width(state) - u.width(tail)));
-        const runs: Run[] = [{ text: "   " + (p.online ? "●" : "○") + " ", fg: p.online ? T.ok : DIM }, { text: name, fg: "", bold: true }, { text: " · " + state, fg: p.online ? T.ok : DIM }];
-        if (track.length > 0) runs.push({ text: " " + track, fg: p.behind > 0 ? T.warn : T.ok });
-        if (p.fetchedMs > 0) runs.push({ text: " · fetched " + u.age(now - p.fetchedMs) + " ago", fg: DIM });
-        if (p.fetchError.length > 0) runs.push({ text: " · " + u.clip(p.fetchError, 40), fg: T.bad });
-        return { bg, runs };
+        const tag = tagOf(p);
+        return pairRow(bg, { text: "   " + (p.online ? "● " : "○ "), fg: p.online ? T.ok : DIM }, p.name, "", true, tag.text, tag.fg, width);
       }
-      if (r.kind === "peer-repo") {
-        const p = peers[r.peer ?? 0];
-        const o = p.repos[r.repo ?? 0];
-        const same = o.repoId === myRepoId && myRepoId.length > 0;
-        const tip = branch.length > 0 && o.tips[branch] !== undefined ? " · " + branch + " " + o.tips[branch].slice(0, 7) : "";
-        return { bg, runs: [{ text: "      " + (same ? "● " : "  "), fg: T.link }, { text: u.clip(o.name, Math.max(4, width - 12 - u.width(tip))), fg: same ? T.link : "" }, { text: " " + o.mode + (same ? (o.mode === "hosted" ? " · this folder's, takes pushes" : " · same as this folder") : "") + tip, fg: DIM }] };
-      }
-      if (r.kind === "nearby") {
-        const n = nearby[r.near ?? 0];
-        const tail = " · nearby, not paired · " + n.address + ":" + String(n.port);
-        return { bg, runs: [{ text: "   ○ ", fg: DIM }, { text: u.clip(n.name, Math.max(4, width - 6 - u.width(tail))), fg: "" }, { text: tail, fg: DIM }] };
-      }
-      if (r.kind === "pairing") {
+      if (r.kind === "peer-note") return plain("  " + (r.text ?? ""), peers[r.peer ?? 0].fetchError.length > 0 ? T.bad : DIM);
+      if (r.kind === "nearby") return pairRow(bg, { text: "   ○ ", fg: DIM }, nearby[r.near ?? 0].name, "", false, "nearby", DIM, width);
+      if (r.kind === "code") {
         const left = pairing !== null ? Math.max(0, Math.round((pairing.expiresMs - now) / 1000)) : 0;
-        return { bg, runs: [{ text: "   code ", fg: DIM }, { text: pairing !== null ? pairing.code : "", fg: T.link, bold: true }, { text: " · " + String(Math.floor(left / 60)) + "m" + String(left % 60).padStart(2, "0") + " left", fg: left < 20 ? T.warn : DIM }] };
+        return { bg, runs: [{ text: "   ", fg: "" }, { text: pairing !== null ? pairing.code : "", fg: T.link, bold: true }, { text: "  " + String(Math.floor(left / 60)) + ":" + String(left % 60).padStart(2, "0"), fg: left < 20 ? T.warn : DIM }] };
       }
-      if (r.kind === "hint") return text(r.text ?? "", DIM);
-      return text(r.text ?? "", DIM);
+      if (r.kind === "hint") return plain("↵ details · f fetch · p pair", DIM);
+      return plain(r.text ?? "", DIM);
+    };
+
+    const remoteBranches = new Map<string, RemoteBranch[]>();
+    let detailWidth = 80;
+
+    /** The details page for the row under the cursor, `width` cells wide. */
+    const detailRows = (width: number): Row[] => {
+      const out: Row[] = [];
+      const w = Math.max(20, width - 2);
+      const put = (text: string, fg: string, bold?: boolean): void => {
+        out.push({ runs: [{ text: " " + text, fg, bold }] });
+      };
+      const blank = (): void => put("", "");
+      const field = (name: string, value: string, fg?: string): void => {
+        if (value.length === 0) return;
+        const parts = wrap(value, Math.max(10, w - 12));
+        parts.forEach((part, i) => out.push({ runs: [{ text: " " + (i === 0 ? name.padEnd(11, " ") : "           "), fg: DIM }, { text: part, fg: fg ?? "" }] }));
+      };
+      const joinLine = (): string => "/peers join " + (me.addresses[0] ?? "<this machine's address>") + (me.port > 0 && me.port !== DEFAULT_PORT ? ":" + String(me.port) : "") + " " + (pairing !== null && pairing.expiresMs > Date.now() ? pairing.code : "<code>");
+      const r = rows[selected];
+      const kind = r === undefined ? "me" : r.kind;
+      if (kind === "peer" || kind === "peer-note") {
+        const p = peers[r?.peer ?? 0];
+        put(p.name, "", true);
+        blank();
+        field("state", (p.online ? "online" : p.lastSeenMs > 0 ? "not seen for " + u.age(Date.now() - p.lastSeenMs) : "never seen") + (p.fetching ? " · fetching…" : ""), p.online ? T.ok : DIM);
+        field("address", p.address.length > 0 ? p.address + ":" + String(p.port) : "unknown");
+        field("id", p.id);
+        const mine = match(p);
+        field("remote", p.remote.length > 0 ? p.remote + " (in this folder's repository)" : mine !== null ? "not set up yet" : p.repos.length === 0 ? "nothing offered yet" : "none: it offers no copy of this folder's repository");
+        if (p.fetchedMs > 0) field("fetched", u.age(Date.now() - p.fetchedMs) + " ago" + (p.fetchError.length > 0 ? " · failed: " + p.fetchError : ""), p.fetchError.length > 0 ? T.bad : "");
+        const list = remoteBranches.get(p.remote) ?? [];
+        if (p.remote.length > 0 && list.length > 0) {
+          blank();
+          put("Branches, theirs against ours", DIM);
+          for (const b of list) {
+            const track = b.local ? (b.behind > 0 ? "↓" + String(b.behind) : "") + (b.ahead > 0 ? (b.behind > 0 ? " " : "") + "↑" + String(b.ahead) : "") + (b.ahead === 0 && b.behind === 0 ? "level" : "") : "not here";
+            out.push({ runs: [{ text: " " + u.clip(b.name, 24).padEnd(25, " "), fg: b.name === branch ? T.link : "" }, { text: track.padEnd(10, " "), fg: b.behind > 0 ? T.warn : b.local ? T.ok : DIM }, { text: b.sha.slice(0, 7) + "  " + (b.commitMs > 0 ? u.age(Date.now() - b.commitMs) : ""), fg: DIM }] });
+          }
+        }
+        if (p.repos.length > 0) {
+          blank();
+          put("Offers", DIM);
+          for (const o of p.repos) {
+            const same = myRepoId.length > 0 && o.repoId === myRepoId;
+            out.push({ runs: [{ text: " " + (same ? "◆ " : "• "), fg: same ? T.link : DIM }, { text: u.clip(o.name, 24).padEnd(25, " "), fg: same ? T.link : "" }, { text: o.mode === "hosted" ? "hosted, takes pushes" : same ? "live, this folder's" : "live", fg: DIM }] });
+            put("    http://" + p.address + ":" + String(p.port) + "/" + o.key, DIM);
+          }
+        }
+        blank();
+        put("› f   fetch from it now", "");
+        put("› x   forget it: its token stops opening this machine", "");
+        return out;
+      }
+      if (kind === "nearby") {
+        const n = nearby[r?.near ?? 0];
+        put(n.name, "", true);
+        blank();
+        field("state", "announcing itself nearby, not paired", DIM);
+        field("address", n.address + ":" + String(n.port));
+        field("id", n.id);
+        blank();
+        put("To pair: on that machine, p (or /peers pair) shows a code; here, /peers join " + n.name + " <code>.", "");
+        put("Or show a code here with p and join from there with " + joinLine() + ".", "");
+        return out;
+      }
+      put(me.name.length > 0 ? me.name : "This machine", "", true);
+      blank();
+      if (daemon !== "running") {
+        field("daemon", daemon === "starting" ? "starting…" : daemon === "not running" ? "not running: Enter on its row, or p or s, starts it" : daemon, T.warn);
+        blank();
+      } else {
+        field("serving", ":" + String(me.port) + (me.addresses.length > 0 ? " on " + me.addresses.join(", ") : ""));
+        field("announced", discovery ? "yes, over mDNS as _widecode._tcp" : "no (discovery off, or no avahi or dns-sd)", discovery ? "" : DIM);
+        field("id", me.id);
+      }
+      blank();
+      put("Shared" + (shared.length > 0 ? "" : ": nothing yet"), DIM);
+      for (const sh of shared) {
+        const mine = sh.repoId === myRepoId && sh.mode === "live" && myRepoId.length > 0;
+        out.push({ runs: [{ text: " " + (mine ? "◆ " : "• "), fg: mine ? T.link : DIM }, { text: u.clip(sh.name, 24).padEnd(25, " "), fg: mine ? T.link : "", bold: mine }, { text: sh.mode === "hosted" ? "hosted, takes pushes" : mine ? "live, this folder" : "live", fg: DIM }] });
+        put("    " + sh.path, DIM);
+        put("    " + (sh.branches !== null ? "branches " + sh.branches.join(", ") : "every branch") + " · " + (sh.allow !== null ? String(sh.allow.length) + " peers allowed" : "every paired peer"), DIM);
+        put("    http://" + (me.addresses[0] ?? "<address>") + ":" + String(me.port) + "/" + sh.key, DIM);
+      }
+      if (myShare() === null && myRepoId.length > 0 && daemon === "running") put("› s   share this folder's repository", "");
+      blank();
+      put("Pairing", DIM);
+      if (pairing !== null && pairing.expiresMs > Date.now()) {
+        const left = Math.max(0, Math.round((pairing.expiresMs - Date.now()) / 1000));
+        out.push({ runs: [{ text: " code  ", fg: DIM }, { text: pairing.code, fg: T.link, bold: true }, { text: "  " + String(Math.floor(left / 60)) + ":" + String(left % 60).padStart(2, "0") + " left", fg: left < 20 ? T.warn : DIM }] });
+        put("on the other machine: " + joinLine(), "");
+      } else put("› p   show a code for two minutes; the other machine joins with " + joinLine(), "");
+      put("› /peers join <host:port> <code>", "");
+      put("      join a machine showing a code; a nearby machine's name works as the host", DIM);
+      put("› /peers host <name>", "");
+      put("      a bare repository paired machines push into", DIM);
+      blank();
+      for (const part of wrap("A machine that cannot be reached while it sees this one has port " + String(me.port > 0 ? me.port : DEFAULT_PORT) + "/tcp closed by its firewall (on Linux with ufw: sudo ufw allow " + String(me.port > 0 ? me.port : DEFAULT_PORT) + "/tcp).", w)) put(part, DIM);
+      return out;
+    };
+
+    const detail = api.code.view({
+      id: "peers",
+      count: () => detailRows(detailWidth).length,
+      rows: (from, count, width) => {
+        detailWidth = width;
+        return detailRows(width).slice(from, from + count);
+      },
+    });
+
+    const titleFor = (r: RowSpec | undefined): string => {
+      if (r === undefined) return "Peers";
+      if (r.kind === "peer" || r.kind === "peer-note") return "Peer · " + peers[r.peer ?? 0].name;
+      if (r.kind === "nearby") return "Nearby · " + nearby[r.near ?? 0].name;
+      return "Peers · this machine";
+    };
+
+    /** The page for the row under the cursor, in the code column (while this tab shows). */
+    const showDetail = (): void => {
+      if (api.state.active().panel !== "peers") return;
+      detail.show(titleFor(rows[selected]));
     };
 
     const panel = api.ui.panel({
       id: "peers",
       title: "Peers",
       order: 3,
-      width: (cols) => Math.max(34, Math.min(60, Math.floor(cols / 5))),
+      width: (cols) => Math.max(30, Math.min(48, Math.floor(cols / 6))),
       count: () => rows.length,
       rows: (from, count, width) => rows.slice(from, from + count).map((r, i) => line(r, from + i, width)),
       badge: () => {
         const best = bestPeer();
         return best !== null && best.behind > 0 ? [{ text: "↓" + String(best.behind), fg: T.warn }] : [];
       },
-      info: () => [{ text: " " + (daemon === "running" ? String(peers.filter((p) => p.online).length) + " of " + String(peers.length) + " online · " + String(shared.length) + " shared" : daemon === "starting" ? "starting the daemon…" : "daemon not running"), fg: daemon === "running" ? DIM : T.warn }],
-      press: (row, x) => {
+      info: () => [{ text: " " + (daemon === "running" ? String(peers.filter((p) => p.online).length) + " online · sharing " + String(shared.length) : daemon === "starting" ? "starting the daemon…" : daemon === "not running" ? "idle" : daemon), fg: daemon === "running" ? DIM : T.warn }],
+      press: (row) => {
         selected = row;
-        act("enter", x);
+        act("enter");
       },
       shown: () => {
         layout();
         panel.refresh();
         void refresh(true, true);
         panel.reveal(selected);
+        showDetail();
+      },
+      hidden: () => {
+        if (detail.shown()) api.code.open(api.code.path());
       },
     });
 
@@ -289,6 +443,7 @@ widecode.plugin({
     const redraw = (): void => {
       layout();
       panel.refresh();
+      if (detail.shown()) detail.refresh();
     };
 
     const readState = async (): Promise<boolean> => {
@@ -345,7 +500,9 @@ widecode.plugin({
     };
 
     const measure = async (p: PeerView): Promise<void> => {
-      if (p.remote.length === 0 || branch.length === 0) return;
+      if (p.remote.length === 0) return;
+      remoteBranches.set(p.remote, await api.git.remoteBranches(p.remote));
+      if (branch.length === 0) return;
       const r = await api.git.aheadBehind("HEAD", p.remote + "/" + branch);
       p.ahead = r.ahead;
       p.behind = r.behind;
@@ -485,27 +642,45 @@ widecode.plugin({
       await refresh(false, false);
     };
 
-    const act = (how: string, _x: number): void => {
+    /** The peer the cursor is on (its row or its note), else the first online one. */
+    const peerAtCursor = (): PeerView | null => {
       const r = rows[selected];
-      if (r === undefined) return;
+      if (r !== undefined && (r.kind === "peer" || r.kind === "peer-note")) return peers[r.peer ?? 0];
+      for (const p of peers) if (p.online) return p;
+      return peers[0] ?? null;
+    };
+
+    const act = (how: string): void => {
+      const r = rows[selected];
+      if (r === undefined || r.kind === "gap") return;
       if (r.kind === "section") {
         const name = r.section ?? "";
         if (folded.has(name)) folded.delete(name);
         else folded.add(name);
         redraw();
+        showDetail();
         return;
       }
       if (how !== "enter") return;
-      if (r.kind === "share") void shareHere();
-      else if (r.kind === "repo" && shared[r.repo ?? 0].repoId === myRepoId) void unshareHere();
-      else if (r.kind === "peer" || r.kind === "peer-repo") void fetchPeer(peers[r.peer ?? 0], true);
-      else if (r.kind === "pairing" && pairing !== null) api.tell("code " + pairing.code + ": on the other machine, /peers join " + (me.addresses[0] ?? "<this address>") + ":" + String(me.port) + " " + pairing.code);
+      if (r.kind === "me" && daemon !== "running") {
+        void refresh(true, true);
+        return;
+      }
+      if (r.kind === "share") {
+        void shareHere();
+        return;
+      }
+      showDetail();
     };
 
     const move = (step: number): boolean => {
-      selected = Math.max(0, Math.min(rows.length - 1, selected + step));
+      let next = selected;
+      do next = Math.max(0, Math.min(rows.length - 1, next + step));
+      while (rows[next] !== undefined && rows[next].kind === "gap" && next > 0 && next < rows.length - 1);
+      selected = next;
       panel.refresh();
       panel.reveal(selected);
+      showDetail();
       return true;
     };
     api.keys.action({ id: "peers.up", scope: "peers", key: "up", run: () => move(-1) });
@@ -513,10 +688,22 @@ widecode.plugin({
     api.keys.action({
       id: "peers.open",
       scope: "peers",
-      help: "fetches, shares or folds",
+      help: "details, or shares, or folds",
       key: "enter",
       run: () => {
-        act("enter", -1);
+        act("enter");
+        return true;
+      },
+    });
+    api.keys.action({
+      id: "peers.fetch",
+      scope: "peers",
+      help: "fetch from the peer under the cursor",
+      key: "char:f",
+      run: () => {
+        const p = peerAtCursor();
+        if (p === null) api.tell("no peer to fetch from: p pairs one");
+        else void fetchPeer(p, true);
         return true;
       },
     });
@@ -548,7 +735,8 @@ widecode.plugin({
       key: "char:x",
       run: () => {
         const r = rows[selected];
-        if (r !== undefined && (r.kind === "peer" || r.kind === "peer-repo")) void forget(peers[r.peer ?? 0]);
+        if (r !== undefined && (r.kind === "peer" || r.kind === "peer-note")) void forget(peers[r.peer ?? 0]);
+        else api.tell("x forgets the peer under the cursor");
         return true;
       },
     });
