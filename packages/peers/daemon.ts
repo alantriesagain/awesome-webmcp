@@ -15,6 +15,7 @@ import { Identity, loadOrCreateIdentity, newToken, saveIdentity } from "./identi
 import { JoinRequest, PairOffer, acceptJoin, joinPeer, newPairCode } from "./pairing.ts";
 import { Peer, Registry, SharedRepo } from "./registry.ts";
 import { Advertiser, Browser, Seen } from "./discovery.ts";
+import { peerRequest } from "./peer-request.ts";
 
 export const DEFAULT_PORT = 7337;
 const MAX_BODY = 1048576;
@@ -130,53 +131,6 @@ const listenOn = (server: Server, port: number, host: string): Promise<number> =
       const address = server.address();
       done(address !== null && typeof address === "object" ? address.port : 0);
     });
-  });
-
-/**
- * A request to another machine's daemon: never pooled (`Connection: close`, so a daemon restarted on
- * the other side is never spoken to over a dead connection) and tried twice when the first attempt
- * fails outright.
- */
-export const peerFetch = async (url: string, headers: Record<string, string>): Promise<Response> => {
-  const all: Record<string, string> = { ...headers, connection: "close" };
-  try {
-    return await fetch(url, { headers: all });
-  } catch (first) {
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    try {
-      return await fetch(url, { headers: all });
-    } catch {
-      throw first;
-    }
-  }
-};
-
-/** Whether `p` answers 200 within `ms`; a slow or failed request is false (said to `why`) and left to end on its own. */
-const raceOk = (p: Promise<Response>, ms: number, why: (text: string) => void): Promise<boolean> =>
-  new Promise((resolve) => {
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      why("no answer within " + String(ms) + " ms");
-      resolve(false);
-    }, ms);
-    p.then(
-      (res: Response) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        if (res.status !== 200) why("status " + String(res.status));
-        resolve(res.status === 200);
-      },
-      (err: unknown) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        why(errorMessage(err, "failed"));
-        resolve(false);
-      },
-    );
   });
 
 const readBody = (req: IncomingMessage): Promise<string> =>
@@ -444,9 +398,10 @@ export class Daemon {
   async pingPeer(peer: Peer, nowMs: number): Promise<boolean> {
     if (peer.address.length === 0 || peer.port <= 0) return false;
     const url = "http://" + urlHost(peer.address) + ":" + String(peer.port) + "/ping";
-    const ok = await raceOk(peerFetch(url, {}), 2500, (why: string) => this.note("ping " + peer.name + " at " + url + ": " + why));
-    if (ok) this.seen(peer.id, "", 0, nowMs);
-    return ok;
+    const a = await peerRequest("GET", url, {}, null, 2500);
+    if (!a.ok) this.note("ping " + peer.name + " at " + url + ": " + (a.error.length > 0 ? a.error : "status " + String(a.status)));
+    else this.seen(peer.id, "", 0, nowMs);
+    return a.ok;
   }
 
   /** Every peer pinged at once; the ids of those that answered. */
@@ -463,17 +418,12 @@ export class Daemon {
   async peerRepos(peer: Peer): Promise<string> {
     if (peer.address.length === 0 || peer.port <= 0) return "";
     const url = "http://" + urlHost(peer.address) + ":" + String(peer.port) + "/repos";
-    try {
-      const res = await peerFetch(url, { authorization: "Bearer " + peer.tokenWePresent });
-      if (res.status !== 200) {
-        this.note("repos of " + peer.name + " at " + url + ": status " + String(res.status) + " " + (await res.text()).trim().slice(0, 120));
-        return "";
-      }
-      return await res.text();
-    } catch (err) {
-      this.note("repos of " + peer.name + " at " + url + ": " + errorMessage(err, "no answer"));
+    const a = await peerRequest("GET", url, { authorization: "Bearer " + peer.tokenWePresent }, null, 15000);
+    if (!a.ok) {
+      this.note("repos of " + peer.name + " at " + url + ": " + (a.error.length > 0 ? a.error : "status " + String(a.status) + " " + a.text.trim().slice(0, 120)));
       return "";
     }
+    return a.text;
   }
 
   /** The daemon as the sessions see it. */

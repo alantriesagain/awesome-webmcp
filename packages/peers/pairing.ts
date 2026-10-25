@@ -7,6 +7,7 @@ import { createHmac, randomInt } from "node:crypto";
 import { num, parseJson, recordOf, str } from "@light/lib/json.ts";
 import { Identity, newToken, peerIdOf } from "./identity.ts";
 import { urlHost } from "./git-http.ts";
+import { peerRequest } from "./peer-request.ts";
 import { Peer, Registry, sameSecret } from "./registry.ts";
 
 export const PAIR_CODE_LIFE_MS = 120000;
@@ -125,16 +126,10 @@ export const recordHost = (registry: Registry, answer: JoinAnswer, tokenTheyPres
 export const joinPeer = async (registry: Registry, identity: Identity, myPort: number, address: string, port: number, code: string, nowMs: number): Promise<Peer | string> => {
   const tokenTheyPresent = newToken();
   const body = new JoinRequest(identity.publicKey, identity.name, myPort, tokenTheyPresent, proofOf(code, identity.publicKey));
-  let status = 0;
-  let text = "";
-  try {
-    const res = await fetch("http://" + urlHost(address) + ":" + String(port) + "/pair", { method: "POST", headers: { "content-type": "application/json", connection: "close" }, body: JSON.stringify(body.toJson()) });
-    status = res.status;
-    text = await res.text();
-  } catch (err) {
-    return "no answer from " + address + ":" + String(port) + (err instanceof Error ? " (" + err.message + ")" : "");
-  }
-  if (status !== 200) return address + ":" + String(port) + " refused the code" + (text.length > 0 ? ": " + text.trim() : "");
+  const a = await peerRequest("POST", "http://" + urlHost(address) + ":" + String(port) + "/pair", {}, JSON.stringify(body.toJson()), 15000);
+  if (a.status === 0) return "no answer from " + address + ":" + String(port) + (a.error.length > 0 ? " (" + a.error + ")" : "");
+  const text = a.text;
+  if (a.status !== 200) return address + ":" + String(port) + " refused the code" + (text.length > 0 ? ": " + text.trim() : "");
   const answer = JoinAnswer.parse(text);
   if (answer === null) return address + ":" + String(port) + " answered something else";
   return recordHost(registry, answer, tokenTheyPresent, address, nowMs);
