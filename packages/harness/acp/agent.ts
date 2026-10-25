@@ -512,6 +512,14 @@ export class AcpAgent {
       }
       this.server.notify("session/update", usageUpdate(s.id, s.used, s.window, s.costUsd));
     };
+    // A subagent's requests: their cost counts, the context shown stays the session's.
+    listener.onSubUsage = (usage: Usage) => {
+      const m = this.registry.model(s.loop.model);
+      const cost = m !== null ? costUsd(m, usage.input, usage.output, usage.cacheRead, usage.cacheWrite) : -1;
+      if (cost < 0) return;
+      s.costUsd = (s.costUsd < 0 ? 0 : s.costUsd) + cost;
+      this.server.notify("session/update", usageUpdate(s.id, s.used, s.window, s.costUsd));
+    };
     listener.onToolStart = (callId: string, name: string, inputJson: string) => {
       // Every tool the session has, whatever the mode, its MCP ones as listed by now: a call is titled as its tool shows.
       const t = this.loop.tools.plus(s.loop.extraTools).find(name);

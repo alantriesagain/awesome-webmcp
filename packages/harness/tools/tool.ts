@@ -130,6 +130,7 @@ const GLOB_SCHEMA = '{"type":"object","properties":{"pattern":{"type":"string","
 const SKILL_SCHEMA = '{"type":"object","properties":{"name":{"type":"string","description":"The name of the skill, as the system prompt lists it"}},"required":["name"]}';
 const FETCH_SCHEMA = '{"type":"object","properties":{"url":{"type":"string","description":"The page, an http or https address"},"prompt":{"type":"string","description":"What you want from the page, in a few words"}},"required":["url"]}';
 const SEARCH_SCHEMA = '{"type":"object","properties":{"query":{"type":"string","description":"What to search for"},"limit":{"type":"integer","description":"How many results (8 by default, 20 at most)"}},"required":["query"]}';
+const TASK_SCHEMA = '{"type":"object","properties":{"description":{"type":"string","description":"The task in three to five words"},"prompt":{"type":"string","description":"The whole task for the subagent, with what it needs to know: it sees nothing of this conversation"},"subagent_type":{"type":"string","description":"general-purpose"}},"required":["description","prompt"]}';
 const LS_SCHEMA = '{"type":"object","properties":{"path":{"type":"string","description":"The folder to list (the folder by default)"}},"required":[]}';
 const READ_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"The file to read, absolute or relative to the folder"},"offset":{"type":"integer","description":"The line to start from, 1-based"},"limit":{"type":"integer","description":"How many lines to read (2000 by default)"}},"required":["file_path"]}';
 const BASH_SCHEMA = '{"type":"object","properties":{"command":{"type":"string","description":"The command, run by bash in the folder"},"timeout":{"type":"integer","description":"A timeout in milliseconds (120000 by default, 600000 at most)"},"description":{"type":"string","description":"What the command does, in a few words"}},"required":["command"]}';
@@ -145,6 +146,7 @@ export const builtInTools = (): Tool[] => [
   new Tool("LS", "List a folder's entries (folders end with a slash).", LS_SCHEMA, "read", false),
   new Tool("Skill", "Load a skill's instructions by name (the system prompt lists the skills): follow them for the task.", SKILL_SCHEMA, "read", false),
   new Tool("WebFetch", "Fetch a web page through a headless browser (its scripts run) and get its main content as markdown, 50,000 characters at most. http and https addresses only.", FETCH_SCHEMA, "fetch", false),
+  new Tool("Task", "Give a self-contained task to a subagent: a fresh session on the same model with the same tools (but Task), which works on it and replies with a report, the only part of its work this conversation sees. Use it for a search or a change whose steps the conversation does not need; several in one reply run together.", TASK_SCHEMA, "other", false),
   new Tool("WebSearch", "Search the web: numbered results with their titles, addresses and snippets. Read a result with WebFetch.", SEARCH_SCHEMA, "fetch", false),
 ];
 
@@ -160,6 +162,11 @@ export class ToolSet {
   /** The tools of `mode`: every one in build, the read-only ones in plan. */
   forMode(mode: string): ToolSet {
     return mode === "plan" ? new ToolSet(this.tools.filter((t) => READ_ONLY.includes(t.name))) : this;
+  }
+
+  /** These tools but `name` (a subagent's: no Task of its own). */
+  without(name: string): ToolSet {
+    return new ToolSet(this.tools.filter((t) => t.name !== name));
   }
 
   /** These tools and `more` (a session's MCP tools). */

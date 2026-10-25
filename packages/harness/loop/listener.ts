@@ -17,6 +17,8 @@ export class LoopListener {
   onToolEnd: ((callId: string, outcome: ToolOutcome) => void) | null = null;
   /** A message joined the conversation: the user's, the assistant's, a batch's results. */
   onMessage: ((m: Message) => void) | null = null;
+  /** What a subagent's request used: its cost counts, the session's context does not change. */
+  onSubUsage: ((u: Usage) => void) | null = null;
   /** The context was compacted: the summary stands for the messages before the first kept one. */
   onCompaction: ((c: CompactionResult) => void) | null = null;
 }

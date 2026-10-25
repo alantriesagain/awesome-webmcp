@@ -248,7 +248,8 @@ Another provider is an entry of `harness.providers`, speaking the Anthropic Mess
 `"thinking"` being `toggle` (`thinking: {type}`) or `effort` (`reasoning_effort`).
 
 Its tools are named as Claude Code names them: Read, Write, Edit, Bash, Grep, Glob, LS, Skill,
-WebFetch and WebSearch, and widecode's own over its MCP server (AskUser and PresentPlan in the
+WebFetch, WebSearch and Task (a subagent: the task run as a session of its own on the same model,
+its report the call's result), and widecode's own over its MCP server (AskUser and PresentPlan in the
 request panel, the harness folder's tools). It asks no permission: every call runs, as in pi,
 but those `permissions.deny` in config.json refuses (the user's and a trusted project's, in Claude
 Code's syntax: `Bash(git push *)`, `Read(./.env)`, `Edit(/etc/**)`, `WebFetch(domain:example.com)`,

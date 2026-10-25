@@ -355,8 +355,10 @@ risks); each slice below is one commit with its tests.
       free DeepSeek V4.1 Flash passed five of six.
 - [x] **A deny list.** `permissions.deny` of the user's config.json and a trusted project's, in
       Claude Code's syntax, checked before a call runs; the tools listing marks a tool denied whole.
-- [ ] **Later.** A `browser` tool over the DevTools protocol; subagents; branching; images in tool
-      results; the native `fetch` behind `HttpStream`; prices refreshed from the providers.
+- [x] **Subagents.** A `Task` tool: a nested loop with the tools but Task, its report the result,
+      its cost counted; the acp plugin draws it as an agent.
+- [ ] **Later.** A `browser` tool over the DevTools protocol; branching; images in tool results; the
+      native `fetch` behind `HttpStream`; prices refreshed from the providers.
 
 ## Deferred or skip
 

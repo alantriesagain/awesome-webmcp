@@ -22,6 +22,10 @@ import { turnNote } from "../prompt/system.ts";
 
 const two = (n: number): string => (n < 10 ? "0" : "") + String(n);
 
+/** What a subagent is told after the parent's system prompt. */
+const SUBAGENT_NOTE =
+  "You are a subagent: the main agent gave you the task in the first message and sees nothing of your work but your last reply. Work on the task with your tools, then end with a short report of what you found or did: the facts, file paths and lines the main agent needs, and anything you could not do.";
+
 /** Today's date, the local one. */
 const today = (): string => {
   const d = new Date();
@@ -238,6 +242,52 @@ export class AgentLoop {
     return c;
   }
 
+  /** A Task call: its prompt run as a session of its own on the same model, folder and mode, with the tools but Task; its last reply is the call's text, its requests' usage the parent's cost. */
+  private async subagent(s: LoopSession, inputJson: string, listener: LoopListener, abort: Abort): Promise<ToolOutcome> {
+    const input = recordOf(parseJson(inputJson.length > 0 ? inputJson : "{}")) ?? {};
+    const prompt = typeof input["prompt"] === "string" ? (input["prompt"] as string) : "";
+    if (prompt.trim().length === 0) return ToolOutcome.failed("Task needs a prompt");
+    const sub = new LoopSession();
+    sub.system = s.system.concat([SUBAGENT_NOTE]);
+    sub.model = s.model;
+    sub.effort = s.effort;
+    sub.cwd = s.cwd;
+    sub.mode = s.mode;
+    sub.window = s.window;
+    sub.servers = s.servers;
+    sub.extraTools = s.extraTools;
+    sub.trusted = s.trusted;
+    sub.home = s.home;
+    sub.harnessRoot = s.harnessRoot;
+    sub.web = s.web;
+    sub.deny = s.deny;
+    const loop = new AgentLoop(this.client, this.tools.without("Task"));
+    loop.extras = this.extras;
+    loop.compactAt = this.compactAt;
+    loop.keepTokens = this.keepTokens;
+    const inner = new LoopListener();
+    let last = "";
+    let calls = 0;
+    inner.onUsage = (u: Usage) => {
+      const fn = listener.onSubUsage;
+      if (fn !== null) fn(u);
+    };
+    inner.onSubUsage = inner.onUsage;
+    inner.onMessage = (m: Message) => {
+      if (m.role === "assistant" && m.text().trim().length > 0) last = m.text().trim();
+    };
+    inner.onToolStart = (_callId: string, _name: string, _input: string) => {
+      calls++;
+    };
+    const end = await loop.run(sub, prompt, inner, abort);
+    if (end.stopReason === CANCELLED || abort.aborted) return ToolOutcome.failed("interrupted");
+    if (end.stopReason === FAILED) return ToolOutcome.failed("the subagent failed: " + end.error + (last.length > 0 ? "\n\nIts last words: " + last : ""));
+    const o = new ToolOutcome();
+    o.text = last.length > 0 ? last : "The subagent ended without a reply.";
+    o.rawOutputJson = '{"calls":' + String(calls) + ',"stopReason":' + JSON.stringify(end.stopReason) + "}";
+    return o;
+  }
+
   /** The steering messages queued, as one user message. */
   private steer(s: LoopSession, listener: LoopListener): void {
     if (s.steering.length === 0) return;
@@ -324,7 +374,7 @@ export class AgentLoop {
       else {
         const onOutput = listener.onToolOutput;
         try {
-          outcome = await tools.run(p.name, p.inputJson, ctx, abort, onOutput !== null ? (text: string) => onOutput(p.callId, text) : null);
+          outcome = p.name === "Task" ? await this.subagent(s, p.inputJson, listener, abort) : await tools.run(p.name, p.inputJson, ctx, abort, onOutput !== null ? (text: string) => onOutput(p.callId, text) : null);
         } catch (err) {
           outcome = ToolOutcome.failed(err instanceof Error ? err.message : "the tool failed");
         }
