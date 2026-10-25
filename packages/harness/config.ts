@@ -10,6 +10,7 @@
 //     "providers": { "mine": { "name": "Mine", "baseUrl": "https://host/anthropic", "keyEnv": "MINE_API_KEY",
 //       "models": [{ "id": "big", "name": "Big", "context": 200000, "output": 32000, "price": [1, 4] }] } } }
 import { readTextOr } from "@light/lib/fs.ts";
+import { rulesIn } from "./tools/permissions.ts";
 import { listOf, num, parseJson, recordOf, str, strs } from "@light/lib/json.ts";
 import { ADAPTIVE, BUDGET, EFFORT, ModelInfo, ModelRegistry, NO_THINKING, OPENAI_API, Provider, TOGGLE, effortsFor } from "./model/registry.ts";
 
@@ -27,10 +28,13 @@ export class HarnessConfig {
   searchOrder: string[] = [];
   searxng = "";
   browserCommand = "";
+  /** The config's `permissions.deny`: the calls the harness refuses. */
+  denyRules: string[] = [];
 
   /** The section as config.json at `path` has it; defaults where it says nothing. */
   static read(path: string): HarnessConfig {
     const c = new HarnessConfig();
+    c.denyRules = rulesIn(path);
     const root = recordOf(parseJson(readTextOr(path, "{}")));
     const section = root !== null ? recordOf(root["harness"]) : null;
     if (section === null) return c;

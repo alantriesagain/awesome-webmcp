@@ -11,7 +11,8 @@
   "dependencies": {
     "@light/lib": "workspace:*",
     "@light/workspace": "workspace:*",
-    "@widecode/agent": "workspace:*"
+    "@widecode/agent": "workspace:*",
+    "@widecode/conversation": "workspace:*"
   },
   "devDependencies": {
     "@light/test": "workspace:*",

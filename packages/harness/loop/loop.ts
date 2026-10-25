@@ -15,6 +15,8 @@ import { ModelClient, ModelRequest, StreamEnd, StreamListener } from "../model/c
 import { CANCELLED, END_TURN, FAILED, MAX_TOKENS, Message, Part, TEXT, THINKING, TOOL_CALL, TOOL_RESULT, TOOL_USE, Usage, textPart } from "../model/message.ts";
 import { McpLink } from "../tools/mcp.ts";
 import { WebSettings } from "../tools/web.ts";
+import { DenyRule, deniedBy } from "../tools/permissions.ts";
+import { parseJson, recordOf } from "@light/lib/json.ts";
 import { Tool, ToolContext, ToolOutcome, ToolSet } from "../tools/tool.ts";
 import { turnNote } from "../prompt/system.ts";
 
@@ -62,6 +64,8 @@ export class LoopSession {
   harnessRoot = "";
   /** What the web tools have. */
   web = new WebSettings();
+  /** The calls refused (permissions.deny). */
+  deny: DenyRule[] = [];
   /** The context's size after the last request (its real count), and how many messages there were then. */
   contextTokens = 0;
   sinceIndex = 0;
@@ -314,7 +318,9 @@ export class AgentLoop {
       const onStart = listener.onToolStart;
       if (onStart !== null) onStart(p.callId, p.name, p.inputJson.length > 0 ? p.inputJson : "{}");
       let outcome: ToolOutcome;
+      const refused = why.length > 0 ? "" : deniedBy(s.deny, p.name, recordOf(parseJson(p.inputJson.length > 0 ? p.inputJson : "{}")) ?? {}, s.cwd, s.home);
       if (why.length > 0) outcome = ToolOutcome.failed(why);
+      else if (refused.length > 0) outcome = ToolOutcome.failed("refused by the rule " + refused + " in permissions.deny: take another way, or ask the user");
       else {
         const onOutput = listener.onToolOutput;
         try {

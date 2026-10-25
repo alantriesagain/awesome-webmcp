@@ -22,3 +22,4 @@ export * from "./tools/mcp.ts";
 export * from "./tools/browser.ts";
 export * from "./tools/html.ts";
 export * from "./tools/web.ts";
+export * from "./tools/permissions.ts";

@@ -353,9 +353,10 @@ risks); each slice below is one commit with its tests.
       (any ACP agent, the model and effort through the session's options), JSONL records and a
       table. First live run: the harness passed all eight on DeepSeek Flash and V4 Pro; opencode's
       free DeepSeek V4.1 Flash passed five of six.
-- [ ] **Later.** A `browser` tool over the DevTools protocol; subagents; a deny list from
-      `permissions.deny`; branching; images in tool results; the native `fetch` behind
-      `HttpStream`; prices refreshed from the providers.
+- [x] **A deny list.** `permissions.deny` of the user's config.json and a trusted project's, in
+      Claude Code's syntax, checked before a call runs; the tools listing marks a tool denied whole.
+- [ ] **Later.** A `browser` tool over the DevTools protocol; subagents; branching; images in tool
+      results; the native `fetch` behind `HttpStream`; prices refreshed from the providers.
 
 ## Deferred or skip
 

@@ -191,6 +191,9 @@ importers:
       '@widecode/agent':
         specifier: workspace:*
         version: link:../agent
+      '@widecode/conversation':
+        specifier: workspace:*
+        version: link:../conversation
     devDependencies:
       '@light/test':
         specifier: workspace:*

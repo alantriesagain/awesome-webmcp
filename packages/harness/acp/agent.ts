@@ -31,6 +31,8 @@ import { titleFor } from "../session/title.ts";
 import { McpLink, McpListing } from "../tools/mcp.ts";
 import { Tool, ToolOutcome, ToolSet } from "../tools/tool.ts";
 import { WebSettings } from "../tools/web.ts";
+import { parseRules, rulesIn } from "../tools/permissions.ts";
+import { join } from "node:path";
 import { Choice, ConfigOptions } from "./options.ts";
 import { AcpServer, Incoming } from "./server.ts";
 import { DiffBlock, chunkUpdate, commandsUpdate, modeUpdate, toolCallEnd, toolCallUpdate, usageUpdate } from "./updates.ts";
@@ -274,6 +276,8 @@ export class AcpAgent {
     s.loop.home = this.paths.userHome;
     s.loop.harnessRoot = this.paths.root();
     s.loop.web = this.web;
+    // The user's rules, and a trusted project's (its .widecode/config.json, read again as the session goes).
+    s.loop.deny = parseRules(s.trusted && s.cwd.length > 0 ? this.config.denyRules.concat(rulesIn(join(s.cwd, ".widecode", "config.json"))) : this.config.denyRules);
     const m = this.registry.model(s.options.model);
     s.window = m !== null ? m.window : DEFAULT_WINDOW;
     s.loop.window = s.window;

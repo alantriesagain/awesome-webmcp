@@ -19,6 +19,7 @@ import { ModelInfo, ModelRegistry, NO_THINKING, Provider } from "./model/registr
 import { HarnessPaths } from "./paths.ts";
 import { scanSkills, skillsJson } from "./prompt/skills.ts";
 import { findBrowser } from "./tools/browser.ts";
+import { DenyRule, listingRules, parseRules, rulesIn } from "./tools/permissions.ts";
 import { WebSettings, searchOrder } from "./tools/web.ts";
 import { SessionStore, sessionsJson } from "./session/store.ts";
 import { ToolSet, builtInTools } from "./tools/tool.ts";
@@ -28,10 +29,10 @@ const argValue = (args: string[], name: string): string | null => {
   return at >= 0 && at + 1 < args.length ? args[at + 1] : null;
 };
 
-/** The tools of a mode, every one on, as opencode's `debug agent` prints them; plan mode has the read-only ones. */
-export const toolsListing = (mode: string): string => {
+/** The tools of a mode, every one on, as opencode's `debug agent` prints them, plan mode's the read-only ones; a tool the deny rules refuse whole marked so. */
+export const toolsListing = (mode: string, rules: DenyRule[]): string => {
   const names = new ToolSet(builtInTools()).forMode(mode).tools.map((t) => t.name);
-  return '{"tools":{' + names.map((n) => JSON.stringify(n) + ":true").join(",") + '},"permission":[]}';
+  return '{"tools":{' + names.map((n) => JSON.stringify(n) + ":true").join(",") + '},"permission":' + listingRules(rules) + "}";
 };
 
 /** The search APIs a key is kept for, beside the model providers. */
@@ -86,7 +87,9 @@ export const harnessMain = (storeRoot: string, args: string[], build: string): P
   const paths = new HarnessPaths(storeRoot);
   const tools = argValue(args, "--harness-tools");
   if (tools !== null) {
-    process.stdout.write(toolsListing(tools) + "\n");
+    // In the folder the command runs in: the user's rules and the project's.
+    const rules = parseRules(rulesIn(paths.configPath()).concat(rulesIn(join(process.cwd(), ".widecode", "config.json"))));
+    process.stdout.write(toolsListing(tools, rules) + "\n");
     return done(0);
   }
   paths.userHome = process.env["HOME"] ?? "";
