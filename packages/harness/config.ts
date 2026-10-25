@@ -4,13 +4,14 @@
 // each session and prompt.
 //
 //   "harness": { "model": "anthropic/claude-sonnet-5", "effort": "high", "compactAt": 200000, "http": "node",
+//     (a provider with "api": "openai" speaks chat completions; a model's "api", "baseUrl", "thinking": "toggle" | "effort", "reasoningField")
 //     "search": { "order": ["searxng", "google", "brave", "tavily"], "searxng": "http://127.0.0.1:8080" },
 //     "browser": { "command": "" },
 //     "providers": { "mine": { "name": "Mine", "baseUrl": "https://host/anthropic", "keyEnv": "MINE_API_KEY",
 //       "models": [{ "id": "big", "name": "Big", "context": 200000, "output": 32000, "price": [1, 4] }] } } }
 import { readTextOr } from "@light/lib/fs.ts";
 import { listOf, num, parseJson, recordOf, str, strs } from "@light/lib/json.ts";
-import { BUDGET, ModelInfo, ModelRegistry, NO_THINKING, Provider } from "./model/registry.ts";
+import { ADAPTIVE, BUDGET, EFFORT, ModelInfo, ModelRegistry, NO_THINKING, OPENAI_API, Provider, TOGGLE, effortsFor } from "./model/registry.ts";
 
 export class HarnessConfig {
   /** `provider/model`; "" for the first model the registry offers. */
@@ -61,10 +62,12 @@ export class HarnessConfig {
       let provider = r.provider(id);
       if (provider === null) {
         provider = new Provider(id, str(p["name"]).length > 0 ? str(p["name"]) : id, str(p["baseUrl"]), str(p["keyEnv"]).length > 0 ? str(p["keyEnv"]) : id.toUpperCase().replace(/[^A-Z0-9]/g, "_") + "_API_KEY", p["anthropicExtras"] === true);
+        if (str(p["api"]) === OPENAI_API) provider.api = OPENAI_API;
         r.providers.push(provider);
       } else {
         if (str(p["baseUrl"]).length > 0) provider.baseUrl = str(p["baseUrl"]);
         if (str(p["keyEnv"]).length > 0) provider.keyEnv = str(p["keyEnv"]);
+        if (typeof p["anthropicExtras"] === "boolean") provider.anthropicExtras = p["anthropicExtras"] === true;
       }
       for (const v of listOf(p["models"])) {
         const m = recordOf(v);
@@ -81,9 +84,15 @@ export class HarnessConfig {
           info.cacheReadPrice = price.length > 2 ? num(price[2], info.inputPrice) : info.inputPrice;
           info.cacheWritePrice = info.inputPrice;
         }
+        if (str(m["api"]).length > 0) info.api = str(m["api"]);
+        if (str(m["baseUrl"]).length > 0) info.baseUrl = str(m["baseUrl"]);
+        if (str(m["reasoningField"]).length > 0) info.reasoningField = str(m["reasoningField"]);
+        // Thinking as the model's API asks for it: by default a budget on an Anthropic-format API, nothing on a chat completions one.
+        const chat = (info.api.length > 0 ? info.api : provider.api) === OPENAI_API;
         const thinking = str(m["thinking"]);
-        info.thinking = thinking === "adaptive" || thinking === "budget" ? thinking : thinking === "none" ? NO_THINKING : BUDGET;
-        info.efforts = info.thinking === NO_THINKING ? [] : ["low", "medium", "high"];
+        const known = chat ? [TOGGLE, EFFORT, NO_THINKING] : [ADAPTIVE, BUDGET, NO_THINKING];
+        info.thinking = known.includes(thinking) ? thinking : chat ? NO_THINKING : BUDGET;
+        info.efforts = effortsFor(info.thinking);
         r.models.push(info);
       }
     }

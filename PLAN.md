@@ -343,9 +343,15 @@ risks); each slice below is one commit with its tests.
 - [x] **The selftest and the docs.** The `harness` selftest, README.md "The harness",
       `light-native coverage --apps` with the daemon's code (static). PLUGINS.md keeps "The
       harness" as the folder's heading, which AGENTS.md and the docs the binary carries name.
-- [ ] **Later.** The OpenAI-compatible client; a `browser` tool over the DevTools protocol; subagents;
-      a deny list from `permissions.deny`; branching; images in tool results; the native `fetch`
-      behind `HttpStream`; prices refreshed from the providers.
+- [x] **The OpenAI-compatible client and OpenCode Zen.** `model/openai.ts` (chat completions, tool
+      messages, `reasoning_content` sent back), a model's own API and base URL, Zen built in (Claude
+      on its Anthropic-format endpoint, the rest on its chat completions one). A live run on
+      DeepSeek's chat endpoint found the Grep and Glob schemas sent as invalid JSON since the
+      edits slice (an escaped quote lost in a single-quoted string); fixed, with a test that every
+      schema parses.
+- [ ] **Later.** A `browser` tool over the DevTools protocol; subagents; a deny list from
+      `permissions.deny`; branching; images in tool results; the native `fetch` behind
+      `HttpStream`; prices refreshed from the providers.
 
 ## Deferred or skip
 

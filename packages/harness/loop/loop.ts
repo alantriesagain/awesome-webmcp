@@ -291,6 +291,7 @@ export class AgentLoop {
     req.systemCached = s.system.length;
     req.effort = s.effort;
     req.toolsJson = tools.json(this.extras);
+    req.toolsOpenAiJson = tools.openAiJson();
     return this.client.stream(req, sl, abort);
   }
 

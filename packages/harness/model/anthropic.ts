@@ -196,6 +196,7 @@ export class AnthropicClient {
     const model = this.registry.model(req.model);
     const provider = model !== null ? this.registry.provider(model.provider) : null;
     if (model === null || provider === null) return failed("no model " + req.model);
+    const base = model.baseUrl.length > 0 ? model.baseUrl : provider.baseUrl;
     const key = this.auth.keyFor(provider);
     if (key.length === 0) return failed("no key for " + provider.name + ": set " + provider.keyEnv + " or run widecode --harness-auth " + provider.id);
     const body = requestBody(req, model, provider);
@@ -219,7 +220,7 @@ export class AnthropicClient {
         }
         for (const ev of splitter.push(text)) reader.take(ev);
       };
-      const r = new HttpRequest(provider.baseUrl.replace(/\/+$/, "") + "/v1/messages");
+      const r = new HttpRequest(base.replace(/\/+$/, "") + "/v1/messages");
       r.headers = [
         ["content-type", "application/json"],
         ["accept", "text/event-stream"],

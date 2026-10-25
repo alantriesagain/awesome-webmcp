@@ -11,7 +11,7 @@ import { ModelInfo, ModelRegistry, Provider, budgetFor, costUsd } from "../model
 import { done, eq, ok } from "@light/test/assert.ts";
 
 const r = ModelRegistry.builtIn();
-eq("the providers", r.providers.map((p) => p.id + ":" + p.baseUrl).join(" "), "anthropic:https://api.anthropic.com deepseek:https://api.deepseek.com/anthropic");
+eq("the providers", r.providers.map((p) => p.id + ":" + p.baseUrl).join(" "), "anthropic:https://api.anthropic.com deepseek:https://api.deepseek.com/anthropic opencode:https://opencode.ai/inference/openai/v1");
 const opus = r.model("anthropic/claude-opus-5");
 ok("a model by value", opus !== null && opus.name === "Claude Opus 5" && opus.window === 1000000 && opus.thinking === "adaptive");
 if (opus === null) throw new Error("no opus");

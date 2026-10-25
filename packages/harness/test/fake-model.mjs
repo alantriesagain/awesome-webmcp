@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * @file A stand-in for the Anthropic Messages API in tests: an HTTP server on 127.0.0.1 at a free
- * port (printed as `PORT <n>` on stdout) answering `POST /v1/messages` from a JSONL fixture, one
+ * port (printed as `PORT <n>` on stdout) answering `POST /v1/messages` (and a chat completions API's
+ * `POST /v1/chat/completions`, the records holding its chunks) from a JSONL fixture, one
  * record per request in order: `{"status": 200, "sse": "<event text>", "delayMs": 0, "hold": false}`.
  * A 200 answers as an event stream, the events (blank-line separated in `sse`) written `delayMs`
  * apart; `hold` keeps the stream open until the client goes; another status writes the record's
@@ -33,7 +34,7 @@ const server = createServer((req, res) => {
   });
   req.on("end", () => {
     if (log.length > 0) appendFileSync(log, JSON.stringify({ method: req.method, url: req.url, headers: req.headers, body }) + "\n");
-    if (req.method !== "POST" || req.url !== "/v1/messages") {
+    if (req.method !== "POST" || (req.url !== "/v1/messages" && req.url !== "/v1/chat/completions")) {
       res.writeHead(404, { "content-type": "application/json" });
       res.end('{"error":{"type":"not_found_error","message":"no such route"}}');
       return;

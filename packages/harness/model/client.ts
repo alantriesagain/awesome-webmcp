@@ -6,8 +6,9 @@ import { Abort } from "../loop/abort.ts";
 import { Auth } from "../auth.ts";
 import { Message, Usage } from "./message.ts";
 import { AnthropicClient } from "./anthropic.ts";
+import { OpenAiClient } from "./openai.ts";
 import { FakeClient } from "./fake.ts";
-import { ModelRegistry } from "./registry.ts";
+import { ModelRegistry, OPENAI_API } from "./registry.ts";
 
 export class ModelRequest {
   readonly model: string;
@@ -15,8 +16,9 @@ export class ModelRequest {
   readonly system: string[];
   readonly messages: Message[];
   effort = "";
-  /** The tools as the API's JSON list ("" for none). */
+  /** The tools as the API's JSON list ("" for none), as Anthropic's Messages API and as a chat completions API take them. */
   toolsJson = "";
+  toolsOpenAiJson = "";
   /** How many of the system blocks are stable, the breakpoint on the last of them (0: all are). */
   systemCached = 0;
 
@@ -51,11 +53,13 @@ export class StreamEnd {
 export class ModelClient {
   readonly registry: ModelRegistry;
   readonly anthropic: AnthropicClient;
+  readonly openai: OpenAiClient;
   readonly fake: FakeClient | null;
 
   constructor(registry: ModelRegistry, auth: Auth, httpKind: string, fake: FakeClient | null) {
     this.registry = registry;
     this.anthropic = new AnthropicClient(registry, auth, httpKind);
+    this.openai = new OpenAiClient(registry, auth, httpKind);
     this.fake = fake;
   }
 
@@ -63,6 +67,7 @@ export class ModelClient {
     const fake = this.fake;
     const m = this.registry.model(req.model);
     if (fake !== null && (m === null || m.provider === "fake")) return fake.play(req, listener, abort);
+    if (m !== null && this.registry.apiOf(m) === OPENAI_API) return this.openai.stream(req, listener, abort);
     return this.anthropic.stream(req, listener, abort);
   }
 }

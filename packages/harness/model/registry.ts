@@ -1,13 +1,22 @@
 // The models the harness offers, by provider: the Anthropic Messages API's own models (the
-// claude-api reference, cached 2026-06-24) and DeepSeek's through its Anthropic-format endpoint
-// (its pricing page, peak rates; off-peak is half), each with its window, output cap, prices per
-// million tokens, how thinking is asked for (`adaptive` with an effort on current Anthropic
-// models, a `budget` on Haiku 4.5 and DeepSeek, `none`) and the efforts it takes. A configured
-// provider adds its own rows.
+// claude-api reference, cached 2026-06-24), DeepSeek's through its Anthropic-format endpoint (its
+// pricing page, peak rates; off-peak is half) and OpenCode Zen's (its docs, October 2026: Claude
+// on its Anthropic-format endpoint, DeepSeek, Kimi, GLM and Qwen on its OpenAI-compatible one),
+// each with its window, output cap, prices per million tokens, the API it speaks, how thinking is
+// asked for (`adaptive` with an effort on current Anthropic models, a `budget` on Haiku 4.5 and
+// DeepSeek's Anthropic endpoint; on a chat completions API `toggle` sends `thinking: {type}` and
+// `effort` sends `reasoning_effort`; `none`) and the efforts it takes. A configured provider adds
+// its own rows.
 
 export const ADAPTIVE = "adaptive";
 export const BUDGET = "budget";
 export const NO_THINKING = "none";
+export const TOGGLE = "toggle";
+export const EFFORT = "effort";
+
+/** The APIs a provider speaks: Anthropic's Messages, or OpenAI's chat completions. */
+export const ANTHROPIC_API = "anthropic";
+export const OPENAI_API = "openai";
 
 export class Provider {
   readonly id: string;
@@ -17,6 +26,8 @@ export class Provider {
   keyEnv: string;
   /** Whether the API takes Anthropic's own extras: cache breakpoints, eager input streaming, the effort. */
   anthropicExtras: boolean;
+  /** The API its models speak unless a model says otherwise. */
+  api = ANTHROPIC_API;
 
   constructor(id: string, name: string, baseUrl: string, keyEnv: string, anthropicExtras: boolean) {
     this.id = id;
@@ -40,6 +51,11 @@ export class ModelInfo {
   cacheWritePrice = -1;
   thinking = NO_THINKING;
   efforts: string[] = [];
+  /** The API it speaks and where ("" for its provider's). */
+  api = "";
+  baseUrl = "";
+  /** Where a chat completions API puts the thinking, which goes back on the assistant's messages. */
+  reasoningField = "reasoning_content";
 
   constructor(provider: string, id: string, name: string) {
     this.provider = provider;
@@ -81,6 +97,38 @@ const deepseek = (id: string, name: string, input: number, output: number, cache
   return m;
 };
 
+/** The efforts a model's thinking kind takes. */
+export const effortsFor = (thinking: string): string[] => (thinking === TOGGLE ? ["on", "off"] : thinking === EFFORT ? ["low", "medium", "high"] : thinking === NO_THINKING ? [] : ["low", "medium", "high"]);
+
+/** A Claude model on OpenCode Zen's Anthropic-format endpoint. */
+const zenClaude = (id: string, name: string, input: number, output: number, cacheRead: number, window: number, thinking: string, efforts: string[]): ModelInfo => {
+  const m = new ModelInfo("opencode", id, name);
+  m.api = ANTHROPIC_API;
+  m.baseUrl = "https://opencode.ai/inference/anthropic";
+  m.window = window;
+  m.inputPrice = input;
+  m.outputPrice = output;
+  m.cacheReadPrice = cacheRead;
+  m.cacheWritePrice = input >= 0 ? input * 1.25 : -1;
+  m.thinking = thinking;
+  m.efforts = efforts;
+  return m;
+};
+
+/** A model on OpenCode Zen's chat completions endpoint (its provider's). */
+const zenChat = (id: string, name: string, input: number, output: number, cacheRead: number, window: number, thinking: string): ModelInfo => {
+  const m = new ModelInfo("opencode", id, name);
+  m.window = window;
+  m.maxOutput = 32000;
+  m.inputPrice = input;
+  m.outputPrice = output;
+  m.cacheReadPrice = cacheRead;
+  m.cacheWritePrice = input;
+  m.thinking = thinking;
+  m.efforts = effortsFor(thinking);
+  return m;
+};
+
 export class ModelRegistry {
   readonly providers: Provider[] = [];
   readonly models: ModelInfo[] = [];
@@ -98,7 +146,28 @@ export class ModelRegistry {
     r.models.push(anthropic("claude-haiku-4-5", "Claude Haiku 4.5", 1, 5, 200000, BUDGET, ["off", "low", "medium", "high"]));
     r.models.push(deepseek("deepseek-v4-pro", "DeepSeek V4 Pro", 1.32, 3.96, 0.044, false));
     r.models.push(deepseek("deepseek-flash", "DeepSeek Flash", 0.3, 1.2, 0.006, true));
+    const zen = new Provider("opencode", "OpenCode Zen", "https://opencode.ai/inference/openai/v1", "OPENCODE_API_KEY", false);
+    zen.api = OPENAI_API;
+    r.providers.push(zen);
+    r.models.push(zenClaude("claude-haiku-4-5", "Claude Haiku 4.5", -1, -1, -1, 200000, BUDGET, ["off", "low", "medium", "high"]));
+    r.models.push(zenClaude("claude-sonnet-5", "Claude Sonnet 5", -1, -1, -1, 1000000, ADAPTIVE, EFFORTS));
+    r.models.push(zenClaude("claude-sonnet-5-5", "Claude Sonnet 5.5", 2, 10, 0.2, 1000000, ADAPTIVE, EFFORTS));
+    r.models.push(zenClaude("claude-opus-5-5", "Claude Opus 5.5", 4, 20, 0.2, 1000000, ADAPTIVE, EFFORTS));
+    r.models.push(zenClaude("claude-fable-5-1", "Claude Fable 5.1", -1, -1, -1, 1000000, ADAPTIVE, EFFORTS));
+    r.models.push(zenChat("deepseek-v4.1-flash", "DeepSeek V4.1 Flash", 0.3, 1.2, 0.006, 1000000, TOGGLE));
+    r.models.push(zenChat("deepseek-v4-pro", "DeepSeek V4 Pro", -1, -1, -1, 1000000, TOGGLE));
+    r.models.push(zenChat("kimi-k2.6", "Kimi K2.6", -1, -1, -1, 256000, NO_THINKING));
+    r.models.push(zenChat("kimi-k3", "Kimi K3", -1, -1, -1, 256000, NO_THINKING));
+    r.models.push(zenChat("glm-5.3", "GLM 5.3", -1, -1, -1, 200000, TOGGLE));
+    r.models.push(zenChat("qwen3.8-max", "Qwen 3.8 Max", -1, -1, -1, 256000, NO_THINKING));
     return r;
+  }
+
+  /** The API `m` speaks: its own, else its provider's. */
+  apiOf(m: ModelInfo): string {
+    if (m.api.length > 0) return m.api;
+    const p = this.provider(m.provider);
+    return p !== null ? p.api : ANTHROPIC_API;
   }
 
   provider(id: string): Provider | null {

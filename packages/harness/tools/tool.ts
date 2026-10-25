@@ -112,6 +112,11 @@ export class Tool {
     this.title = name;
   }
 
+  /** The tool as a chat completions API's list takes it. */
+  openAiJson(): string {
+    return '{"type":"function","function":{"name":' + JSON.stringify(this.name) + ',"description":' + JSON.stringify(this.description) + ',"parameters":' + this.schemaJson + "}}";
+  }
+
   /** The tool as the API's list takes it, with Anthropic's extras when `extras` (eager input streaming, a cache breakpoint when `cached`). */
   json(extras: boolean, cached: boolean): string {
     return '{"name":' + JSON.stringify(this.name) + ',"description":' + JSON.stringify(this.description) + ',"input_schema":' + this.schemaJson + (extras ? ',"eager_input_streaming":true' : "") + (extras && cached ? ',"cache_control":{"type":"ephemeral"}' : "") + "}";
@@ -120,8 +125,8 @@ export class Tool {
 
 const WRITE_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"The file to write, absolute or relative to the folder"},"content":{"type":"string","description":"The whole content"}},"required":["file_path","content"]}';
 const EDIT_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"The file to change"},"old_string":{"type":"string","description":"The exact text to replace (it must occur once, unless replace_all)"},"new_string":{"type":"string","description":"What replaces it"},"replace_all":{"type":"boolean","description":"Replace every occurrence"}},"required":["file_path","old_string","new_string"]}';
-const GREP_SCHEMA = '{"type":"object","properties":{"pattern":{"type":"string","description":"A regular expression"},"path":{"type":"string","description":"The folder or file to search, relative to the folder (the folder by default)"},"include":{"type":"string","description":"A glob the file names must match (\"*.ts\")"},"ignoreCase":{"type":"boolean"},"context":{"type":"integer","description":"Lines of context around each match"}},"required":["pattern"]}';
-const GLOB_SCHEMA = '{"type":"object","properties":{"pattern":{"type":"string","description":"A glob over relative paths (\"src/**/*.ts\"; a bare name matches at any depth)"},"path":{"type":"string","description":"The folder to search (the folder by default)"}},"required":["pattern"]}';
+const GREP_SCHEMA = '{"type":"object","properties":{"pattern":{"type":"string","description":"A regular expression"},"path":{"type":"string","description":"The folder or file to search, relative to the folder (the folder by default)"},"include":{"type":"string","description":"A glob the file names must match, such as *.ts"},"ignoreCase":{"type":"boolean"},"context":{"type":"integer","description":"Lines of context around each match"}},"required":["pattern"]}';
+const GLOB_SCHEMA = '{"type":"object","properties":{"pattern":{"type":"string","description":"A glob over relative paths, such as src/**/*.ts (a bare name matches at any depth)"},"path":{"type":"string","description":"The folder to search (the folder by default)"}},"required":["pattern"]}';
 const SKILL_SCHEMA = '{"type":"object","properties":{"name":{"type":"string","description":"The name of the skill, as the system prompt lists it"}},"required":["name"]}';
 const FETCH_SCHEMA = '{"type":"object","properties":{"url":{"type":"string","description":"The page, an http or https address"},"prompt":{"type":"string","description":"What you want from the page, in a few words"}},"required":["url"]}';
 const SEARCH_SCHEMA = '{"type":"object","properties":{"query":{"type":"string","description":"What to search for"},"limit":{"type":"integer","description":"How many results (8 by default, 20 at most)"}},"required":["query"]}';
@@ -171,6 +176,12 @@ export class ToolSet {
   json(extras: boolean): string {
     if (this.tools.length === 0) return "";
     return "[" + this.tools.map((t, i) => t.json(extras, i === this.tools.length - 1)).join(",") + "]";
+  }
+
+  /** The chat completions API's tools list ("" with none). */
+  openAiJson(): string {
+    if (this.tools.length === 0) return "";
+    return "[" + this.tools.map((t) => t.openAiJson()).join(",") + "]";
   }
 
   /** Why `inputJson` is not an input for `name` ("" when it is): not JSON, not an object, a required field missing, a field of the wrong type. */

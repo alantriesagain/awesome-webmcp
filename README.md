@@ -238,9 +238,14 @@ to the acp plugin, calling model APIs directly and running its own tools. It nee
 a subscription: `widecode --harness-auth deepseek` (or `anthropic`) reads one from stdin into
 `~/.widecode/auth.json`, readable by the user alone, and `DEEPSEEK_API_KEY` or `ANTHROPIC_API_KEY`
 in the environment take precedence. `widecode --harness-models` lists the models and which
-providers have a key. Anthropic's models and DeepSeek's (through its Anthropic-format endpoint)
-are built in; another provider that serves the Anthropic Messages API is an entry of
-`harness.providers`.
+providers have a key. Anthropic's models, DeepSeek's (through its Anthropic-format endpoint) and
+OpenCode Zen's (Claude on its Anthropic-format endpoint; DeepSeek, Kimi, GLM and Qwen on its
+OpenAI-compatible one; `widecode --harness-auth opencode`, or `OPENCODE_API_KEY`) are built in.
+Another provider is an entry of `harness.providers`, speaking the Anthropic Messages API, or with
+`"api": "openai"` an OpenAI-compatible chat completions API (OpenRouter, Groq, a local server):
+`"openrouter": {"api": "openai", "baseUrl": "https://openrouter.ai/api/v1", "keyEnv":
+"OPENROUTER_API_KEY", "models": [{"id": "qwen/qwen3-coder", "context": 262144}]}`, a model's
+`"thinking"` being `toggle` (`thinking: {type}`) or `effort` (`reasoning_effort`).
 
 Its tools are named as Claude Code names them: Read, Write, Edit, Bash, Grep, Glob, LS, Skill,
 WebFetch and WebSearch, and widecode's own over its MCP server (AskUser and PresentPlan in the
