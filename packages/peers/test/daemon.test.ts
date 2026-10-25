@@ -111,6 +111,15 @@ const main = async (): Promise<void> => {
   ok("after a commit on b's side the sync counts it", behind.ok && behind.text.includes('"behind":1') && behind.text.includes('"subject":"second, on b"'));
   eq("the working tree of a's clone is untouched", spawnSync("git", ["-C", srcA, "status", "--short"], { encoding: "utf8" }).stdout.trim() + spawnSync("git", ["-C", srcA, "log", "-1", "--format=%s"], { encoding: "utf8" }).stdout.trim(), "first");
   ok("the state carries the sync", (await client.request("GET", "/api/state", null)).text.includes('"syncs":[{"peerId":"' + b.identity.id + '"'));
+  // A hosted mirror b offers beside its live copy of src is listed as a push target, not compared.
+  const hostedOnB = await b.host("src-mirror", "");
+  ok("b hosts a mirror", typeof hostedOnB !== "string");
+  const aToken = a.registry.peerById(b.identity.id)!.tokenWePresent;
+  const mirrored = await spawnCapped("env", ["GIT_TERMINAL_PROMPT=0", "git", "-C", src, "-c", "credential.helper=", "-c", "http.extraHeader=Authorization: Bearer " + aToken, "push", "-q", "http://127.0.0.1:" + String(b.port) + "/h/src-mirror", "main"], po);
+  eq("src is pushed into it", mirrored.err, "");
+  const withMirror = await client.request("POST", "/api/peer/sync", { peerId: b.identity.id });
+  ok("the mirror is listed beside the live copy, hosted, with no local path", withMirror.ok && withMirror.text.includes('"key":"h/src-mirror"') && withMirror.text.includes('"name":"src-mirror","repoId":"' + a.registry.repoByPath(srcA)!.repoId + '","mode":"hosted","local":""'));
+  ok("while the live copy is the one compared", withMirror.text.includes('"local":"' + srcA + '"') && withMirror.text.includes('"behind":1'));
   // A repository b has and a lacks is listed as such, and /api/clone brings it here, shared live.
   const other = join(root, "other");
   mkdirSync(other);

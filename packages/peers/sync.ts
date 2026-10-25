@@ -165,21 +165,20 @@ export const parseOffers = (v: unknown): Offer[] => {
 };
 
 /**
- * The peer's offers against this machine's live shares: one RepoSync per repository the peer
- * offers (a live copy preferred over a hosted mirror of the same one), fetched into the local
- * checkout where there is one, with the counts and the fresh commits of its current branch.
+ * The peer's offers against this machine's live shares: one RepoSync per offer, fetched into the
+ * local checkout where there is one, with the counts and the fresh commits of its current branch.
+ * A hosted mirror the peer offers beside a live copy of the same repository is listed as what it
+ * is (a push target) and not compared: the peer's remote in the local checkout points at the live copy.
  */
 export const syncOffers = async (git: string, peer: Peer, offers: Offer[], shares: SharedRepo[], onLog: ((line: string) => void) | null): Promise<RepoSync[]> => {
-  const byId = new Map<string, Offer>();
-  for (const o of offers) {
-    const had = byId.get(o.repoId.length > 0 ? o.repoId : o.key);
-    if (had === undefined || (had.mode === "hosted" && o.mode === "live")) byId.set(o.repoId.length > 0 ? o.repoId : o.key, o);
-  }
+  const liveIds = new Set<string>();
+  for (const o of offers) if (o.mode === "live" && o.repoId.length > 0) liveIds.add(o.repoId);
   const out: RepoSync[] = [];
   const base = peerBase(peer);
   const remote = remoteNameOf(peer.name, peer.id);
-  for (const o of byId.values()) {
-    const share = shares.find((s: SharedRepo) => !s.hosted && s.repoId.length > 0 && s.repoId === o.repoId);
+  for (const o of offers) {
+    const mirrored = o.mode === "hosted" && liveIds.has(o.repoId);
+    const share = mirrored ? undefined : shares.find((s: SharedRepo) => !s.hosted && s.repoId.length > 0 && s.repoId === o.repoId);
     const r = new RepoSync(o.key, o.name, o.repoId, o.mode, share !== undefined ? share.path : "");
     r.theirBranches = o.branches;
     out.push(r);
