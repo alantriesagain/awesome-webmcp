@@ -673,6 +673,27 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
     emit({ type: "finish", key });
   };
 
+  /** Whether this agent took /title over (an agent whose session commands include `title` names it on request; the sessions plugin's /title says another agent names its own). */
+  let titleOffered = false;
+  const offerTitle = (): void => {
+    if (titleOffered) return;
+    titleOffered = true;
+    api.commands.add({
+      name: "/title",
+      usage: "[title]",
+      help: "ask " + entry.name + " for a new title, or give one",
+      run: (words) => {
+        const r = api.agent.send("/title" + (words.length > 0 ? " " + words : ""));
+        if (r.error.length > 0) api.tell(r.error);
+      },
+    });
+  };
+  const dropTitle = (): void => {
+    if (!titleOffered) return;
+    titleOffered = false;
+    api.commands.remove("/title");
+  };
+
   /** A session/update notification. */
   const update = (u: Msg): void => {
     const what = str(u.sessionUpdate);
@@ -706,7 +727,12 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
       emit({ type: "mode", mode: str(u.currentModeId) });
       if (changed && ready) readTools();
     } else if (what === "config_option_update") applyOptions(u.configOptions);
-    else if (what === "available_commands_update") emit({ type: "session", commands: list(u.availableCommands).map((c) => str(obj(c)?.name)).filter((n) => n.length > 0) });
+    else if (what === "available_commands_update") {
+      const names = list(u.availableCommands).map((c) => str(obj(c)?.name)).filter((n) => n.length > 0);
+      emit({ type: "session", commands: names });
+      if (names.includes("title")) offerTitle();
+      else dropTitle();
+    }
     else if (what === "usage_update") {
       const cost = obj(u.cost);
       // A cancelled turn reports nothing used (opencode): the context stays as it was.
@@ -1120,6 +1146,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
     // A process killed is over already; what it says after is not heard.
     processes++;
     proc = null;
+    dropTitle();
     initialized = false;
     ready = false;
     switching = false;

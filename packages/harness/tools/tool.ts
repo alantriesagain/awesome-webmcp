@@ -3,7 +3,7 @@
 // the ACP kind its calls show as, and whether it changes the world (a batch with one runs its
 // calls one at a time). The set of a mode runs a call by name, after checking its input against
 // the schema; one flat class and a switch, since an overridden method cannot be async natively.
-import { listOf, parseJson, recordOf, str, strs } from "@light/lib/json.ts";
+import { listOf, listText, objectText, parseJson, recordOf, str, strs } from "@light/lib/json.ts";
 import { Abort } from "../loop/abort.ts";
 import { bashTool } from "./bash.ts";
 import { editTool } from "./edit.ts";
@@ -43,6 +43,40 @@ export class ToolOutcome {
     o.text = why;
     o.isError = true;
     return o;
+  }
+
+  /** The outcome as JSON text, kept beside a call's result in a session file; `kind` the tool's ACP kind. */
+  json(kind: string): string {
+    const text = this.text.length > 2048 ? this.text.slice(0, 2048) + "…" : this.text;
+    return objectText(["kind", "text", "isError", "locations", "diffPath", "created", "oldText", "newText", "patch", "rawOutputJson"], [JSON.stringify(kind), JSON.stringify(text), this.isError ? "true" : "false", listText(this.locations.map((l) => JSON.stringify(l))), JSON.stringify(this.diffPath), this.created ? "true" : "false", JSON.stringify(this.oldText), JSON.stringify(this.newText), JSON.stringify(this.patch), JSON.stringify(this.rawOutputJson)]);
+  }
+
+  /** An outcome and its kind from that text; null when it is not one. */
+  static parse(text: string): KeptOutcome | null {
+    const r = recordOf(parseJson(text));
+    if (r === null) return null;
+    const o = new ToolOutcome();
+    o.text = str(r["text"]);
+    o.isError = r["isError"] === true;
+    o.locations = strs(r["locations"]);
+    o.diffPath = str(r["diffPath"]);
+    o.created = r["created"] === true;
+    o.oldText = str(r["oldText"]);
+    o.newText = str(r["newText"]);
+    o.patch = str(r["patch"]);
+    o.rawOutputJson = str(r["rawOutputJson"]);
+    return new KeptOutcome(o, str(r["kind"]));
+  }
+}
+
+/** An outcome read back from a session file, with the ACP kind of its call. */
+export class KeptOutcome {
+  readonly outcome: ToolOutcome;
+  readonly kind: string;
+
+  constructor(outcome: ToolOutcome, kind: string) {
+    this.outcome = outcome;
+    this.kind = kind;
   }
 }
 

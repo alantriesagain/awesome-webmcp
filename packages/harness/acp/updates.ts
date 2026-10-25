@@ -58,3 +58,20 @@ export const toolCallEnd = (sessionId: string, callId: string, failed: boolean, 
   }
   return update(sessionId, fields, values);
 };
+
+/** A user message shown again by a load: one chunk per message, the id telling messages apart. */
+export const userChunkUpdate = (sessionId: string, messageId: string, text: string): string =>
+  update(sessionId, ["sessionUpdate", "messageId", "content"], ['"user_message_chunk"', JSON.stringify(messageId), objectText(["type", "text"], ['"text"', JSON.stringify(text)])]);
+
+/** A call shown again by a load: one update with its status, input, files, text, change and raw output. */
+export const toolCallReplay = (sessionId: string, callId: string, title: string, kind: string, rawInputJson: string, locations: string[], failed: boolean, text: string, diff: DiffBlock | null, rawOutputJson: string): string => {
+  const fields = ["sessionUpdate", "toolCallId", "title", "kind", "status", "rawInput", "locations", "content"];
+  const blocks = [objectText(["type", "content"], ['"content"', objectText(["type", "text"], ['"text"', JSON.stringify(text)])])];
+  if (diff !== null) blocks.push(objectText(["type", "path", "oldText", "newText"], ['"diff"', JSON.stringify(diff.path), diff.created ? "null" : JSON.stringify(diff.oldText), JSON.stringify(diff.newText)]));
+  const values = ['"tool_call"', JSON.stringify(callId), JSON.stringify(title), JSON.stringify(kind), failed ? '"failed"' : '"completed"', rawInputJson.length > 0 ? rawInputJson : "{}", listText(locations.map((l) => objectText(["path"], [JSON.stringify(l)]))), listText(blocks)];
+  if (rawOutputJson.length > 0) {
+    fields.push("rawOutput");
+    values.push(rawOutputJson);
+  }
+  return update(sessionId, fields, values);
+};

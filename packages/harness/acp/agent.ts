@@ -2,18 +2,29 @@
 // (its messages, the system prompt's blocks, the model, effort and mode, the folder), the client's
 // `_meta.widecode` (the project's prompt and trust), the MCP servers it was given, its config
 // options (the models by provider, the current model's efforts, the modes), the usage and cost so
-// far, and the turn in progress: the prompt ids waiting for its end (a prompt sent mid-turn is a
-// steering message answered with the turn), and the abort a cancel fires. A tool call goes out as
-// it starts and as it ends, titled with the tool's name.
-import { listOf, recordOf, str } from "@light/lib/json.ts";
+// far, its file under the store (every message, a model or mode change, its title, appended as
+// they happen; made on the first message, so a session never written leaves nothing), and the
+// turn in progress: the prompt ids waiting for its end (a prompt sent mid-turn is a steering
+// message answered with the turn), and the abort a cancel fires. A tool call goes out as it starts
+// and as it ends, titled with the tool's name. A load of a session this process does not hold
+// reads its file and shows its turns again before answering; a resume shows nothing; a fork copies
+// the branch into a file of its own; the list is the folder's files. After the first turn a cheap
+// model names the session; `/title` asks again, or takes the words after it.
+import { errorMessage, listOf, recordOf, str } from "@light/lib/json.ts";
+import { log } from "@light/lib/log.ts";
 import { HarnessConfig } from "../config.ts";
 import { Abort } from "../loop/abort.ts";
 import { LoopListener } from "../loop/listener.ts";
-import { AgentLoop, LoopSession, TurnEnd } from "../loop/loop.ts";
+import { AgentLoop, LoopSession, TurnEnd, danglingResults } from "../loop/loop.ts";
 import { ModelClient } from "../model/client.ts";
-import { CANCELLED, FAILED, Usage } from "../model/message.ts";
+import { CANCELLED, FAILED, Message, TOOL_RESULT, Usage } from "../model/message.ts";
 import { ModelInfo, ModelRegistry, costUsd } from "../model/registry.ts";
+import { HarnessPaths } from "../paths.ts";
 import { systemBlocks } from "../prompt/system.ts";
+import { Entry, MESSAGE, MODE, MODEL, TITLE } from "../session/entries.ts";
+import { replayPaced, replayUpdates } from "../session/replay.ts";
+import { SessionFile, SessionStore, sessionsJson } from "../session/store.ts";
+import { titleFor } from "../session/title.ts";
 import { ToolOutcome, ToolSet } from "../tools/tool.ts";
 import { Choice, ConfigOptions } from "./options.ts";
 import { AcpServer, Incoming } from "./server.ts";
@@ -45,6 +56,11 @@ export class HarnessSession {
   used = 0;
   window = DEFAULT_WINDOW;
   costUsd = -1;
+  /** The session's file, appended to as it goes (null in a process that keeps none). */
+  file: SessionFile | null = null;
+  title = "";
+  /** Whether a title was asked for already (once, after the first turn). */
+  titled = false;
 
   constructor(id: string, options: ConfigOptions) {
     this.id = id;
@@ -67,6 +83,21 @@ const promptText = (prompt: unknown): string => {
   return out.join("\n");
 };
 
+/** The session's opening: the first user message's text and the first reply's. */
+const firstExchange = (messages: Message[]): string[] => {
+  let prompt = "";
+  let reply = "";
+  for (const m of messages) {
+    if (m.parts.some((p) => p.kind === TOOL_RESULT)) continue;
+    if (m.role === "user" && prompt.length === 0) prompt = m.text();
+    else if (m.role === "assistant" && prompt.length > 0 && m.text().length > 0) {
+      reply = m.text();
+      break;
+    }
+  }
+  return [prompt, reply];
+};
+
 export class AcpAgent {
   readonly server: AcpServer;
   readonly loop: AgentLoop;
@@ -74,15 +105,22 @@ export class AcpAgent {
   readonly config: HarnessConfig;
   readonly build: string;
   readonly platform: string;
+  readonly paths: HarnessPaths;
   private readonly sessions = new Map<string, HarnessSession>();
 
-  constructor(server: AcpServer, client: ModelClient, tools: ToolSet, registry: ModelRegistry, config: HarnessConfig, build: string, platform: string) {
+  constructor(server: AcpServer, client: ModelClient, tools: ToolSet, registry: ModelRegistry, config: HarnessConfig, build: string, platform: string, paths: HarnessPaths) {
     this.server = server;
     this.loop = new AgentLoop(client, tools);
     this.registry = registry;
     this.config = config;
     this.build = build;
     this.platform = platform;
+    this.paths = paths;
+  }
+
+  /** The folder's session files. */
+  private storeFor(cwd: string): SessionStore {
+    return new SessionStore(this.paths.sessionsDir(cwd));
   }
 
   /** The options a new session starts with: every model by provider, the chosen model's efforts, the config's choices. */
@@ -118,8 +156,10 @@ export class AcpAgent {
         this.announce(m.idText, this.make(p));
         return;
       case "session/load":
+        this.reopen(m.idText, p, true);
+        return;
       case "session/resume":
-        this.reopen(m.idText, p);
+        this.reopen(m.idText, p, false);
         return;
       case "session/fork":
         this.fork(m.idText, p);
@@ -135,9 +175,11 @@ export class AcpAgent {
       case "session/set_config_option":
         this.setOption(m.idText, p);
         return;
-      case "session/list":
-        this.server.answer(m.idText, '{"sessions":[]}');
+      case "session/list": {
+        const cwd = p !== null ? str(p["cwd"]) : "";
+        this.server.answer(m.idText, '{"sessions":' + sessionsJson(this.storeFor(cwd).list(cwd)) + "}");
         return;
+      }
       default:
         if (m.idText.length > 0) this.server.refuse(m.idText, -32601, "widecode's harness does not offer " + m.method);
     }
@@ -163,6 +205,7 @@ export class AcpAgent {
     const servers = p !== null ? p["mcpServers"] : null;
     s.mcpServersText = Array.isArray(servers) ? JSON.stringify(servers) : "[]";
     this.takeMeta(s, p);
+    s.file = this.storeFor(s.cwd).open(s.id, s.cwd);
     this.apply(s);
     this.sessions.set(s.id, s);
     return s;
@@ -188,20 +231,94 @@ export class AcpAgent {
     this.server.notify("session/update", usageUpdate(s.id, s.used, s.window, s.costUsd));
   }
 
-  /** A session this process holds is reopened in place; one it does not know is refused, and the client starts a new one. */
-  private reopen(idText: string, p: Record<string, unknown> | null): void {
-    const s = this.sessionOf(p);
-    if (s === null) {
-      this.server.refuse(idText, -32602, "no such session here" + (p !== null ? ": " + str(p["sessionId"]) : ""));
+  /** `e` into the session's file; a file that cannot be written is logged, the turn goes on. */
+  private write(s: HarnessSession, e: Entry): void {
+    const f = s.file;
+    if (f === null) return;
+    try {
+      f.append(e);
+    } catch (err) {
+      log("session " + s.id + " not written: " + errorMessage(err, "error"));
+    }
+  }
+
+  /** A message joined the session: kept, after the model and mode it runs on when it is the first. */
+  private kept(s: HarnessSession, m: Message): void {
+    const f = s.file;
+    if (f === null) return;
+    if (f.leaf.length === 0) {
+      this.note(s, MODEL, s.options.model);
+      if (s.options.mode !== "build") this.note(s, MODE, s.options.mode);
+    }
+    this.write(s, Entry.ofMessage(m, Date.now()));
+  }
+
+  /** A model, mode or title entry. */
+  private note(s: HarnessSession, kind: string, value: string): void {
+    this.write(s, Entry.ofValue(kind, "", value, Date.now()));
+  }
+
+  /** A session from its file: its messages, the model and mode it was last on, its title; a batch its process left unfinished gets its results. */
+  private restore(id: string, cwd: string, p: Record<string, unknown> | null): HarnessSession | null {
+    const got = this.storeFor(cwd).load(id);
+    if (got === null) return null;
+    const s = new HarnessSession(id, this.defaults());
+    s.cwd = got.file.cwd.length > 0 ? got.file.cwd : cwd;
+    s.file = got.file;
+    const servers = p !== null ? p["mcpServers"] : null;
+    s.mcpServersText = Array.isArray(servers) ? JSON.stringify(servers) : "[]";
+    const messages: Message[] = [];
+    for (const e of got.entries) {
+      if (e.kind === MESSAGE) messages.push(e.message());
+      else if (e.kind === MODEL) {
+        if (s.options.set("model", e.value).length === 0) this.effortsOf(s.options, this.registry.model(e.value));
+      } else if (e.kind === MODE) s.options.set("mode", e.value);
+      else if (e.kind === TITLE) s.title = e.value;
+    }
+    s.loop.takeMessages(messages);
+    for (const m of messages)
+      for (const part of m.parts) {
+        if (part.kind !== TOOL_RESULT || part.acpJson.length === 0) continue;
+        const k = ToolOutcome.parse(part.acpJson);
+        if (k === null || k.outcome.isError) continue;
+        if (k.kind === "read") for (const l of k.outcome.locations) s.loop.reads.add(l);
+        if (k.outcome.diffPath.length > 0) s.loop.reads.add(k.outcome.diffPath);
+      }
+    const fix = danglingResults(s.loop);
+    if (fix !== null) {
+      s.loop.messages.push(fix);
+      this.write(s, Entry.ofMessage(fix, Date.now()));
+    }
+    s.titled = s.title.length > 0;
+    this.apply(s);
+    this.sessions.set(id, s);
+    return s;
+  }
+
+  /** A session reopened: one this process holds in place, else from its file; a load shows its turns again first. One with no file is refused, and the client starts a new one. */
+  private reopen(idText: string, p: Record<string, unknown> | null, replay: boolean): void {
+    const held = this.sessionOf(p);
+    const id = p !== null ? str(p["sessionId"]) : "";
+    const found = held !== null ? held : this.restore(id, p !== null ? str(p["cwd"]) : "", p);
+    if (found === null) {
+      this.server.refuse(idText, -32602, "no such session here" + (id.length > 0 ? ": " + id : ""));
       return;
     }
+    const s: HarnessSession = found;
     this.takeMeta(s, p);
     const servers = p !== null ? p["mcpServers"] : null;
     if (Array.isArray(servers)) s.mcpServersText = JSON.stringify(servers);
-    this.announce(idText, s);
+    if (!replay) {
+      this.announce(idText, s);
+      return;
+    }
+    replayPaced(replayUpdates(s.id, s.loop.messages), (text: string) => this.server.notify("session/update", text)).then(
+      () => this.announce(idText, s),
+      (err: unknown) => this.server.refuse(idText, -32603, errorMessage(err, "the session could not be shown again")),
+    );
   }
 
-  /** A copy of the session's conversation as a session of its own (a side question's). */
+  /** A copy of the session's conversation as a session of its own (a side question's), its branch copied into a file of its own. */
   private fork(idText: string, p: Record<string, unknown> | null): void {
     const from = this.sessionOf(p);
     if (from === null) {
@@ -212,11 +329,17 @@ export class AcpAgent {
     s.cwd = from.cwd;
     s.harnessText = from.harnessText;
     s.trusted = from.trusted;
-    s.loop.messages = from.loop.messages.slice();
+    s.loop.takeMessages(from.loop.messages.slice());
+    for (const r of from.loop.reads) s.loop.reads.add(r);
     s.options.model = from.options.model;
     s.options.effort = from.options.effort;
     s.options.mode = from.options.mode;
     this.effortsOf(s.options, this.registry.model(s.options.model));
+    s.title = from.title;
+    s.titled = true;
+    const store = this.storeFor(from.cwd);
+    const copied = store.fork(from.id, s.id);
+    s.file = copied !== null ? copied : store.open(s.id, from.cwd);
     this.apply(s);
     this.announce(idText, s);
   }
@@ -236,6 +359,8 @@ export class AcpAgent {
     }
     if (id === "model") this.effortsOf(s.options, this.registry.model(value));
     this.apply(s);
+    // A change in a session written already is an entry; one before any message is where the first message's note comes from.
+    if ((id === "model" || id === "mode") && s.file !== null && s.file.leaf.length > 0) this.note(s, id === "model" ? MODEL : MODE, value);
     this.server.answer(idText, '{"configOptions":' + s.options.text() + "}");
     if (id === "mode") this.server.notify("session/update", modeUpdate(s.id, value));
   }
@@ -248,6 +373,11 @@ export class AcpAgent {
     }
     this.takeMeta(s, p);
     const text = promptText(p["prompt"]);
+    const words = text.trim();
+    if (words === "/title" || words.startsWith("/title ")) {
+      this.retitle(s, idText, words.slice("/title".length).trim());
+      return;
+    }
     if (s.running) {
       // A steering message: into the turn after its current request, answered with it.
       s.loop.steering.push(text);
@@ -283,6 +413,7 @@ export class AcpAgent {
       const diff = outcome.diffPath.length > 0 && !outcome.isError ? new DiffBlock(outcome.diffPath, outcome.created, outcome.oldText, outcome.newText) : null;
       this.server.notify("session/update", toolCallEnd(s.id, callId, outcome.isError, outcome.text, diff, outcome.rawOutputJson));
     };
+    listener.onMessage = (m: Message) => this.kept(s, m);
     this.loop.run(s.loop, text, listener, s.abort).then(
       (end: TurnEnd) => this.turnEnded(s, end),
       (err: unknown) => {
@@ -294,7 +425,7 @@ export class AcpAgent {
     );
   }
 
-  /** The turn is over: every prompt of it is answered with how it ended. */
+  /** The turn is over: every prompt of it is answered with how it ended; the first turn that ended well names the session. */
   private turnEnded(s: HarnessSession, end: TurnEnd): void {
     s.running = false;
     const ids = s.promptIds;
@@ -306,10 +437,65 @@ export class AcpAgent {
       if (end.stopReason === FAILED) this.server.refuse(id, -32603, end.error);
       else this.server.answer(id, result);
     }
+    if (!s.titled && end.stopReason !== FAILED && end.stopReason !== CANCELLED && s.file !== null && s.file.leaf.length > 0) {
+      s.titled = true;
+      this.entitle(s, null);
+    }
+  }
+
+  /** The session's title from the model, from its opening; `idText` is a `/title` prompt to answer with the outcome. */
+  private entitle(s: HarnessSession, idText: string | null): void {
+    const first = firstExchange(s.loop.messages);
+    if (first[0].length === 0) {
+      if (idText !== null) this.said(s, idText, "Nothing to name yet: send a message first.");
+      return;
+    }
+    titleFor(this.loop.client, this.registry, s.loop.model, first[0], first[1]).then(
+      (title: string) => {
+        if (title.length > 0) this.setTitle(s, title);
+        if (idText !== null) this.said(s, idText, title.length > 0 ? "Titled: " + title : "No title came back.");
+      },
+      (err: unknown) => {
+        log("session " + s.id + " not titled: " + errorMessage(err, "error"));
+        if (idText !== null) this.said(s, idText, "No title came back: " + errorMessage(err, "the request failed"));
+      },
+    );
+  }
+
+  private setTitle(s: HarnessSession, title: string): void {
+    s.title = title;
+    s.titled = true;
+    this.note(s, TITLE, title);
+  }
+
+  /** `/title <words>` names the session so; `/title` alone asks the model again. */
+  private retitle(s: HarnessSession, idText: string, words: string): void {
+    if (words.length > 0) {
+      if (s.file !== null && s.file.leaf.length === 0) {
+        this.said(s, idText, "Nothing to name yet: send a message first.");
+        return;
+      }
+      this.setTitle(s, words);
+      this.said(s, idText, "Titled: " + words);
+      return;
+    }
+    this.entitle(s, idText);
+  }
+
+  /** A line of the agent's as the answer to prompt `idText`, outside the conversation. */
+  private said(s: HarnessSession, idText: string, text: string): void {
+    this.server.notify("session/update", chunkUpdate(s.id, "agent_message_chunk", "note-" + idText, text));
+    this.server.answer(idText, '{"stopReason":"end_turn","usage":{"inputTokens":0,"outputTokens":0}}');
   }
 
   /** How many sessions this process holds (tests). */
   count(): number {
     return this.sessions.size;
+  }
+
+  /** The title of session `id` ("" for none; tests). */
+  titleOf(id: string): string {
+    const s = this.sessions.get(id);
+    return s === undefined ? "" : s.title;
   }
 }

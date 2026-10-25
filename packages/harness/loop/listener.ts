@@ -1,7 +1,7 @@
 // What the loop reports as a turn goes: the agent's text and thinking by message, a tool call as
 // it starts, its output as it comes and its end, and what each request used, so the ACP side can
 // stream them out.
-import { Usage } from "../model/message.ts";
+import { Message, Usage } from "../model/message.ts";
 import { ToolOutcome } from "../tools/tool.ts";
 
 export class LoopListener {
@@ -14,4 +14,6 @@ export class LoopListener {
   /** A long call's output so far. */
   onToolOutput: ((callId: string, text: string) => void) | null = null;
   onToolEnd: ((callId: string, outcome: ToolOutcome) => void) | null = null;
+  /** A message joined the conversation: the user's, the assistant's, a batch's results. */
+  onMessage: ((m: Message) => void) | null = null;
 }

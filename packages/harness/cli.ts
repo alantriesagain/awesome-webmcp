@@ -3,8 +3,8 @@
 // whose auth.json has the keys. Its log is a file of its own under the store's `harness/logs`;
 // stdin's end and SIGTERM end it. The side commands the ACP entry names are answered by the same
 // program without starting the loop: `--harness-tools <mode>` (the tools of a mode, in opencode's
-// listing shape), `--harness-skills`, `--harness-sessions` (the folder's sessions),
-// `--harness-forget <id>`; and for the user, `--harness-models` (the models offered and which
+// listing shape), `--harness-skills`, `--harness-sessions` (the folder's sessions, as JSON),
+// `--harness-forget <id>` (its file removed); and for the user, `--harness-models` (the models offered and which
 // providers have a key) and `--harness-auth <provider>` (a key read from stdin into auth.json).
 import { join } from "node:path";
 import { log, nameLog, openLogIn } from "@light/lib/log.ts";
@@ -17,6 +17,7 @@ import { ModelClient } from "./model/client.ts";
 import { FakeClient } from "./model/fake.ts";
 import { ModelInfo, ModelRegistry, NO_THINKING, Provider } from "./model/registry.ts";
 import { HarnessPaths } from "./paths.ts";
+import { SessionStore, sessionsJson } from "./session/store.ts";
 import { ToolSet, builtInTools } from "./tools/tool.ts";
 
 const argValue = (args: string[], name: string): string | null => {
@@ -69,11 +70,21 @@ export const harnessMain = (storeRoot: string, args: string[], build: string): P
     process.stdout.write(toolsListing(tools) + "\n");
     return done(0);
   }
-  if (args.includes("--harness-skills") || args.includes("--harness-sessions")) {
+  if (args.includes("--harness-skills")) {
     process.stdout.write("[]\n");
     return done(0);
   }
-  if (argValue(args, "--harness-forget") !== null) return done(0);
+  // The sessions side commands run in the folder (`cd <folder> && ...`), whose sessions they mean.
+  if (args.includes("--harness-sessions")) {
+    const cwd = process.cwd();
+    process.stdout.write(sessionsJson(new SessionStore(paths.sessionsDir(cwd)).list(cwd)) + "\n");
+    return done(0);
+  }
+  const forget = argValue(args, "--harness-forget");
+  if (forget !== null) {
+    new SessionStore(paths.sessionsDir(process.cwd())).remove(forget);
+    return done(0);
+  }
   const config = HarnessConfig.read(paths.configPath());
   const auth = new Auth(paths.authPath());
   if (args.includes("--harness-models")) {
@@ -130,7 +141,7 @@ export const harnessMain = (storeRoot: string, args: string[], build: string): P
     const client = new ModelClient(registry, auth, config.http, fake);
     const server = new AcpServer();
     server.tracePath = argValue(args, "--log") ?? "";
-    const agent = new AcpAgent(server, client, new ToolSet(builtInTools()), registry, config, build, process.platform);
+    const agent = new AcpAgent(server, client, new ToolSet(builtInTools()), registry, config, build, process.platform, paths);
     server.onIncoming = (m: Incoming) => {
       try {
         agent.receive(m);

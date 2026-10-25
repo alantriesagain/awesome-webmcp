@@ -46,7 +46,35 @@ export class LoopSession {
     this.assistants++;
     return "m" + String(this.assistants);
   }
+
+  /** The conversation so far, from a session file: the ids given from here on come after those loaded. */
+  takeMessages(messages: Message[]): void {
+    this.messages = messages;
+    for (const m of messages) {
+      const n = /^([um])(\d+)$/.exec(m.id);
+      if (n === null) continue;
+      if (n[1] === "u" && Number(n[2]) > this.users) this.users = Number(n[2]);
+      if (n[1] === "m" && Number(n[2]) > this.assistants) this.assistants = Number(n[2]);
+    }
+  }
 }
+
+/** The results a loaded conversation's last message lacks (its process ended mid-batch): one error result per call, "interrupted"; null when it ends well. */
+export const danglingResults = (s: LoopSession): Message | null => {
+  const last = s.messages.length > 0 ? s.messages[s.messages.length - 1] : null;
+  if (last === null || last.role !== "assistant" || !last.parts.some((p) => p.kind === TOOL_CALL)) return null;
+  const m = new Message("user", s.nextUserId());
+  for (const p of last.parts) {
+    if (p.kind !== TOOL_CALL) continue;
+    const r = new Part(TOOL_RESULT);
+    r.callId = p.callId;
+    r.text = "interrupted";
+    r.isError = true;
+    r.acpJson = ToolOutcome.failed("interrupted").json("other");
+    m.parts.push(r);
+  }
+  return m;
+};
 
 /** A tool call of a batch and its result. */
 class Call {
@@ -75,44 +103,44 @@ export class AgentLoop {
     const end = new TurnEnd();
     const user = new Message("user", s.nextUserId());
     user.parts.push(textPart(text));
-    s.messages.push(user);
+    this.add(s, user, listener);
     const tools = this.tools.forMode(s.mode);
     for (;;) {
       const assistant = new Message("assistant", s.nextAssistantId());
       const got = await this.request(s, assistant, tools, listener, abort);
-      if (assistant.parts.length > 0) s.messages.push(assistant);
+      if (assistant.parts.length > 0) this.add(s, assistant, listener);
       end.usage.add(got.usage);
       const onUsage = listener.onUsage;
       if (onUsage !== null) onUsage(got.usage);
       const calls = assistant.parts.filter((p) => p.kind === TOOL_CALL).map((p) => new Call(p));
       if (abort.aborted || got.stopReason === CANCELLED) {
-        if (calls.length > 0) s.messages.push(this.results(s, calls, "interrupted"));
+        if (calls.length > 0) this.add(s, this.results(s, calls, tools, "interrupted"), listener);
         end.stopReason = CANCELLED;
         return end;
       }
       if (got.stopReason === FAILED) {
-        if (calls.length > 0) s.messages.push(this.results(s, calls, "the request failed: " + got.error));
+        if (calls.length > 0) this.add(s, this.results(s, calls, tools, "the request failed: " + got.error), listener);
         end.stopReason = FAILED;
         end.error = got.error;
         return end;
       }
       if (got.stopReason === MAX_TOKENS) {
-        if (calls.length > 0) s.messages.push(this.results(s, calls, "the reply was cut off at the output limit; the call did not run"));
+        if (calls.length > 0) this.add(s, this.results(s, calls, tools, "the reply was cut off at the output limit; the call did not run"), listener);
         end.stopReason = MAX_TOKENS;
         return end;
       }
       if (got.stopReason === TOOL_USE && calls.length > 0) {
         await this.batch(s, calls, tools, listener, abort);
-        s.messages.push(this.results(s, calls, "interrupted"));
+        this.add(s, this.results(s, calls, tools, "interrupted"), listener);
         if (abort.aborted) {
           end.stopReason = CANCELLED;
           return end;
         }
-        this.steer(s);
+        this.steer(s, listener);
         continue;
       }
       if (s.steering.length > 0) {
-        this.steer(s);
+        this.steer(s, listener);
         continue;
       }
       end.stopReason = got.stopReason;
@@ -120,13 +148,20 @@ export class AgentLoop {
     }
   }
 
+  /** `m` joins the conversation; the listener hears it (a session file keeps it). */
+  private add(s: LoopSession, m: Message, listener: LoopListener): void {
+    s.messages.push(m);
+    const fn = listener.onMessage;
+    if (fn !== null) fn(m);
+  }
+
   /** The steering messages queued, as one user message. */
-  private steer(s: LoopSession): void {
+  private steer(s: LoopSession, listener: LoopListener): void {
     if (s.steering.length === 0) return;
     const next = new Message("user", s.nextUserId());
     next.parts.push(textPart(s.steering.join("\n")));
     s.steering = [];
-    s.messages.push(next);
+    this.add(s, next, listener);
   }
 
   /** One request: the stream into `assistant`'s parts and the listener. */
@@ -207,20 +242,17 @@ export class AgentLoop {
     else await Promise.all(calls.map(one));
   }
 
-  /** The batch's results as one user message, `missing` the text of a call that has none (cancelled, cut off). */
-  private results(s: LoopSession, calls: Call[], missing: string): Message {
+  /** The batch's results as one user message, `missing` the text of a call that has none (cancelled, cut off); each keeps its outcome, for a later load. */
+  private results(s: LoopSession, calls: Call[], tools: ToolSet, missing: string): Message {
     const m = new Message("user", s.nextUserId());
     for (const c of calls) {
       const r = new Part(TOOL_RESULT);
       r.callId = c.part.callId;
-      const o = c.outcome;
-      if (o === null) {
-        r.text = missing;
-        r.isError = true;
-      } else {
-        r.text = o.text.length > RESULT_MAX ? o.text.slice(0, RESULT_MAX) + "\n[… cut at " + String(RESULT_MAX) + " characters]" : o.text;
-        r.isError = o.isError;
-      }
+      const o = c.outcome !== null ? c.outcome : ToolOutcome.failed(missing);
+      r.text = o.text.length > RESULT_MAX ? o.text.slice(0, RESULT_MAX) + "\n[… cut at " + String(RESULT_MAX) + " characters]" : o.text;
+      r.isError = o.isError;
+      const t = tools.find(c.part.name);
+      r.acpJson = o.json(t !== null ? t.kind : "other");
       m.parts.push(r);
     }
     return m;

@@ -4,8 +4,9 @@
 // in the system prompt; a prompt sent mid-turn steering the turn and answered with it; a tool
 // call announced, run and ended, its result read by the next request; a cancel answering
 // `cancelled`; an option set, a mode's update, plan mode's tools; a fork carrying the messages;
-// an unknown method and session refused.
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+// an unknown method and session refused; the session's file, its title, /title, a load in another
+// process showing the turns again, a resume, a batch cut off by its process's end given results.
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AcpAgent } from "../acp/agent.ts";
@@ -15,6 +16,9 @@ import { registryFor } from "../cli.ts";
 import { HarnessConfig } from "../config.ts";
 import { ModelClient } from "../model/client.ts";
 import { FakeClient } from "../model/fake.ts";
+import { HarnessPaths } from "../paths.ts";
+import { Entry } from "../session/entries.ts";
+import { SessionStore } from "../session/store.ts";
 import { ToolSet, builtInTools } from "../tools/tool.ts";
 import { done, eq, ok } from "@light/test/assert.ts";
 
@@ -44,7 +48,7 @@ const main = async (): Promise<void> => {
   server.sink = (line: string) => out.push(line);
   const config = new HarnessConfig();
   const registry = registryFor(config, true);
-  const agent = new AcpAgent(server, new ModelClient(registry, new Auth(join(folder, "auth.json")), "node", FakeClient.fromText(FIXTURE)), new ToolSet(builtInTools()), registry, config, "test", "linux");
+  const agent = new AcpAgent(server, new ModelClient(registry, new Auth(join(folder, "auth.json")), "node", FakeClient.fromText(FIXTURE)), new ToolSet(builtInTools()), registry, config, "test", "linux", new HarnessPaths(join(folder, "home")));
   let n = 0;
   const send = (method: string, params: unknown, notification = false): string => {
     const id = notification ? "" : String(++n);
@@ -124,11 +128,61 @@ const main = async (): Promise<void> => {
   eq("with the conversation so far", forkLines.filter((l) => l.includes("agent_message_chunk")).map((l) => /"text":"([^"]*)"/.exec(l)?.[1] ?? "").join("") + " · " + String(forkLines.length), "You said: what · 4");
 
   send("session/load", { sessionId: "h-gone", cwd: "/p", mcpServers: [] });
-  ok("a session this process does not hold is refused, so the client starts a new one", taken()[0].includes('"error":{"code":-32602,"message":"no such session here: h-gone"}'));
-  send("session/load", { sessionId: sid, cwd: "/p", mcpServers: [] });
-  ok("one it holds is reopened in place", taken()[0].includes('"sessionId":"' + sid + '"'));
+  ok("a session with no file here is refused, so the client starts a new one", taken()[0].includes('"error":{"code":-32602,"message":"no such session here: h-gone"}'));
+  const again = send("session/load", { sessionId: sid, cwd: "/p", mcpServers: [] });
+  await until(() => out.some((l) => l.includes('"id":' + again)));
+  const shown = taken();
+  ok("one it holds is shown again, then reopened in place", shown[0].includes('"sessionUpdate":"user_message_chunk","messageId":"u1","content":{"type":"text","text":"hello there"}') && shown[shown.length - 3].includes('"sessionId":"' + sid + '"'));
   send("fs/read_text_file", {});
   ok("an unknown method", taken()[0].includes('"code":-32601'));
+
+  // The session's file: every message, the model it started on, the changes, the title the first turn brought.
+  const paths = new HarnessPaths(join(folder, "home"));
+  const store = new SessionStore(paths.sessionsDir(folder));
+  await until(() => agent.titleOf(sid).length > 0);
+  const kinds = readFileSync(store.pathOf(sid), "utf8").split("\n").filter((l) => l.length > 0).map((l) => Entry.parse(l)).map((e) => (e === null ? "?" : e.kind === "message" ? e.role[0] + e.id : e.kind + (e.value.length > 0 ? ":" + e.value : "")));
+  eq("the file's entries", kinds.join(" "), "session model:fake/fake uu1 am1 title:Fake session title uu2 am2 uu3 am3 uu4 am4 uu5 am5 uu6 am6 uu7 mode:plan model:anthropic/claude-haiku-4-5 model:fake/fake");
+  eq("the fork's file holds the branch and its own turn", String(existsSync(store.pathOf(fid))) + " " + readFileSync(store.pathOf(fid), "utf8").split("\n").filter((l) => l.includes('"text":"You said: what"')).length, "true 1");
+  ok("the list: both, newest first, the title read from the tail", /^\{"sessions":\[\{"sessionId":"h-[^"]+","cwd":"[^"]+","title":"Fake session title","updatedAt":\d+\},\{"sessionId":"h-[^"]+","cwd":"[^"]+","title":"Fake session title","updatedAt":\d+\}\]\}$/.test((send("session/list", { cwd: folder }), /"result":(.*)\}$/.exec(taken()[0])?.[1] ?? "")));
+
+  const named = send("session/prompt", { sessionId: sid, prompt: [{ type: "text", text: "/title Reading files" }] });
+  const naming = taken();
+  ok("/title with words names the session so, outside the conversation", naming[0].includes('"text":"Titled: Reading files"') && naming[1].includes('"id":' + named + ',"result":{"stopReason":"end_turn"') && agent.titleOf(sid) === "Reading files" && readFileSync(store.pathOf(sid), "utf8").includes('"kind":"title","id":"e6","parentId":"e5","at":') && store.list(folder)[0].title === "Reading files");
+  const asked = send("session/prompt", { sessionId: sid, prompt: [{ type: "text", text: "/title" }] });
+  await until(() => out.some((l) => l.includes('"id":' + asked)));
+  ok("/title alone asks the model again", taken()[0].includes('"text":"Titled: Fake session title"') && agent.titleOf(sid) === "Fake session title");
+
+  // Another process: the session from its file, its turns shown again, its mode and model as left, a batch its process left unfinished given its results.
+  writeFileSync(store.pathOf("h-cut"), [
+    '{"kind":"session","id":"h-cut","parentId":"","at":1,"cwd":' + JSON.stringify(folder) + ',"version":1}',
+    '{"kind":"model","id":"e1","parentId":"","at":1,"value":"fake/fake"}',
+    '{"kind":"message","id":"u1","parentId":"e1","at":2,"role":"user","parts":[{"kind":"text","text":"read it"}]}',
+    '{"kind":"message","id":"m1","parentId":"u1","at":3,"role":"assistant","parts":[{"kind":"text","text":"Reading."},{"kind":"tool_call","callId":"call_9","name":"Read","inputJson":"{\\"file_path\\":\\"a.txt\\"}"}]}',
+  ].join("\n") + "\n");
+  const out2: string[] = [];
+  const server2 = new AcpServer();
+  server2.sink = (line: string) => out2.push(line);
+  const agent2 = new AcpAgent(server2, new ModelClient(registry, new Auth(join(folder, "auth.json")), "node", FakeClient.fromText(FIXTURE)), new ToolSet(builtInTools()), registry, config, "test", "linux", paths);
+  agent2.receive(new Incoming("session/load", { sessionId: sid, cwd: folder, mcpServers: [] }, "1"));
+  await until(() => out2.some((l) => l.includes('"id":1,')));
+  const replayed = out2.splice(0, out2.length);
+  eq(
+    "the turns shown again: the prompts with their ids, the thoughts and texts, each call completed with its text, then the answer with the options as left",
+    replayed.map((l) => (l.includes('"user_message_chunk"') ? "user:" + (/"messageId":"([^"]+)"/.exec(l)?.[1] ?? "") : l.includes('"agent_thought_chunk"') ? "thought" : l.includes('"agent_message_chunk"') ? "text" : l.includes('"sessionUpdate":"tool_call"') ? "call:" + (/"title":"([^"]+)","kind":"([^"]+)","status":"([^"]+)"/.exec(l) ?? []).slice(1).join("/") : l.includes('"id":1,') ? "answer" : l.includes("usage_update") ? "usage" : l.includes("available_commands") ? "commands" : "?")).join(" "),
+    "user:u1 thought text user:u2 text user:u3 text user:u4 text call:Bash/execute/completed call:Read/read/completed text user:u6 text user:u7 answer commands usage",
+  );
+  ok("a call shown again carries its output and the result text", replayed.some((l) => l.includes('"toolCallId":"call_1","title":"Bash","kind":"execute","status":"completed","rawInput":{"command":"echo hi; echo there"},"locations":[],"content":[{"type":"content","content":{"type":"text","text":"hi\\nthere"}}],"rawOutput":{"output":"hi\\nthere\\n","exitCode":0,"timedOut":false}')));
+  ok("the mode and model as left, the title known", replayed[replayed.length - 3].includes('"currentValue":"plan"') && replayed[replayed.length - 3].includes('"currentValue":"fake/fake"') && agent2.titleOf(sid) === "Fake session title");
+  agent2.receive(new Incoming("session/prompt", { sessionId: sid, prompt: [{ type: "text", text: "what now" }] }, "2"));
+  await until(() => out2.some((l) => l.includes('"id":2,')));
+  eq("and it goes on, the reply echoing the prompt, kept in the file", out2.filter((l) => l.includes("agent_message_chunk")).map((l) => /"text":"([^"]*)"/.exec(l)?.[1] ?? "").join("") + " " + String(readFileSync(store.pathOf(sid), "utf8").includes('"text":"You said: what now"')), "You said: what now true");
+  out2.splice(0, out2.length);
+  agent2.receive(new Incoming("session/resume", { sessionId: "h-cut", cwd: folder, mcpServers: [] }, "3"));
+  await until(() => out2.some((l) => l.includes('"id":3,')));
+  eq("a resume shows nothing again", out2.filter((l) => l.includes("session/update")).map((l) => /"sessionUpdate":"([^"]+)"/.exec(l)?.[1] ?? "?").join(","), "available_commands_update,usage_update");
+  const cut = readFileSync(store.pathOf("h-cut"), "utf8").split("\n").filter((l) => l.length > 0);
+  eq("the batch cut off by its process's end has its results, as errors", String(cut.length) + " " + (Entry.parse(cut[4])?.message().parts.map((p) => p.kind + ":" + p.callId + ":" + p.text + ":" + String(p.isError)).join(",") ?? "?"), "5 tool_result:call_9:interrupted:true");
+
   rmSync(folder, { recursive: true, force: true });
   done();
 };

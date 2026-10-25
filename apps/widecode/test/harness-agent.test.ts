@@ -6,8 +6,10 @@
 // session and each prompt (the daemon's trace says so); a reply from the fake model's fixture
 // streams into the chat with its thinking; a message sent meanwhile steers the turn and is
 // answered with it; Esc cancels a held turn; a model error is a notice; /new starts another
-// session; the tools command answers the Available tab; the chosen harness shows as the agent.
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+// session; the tools command answers the Available tab; the chosen harness shows as the agent; the
+// Sessions tab lists the first session with the title the fake model gave, opening it again shows
+// its turns from its file, /title names it, a side question runs in a fork forgotten after.
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "@widecode/conversation/conversation.ts";
@@ -16,6 +18,7 @@ import { NoStateFile } from "@light/kernel/settings.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
 import { Run } from "@bootstrapp/light/native/tui/lines.ts";
+import { KeyEvent } from "@bootstrapp/light/native/tui";
 import { done, eq, ok } from "@light/test/assert.ts";
 import { until } from "@light/test/headless.ts";
 
@@ -48,7 +51,15 @@ const main = async (): Promise<void> => {
   const config: unknown = {
     acp: {
       agents: {
-        harness: { name: "harness", command: ["node", main, "--harness", "--harness-home", home, "--log", log, "--harness-fake", fixture], tools: ["node", main, "--harness-tools", "{mode}"], midTurn: true, own: true },
+        harness: {
+          name: "harness",
+          command: ["node", main, "--harness", "--harness-home", home, "--log", log, "--harness-fake", fixture],
+          tools: ["node", main, "--harness-tools", "{mode}"],
+          sessions: ["node", main, "--harness-sessions", "--harness-home", home],
+          forget: ["node", main, "--harness-forget", "{session}", "--harness-home", home],
+          midTurn: true,
+          own: true,
+        },
       },
     },
   };
@@ -134,9 +145,36 @@ const main = async (): Promise<void> => {
   eq("plan mode offers the read-only tools", available().split("|").slice(0, 6).join("|"), "harness|Read  ×1|Grep|Glob|LS|widecode  MCP");
 
   const sessions = sent().split('"method":"session/new"').length - 1;
+  const firstSession = c.sessionId;
   c.reset();
   c.prepare();
   ok("/new starts another session on the same process", await until(() => sent().split('"method":"session/new"').length - 1 > sessions && c.model.effort === "high"));
+
+  // The sessions: the first one in the Sessions tab with the title the fake model gave, opened again with its turns shown; /title; a fork for a side question, forgotten after.
+  const sessionRows = (): string[] => {
+    const p = w.host.screen.findPanel("sessions");
+    const out: string[] = [];
+    if (p === null) return out;
+    const s = p.view.source;
+    s.prepare(60);
+    for (let i = 0; i < s.count(); i++) out.push(s.line(i, 60).runs.map((r: Run) => r.text).join("").trim());
+    return out;
+  };
+  w.host.screen.showPanel("sessions");
+  ok("the first session in the Sessions tab, named by the fake model, from session/list", await until(() => sessionRows().some((l) => l.includes("Fake session title"))));
+  const p = w.host.screen.findPanel("sessions");
+  const row = sessionRows().findIndex((l) => l.includes("Fake session title"));
+  if (p !== null && row >= 0) p.press(row, 0);
+  const open = w.host.kernel.actions.find("sessions.resume");
+  if (open !== null) open.onRun(new KeyEvent("enter", "", false, false, false), 1);
+  ok("opened again: the same session, its turns shown from the file (session/load)", await until(() => c.sessionId === firstSession && c.model.turns.length >= 5 && chat().some((l) => l.includes("Hello, world.")) && sent().includes('"method":"session/load"')));
+  const files = (): string[] => readdirSync(join(home, "harness", "sessions", folder.replace(/[^A-Za-z0-9]/g, "-"))).sort();
+  eq("one file: the first session's (the one left with /new was never written)", String(files().length), "1");
+  w.host.roles.chat.submit("/title Hello world session");
+  ok("/title names it, the tab following", await until(() => sessionRows().some((l) => l.includes("Hello world session"))));
+  w.host.roles.chat.submit("/btw what was that?");
+  ok("a side question in a fork, answered apart", await until(() => chat().some((l) => l.includes("│ You said: "))));
+  ok("the fork's file removed after (--harness-forget)", await until(() => files().length === 1));
 
   w.host.kernel.stop();
   w.js.killProcesses();

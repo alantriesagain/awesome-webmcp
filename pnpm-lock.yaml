@@ -188,6 +188,9 @@ importers:
       '@light/workspace':
         specifier: workspace:*
         version: link:../../light/packages/native/workspace
+      '@widecode/agent':
+        specifier: workspace:*
+        version: link:../agent
     devDependencies:
       '@light/test':
         specifier: workspace:*

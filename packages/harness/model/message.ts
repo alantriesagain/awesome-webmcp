@@ -86,3 +86,39 @@ export class Usage {
     return this.input + this.cacheRead + this.cacheWrite + this.output;
   }
 }
+
+/** A part as JSON text, its empty fields left out. */
+export const partJson = (p: Part): string => {
+  const fields: string[] = ['"kind":' + JSON.stringify(p.kind)];
+  if (p.text.length > 0) fields.push('"text":' + JSON.stringify(p.text));
+  if (p.signature.length > 0) fields.push('"signature":' + JSON.stringify(p.signature));
+  if (p.callId.length > 0) fields.push('"callId":' + JSON.stringify(p.callId));
+  if (p.name.length > 0) fields.push('"name":' + JSON.stringify(p.name));
+  if (p.inputJson.length > 0) fields.push('"inputJson":' + JSON.stringify(p.inputJson));
+  if (p.isError) fields.push('"isError":true');
+  if (p.mediaType.length > 0) fields.push('"mediaType":' + JSON.stringify(p.mediaType));
+  if (p.data.length > 0) fields.push('"data":' + JSON.stringify(p.data));
+  if (p.acpJson.length > 0) fields.push('"acpJson":' + JSON.stringify(p.acpJson));
+  return "{" + fields.join(",") + "}";
+};
+
+const field = (r: Record<string, unknown>, name: string): string => (typeof r[name] === "string" ? (r[name] as string) : "");
+
+/** A part from its parsed JSON, null when it is not one. */
+export const partOf = (v: unknown): Part | null => {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
+  const r = v as Record<string, unknown>;
+  const kind = field(r, "kind");
+  if (kind.length === 0) return null;
+  const p = new Part(kind);
+  p.text = field(r, "text");
+  p.signature = field(r, "signature");
+  p.callId = field(r, "callId");
+  p.name = field(r, "name");
+  p.inputJson = field(r, "inputJson");
+  p.isError = r["isError"] === true;
+  p.mediaType = field(r, "mediaType");
+  p.data = field(r, "data");
+  p.acpJson = field(r, "acpJson");
+  return p;
+};

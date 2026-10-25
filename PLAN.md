@@ -327,8 +327,10 @@ risks); each slice below is one commit with its tests.
 - [x] **Modes and the tool set.** `build` and `plan` as the mode option, `current_mode_update`,
       the read-only set in plan, `--harness-tools <mode>` answered from the set (done with the
       earlier slices; the app test covers /plan and the Available tab in both modes).
-- [ ] **Sessions.** The JSONL tree, replay on load, resume, fork as a file, `--harness-sessions`,
-      `--harness-forget`, titles and `/title`.
+- [x] **Sessions.** The JSONL tree, replay on load, resume, fork as a file, `--harness-sessions`,
+      `--harness-forget`, titles and `/title` (the acp plugin takes `/title` over for an agent whose
+      session commands include it; a tool result keeps its outcome for the replay; a batch cut off
+      by the process's end gets error results on load).
 - [ ] **Compaction.** The estimate, the threshold and `compactAt`, the summary, `/compact`.
 - [ ] **Skills, context files and widecode's tools.** The skills scan, the `Skill` tool, AGENTS.md
       and CLAUDE.md, `--harness-skills`; widecode's MCP tools called over HTTP.

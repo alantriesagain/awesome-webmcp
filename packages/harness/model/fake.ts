@@ -85,6 +85,15 @@ export class FakeClient {
   }
 
   async play(req: ModelRequest, listener: StreamListener, abort: Abort): Promise<StreamEnd> {
+    // A request naming a session (the naming prompt first in the system): one fixed answer.
+    if (req.system.length > 0 && req.system[0].startsWith("You name coding sessions")) {
+      const fn = listener.onText;
+      if (fn !== null) fn("Fake session title");
+      const named = new StreamEnd(END_TURN);
+      named.usage.input = 20;
+      named.usage.output = 3;
+      return named;
+    }
     const last = req.messages.length > 0 ? req.messages[req.messages.length - 1] : null;
     const afterTool = last !== null && last.parts.some((p) => p.kind === TOOL_RESULT);
     const lastText = last !== null ? (afterTool ? last.parts.map((p) => p.text).join("\n") : last.text()) : "";
