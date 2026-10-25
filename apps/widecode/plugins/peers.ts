@@ -180,6 +180,7 @@ widecode.plugin({
         if (pairing !== null && pairing.expiresMs > Date.now()) out.push({ kind: "pairing" });
         out.push({ kind: "hint", text: pairing !== null && pairing.expiresMs > Date.now() ? "on the other machine: /peers join " + (me.addresses[0] ?? "<this address>") + ":" + String(me.port) + " " + pairing.code : "p shows a code for another machine to join with" });
         out.push({ kind: "hint", text: "/peers join <host:port> <code> joins a machine showing one" + (nearby.length > 0 ? " (a nearby name works: /peers join " + nearby[0].name + " <code>)" : "") });
+        out.push({ kind: "hint", text: "a machine that cannot be joined or fetched from has port " + String(me.port > 0 ? me.port : DEFAULT_PORT) + "/tcp closed by its firewall (ufw allow " + String(me.port > 0 ? me.port : DEFAULT_PORT) + "/tcp on Linux)" });
       }
       rows = out;
       if (selected >= rows.length) selected = Math.max(0, rows.length - 1);

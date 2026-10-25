@@ -101,7 +101,8 @@ const main = async (): Promise<void> => {
     const x = app.shell.xOf(column);
     return shown.slice(-3).map((l) => l.slice(x, x + app.shell.widthOf(column)).trim()).filter((t) => t.length > 0).join("|");
   };
-  ok("the tabs' links on the band under the side column, and the switch: all files, changed ones", links(lines) === "Files 2|Sessions 2|Git" && has(lines, " All 3│ Changed 2 "));
+  eq("the tabs' links on the band under the side column, the fourth beside the first", links(lines), "Files 2      Peers|Sessions 2|Git");
+  ok("and the switch: all files, changed ones", has(lines, " All 3│ Changed 2 "));
   const toolsBand = links(lines, "tools").split("|");
   ok("the tools column beside the chat: its Tools, Available and Agents tabs, the calls' status beside them", app.shell.xOf("tools") === app.shell.widthOf("chat") && toolsBand[0].startsWith("Tools") && toolsBand[1].startsWith("Available") && toolsBand[1].includes("R 0 W 0 X 0 A 0") && toolsBand[2].startsWith("Agents"));
   const filesTab = app.host.screen.findPanel("files");
@@ -245,6 +246,9 @@ const main = async (): Promise<void> => {
   await wait(400);
   lines = screen();
   ok("Tab in the files column: Sessions, then Git (wider)", app.host.screen.shownIn("side") === "git" && app.shell.widthOf("side") === 40 && has(lines, " vs  HEAD │ branch │ session ") && has(lines, "▸ ") && has(lines, " init "));
+  app.shell.handleKey(key("tab", ""));
+  lines = screen();
+  ok("then Peers", app.host.screen.shownIn("side") === "peers" && has(lines, "This machine"));
   app.shell.handleKey(key("tab", ""));
   lines = screen();
   ok("then back to the files", app.host.screen.shownIn("side") === "files" && has(lines, "app.js") && app.shell.widthOf("side") === 24);
