@@ -185,6 +185,9 @@ importers:
       '@light/lib':
         specifier: workspace:*
         version: link:../../light/packages/native/lib
+      '@light/workspace':
+        specifier: workspace:*
+        version: link:../../light/packages/native/workspace
     devDependencies:
       '@light/test':
         specifier: workspace:*

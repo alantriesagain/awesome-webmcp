@@ -31,6 +31,8 @@ export class LoopSession {
   mode = "build";
   /** Messages sent while a turn ran, taken up after the current request. */
   steering: string[] = [];
+  /** The files read in the session (absolute paths): what Edit and Write may change. */
+  readonly reads = new Set<string>();
   private users = 0;
   private assistants = 0;
 
@@ -176,7 +178,7 @@ export class AgentLoop {
 
   /** Run the batch: one at a time when any call mutates, else together. */
   private async batch(s: LoopSession, calls: Call[], tools: ToolSet, listener: LoopListener, abort: Abort): Promise<void> {
-    const ctx = new ToolContext(s.cwd, s.mode);
+    const ctx = new ToolContext(s.cwd, s.mode, s.reads);
     const sequential = calls.some((c) => {
       const t = tools.find(c.part.name);
       return t === null || t.mutating;

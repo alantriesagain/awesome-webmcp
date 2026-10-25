@@ -33,6 +33,8 @@ const main = async (): Promise<void> => {
       '{"match":"slow","text":"Working on it for a while now.","chunks":4,"delayMs":60}',
       '{"match":"run","text":"Listing.","tools":[{"name":"Bash","input":{"command":"ls -1","description":"List files"}},{"name":"Read","input":{"file_path":"a.txt"}}]}',
       '{"match":"result","text":"One file, one line."}',
+      '{"match":"edit","text":"Editing.","tools":[{"name":"Edit","input":{"file_path":"a.txt","old_string":"one","new_string":"one\\ntwo"}}]}',
+      '{"match":"result","text":"Edited."}',
       '{"match":"hold","text":"Holding","hold":true}',
       '{"match":"fail","error":"model unavailable"}',
     ].join("\n") + "\n",
@@ -90,6 +92,14 @@ const main = async (): Promise<void> => {
   eq("what the tools counted as: the tool's name, the first title", calls.map((i: Item) => i.tool).join(","), "Bash,Read");
   eq("the text after the results", last().body.children.filter((i: Item) => i.kind === TEXT).map((i: Item) => i.text).join("|"), "Listing.|One file, one line.");
 
+  // An edit: its diff over the whole file with the lines' numbers, followed by the code column.
+  ok("a turn with an edit", await turn("edit it"));
+  const edit = last().body.children.find((i: Item) => i.kind === TOOL) ?? null;
+  const hunks = edit === null || edit.result === null ? "" : edit.result.patch.map((h) => String(h.oldStart) + "," + String(h.newStart) + ":" + h.lines.join("|")).join(" ");
+  eq("its file, its line, its diff with the file's line numbers", (edit === null ? "" : edit.category + " " + edit.paths.join(",") + " " + edit.summary) + " " + hunks, "edit " + join(folder, "a.txt") + " a.txt 1,1: one|+two");
+  eq("the code column follows it", c.model.lastEdit, join(folder, "a.txt"));
+  eq("the file changed", readFileSync(join(folder, "a.txt"), "utf8"), "one\ntwo\n");
+
   const held = c.model.turns.length;
   w.host.roles.chat.submit("hold on");
   await until(() => c.model.turns.length > held && last().body.children.some((i: Item) => i.kind === TEXT));
@@ -117,11 +127,11 @@ const main = async (): Promise<void> => {
     for (let i = 0; i < s.count(); i++) out.push(s.line(i, 40).runs.map((r: Run) => r.text).join("").trim().replace(/(\S) {2,}(\S)/g, "$1  $2"));
     return out.join("|");
   };
-  await until(() => available().startsWith("harness|Read  ×1|Bash  ×1"));
-  eq("the tools command answers the Available tab, with the calls counted", available().split("|").slice(0, 3).join("|"), "harness|Read  ×1|Bash  ×1");
+  await until(() => available().startsWith("harness|Read  ×1|Write|Edit  ×1|Bash  ×1"));
+  eq("the tools command answers the Available tab, with the calls counted", available().split("|").slice(0, 8).join("|"), "harness|Read  ×1|Write|Edit  ×1|Bash  ×1|Grep|Glob|LS");
   eq("plan mode", c.setMode("plan"), "");
-  await until(() => available().startsWith("harness|Read  ×1") && !available().includes("Bash"));
-  eq("plan mode offers the read-only tools", available().split("|").slice(0, 3).join("|"), "harness|Read  ×1|widecode  MCP");
+  await until(() => available().startsWith("harness|Read  ×1|Grep"));
+  eq("plan mode offers the read-only tools", available().split("|").slice(0, 6).join("|"), "harness|Read  ×1|Grep|Glob|LS|widecode  MCP");
 
   const sessions = sent().split('"method":"session/new"').length - 1;
   c.reset();

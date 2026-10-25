@@ -31,10 +31,27 @@ export const modeUpdate = (sessionId: string, mode: string): string => update(se
 export const toolCallUpdate = (sessionId: string, callId: string, title: string, kind: string, status: string, rawInputJson: string, locations: string[]): string =>
   update(sessionId, ["sessionUpdate", "toolCallId", "title", "kind", "status", "rawInput", "locations"], ['"tool_call"', JSON.stringify(callId), JSON.stringify(title), JSON.stringify(kind), JSON.stringify(status), rawInputJson, listText(locations.map((p) => objectText(["path"], [JSON.stringify(p)])))]);
 
-/** A call's end: `completed` or `failed`, its text, the raw output as JSON text ("" for none). */
-export const toolCallEnd = (sessionId: string, callId: string, failed: boolean, text: string, rawOutputJson: string): string => {
+/** A change a call made, for the chat: the file, its text before (none for a new file) and after. */
+export class DiffBlock {
+  readonly path: string;
+  readonly created: boolean;
+  readonly oldText: string;
+  readonly newText: string;
+
+  constructor(path: string, created: boolean, oldText: string, newText: string) {
+    this.path = path;
+    this.created = created;
+    this.oldText = oldText;
+    this.newText = newText;
+  }
+}
+
+/** A call's end: `completed` or `failed`, its text, a change as a diff block, the raw output as JSON text ("" for none). */
+export const toolCallEnd = (sessionId: string, callId: string, failed: boolean, text: string, diff: DiffBlock | null, rawOutputJson: string): string => {
   const fields = ["sessionUpdate", "toolCallId", "status", "content"];
-  const values = ['"tool_call_update"', JSON.stringify(callId), failed ? '"failed"' : '"completed"', listText([objectText(["type", "content"], ['"content"', objectText(["type", "text"], ['"text"', JSON.stringify(text)])])])];
+  const blocks = [objectText(["type", "content"], ['"content"', objectText(["type", "text"], ['"text"', JSON.stringify(text)])])];
+  if (diff !== null) blocks.push(objectText(["type", "path", "oldText", "newText"], ['"diff"', JSON.stringify(diff.path), diff.created ? "null" : JSON.stringify(diff.oldText), JSON.stringify(diff.newText)]));
+  const values = ['"tool_call_update"', JSON.stringify(callId), failed ? '"failed"' : '"completed"', listText(blocks)];
   if (rawOutputJson.length > 0) {
     fields.push("rawOutput");
     values.push(rawOutputJson);

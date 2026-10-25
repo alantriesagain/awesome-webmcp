@@ -17,7 +17,7 @@ import { systemBlocks } from "../prompt/system.ts";
 import { ToolOutcome, ToolSet } from "../tools/tool.ts";
 import { Choice, ConfigOptions } from "./options.ts";
 import { AcpServer, Incoming } from "./server.ts";
-import { chunkUpdate, commandsUpdate, modeUpdate, toolCallEnd, toolCallUpdate, usageUpdate } from "./updates.ts";
+import { DiffBlock, chunkUpdate, commandsUpdate, modeUpdate, toolCallEnd, toolCallUpdate, usageUpdate } from "./updates.ts";
 
 /** The context window the usage is reported against while no model says otherwise. */
 const DEFAULT_WINDOW = 200000;
@@ -279,7 +279,10 @@ export class AcpAgent {
       const path = input !== null ? str(input["file_path"]) : "";
       this.server.notify("session/update", toolCallUpdate(s.id, callId, name, kind, "in_progress", inputJson, path.length > 0 ? [path] : []));
     };
-    listener.onToolEnd = (callId: string, outcome: ToolOutcome) => this.server.notify("session/update", toolCallEnd(s.id, callId, outcome.isError, outcome.text, outcome.rawOutputJson));
+    listener.onToolEnd = (callId: string, outcome: ToolOutcome) => {
+      const diff = outcome.diffPath.length > 0 && !outcome.isError ? new DiffBlock(outcome.diffPath, outcome.created, outcome.oldText, outcome.newText) : null;
+      this.server.notify("session/update", toolCallEnd(s.id, callId, outcome.isError, outcome.text, diff, outcome.rawOutputJson));
+    };
     this.loop.run(s.loop, text, listener, s.abort).then(
       (end: TurnEnd) => this.turnEnded(s, end),
       (err: unknown) => {

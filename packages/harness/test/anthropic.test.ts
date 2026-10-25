@@ -8,7 +8,8 @@ import { AnthropicReader, messagesJson, requestBody } from "../model/anthropic.t
 import { ModelRequest, StreamListener } from "../model/client.ts";
 import { IMAGE, Message, Part, THINKING, TOOL_CALL, TOOL_RESULT, textPart } from "../model/message.ts";
 import { ModelRegistry } from "../model/registry.ts";
-import { SseEvent } from "../model/sse.ts";
+import { SseEvent, SseSplitter } from "../model/sse.ts";
+import { readFileSync } from "node:fs";
 import { ToolSet, builtInTools } from "../tools/tool.ts";
 import { done, eq, ok } from "@light/test/assert.ts";
 
@@ -99,6 +100,17 @@ eq("the stop reason and the usage", reader.end.stopReason + " " + String(reader.
 const refused = new AnthropicReader(new StreamListener());
 refused.take(ev("message_delta", '{"type":"message_delta","delta":{"stop_reason":"refusal","stop_details":{"type":"refusal","category":"cyber"}},"usage":{"output_tokens":0}}'));
 eq("a refusal fails the stream with its category", refused.end.stopReason + " " + refused.end.error, "error the model refused (cyber)");
+// A stream DeepSeek served through its Anthropic-format endpoint, recorded by test/probe/model.mjs.
+const recorded: string[] = [];
+const rl = new StreamListener();
+rl.onToolCallStart = (_id, name) => recorded.push("call " + name);
+rl.onToolCallDelta = (_id, json) => recorded.push(json);
+rl.onSignature = (d) => recorded.push("sig " + String(d.length > 0));
+const rr = new AnthropicReader(rl);
+const rs = new SseSplitter();
+for (const e of rs.push(readFileSync("test/fixtures/model-deepseek-tools.sse", "utf8"))) rr.take(e);
+for (const e of rs.flush()) rr.take(e);
+eq("DeepSeek's recorded stream: a thinking signature, a Bash call with its input in pieces, the stop reason and usage", recorded.filter((r) => r.startsWith("sig") || r.startsWith("call")).join(" ") + " " + recorded.filter((r) => !r.startsWith("sig") && !r.startsWith("call")).join("") + " " + rr.end.stopReason + " " + String(rr.end.usage.input) + "/" + String(rr.end.usage.output), 'sig true call Bash {"command": "echo PONG"} tool_use 331/40');
 const errored = new AnthropicReader(new StreamListener());
 errored.take(ev("error", '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}'));
 eq("an error event fails it with the message", errored.end.stopReason + " " + errored.end.error, "error overloaded_error: Overloaded");

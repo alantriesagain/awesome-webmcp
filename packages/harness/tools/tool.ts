@@ -6,25 +6,34 @@
 import { listOf, parseJson, recordOf, str, strs } from "@light/lib/json.ts";
 import { Abort } from "../loop/abort.ts";
 import { bashTool } from "./bash.ts";
+import { editTool } from "./edit.ts";
+import { globTool } from "./glob.ts";
+import { grepTool } from "./grep.ts";
+import { lsTool } from "./ls.ts";
 import { readTool } from "./read.ts";
+import { writeTool } from "./write.ts";
 
 export class ToolContext {
   readonly cwd: string;
   readonly mode: string;
+  /** The files read in the session (absolute paths): what Edit and Write may change. */
+  readonly reads: Set<string>;
 
-  constructor(cwd: string, mode: string) {
+  constructor(cwd: string, mode: string, reads: Set<string>) {
     this.cwd = cwd;
     this.mode = mode;
+    this.reads = reads;
   }
 }
 
-/** What a call produced: its text for the model, whether it failed, the files it touched, the raw output for the UI as JSON text, and a change's diff (later). */
+/** What a call produced: its text for the model, whether it failed, the files it touched, the raw output for the UI as JSON text, and a change: the file, whether it was created, its texts before and after, the patch with its line numbers. */
 export class ToolOutcome {
   text = "";
   isError = false;
   locations: string[] = [];
   rawOutputJson = "";
   diffPath = "";
+  created = false;
   oldText = "";
   newText = "";
   patch = "";
@@ -59,13 +68,23 @@ export class Tool {
   }
 }
 
+const WRITE_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"The file to write, absolute or relative to the folder"},"content":{"type":"string","description":"The whole content"}},"required":["file_path","content"]}';
+const EDIT_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"The file to change"},"old_string":{"type":"string","description":"The exact text to replace (it must occur once, unless replace_all)"},"new_string":{"type":"string","description":"What replaces it"},"replace_all":{"type":"boolean","description":"Replace every occurrence"}},"required":["file_path","old_string","new_string"]}';
+const GREP_SCHEMA = '{"type":"object","properties":{"pattern":{"type":"string","description":"A regular expression"},"path":{"type":"string","description":"The folder or file to search, relative to the folder (the folder by default)"},"include":{"type":"string","description":"A glob the file names must match (\"*.ts\")"},"ignoreCase":{"type":"boolean"},"context":{"type":"integer","description":"Lines of context around each match"}},"required":["pattern"]}';
+const GLOB_SCHEMA = '{"type":"object","properties":{"pattern":{"type":"string","description":"A glob over relative paths (\"src/**/*.ts\"; a bare name matches at any depth)"},"path":{"type":"string","description":"The folder to search (the folder by default)"}},"required":["pattern"]}';
+const LS_SCHEMA = '{"type":"object","properties":{"path":{"type":"string","description":"The folder to list (the folder by default)"}},"required":[]}';
 const READ_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"The file to read, absolute or relative to the folder"},"offset":{"type":"integer","description":"The line to start from, 1-based"},"limit":{"type":"integer","description":"How many lines to read (2000 by default)"}},"required":["file_path"]}';
 const BASH_SCHEMA = '{"type":"object","properties":{"command":{"type":"string","description":"The command, run by bash in the folder"},"timeout":{"type":"integer","description":"A timeout in milliseconds (120000 by default, 600000 at most)"},"description":{"type":"string","description":"What the command does, in a few words"}},"required":["command"]}';
 
 /** The built-in tools. */
 export const builtInTools = (): Tool[] => [
   new Tool("Read", "Read a file: its lines numbered, 2000 at a time, 2000 characters per line at most. Read a file before you edit it.", READ_SCHEMA, "read", false),
-  new Tool("Bash", "Run a shell command in the folder with bash and get its output (30 KB kept, the start and the end). No interactive commands; prefer dedicated tools for reading files.", BASH_SCHEMA, "execute", true),
+  new Tool("Write", "Write a whole file (its folders made). For a file that exists, read it first; prefer Edit for a change to part of it.", WRITE_SCHEMA, "edit", true),
+  new Tool("Edit", "Replace an exact string in a file you have read with another. old_string must occur exactly once (give enough context), unless replace_all.", EDIT_SCHEMA, "edit", true),
+  new Tool("Bash", "Run a shell command in the folder with bash and get its output (30 KB kept, the start and the end). No interactive commands; prefer Read, Grep and Glob for reading and searching files.", BASH_SCHEMA, "execute", true),
+  new Tool("Grep", "Search the folder's files for a regular expression: file, line number and line, 200 matches at most.", GREP_SCHEMA, "search", false),
+  new Tool("Glob", "Find files by a glob over their relative paths, newest first, 500 at most.", GLOB_SCHEMA, "search", false),
+  new Tool("LS", "List a folder's entries (folders end with a slash).", LS_SCHEMA, "read", false),
 ];
 
 const READ_ONLY = ["Read", "Grep", "Glob", "LS", "Skill", "WebFetch", "WebSearch"];
@@ -123,10 +142,23 @@ export class ToolSet {
   async run(name: string, inputJson: string, ctx: ToolContext, abort: Abort, onOutput: ((text: string) => void) | null): Promise<ToolOutcome> {
     const input = recordOf(parseJson(inputJson.length > 0 ? inputJson : "{}")) ?? {};
     switch (name) {
-      case "Read":
-        return readTool(input, ctx);
+      case "Read": {
+        const o = await readTool(input, ctx);
+        for (const p of o.locations) if (!o.isError) ctx.reads.add(p);
+        return o;
+      }
+      case "Write":
+        return writeTool(input, ctx);
+      case "Edit":
+        return editTool(input, ctx);
       case "Bash":
         return bashTool(input, ctx, abort, onOutput);
+      case "Grep":
+        return grepTool(input, ctx);
+      case "Glob":
+        return globTool(input, ctx);
+      case "LS":
+        return lsTool(input, ctx);
       default:
         return ToolOutcome.failed("no tool named " + name);
     }

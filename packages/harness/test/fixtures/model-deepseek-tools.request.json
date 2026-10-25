@@ -1,0 +1,33 @@
+{
+  "model": "deepseek-flash",
+  "max_tokens": 2000,
+  "stream": true,
+  "system": "You are a terse assistant. Use the Bash tool when asked to run a command.",
+  "tools": [
+    {
+      "name": "Bash",
+      "description": "Run a shell command and get its output.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "user",
+      "content": "Run `echo PONG` with the Bash tool and tell me what it printed, in five words or fewer."
+    }
+  ],
+  "thinking": {
+    "type": "enabled",
+    "budget_tokens": 2048
+  }
+}
