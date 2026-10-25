@@ -29,6 +29,8 @@ export class ToolContext {
   harnessRoot = "";
   /** What WebFetch and WebSearch have: the browser, the search backends. */
   web = new WebSettings();
+  /** Whether the session's model reads images. */
+  vision = false;
 
   constructor(cwd: string, mode: string, reads: Set<string>) {
     this.cwd = cwd;
@@ -48,6 +50,9 @@ export class ToolOutcome {
   oldText = "";
   newText = "";
   patch = "";
+  /** An image the call gives the model (a Read of an image file): its type and base64 data. */
+  imageType = "";
+  imageData = "";
 
   static failed(why: string): ToolOutcome {
     const o = new ToolOutcome();

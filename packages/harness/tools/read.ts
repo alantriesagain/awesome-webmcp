@@ -1,7 +1,8 @@
 // The Read tool: a file's lines numbered as `cat -n` writes them, from an offset, a limit of lines
 // (2000 by default) and of characters per line (2000), 256 KB of the file at most; a binary file
-// or a folder is refused; a relative path is under the folder.
-import { closeSync, openSync, readSync, statSync } from "node:fs";
+// or a folder is refused; a relative path is under the folder. An image file (png, jpeg, gif,
+// webp, 3 MB at most) is given to a model that reads images as an image.
+import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { num, str } from "@light/lib/json.ts";
 import { ToolContext, ToolOutcome } from "./tool.ts";
@@ -42,10 +43,35 @@ export const readCapped = (path: string, maxBytes: number): { text: string; size
   return { text: got.toString("utf8"), size, binary: false };
 };
 
+/** The image types Read gives the model as images, by extension. */
+const IMAGE_TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
+const IMAGE_MAX = 3 * 1024 * 1024;
+
+/** An image file as the model sees it, when the model reads images. */
+const readImage = (path: string, given: string, type: string, ctx: ToolContext): ToolOutcome => {
+  if (!ctx.vision) return ToolOutcome.failed(given + " is an image, and this model does not read images");
+  let size = 0;
+  try {
+    size = statSync(path).size;
+  } catch {
+    return ToolOutcome.failed("cannot read " + given);
+  }
+  if (size > IMAGE_MAX) return ToolOutcome.failed(given + " is an image of " + String(Math.round(size / 1024)) + " KB, over the " + String(IMAGE_MAX / 1024 / 1024) + " MB an image may be");
+  const o = new ToolOutcome();
+  o.locations.push(path);
+  o.imageType = type;
+  o.imageData = readFileSync(path).toString("base64");
+  o.text = "The image " + given + " (" + type + ", " + String(Math.max(1, Math.round(size / 1024))) + " KB), attached.";
+  return o;
+};
+
 export const readTool = (input: Record<string, unknown>, ctx: ToolContext): Promise<ToolOutcome> => {
   const out = new ToolOutcome();
   const given = str(input["file_path"]);
   const path = resolvePath(ctx.cwd, given);
+  const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+  const type = path.includes(".") ? (IMAGE_TYPES[ext] ?? "") : "";
+  if (type.length > 0) return done(readImage(path, given, type, ctx));
   const got = readCapped(path, MAX_BYTES);
   if (got === null) return done(ToolOutcome.failed("cannot read " + given + ": not a file, or not readable"));
   out.locations.push(path);

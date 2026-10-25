@@ -26,7 +26,11 @@ const textBlock = (text: string, cached: boolean): string => '{"type":"text","te
 const partBlock = (p: Part, cached: boolean): string => {
   if (p.kind === TEXT) return p.text.length > 0 ? textBlock(p.text, cached) : "";
   if (p.kind === IMAGE) return '{"type":"image","source":{"type":"base64","media_type":' + JSON.stringify(p.mediaType) + ',"data":' + JSON.stringify(p.data) + "}" + (cached ? "," + CACHE : "") + "}";
-  if (p.kind === TOOL_RESULT) return '{"type":"tool_result","tool_use_id":' + JSON.stringify(p.callId) + ',"content":' + JSON.stringify(p.text) + (p.isError ? ',"is_error":true' : "") + (cached ? "," + CACHE : "") + "}";
+  if (p.kind === TOOL_RESULT) {
+    // A result with an image: its text and the image as the content's blocks.
+    const content = p.data.length > 0 ? '[{"type":"text","text":' + JSON.stringify(p.text) + '},{"type":"image","source":{"type":"base64","media_type":' + JSON.stringify(p.mediaType) + ',"data":' + JSON.stringify(p.data) + "}}]" : JSON.stringify(p.text);
+    return '{"type":"tool_result","tool_use_id":' + JSON.stringify(p.callId) + ',"content":' + content + (p.isError ? ',"is_error":true' : "") + (cached ? "," + CACHE : "") + "}";
+  }
   if (p.kind === TOOL_CALL) return '{"type":"tool_use","id":' + JSON.stringify(p.callId) + ',"name":' + JSON.stringify(p.name) + ',"input":' + (p.inputJson.length > 0 ? p.inputJson : "{}") + "}";
   if (p.kind === THINKING) return p.signature.length > 0 ? '{"type":"thinking","thinking":' + JSON.stringify(p.text) + ',"signature":' + JSON.stringify(p.signature) + "}" : "";
   return "";

@@ -23,6 +23,10 @@ const RETRIES = 3;
 const userMessages = (m: Message): string[] => {
   const out: string[] = [];
   for (const p of m.parts) if (p.kind === TOOL_RESULT) out.push('{"role":"tool","tool_call_id":' + JSON.stringify(p.callId) + ',"content":' + JSON.stringify(p.isError ? "Error: " + p.text : p.text) + "}");
+  // A tool message holds text alone: the images results gave follow as a user message.
+  const shown: string[] = [];
+  for (const p of m.parts) if (p.kind === TOOL_RESULT && p.data.length > 0) shown.push('{"type":"text","text":' + JSON.stringify("The image from call " + p.callId + ":") + '},{"type":"image_url","image_url":{"url":' + JSON.stringify("data:" + p.mediaType + ";base64," + p.data) + "}}");
+  if (shown.length > 0) out.push('{"role":"user","content":[' + shown.join(",") + "]}");
   const content: string[] = [];
   let images = false;
   for (const p of m.parts) {

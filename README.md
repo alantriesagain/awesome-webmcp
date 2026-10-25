@@ -260,6 +260,10 @@ CLAUDE.md from the repository's root down (a trusted folder's) and the skills fo
 folder's `.agents/skills` and `.claude/skills`, the user's `~/.agents/skills` and
 `~/.claude/skills`, and `~/.widecode/harness/skills`.
 
+A model that reads images (Anthropic's, Zen's Claude; a configured one with `"vision": true`) gets
+the images attached to a message and those Read gives for an image file; another is told they were
+left out.
+
 Sessions are JSONL files under `~/.widecode/harness/sessions/`, listed in the Sessions tab, shown
 again when opened, named by the provider's cheapest model after the first turn (`/title` asks again
 or takes the words after it). Past the context threshold (the window less a reserve, or

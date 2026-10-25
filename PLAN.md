@@ -357,7 +357,9 @@ risks); each slice below is one commit with its tests.
       Claude Code's syntax, checked before a call runs; the tools listing marks a tool denied whole.
 - [x] **Subagents.** A `Task` tool: a nested loop with the tools but Task, its report the result,
       its cost counted; the acp plugin draws it as an agent.
-- [ ] **Later.** A `browser` tool over the DevTools protocol; branching; images in tool results; the
+- [x] **Images.** A prompt's images and a Read of an image file, for a model that reads them
+      (`vision`); to Anthropic as content blocks, to a chat completions API as a user message.
+- [ ] **Later.** A `browser` tool over the DevTools protocol; branching from an earlier entry; the
       native `fetch` behind `HttpStream`; prices refreshed from the providers.
 
 ## Deferred or skip

@@ -70,6 +70,9 @@ export class LoopSession {
   web = new WebSettings();
   /** The calls refused (permissions.deny). */
   deny: DenyRule[] = [];
+  /** Whether the model reads images, and the images the next prompt carries (taken by `run`). */
+  vision = false;
+  pendingImages: Part[] = [];
   /** The context's size after the last request (its real count), and how many messages there were then. */
   contextTokens = 0;
   sinceIndex = 0;
@@ -157,6 +160,8 @@ export class AgentLoop {
     const end = new TurnEnd();
     const user = new Message("user", s.nextUserId());
     user.parts.push(textPart(text));
+    for (const img of s.pendingImages) user.parts.push(img);
+    s.pendingImages = [];
     this.add(s, user, listener);
     for (;;) {
       // The mode's tools as it stands now (a plan approved mid-turn leaves plan mode).
@@ -261,6 +266,7 @@ export class AgentLoop {
     sub.harnessRoot = s.harnessRoot;
     sub.web = s.web;
     sub.deny = s.deny;
+    sub.vision = s.vision;
     const loop = new AgentLoop(this.client, this.tools.without("Task"));
     loop.extras = this.extras;
     loop.compactAt = this.compactAt;
@@ -357,6 +363,7 @@ export class AgentLoop {
     ctx.home = s.home;
     ctx.harnessRoot = s.harnessRoot;
     ctx.web = s.web;
+    ctx.vision = s.vision;
     const sequential = calls.some((c) => {
       const t = tools.find(c.part.name);
       return t === null || t.mutating;
@@ -396,6 +403,9 @@ export class AgentLoop {
       const o = c.outcome !== null ? c.outcome : ToolOutcome.failed(missing);
       r.text = o.text.length > RESULT_MAX ? o.text.slice(0, RESULT_MAX) + "\n[… cut at " + String(RESULT_MAX) + " characters]" : o.text;
       r.isError = o.isError;
+      // An image the call gives goes with its result.
+      r.mediaType = o.imageType;
+      r.data = o.imageData;
       const t = tools.find(c.part.name);
       r.acpJson = o.json(t !== null ? t.kind : "other", t !== null ? t.title : c.part.name);
       m.parts.push(r);

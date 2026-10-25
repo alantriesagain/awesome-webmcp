@@ -10,7 +10,7 @@ export const estimateTokens = (text: string): number => Math.ceil(text.length / 
 /** A message's tokens: its parts' text, a call's input, an image's share, a few for the framing. */
 export const messageTokens = (m: Message): number => {
   let n = 4;
-  for (const p of m.parts) n += estimateTokens(p.text) + estimateTokens(p.inputJson) + (p.kind === IMAGE ? IMAGE_TOKENS : 0);
+  for (const p of m.parts) n += estimateTokens(p.text) + estimateTokens(p.inputJson) + (p.kind === IMAGE || p.data.length > 0 ? IMAGE_TOKENS : 0);
   return n;
 };
 

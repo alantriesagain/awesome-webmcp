@@ -56,6 +56,8 @@ export class ModelInfo {
   baseUrl = "";
   /** Where a chat completions API puts the thinking, which goes back on the assistant's messages. */
   reasoningField = "reasoning_content";
+  /** Whether it reads images (a prompt's, a Read of an image file). */
+  vision = false;
 
   constructor(provider: string, id: string, name: string) {
     this.provider = provider;
@@ -81,6 +83,7 @@ const anthropic = (id: string, name: string, input: number, output: number, wind
   m.cacheWritePrice = input * 1.25;
   m.thinking = thinking;
   m.efforts = efforts;
+  m.vision = true;
   return m;
 };
 
@@ -112,6 +115,7 @@ const zenClaude = (id: string, name: string, input: number, output: number, cach
   m.cacheWritePrice = input >= 0 ? input * 1.25 : -1;
   m.thinking = thinking;
   m.efforts = efforts;
+  m.vision = true;
   return m;
 };
 

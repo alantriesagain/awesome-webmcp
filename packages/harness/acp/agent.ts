@@ -20,7 +20,7 @@ import { LoopListener } from "../loop/listener.ts";
 import { CompactionResult } from "../loop/compact.ts";
 import { AgentLoop, LoopSession, TurnEnd, danglingResults } from "../loop/loop.ts";
 import { ModelClient } from "../model/client.ts";
-import { CANCELLED, FAILED, Message, TOOL_RESULT, Usage } from "../model/message.ts";
+import { CANCELLED, FAILED, IMAGE, Message, Part, TOOL_RESULT, Usage } from "../model/message.ts";
 import { ModelInfo, ModelRegistry, costUsd } from "../model/registry.ts";
 import { HarnessPaths } from "../paths.ts";
 import { SystemFacts, systemBlocks } from "../prompt/system.ts";
@@ -86,7 +86,21 @@ const CAPABILITIES = '{"loadSession":true,"mcpCapabilities":{"http":true},"promp
 
 const newId = (): string => "h-" + Date.now().toString(36) + "-" + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, "0");
 
-/** The text of a prompt's blocks: the text blocks joined (images come later). */
+/** A prompt's images, as image parts (ACP's `{type: "image", mimeType, data}` blocks). */
+const promptImages = (prompt: unknown): Part[] => {
+  const out: Part[] = [];
+  for (const v of listOf(prompt)) {
+    const b = recordOf(v);
+    if (b === null || str(b["type"]) !== "image" || str(b["data"]).length === 0) continue;
+    const p = new Part(IMAGE);
+    p.mediaType = str(b["mimeType"]).length > 0 ? str(b["mimeType"]) : "image/png";
+    p.data = str(b["data"]);
+    out.push(p);
+  }
+  return out;
+};
+
+/** The text of a prompt's blocks: the text blocks joined (images go as parts of their own). */
 const promptText = (prompt: unknown): string => {
   const out: string[] = [];
   for (const v of listOf(prompt)) {
@@ -268,6 +282,7 @@ export class AcpAgent {
 
   /** The session's options onto its loop: the model, effort, mode, window, folder. */
   private apply(s: HarnessSession): void {
+    const m0 = this.registry.model(s.options.model);
     s.loop.model = s.options.model;
     s.loop.effort = s.options.effort;
     s.loop.mode = s.options.mode;
@@ -276,6 +291,7 @@ export class AcpAgent {
     s.loop.home = this.paths.userHome;
     s.loop.harnessRoot = this.paths.root();
     s.loop.web = this.web;
+    s.loop.vision = m0 !== null && m0.vision;
     // The user's rules, and a trusted project's (its .widecode/config.json, read again as the session goes).
     s.loop.deny = parseRules(s.trusted && s.cwd.length > 0 ? this.config.denyRules.concat(rulesIn(join(s.cwd, ".widecode", "config.json"))) : this.config.denyRules);
     const m = this.registry.model(s.options.model);
@@ -474,6 +490,14 @@ export class AcpAgent {
       s.promptIds.push(idText);
       return;
     }
+    // Its images, for a model that reads them; another is told they were left out.
+    const images = promptImages(p["prompt"]);
+    const model = this.registry.model(s.options.model);
+    if (images.length > 0 && !(model !== null && model.vision)) {
+      this.startTurn(s, text + "\n\n[" + String(images.length) + (images.length === 1 ? " image was" : " images were") + " attached; this model does not read images, so they were left out]", [idText]);
+      return;
+    }
+    s.loop.pendingImages = images;
     this.startTurn(s, text, [idText]);
   }
 
@@ -639,6 +663,12 @@ export class AcpAgent {
   /** How many sessions this process holds (tests). */
   count(): number {
     return this.sessions.size;
+  }
+
+  /** The messages of session `id`'s context (tests). */
+  messagesOf(id: string): Message[] {
+    const s = this.sessions.get(id);
+    return s === undefined ? [] : s.loop.messages;
   }
 
   /** The context of session `id`: its message ids and its summary (tests). */
