@@ -9,19 +9,22 @@
 // and as it ends, titled with the tool's name. A load of a session this process does not hold
 // reads its file and shows its turns again before answering; a resume shows nothing; a fork copies
 // the branch into a file of its own; the list is the folder's files. After the first turn a cheap
-// model names the session; `/title` asks again, or takes the words after it.
+// model names the session; `/title` asks again, or takes the words after it. `/compact [hint]`
+// summarizes the conversation so far into the loop's context, as the loop does on its own past the
+// threshold; the file keeps the compaction, and a load starts the context from it.
 import { errorMessage, listOf, recordOf, str } from "@light/lib/json.ts";
 import { log } from "@light/lib/log.ts";
 import { HarnessConfig } from "../config.ts";
 import { Abort } from "../loop/abort.ts";
 import { LoopListener } from "../loop/listener.ts";
+import { CompactionResult } from "../loop/compact.ts";
 import { AgentLoop, LoopSession, TurnEnd, danglingResults } from "../loop/loop.ts";
 import { ModelClient } from "../model/client.ts";
 import { CANCELLED, FAILED, Message, TOOL_RESULT, Usage } from "../model/message.ts";
 import { ModelInfo, ModelRegistry, costUsd } from "../model/registry.ts";
 import { HarnessPaths } from "../paths.ts";
 import { systemBlocks } from "../prompt/system.ts";
-import { Entry, MESSAGE, MODE, MODEL, TITLE } from "../session/entries.ts";
+import { COMPACTION, Entry, MESSAGE, MODE, MODEL, TITLE } from "../session/entries.ts";
 import { replayPaced, replayUpdates } from "../session/replay.ts";
 import { SessionFile, SessionStore, sessionsJson } from "../session/store.ts";
 import { titleFor } from "../session/title.ts";
@@ -58,6 +61,8 @@ export class HarnessSession {
   costUsd = -1;
   /** The session's file, appended to as it goes (null in a process that keeps none). */
   file: SessionFile | null = null;
+  /** Every message of the session, compacted ones included: what a load shows again. */
+  history: Message[] = [];
   title = "";
   /** Whether a title was asked for already (once, after the first turn). */
   titled = false;
@@ -111,6 +116,7 @@ export class AcpAgent {
   constructor(server: AcpServer, client: ModelClient, tools: ToolSet, registry: ModelRegistry, config: HarnessConfig, build: string, platform: string, paths: HarnessPaths) {
     this.server = server;
     this.loop = new AgentLoop(client, tools);
+    this.loop.compactAt = config.compactAt;
     this.registry = registry;
     this.config = config;
     this.build = build;
@@ -219,6 +225,7 @@ export class AcpAgent {
     s.loop.cwd = s.cwd;
     const m = this.registry.model(s.options.model);
     s.window = m !== null ? m.window : DEFAULT_WINDOW;
+    s.loop.window = s.window;
     const p = m !== null ? this.registry.provider(m.provider) : null;
     this.loop.extras = p === null || p.anthropicExtras;
   }
@@ -244,6 +251,7 @@ export class AcpAgent {
 
   /** A message joined the session: kept, after the model and mode it runs on when it is the first. */
   private kept(s: HarnessSession, m: Message): void {
+    s.history.push(m);
     const f = s.file;
     if (f === null) return;
     if (f.leaf.length === 0) {
@@ -268,14 +276,23 @@ export class AcpAgent {
     const servers = p !== null ? p["mcpServers"] : null;
     s.mcpServersText = Array.isArray(servers) ? JSON.stringify(servers) : "[]";
     const messages: Message[] = [];
+    // The context starts at the last compaction's first kept message, the summary standing for what came before.
+    let from = 0;
     for (const e of got.entries) {
       if (e.kind === MESSAGE) messages.push(e.message());
       else if (e.kind === MODEL) {
         if (s.options.set("model", e.value).length === 0) this.effortsOf(s.options, this.registry.model(e.value));
       } else if (e.kind === MODE) s.options.set("mode", e.value);
       else if (e.kind === TITLE) s.title = e.value;
+      else if (e.kind === COMPACTION) {
+        s.loop.summary = e.summary;
+        const at = e.firstKeptEntryId.length > 0 ? messages.findIndex((m) => m.id === e.firstKeptEntryId) : -1;
+        from = at >= 0 ? at : messages.length;
+      }
     }
+    s.history = messages.slice();
     s.loop.takeMessages(messages);
+    s.loop.messages = messages.slice(from);
     for (const m of messages)
       for (const part of m.parts) {
         if (part.kind !== TOOL_RESULT || part.acpJson.length === 0) continue;
@@ -287,6 +304,7 @@ export class AcpAgent {
     const fix = danglingResults(s.loop);
     if (fix !== null) {
       s.loop.messages.push(fix);
+      s.history.push(fix);
       this.write(s, Entry.ofMessage(fix, Date.now()));
     }
     s.titled = s.title.length > 0;
@@ -312,7 +330,7 @@ export class AcpAgent {
       this.announce(idText, s);
       return;
     }
-    replayPaced(replayUpdates(s.id, s.loop.messages), (text: string) => this.server.notify("session/update", text)).then(
+    replayPaced(replayUpdates(s.id, s.history), (text: string) => this.server.notify("session/update", text)).then(
       () => this.announce(idText, s),
       (err: unknown) => this.server.refuse(idText, -32603, errorMessage(err, "the session could not be shown again")),
     );
@@ -329,7 +347,12 @@ export class AcpAgent {
     s.cwd = from.cwd;
     s.harnessText = from.harnessText;
     s.trusted = from.trusted;
-    s.loop.takeMessages(from.loop.messages.slice());
+    s.loop.takeMessages(from.history.slice());
+    s.loop.messages = from.loop.messages.slice();
+    s.loop.summary = from.loop.summary;
+    s.loop.contextTokens = from.loop.contextTokens;
+    s.loop.sinceIndex = from.loop.sinceIndex;
+    s.history = from.history.slice();
     for (const r of from.loop.reads) s.loop.reads.add(r);
     s.options.model = from.options.model;
     s.options.effort = from.options.effort;
@@ -378,17 +401,40 @@ export class AcpAgent {
       this.retitle(s, idText, words.slice("/title".length).trim());
       return;
     }
+    if (words === "/compact" || words.startsWith("/compact ")) {
+      this.compactRequested(s, idText, words.slice("/compact".length).trim());
+      return;
+    }
     if (s.running) {
       // A steering message: into the turn after its current request, answered with it.
       s.loop.steering.push(text);
       s.promptIds.push(idText);
       return;
     }
+    this.startTurn(s, text, [idText]);
+  }
+
+  /** A turn: the model asked with `text`, its events to the client, the prompts `ids` answered at its end. */
+  private startTurn(s: HarnessSession, text: string, ids: string[]): void {
     s.running = true;
-    s.promptIds = [idText];
+    s.promptIds = ids;
     s.abort = new Abort();
     s.loop.system = systemBlocks(s.cwd, this.platform, s.harnessText);
     this.apply(s);
+    const listener = this.listenerFor(s);
+    this.loop.run(s.loop, text, listener, s.abort).then(
+      (end: TurnEnd) => this.turnEnded(s, end),
+      (err: unknown) => {
+        const end = new TurnEnd();
+        end.stopReason = FAILED;
+        end.error = err instanceof Error ? err.message : "the turn failed";
+        this.turnEnded(s, end);
+      },
+    );
+  }
+
+  /** The loop's events to the client and the session's file. */
+  private listenerFor(s: HarnessSession): LoopListener {
     const tools = this.loop.tools.forMode(s.loop.mode);
     const listener = new LoopListener();
     listener.onText = (messageId: string, delta: string) => this.server.notify("session/update", chunkUpdate(s.id, "agent_message_chunk", messageId, delta));
@@ -414,14 +460,43 @@ export class AcpAgent {
       this.server.notify("session/update", toolCallEnd(s.id, callId, outcome.isError, outcome.text, diff, outcome.rawOutputJson));
     };
     listener.onMessage = (m: Message) => this.kept(s, m);
-    this.loop.run(s.loop, text, listener, s.abort).then(
-      (end: TurnEnd) => this.turnEnded(s, end),
-      (err: unknown) => {
-        const end = new TurnEnd();
-        end.stopReason = FAILED;
-        end.error = err instanceof Error ? err.message : "the turn failed";
-        this.turnEnded(s, end);
+    listener.onCompaction = (c: CompactionResult) => {
+      this.write(s, Entry.ofCompaction(c.summary, c.firstKeptId, c.tokensBefore, Date.now()));
+      s.used = c.tokensAfter;
+      this.server.notify("session/update", usageUpdate(s.id, s.used, s.window, s.costUsd));
+    };
+    return listener;
+  }
+
+  /** `/compact [hint]`: everything so far summarized, the summary the context from now on; a prompt arriving meanwhile starts a turn after. */
+  private compactRequested(s: HarnessSession, idText: string, hint: string): void {
+    if (s.running) {
+      this.said(s, idText, "A turn is running: /compact when it ends.");
+      return;
+    }
+    s.running = true;
+    s.promptIds = [idText];
+    s.abort = new Abort();
+    this.apply(s);
+    const listener = this.listenerFor(s);
+    const settle = (note: string): void => {
+      s.running = false;
+      const waiting = s.promptIds.slice(1);
+      const steered = s.loop.steering;
+      s.promptIds = [];
+      s.loop.steering = [];
+      this.said(s, idText, note);
+      if (steered.length > 0) this.startTurn(s, steered.join("\n"), waiting);
+    };
+    this.loop.compactContext(s.loop, 0, hint, s.abort).then(
+      (c: CompactionResult | null) => {
+        if (c === null) return settle("Nothing to compact yet.");
+        if (c.error.length > 0) return settle("Not compacted: " + c.error);
+        const fn = listener.onCompaction;
+        if (fn !== null) fn(c);
+        settle("Compacted: " + String(c.tokensBefore) + " tokens to " + String(c.tokensAfter) + ".");
       },
+      (err: unknown) => settle("Not compacted: " + errorMessage(err, "the request failed")),
     );
   }
 
@@ -491,6 +566,12 @@ export class AcpAgent {
   /** How many sessions this process holds (tests). */
   count(): number {
     return this.sessions.size;
+  }
+
+  /** The context of session `id`: its message ids and its summary (tests). */
+  contextOf(id: string): string {
+    const s = this.sessions.get(id);
+    return s === undefined ? "" : s.loop.messages.map((m) => m.id).join(",") + " " + s.loop.summary;
   }
 
   /** The title of session `id` ("" for none; tests). */

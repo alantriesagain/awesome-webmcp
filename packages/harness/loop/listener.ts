@@ -2,6 +2,7 @@
 // it starts, its output as it comes and its end, and what each request used, so the ACP side can
 // stream them out.
 import { Message, Usage } from "../model/message.ts";
+import { CompactionResult } from "./compact.ts";
 import { ToolOutcome } from "../tools/tool.ts";
 
 export class LoopListener {
@@ -16,4 +17,6 @@ export class LoopListener {
   onToolEnd: ((callId: string, outcome: ToolOutcome) => void) | null = null;
   /** A message joined the conversation: the user's, the assistant's, a batch's results. */
   onMessage: ((m: Message) => void) | null = null;
+  /** The context was compacted: the summary stands for the messages before the first kept one. */
+  onCompaction: ((c: CompactionResult) => void) | null = null;
 }

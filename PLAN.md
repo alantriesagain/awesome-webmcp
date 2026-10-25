@@ -331,7 +331,8 @@ risks); each slice below is one commit with its tests.
       `--harness-forget`, titles and `/title` (the acp plugin takes `/title` over for an agent whose
       session commands include it; a tool result keeps its outcome for the replay; a batch cut off
       by the process's end gets error results on load).
-- [ ] **Compaction.** The estimate, the threshold and `compactAt`, the summary, `/compact`.
+- [x] **Compaction.** The estimate, the threshold and `compactAt`, the summary, `/compact` (a
+      compaction entry in the session file; a load starts the context at its first kept message).
 - [ ] **Skills, context files and widecode's tools.** The skills scan, the `Skill` tool, AGENTS.md
       and CLAUDE.md, `--harness-skills`; widecode's MCP tools called over HTTP.
 - [ ] **The web.** `browser.ts`, `WebFetch` through headless Chromium with the curl fallback,

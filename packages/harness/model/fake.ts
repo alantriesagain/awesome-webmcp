@@ -94,6 +94,16 @@ export class FakeClient {
       named.usage.output = 3;
       return named;
     }
+    // A request summarizing the session: one fixed answer naming how many messages it saw.
+    if (req.system.length > 0 && req.system[0].startsWith("You summarize coding sessions")) {
+      const fn = listener.onText;
+      const transcript = req.messages.length > 0 ? req.messages[0].text() : "";
+      if (fn !== null) fn("Goal\nA fake summary of " + String(transcript.split("<user>").length - 1) + " user messages." + (transcript.includes("<earlier_summary>") ? " An earlier summary was folded in." : "") + (transcript.includes("keep in mind: ") ? " Hint: " + (transcript.split("keep in mind: ")[1] ?? "") : ""));
+      const summed = new StreamEnd(END_TURN);
+      summed.usage.input = 30;
+      summed.usage.output = 12;
+      return summed;
+    }
     const last = req.messages.length > 0 ? req.messages[req.messages.length - 1] : null;
     const afterTool = last !== null && last.parts.some((p) => p.kind === TOOL_RESULT);
     const lastText = last !== null ? (afterTool ? last.parts.map((p) => p.text).join("\n") : last.text()) : "";

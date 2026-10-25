@@ -5,7 +5,8 @@
 // call announced, run and ended, its result read by the next request; a cancel answering
 // `cancelled`; an option set, a mode's update, plan mode's tools; a fork carrying the messages;
 // an unknown method and session refused; the session's file, its title, /title, a load in another
-// process showing the turns again, a resume, a batch cut off by its process's end given results.
+// process showing the turns again, a resume, a batch cut off by its process's end given results;
+// /compact and the loop's own compaction, the file's entries, the context after a load.
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -152,6 +153,35 @@ const main = async (): Promise<void> => {
   await until(() => out.some((l) => l.includes('"id":' + asked)));
   ok("/title alone asks the model again", taken()[0].includes('"text":"Titled: Fake session title"') && agent.titleOf(sid) === "Fake session title");
 
+  // Compaction: /compact summarizes everything so far, the summary the context from now on, the file keeping the entry; the loop compacts on its own past the threshold, keeping the tail.
+  const compacted = send("session/prompt", { sessionId: sid, prompt: [{ type: "text", text: "/compact keep the file names" }] });
+  await until(() => out.some((l) => l.includes('"id":' + compacted)));
+  const comp = taken();
+  const compactionsOf = (): Entry[] => {
+    const found: Entry[] = [];
+    for (const l of readFileSync(store.pathOf(sid), "utf8").split("\n")) {
+      const e = l.startsWith('{"kind":"compaction"') ? Entry.parse(l) : null;
+      if (e !== null) found.push(e);
+    }
+    return found;
+  };
+  const usedAfter = /"used":(\d+)/.exec(comp[0])?.[1] ?? "none";
+  const before = compactionsOf().length > 0 ? compactionsOf()[0].tokensBefore : 0;
+  eq("the usage with the context after, the note with the sizes, the answer", comp.map((l) => (l.includes("usage_update") ? "usage:" + usedAfter : l.includes("agent_message_chunk") ? "note:" + (/"text":"([^"]*)"/.exec(l)?.[1] ?? "") : l.includes('"id":' + compacted) ? "answer" : "?")).join(" "), "usage:" + usedAfter + " note:Compacted: " + String(before) + " tokens to " + usedAfter + ". answer");
+  ok("the sizes are counts", before > 0 && Number(usedAfter) > 0);
+  eq("the file's compaction entry: the summary from the six user messages so far with the hint, nothing kept", compactionsOf().map((e) => e.summary + " / " + e.firstKeptEntryId).join(" | "), "Goal\nA fake summary of 6 user messages. Hint: keep the file names / ");
+  const after = send("session/prompt", { sessionId: sid, prompt: [{ type: "text", text: "after compaction" }] });
+  await until(() => out.some((l) => l.includes('"id":' + after)));
+  eq("the conversation goes on from the summary", taken().filter((l) => l.includes("agent_message_chunk")).map((l) => /"text":"([^"]*)"/.exec(l)?.[1] ?? "").join(""), "You said: after compaction");
+  agent.loop.compactAt = 1;
+  agent.loop.keepTokens = 8;
+  const tiny = send("session/prompt", { sessionId: sid, prompt: [{ type: "text", text: "tiny" }] });
+  await until(() => out.some((l) => l.includes('"id":' + tiny)));
+  const auto = taken();
+  agent.loop.compactAt = 200000;
+  eq("past the threshold the loop compacts before the request, the usage first, then the reply", (auto[0].includes("usage_update") ? "usage " : "") + auto.filter((l) => l.includes("agent_message_chunk")).map((l) => /"text":"([^"]*)"/.exec(l)?.[1] ?? "").join(""), "usage You said: tiny");
+  eq("the second entry folds the earlier summary in and keeps the turn's words", compactionsOf().map((e) => e.summary + " / " + e.firstKeptEntryId)[1], "Goal\nA fake summary of 1 user messages. An earlier summary was folded in. / u9");
+
   // Another process: the session from its file, its turns shown again, its mode and model as left, a batch its process left unfinished given its results.
   writeFileSync(store.pathOf("h-cut"), [
     '{"kind":"session","id":"h-cut","parentId":"","at":1,"cwd":' + JSON.stringify(folder) + ',"version":1}',
@@ -169,10 +199,11 @@ const main = async (): Promise<void> => {
   eq(
     "the turns shown again: the prompts with their ids, the thoughts and texts, each call completed with its text, then the answer with the options as left",
     replayed.map((l) => (l.includes('"user_message_chunk"') ? "user:" + (/"messageId":"([^"]+)"/.exec(l)?.[1] ?? "") : l.includes('"agent_thought_chunk"') ? "thought" : l.includes('"agent_message_chunk"') ? "text" : l.includes('"sessionUpdate":"tool_call"') ? "call:" + (/"title":"([^"]+)","kind":"([^"]+)","status":"([^"]+)"/.exec(l) ?? []).slice(1).join("/") : l.includes('"id":1,') ? "answer" : l.includes("usage_update") ? "usage" : l.includes("available_commands") ? "commands" : "?")).join(" "),
-    "user:u1 thought text user:u2 text user:u3 text user:u4 text call:Bash/execute/completed call:Read/read/completed text user:u6 text user:u7 answer commands usage",
+    "user:u1 thought text user:u2 text user:u3 text user:u4 text call:Bash/execute/completed call:Read/read/completed text user:u6 text user:u7 user:u8 text user:u9 text answer commands usage",
   );
   ok("a call shown again carries its output and the result text", replayed.some((l) => l.includes('"toolCallId":"call_1","title":"Bash","kind":"execute","status":"completed","rawInput":{"command":"echo hi; echo there"},"locations":[],"content":[{"type":"content","content":{"type":"text","text":"hi\\nthere"}}],"rawOutput":{"output":"hi\\nthere\\n","exitCode":0,"timedOut":false}')));
   ok("the mode and model as left, the title known", replayed[replayed.length - 3].includes('"currentValue":"plan"') && replayed[replayed.length - 3].includes('"currentValue":"fake/fake"') && agent2.titleOf(sid) === "Fake session title");
+  eq("the context from the last compaction: its kept messages and its summary", agent2.contextOf(sid), "u9,m9 Goal\nA fake summary of 1 user messages. An earlier summary was folded in.");
   agent2.receive(new Incoming("session/prompt", { sessionId: sid, prompt: [{ type: "text", text: "what now" }] }, "2"));
   await until(() => out2.some((l) => l.includes('"id":2,')));
   eq("and it goes on, the reply echoing the prompt, kept in the file", out2.filter((l) => l.includes("agent_message_chunk")).map((l) => /"text":"([^"]*)"/.exec(l)?.[1] ?? "").join("") + " " + String(readFileSync(store.pathOf(sid), "utf8").includes('"text":"You said: what now"')), "You said: what now true");

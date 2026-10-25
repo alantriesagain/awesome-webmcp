@@ -59,9 +59,8 @@ const server = createServer((req, res) => {
       else next();
     };
     next();
-    req.on("close", () => {
-      if (r.hold) res.end();
-    });
+    // A held stream stays open until the client goes (its socket closes); the request's own
+    // "close", which fires once its body is read, must not end it.
   });
 });
 server.listen(0, "127.0.0.1", () => {

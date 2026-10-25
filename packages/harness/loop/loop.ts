@@ -4,9 +4,13 @@
 // enters after the current request, a follow-up after the turn. A batch holding a mutating tool
 // runs its calls one at a time in the model's order, a batch of read-only ones concurrently; the
 // results go back in one user message in the model's order; a cancel mid-batch leaves synthetic
-// results, since a tool call without its result is refused by the next request.
+// results, since a tool call without its result is refused by the next request. Before a request
+// the context's size is estimated (the last real count plus what came since) and compacted past
+// the threshold: the earlier messages summarized, the summary sent first from then on.
 import { Abort } from "./abort.ts";
+import { CompactionResult, KEEP_TOKENS, compactThreshold, contextAfter, cutPoint, summarize, withSummary } from "./compact.ts";
 import { LoopListener } from "./listener.ts";
+import { messagesTokens } from "./tokens.ts";
 import { ModelClient, ModelRequest, StreamEnd, StreamListener } from "../model/client.ts";
 import { CANCELLED, END_TURN, FAILED, MAX_TOKENS, Message, Part, TEXT, THINKING, TOOL_CALL, TOOL_RESULT, TOOL_USE, Usage, textPart } from "../model/message.ts";
 import { ToolContext, ToolOutcome, ToolSet } from "../tools/tool.ts";
@@ -23,7 +27,10 @@ export class TurnEnd {
 
 /** What the loop keeps for one session: the messages, the system prompt's blocks, the model and effort, the folder and mode, ids, the queues. */
 export class LoopSession {
+  /** The context: the messages since the last compaction. */
   messages: Message[] = [];
+  /** The last compaction's summary, standing for what came before `messages` ("" for none). */
+  summary = "";
   system: string[] = [];
   model = "";
   effort = "";
@@ -33,8 +40,24 @@ export class LoopSession {
   steering: string[] = [];
   /** The files read in the session (absolute paths): what Edit and Write may change. */
   readonly reads = new Set<string>();
+  /** The model's window, what the compaction threshold is cut from. */
+  window = 200000;
+  /** The context's size after the last request (its real count), and how many messages there were then. */
+  contextTokens = 0;
+  sinceIndex = 0;
   private users = 0;
   private assistants = 0;
+
+  /** The context's size now: the last real count, plus what came since, estimated. */
+  contextEstimate(): number {
+    return this.contextTokens + messagesTokens(this.messages.slice(this.sinceIndex));
+  }
+
+  /** The context's size as a request reported it. */
+  noteContext(tokens: number): void {
+    this.contextTokens = tokens;
+    this.sinceIndex = this.messages.length;
+  }
 
   /** The next user message's id ("u1", "u2", ...) or assistant message's ("m1", ...): what the chunks carry. */
   nextUserId(): string {
@@ -92,6 +115,9 @@ export class AgentLoop {
   tools: ToolSet;
   /** Whether the provider takes Anthropic's extras in the tools list. */
   extras = true;
+  /** The context size past which a session is compacted (the config's), and the tail an automatic compaction keeps. */
+  compactAt = 200000;
+  keepTokens = KEEP_TOKENS;
 
   constructor(client: ModelClient, tools: ToolSet) {
     this.client = client;
@@ -106,9 +132,21 @@ export class AgentLoop {
     this.add(s, user, listener);
     const tools = this.tools.forMode(s.mode);
     for (;;) {
+      if (s.contextEstimate() > compactThreshold(s.window, this.compactAt)) {
+        const c = await this.compactContext(s, this.keepTokens, "", abort);
+        if (c !== null && c.error.length === 0) {
+          const fn = listener.onCompaction;
+          if (fn !== null) fn(c);
+        }
+        if (abort.aborted) {
+          end.stopReason = CANCELLED;
+          return end;
+        }
+      }
       const assistant = new Message("assistant", s.nextAssistantId());
       const got = await this.request(s, assistant, tools, listener, abort);
       if (assistant.parts.length > 0) this.add(s, assistant, listener);
+      if (got.usage.input > 0) s.noteContext(got.usage.context());
       end.usage.add(got.usage);
       const onUsage = listener.onUsage;
       if (onUsage !== null) onUsage(got.usage);
@@ -153,6 +191,26 @@ export class AgentLoop {
     s.messages.push(m);
     const fn = listener.onMessage;
     if (fn !== null) fn(m);
+  }
+
+  /** Compact the context: the messages before the last `keep` tokens summarized (everything, with `keep` 0), the summary standing for them from now on. Null when there is nothing before the kept tail; `error` set when the model gave no summary. */
+  async compactContext(s: LoopSession, keep: number, hint: string, abort: Abort): Promise<CompactionResult | null> {
+    const cut = cutPoint(s.messages, keep);
+    if (cut === 0) return null;
+    const c = new CompactionResult();
+    c.tokensBefore = s.contextEstimate();
+    const got = await summarize(this.client, s.model, s.summary, s.messages.slice(0, cut), hint, abort);
+    if (got[0].length === 0) {
+      c.error = got[1].length > 0 ? got[1] : "the model gave no summary";
+      return c;
+    }
+    c.summary = got[0];
+    c.firstKeptId = cut < s.messages.length ? s.messages[cut].id : "";
+    s.summary = c.summary;
+    s.messages = s.messages.slice(cut);
+    c.tokensAfter = contextAfter(s.summary, s.messages);
+    s.noteContext(c.tokensAfter);
+    return c;
   }
 
   /** The steering messages queued, as one user message. */
@@ -205,7 +263,7 @@ export class AgentLoop {
       const p = calls.get(id);
       if (p !== undefined) p.inputJson += json;
     };
-    const req = new ModelRequest(s.model, s.system, s.messages);
+    const req = new ModelRequest(s.model, s.system, withSummary(s.summary, s.messages));
     req.effort = s.effort;
     req.toolsJson = tools.json(this.extras);
     return this.client.stream(req, sl, abort);

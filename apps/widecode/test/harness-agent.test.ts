@@ -8,7 +8,8 @@
 // answered with it; Esc cancels a held turn; a model error is a notice; /new starts another
 // session; the tools command answers the Available tab; the chosen harness shows as the agent; the
 // Sessions tab lists the first session with the title the fake model gave, opening it again shows
-// its turns from its file, /title names it, a side question runs in a fork forgotten after.
+// its turns from its file, /title names it, a side question runs in a fork forgotten after,
+// /compact summarizes the conversation and the status bar shows the context after.
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -175,6 +176,12 @@ const main = async (): Promise<void> => {
   w.host.roles.chat.submit("/btw what was that?");
   ok("a side question in a fork, answered apart", await until(() => chat().some((l) => l.includes("│ You said: "))));
   ok("the fork's file removed after (--harness-forget)", await until(() => files().length === 1));
+  w.host.roles.chat.submit("/compact");
+  ok("/compact: the conversation so far summarized, the note saying the sizes", await until(() => chat().some((l) => /Compacted: \d+ tokens to \d+\./.test(l))));
+  const noted = Number(/Compacted: \d+ tokens to (\d+)\./.exec(chat().find((l) => l.includes("Compacted: ")) ?? "")?.[1] ?? "0");
+  ok("the status bar's context is the size after", noted > 0 && (await until(() => c.info.contextUsed === noted)));
+  ok("and the session goes on from the summary", await turn("what now"));
+  eq("the reply", last().body.children.filter((i: Item) => i.kind === TEXT).map((i: Item) => i.text).join("|"), "You said: what now");
 
   w.host.kernel.stop();
   w.js.killProcesses();

@@ -83,6 +83,15 @@ export class Entry {
     return e;
   }
 
+  static ofCompaction(summary: string, firstKeptEntryId: string, tokensBefore: number, at: number): Entry {
+    const e = new Entry(COMPACTION);
+    e.at = at;
+    e.summary = summary;
+    e.firstKeptEntryId = firstKeptEntryId;
+    e.tokensBefore = tokensBefore;
+    return e;
+  }
+
   static ofValue(kind: string, id: string, value: string, at: number): Entry {
     const e = new Entry(kind);
     e.id = id;
