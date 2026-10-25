@@ -56,7 +56,8 @@ export const messagesJson = (messages: Message[], extras: boolean): string => {
 export const requestBody = (req: ModelRequest, model: ModelInfo, provider: Provider): string => {
   const extras = provider.anthropicExtras;
   const parts: string[] = ['"model":' + JSON.stringify(model.id), '"max_tokens":' + String(model.maxOutput), '"stream":true'];
-  if (req.system.length > 0) parts.push('"system":[' + req.system.map((s, i) => textBlock(s, extras && i === req.system.length - 1)).join(",") + "]");
+  const cachedAt = (req.systemCached > 0 ? req.systemCached : req.system.length) - 1;
+  if (req.system.length > 0) parts.push('"system":[' + req.system.map((s, i) => textBlock(s, extras && i === cachedAt)).join(",") + "]");
   if (req.toolsJson.length > 0) parts.push('"tools":' + req.toolsJson);
   parts.push('"messages":' + messagesJson(req.messages, extras));
   const effort = model.efforts.includes(req.effort) ? req.effort : "";

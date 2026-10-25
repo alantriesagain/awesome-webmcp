@@ -17,6 +17,8 @@ export class ModelRequest {
   effort = "";
   /** The tools as the API's JSON list ("" for none). */
   toolsJson = "";
+  /** How many of the system blocks are stable, the breakpoint on the last of them (0: all are). */
+  systemCached = 0;
 
   constructor(model: string, system: string[], messages: Message[]) {
     this.model = model;

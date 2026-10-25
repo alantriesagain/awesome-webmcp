@@ -23,12 +23,13 @@ import { ModelClient } from "../model/client.ts";
 import { CANCELLED, FAILED, Message, TOOL_RESULT, Usage } from "../model/message.ts";
 import { ModelInfo, ModelRegistry, costUsd } from "../model/registry.ts";
 import { HarnessPaths } from "../paths.ts";
-import { systemBlocks } from "../prompt/system.ts";
+import { SystemFacts, systemBlocks } from "../prompt/system.ts";
 import { COMPACTION, Entry, MESSAGE, MODE, MODEL, TITLE } from "../session/entries.ts";
 import { replayPaced, replayUpdates } from "../session/replay.ts";
 import { SessionFile, SessionStore, sessionsJson } from "../session/store.ts";
 import { titleFor } from "../session/title.ts";
-import { ToolOutcome, ToolSet } from "../tools/tool.ts";
+import { McpLink, McpListing } from "../tools/mcp.ts";
+import { Tool, ToolOutcome, ToolSet } from "../tools/tool.ts";
 import { Choice, ConfigOptions } from "./options.ts";
 import { AcpServer, Incoming } from "./server.ts";
 import { DiffBlock, chunkUpdate, commandsUpdate, modeUpdate, toolCallEnd, toolCallUpdate, usageUpdate } from "./updates.ts";
@@ -63,6 +64,10 @@ export class HarnessSession {
   file: SessionFile | null = null;
   /** Every message of the session, compacted ones included: what a load shows again. */
   history: Message[] = [];
+  /** Settles once the session's MCP servers listed their tools (a turn starts after). */
+  toolsReady: Promise<void> = new Promise<void>((settle) => settle());
+  /** The servers' JSON text the tools were listed for. */
+  linkedText = "";
   title = "";
   /** Whether a title was asked for already (once, after the first turn). */
   titled = false;
@@ -213,8 +218,47 @@ export class AcpAgent {
     this.takeMeta(s, p);
     s.file = this.storeFor(s.cwd).open(s.id, s.cwd);
     this.apply(s);
+    this.link(s);
     this.sessions.set(s.id, s);
     return s;
+  }
+
+  /** The session's MCP servers and their tools, listed again when the servers changed. */
+  private link(s: HarnessSession): void {
+    if (s.mcpServersText === s.linkedText) return;
+    s.linkedText = s.mcpServersText;
+    const links = McpLink.fromSession(s.mcpServersText);
+    for (const l of links) l.httpKind = this.config.http;
+    s.loop.servers = links;
+    s.loop.extraTools = [];
+    if (links.length === 0) {
+      s.toolsReady = new Promise<void>((settle) => settle());
+      return;
+    }
+    s.toolsReady = Promise.all(links.map((l) => l.listTools(new Abort()))).then((listings: McpListing[]) => {
+      const tools: Tool[] = [];
+      for (let i = 0; i < listings.length; i++) {
+        if (listings[i].error.length > 0) log("session " + s.id + ": the tools of " + links[i].name + " not listed: " + listings[i].error);
+        for (const info of listings[i].tools) {
+          const t = new Tool(info.calledAs(), info.description, info.schemaJson, "other", true);
+          t.title = info.titledAs();
+          tools.push(t);
+        }
+      }
+      s.loop.extraTools = tools;
+    });
+  }
+
+  /** The stable blocks of the session's system prompt. */
+  private blocksFor(s: HarnessSession): string[] {
+    const f = new SystemFacts();
+    f.cwd = s.cwd;
+    f.platform = this.platform;
+    f.harnessText = s.harnessText;
+    f.trusted = s.trusted;
+    f.home = this.paths.userHome;
+    f.harnessRoot = this.paths.root();
+    return systemBlocks(f);
   }
 
   /** The session's options onto its loop: the model, effort, mode, window, folder. */
@@ -223,6 +267,9 @@ export class AcpAgent {
     s.loop.effort = s.options.effort;
     s.loop.mode = s.options.mode;
     s.loop.cwd = s.cwd;
+    s.loop.trusted = s.trusted;
+    s.loop.home = this.paths.userHome;
+    s.loop.harnessRoot = this.paths.root();
     const m = this.registry.model(s.options.model);
     s.window = m !== null ? m.window : DEFAULT_WINDOW;
     s.loop.window = s.window;
@@ -232,7 +279,7 @@ export class AcpAgent {
 
   /** A session's answer to new, load, resume and fork: its id and options; then what it offers. */
   private announce(idText: string, s: HarnessSession): void {
-    s.loop.system = systemBlocks(s.cwd, this.platform, s.harnessText);
+    s.loop.system = this.blocksFor(s);
     this.server.answer(idText, '{"sessionId":' + JSON.stringify(s.id) + ',"configOptions":' + s.options.text() + "}");
     this.server.notify("session/update", commandsUpdate(s.id, COMMANDS));
     this.server.notify("session/update", usageUpdate(s.id, s.used, s.window, s.costUsd));
@@ -309,6 +356,7 @@ export class AcpAgent {
     }
     s.titled = s.title.length > 0;
     this.apply(s);
+    this.link(s);
     this.sessions.set(id, s);
     return s;
   }
@@ -326,6 +374,8 @@ export class AcpAgent {
     this.takeMeta(s, p);
     const servers = p !== null ? p["mcpServers"] : null;
     if (Array.isArray(servers)) s.mcpServersText = JSON.stringify(servers);
+    this.apply(s);
+    this.link(s);
     if (!replay) {
       this.announce(idText, s);
       return;
@@ -360,6 +410,11 @@ export class AcpAgent {
     this.effortsOf(s.options, this.registry.model(s.options.model));
     s.title = from.title;
     s.titled = true;
+    // The parent's servers and tools (a fork is given none of its own).
+    s.loop.servers = from.loop.servers;
+    s.loop.extraTools = from.loop.extraTools;
+    s.toolsReady = from.toolsReady;
+    s.linkedText = s.mcpServersText;
     const store = this.storeFor(from.cwd);
     const copied = store.fork(from.id, s.id);
     s.file = copied !== null ? copied : store.open(s.id, from.cwd);
@@ -419,23 +474,24 @@ export class AcpAgent {
     s.running = true;
     s.promptIds = ids;
     s.abort = new Abort();
-    s.loop.system = systemBlocks(s.cwd, this.platform, s.harnessText);
     this.apply(s);
+    s.loop.system = this.blocksFor(s);
     const listener = this.listenerFor(s);
-    this.loop.run(s.loop, text, listener, s.abort).then(
-      (end: TurnEnd) => this.turnEnded(s, end),
-      (err: unknown) => {
-        const end = new TurnEnd();
-        end.stopReason = FAILED;
-        end.error = err instanceof Error ? err.message : "the turn failed";
-        this.turnEnded(s, end);
-      },
+    const failed = (err: unknown): void => {
+      const end = new TurnEnd();
+      end.stopReason = FAILED;
+      end.error = err instanceof Error ? err.message : "the turn failed";
+      this.turnEnded(s, end);
+    };
+    // The session's MCP tools first, when they are still being listed.
+    s.toolsReady.then(
+      () => this.loop.run(s.loop, text, listener, s.abort).then((end: TurnEnd) => this.turnEnded(s, end), failed),
+      failed,
     );
   }
 
   /** The loop's events to the client and the session's file. */
   private listenerFor(s: HarnessSession): LoopListener {
-    const tools = this.loop.tools.forMode(s.loop.mode);
     const listener = new LoopListener();
     listener.onText = (messageId: string, delta: string) => this.server.notify("session/update", chunkUpdate(s.id, "agent_message_chunk", messageId, delta));
     listener.onThinking = (messageId: string, delta: string) => this.server.notify("session/update", chunkUpdate(s.id, "agent_thought_chunk", messageId, delta));
@@ -449,11 +505,12 @@ export class AcpAgent {
       this.server.notify("session/update", usageUpdate(s.id, s.used, s.window, s.costUsd));
     };
     listener.onToolStart = (callId: string, name: string, inputJson: string) => {
-      const t = tools.find(name);
+      // Every tool the session has, whatever the mode, its MCP ones as listed by now: a call is titled as its tool shows.
+      const t = this.loop.tools.plus(s.loop.extraTools).find(name);
       const kind = t !== null ? t.kind : "other";
       const input = recordOf(JSON.parse(inputJson));
       const path = input !== null ? str(input["file_path"]) : "";
-      this.server.notify("session/update", toolCallUpdate(s.id, callId, name, kind, "in_progress", inputJson, path.length > 0 ? [path] : []));
+      this.server.notify("session/update", toolCallUpdate(s.id, callId, t !== null ? t.title : name, kind, "in_progress", inputJson, path.length > 0 ? [path] : []));
     };
     listener.onToolEnd = (callId: string, outcome: ToolOutcome) => {
       const diff = outcome.diffPath.length > 0 && !outcome.isError ? new DiffBlock(outcome.diffPath, outcome.created, outcome.oldText, outcome.newText) : null;

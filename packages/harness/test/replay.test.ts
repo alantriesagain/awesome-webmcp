@@ -32,7 +32,7 @@ o.oldText = "one\n";
 o.newText = "two\n";
 o.patch = "@@ -1,1 +1,1 @@\n-one\n+two\n";
 o.rawOutputJson = '{"metadata":{"filediff":{"patch":"@@ -1,1 +1,1 @@\\n-one\\n+two\\n"}}}';
-r.acpJson = o.json("edit");
+r.acpJson = o.json("edit", "Edit");
 results.parts.push(r);
 const reply = new Message("assistant", "m2");
 reply.parts.push(textPart("Done."));

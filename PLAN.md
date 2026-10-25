@@ -333,8 +333,9 @@ risks); each slice below is one commit with its tests.
       by the process's end gets error results on load).
 - [x] **Compaction.** The estimate, the threshold and `compactAt`, the summary, `/compact` (a
       compaction entry in the session file; a load starts the context at its first kept message).
-- [ ] **Skills, context files and widecode's tools.** The skills scan, the `Skill` tool, AGENTS.md
-      and CLAUDE.md, `--harness-skills`; widecode's MCP tools called over HTTP.
+- [x] **Skills, context files and widecode's tools.** The skills scan, the `Skill` tool, AGENTS.md
+      and CLAUDE.md, `--harness-skills`; widecode's MCP tools called over HTTP (AskUser's question
+      in the request panel from the harness; the date and plan mode's note in an uncached block).
 - [ ] **The web.** `browser.ts`, `WebFetch` through headless Chromium with the curl fallback,
       `html.ts`, `WebSearch` with the chain (searxng, google, brave, tavily, anthropic; duckduckgo
       opt-in).

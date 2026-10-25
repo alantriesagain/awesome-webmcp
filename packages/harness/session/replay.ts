@@ -30,7 +30,7 @@ export const replayUpdates = (sessionId: string, messages: Message[]): string[] 
         const got = text.length > 0 ? ToolOutcome.parse(text) : null;
         const o = got !== null ? got.outcome : ToolOutcome.failed("no result kept");
         const diff = o.diffPath.length > 0 && !o.isError ? new DiffBlock(o.diffPath, o.created, o.oldText, o.newText) : null;
-        out.push(toolCallReplay(sessionId, p.callId, p.name, got !== null ? got.kind : "other", p.inputJson, o.locations, o.isError, o.text, diff, o.rawOutputJson));
+        out.push(toolCallReplay(sessionId, p.callId, got !== null && got.title.length > 0 ? got.title : p.name, got !== null ? got.kind : "other", p.inputJson, o.locations, o.isError, o.text, diff, o.rawOutputJson));
       }
     }
   }

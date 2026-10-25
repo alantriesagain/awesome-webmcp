@@ -10,7 +10,9 @@ import { editTool } from "./edit.ts";
 import { globTool } from "./glob.ts";
 import { grepTool } from "./grep.ts";
 import { lsTool } from "./ls.ts";
+import { McpLink } from "./mcp.ts";
 import { readTool } from "./read.ts";
+import { skillTool } from "./skill.ts";
 import { writeTool } from "./write.ts";
 
 export class ToolContext {
@@ -18,6 +20,12 @@ export class ToolContext {
   readonly mode: string;
   /** The files read in the session (absolute paths): what Edit and Write may change. */
   readonly reads: Set<string>;
+  /** The session's MCP servers, whose tools are named `mcp__<server>__<tool>`. */
+  servers: McpLink[] = [];
+  /** What the Skill tool reads: the folder's skills when trusted, the user's home ("" for none), the harness's folder. */
+  trusted = false;
+  home = "";
+  harnessRoot = "";
 
   constructor(cwd: string, mode: string, reads: Set<string>) {
     this.cwd = cwd;
@@ -45,10 +53,10 @@ export class ToolOutcome {
     return o;
   }
 
-  /** The outcome as JSON text, kept beside a call's result in a session file; `kind` the tool's ACP kind. */
-  json(kind: string): string {
+  /** The outcome as JSON text, kept beside a call's result in a session file; `kind` the tool's ACP kind, `title` what its call showed as. */
+  json(kind: string, title: string): string {
     const text = this.text.length > 2048 ? this.text.slice(0, 2048) + "…" : this.text;
-    return objectText(["kind", "text", "isError", "locations", "diffPath", "created", "oldText", "newText", "patch", "rawOutputJson"], [JSON.stringify(kind), JSON.stringify(text), this.isError ? "true" : "false", listText(this.locations.map((l) => JSON.stringify(l))), JSON.stringify(this.diffPath), this.created ? "true" : "false", JSON.stringify(this.oldText), JSON.stringify(this.newText), JSON.stringify(this.patch), JSON.stringify(this.rawOutputJson)]);
+    return objectText(["kind", "title", "text", "isError", "locations", "diffPath", "created", "oldText", "newText", "patch", "rawOutputJson"], [JSON.stringify(kind), JSON.stringify(title), JSON.stringify(text), this.isError ? "true" : "false", listText(this.locations.map((l) => JSON.stringify(l))), JSON.stringify(this.diffPath), this.created ? "true" : "false", JSON.stringify(this.oldText), JSON.stringify(this.newText), JSON.stringify(this.patch), JSON.stringify(this.rawOutputJson)]);
   }
 
   /** An outcome and its kind from that text; null when it is not one. */
@@ -65,18 +73,20 @@ export class ToolOutcome {
     o.newText = str(r["newText"]);
     o.patch = str(r["patch"]);
     o.rawOutputJson = str(r["rawOutputJson"]);
-    return new KeptOutcome(o, str(r["kind"]));
+    return new KeptOutcome(o, str(r["kind"]), str(r["title"]));
   }
 }
 
-/** An outcome read back from a session file, with the ACP kind of its call. */
+/** An outcome read back from a session file, with the ACP kind and the title of its call ("" when not kept). */
 export class KeptOutcome {
   readonly outcome: ToolOutcome;
   readonly kind: string;
+  readonly title: string;
 
-  constructor(outcome: ToolOutcome, kind: string) {
+  constructor(outcome: ToolOutcome, kind: string, title: string) {
     this.outcome = outcome;
     this.kind = kind;
+    this.title = title;
   }
 }
 
@@ -87,6 +97,8 @@ export class Tool {
   /** The ACP kind of its calls: read, edit, execute, search, fetch, other. */
   readonly kind: string;
   readonly mutating: boolean;
+  /** What its calls show as to the client: the name, but for an MCP tool (`widecode_AskUser`). */
+  title: string;
 
   constructor(name: string, description: string, schemaJson: string, kind: string, mutating: boolean) {
     this.name = name;
@@ -94,6 +106,7 @@ export class Tool {
     this.schemaJson = schemaJson;
     this.kind = kind;
     this.mutating = mutating;
+    this.title = name;
   }
 
   /** The tool as the API's list takes it, with Anthropic's extras when `extras` (eager input streaming, a cache breakpoint when `cached`). */
@@ -106,6 +119,7 @@ const WRITE_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string
 const EDIT_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"The file to change"},"old_string":{"type":"string","description":"The exact text to replace (it must occur once, unless replace_all)"},"new_string":{"type":"string","description":"What replaces it"},"replace_all":{"type":"boolean","description":"Replace every occurrence"}},"required":["file_path","old_string","new_string"]}';
 const GREP_SCHEMA = '{"type":"object","properties":{"pattern":{"type":"string","description":"A regular expression"},"path":{"type":"string","description":"The folder or file to search, relative to the folder (the folder by default)"},"include":{"type":"string","description":"A glob the file names must match (\"*.ts\")"},"ignoreCase":{"type":"boolean"},"context":{"type":"integer","description":"Lines of context around each match"}},"required":["pattern"]}';
 const GLOB_SCHEMA = '{"type":"object","properties":{"pattern":{"type":"string","description":"A glob over relative paths (\"src/**/*.ts\"; a bare name matches at any depth)"},"path":{"type":"string","description":"The folder to search (the folder by default)"}},"required":["pattern"]}';
+const SKILL_SCHEMA = '{"type":"object","properties":{"name":{"type":"string","description":"The name of the skill, as the system prompt lists it"}},"required":["name"]}';
 const LS_SCHEMA = '{"type":"object","properties":{"path":{"type":"string","description":"The folder to list (the folder by default)"}},"required":[]}';
 const READ_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"The file to read, absolute or relative to the folder"},"offset":{"type":"integer","description":"The line to start from, 1-based"},"limit":{"type":"integer","description":"How many lines to read (2000 by default)"}},"required":["file_path"]}';
 const BASH_SCHEMA = '{"type":"object","properties":{"command":{"type":"string","description":"The command, run by bash in the folder"},"timeout":{"type":"integer","description":"A timeout in milliseconds (120000 by default, 600000 at most)"},"description":{"type":"string","description":"What the command does, in a few words"}},"required":["command"]}';
@@ -119,6 +133,7 @@ export const builtInTools = (): Tool[] => [
   new Tool("Grep", "Search the folder's files for a regular expression: file, line number and line, 200 matches at most.", GREP_SCHEMA, "search", false),
   new Tool("Glob", "Find files by a glob over their relative paths, newest first, 500 at most.", GLOB_SCHEMA, "search", false),
   new Tool("LS", "List a folder's entries (folders end with a slash).", LS_SCHEMA, "read", false),
+  new Tool("Skill", "Load a skill's instructions by name (the system prompt lists the skills): follow them for the task.", SKILL_SCHEMA, "read", false),
 ];
 
 const READ_ONLY = ["Read", "Grep", "Glob", "LS", "Skill", "WebFetch", "WebSearch"];
@@ -133,6 +148,11 @@ export class ToolSet {
   /** The tools of `mode`: every one in build, the read-only ones in plan. */
   forMode(mode: string): ToolSet {
     return mode === "plan" ? new ToolSet(this.tools.filter((t) => READ_ONLY.includes(t.name))) : this;
+  }
+
+  /** These tools and `more` (a session's MCP tools). */
+  plus(more: Tool[]): ToolSet {
+    return more.length === 0 ? this : new ToolSet(this.tools.concat(more));
   }
 
   find(name: string): Tool | null {
@@ -193,8 +213,21 @@ export class ToolSet {
         return globTool(input, ctx);
       case "LS":
         return lsTool(input, ctx);
-      default:
-        return ToolOutcome.failed("no tool named " + name);
+      case "Skill":
+        return skillTool(input, ctx);
+      default: {
+        // An MCP server's tool: `mcp__<server>__<tool>`.
+        const m = /^mcp__([A-Za-z0-9_-]+?)__(.+)$/.exec(name);
+        const server = m !== null ? m[1] : "";
+        const tool = m !== null ? m[2] : "";
+        const link = ctx.servers.find((l) => l.name.replace(/[^A-Za-z0-9_-]/g, "_") === server) ?? null;
+        if (m === null || link === null) return ToolOutcome.failed("no tool named " + name);
+        const got = await link.callTool(tool, inputJson, abort);
+        const o = new ToolOutcome();
+        o.text = got.text;
+        o.isError = got.isError;
+        return o;
+      }
     }
   }
 }

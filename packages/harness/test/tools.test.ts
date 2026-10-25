@@ -53,7 +53,7 @@ const main = async (): Promise<void> => {
   eq("under a folder", await run("Glob", '{"pattern":"*.ts","path":"src/deep"}'), "src/deep/two.ts");
   eq("no files", await run("Glob", '{"pattern":"*.rs"}'), "No files match *.rs");
   eq("LS: the entries, folders marked", await run("LS", '{"path":"src"}'), "deep/\nnotes.md\none.ts");
-  eq("the set in plan mode", tools.forMode("plan").tools.map((t) => t.name).join(","), "Read,Grep,Glob,LS");
+  eq("the set in plan mode", tools.forMode("plan").tools.map((t) => t.name).join(","), "Read,Grep,Glob,LS,Skill");
   ok("the tools as the API takes them", tools.json(false).startsWith('[{"name":"Read","description":"Read a file') && tools.json(false).includes('"input_schema":{"type":"object","properties":{"file_path"') && !tools.json(false).includes("eager"));
   eq("an input checked: a missing field, a wrong type, not JSON, not an object, unknown tool, a good one", [tools.checkInput("Read", "{}"), tools.checkInput("Read", '{"file_path":3}'), tools.checkInput("Bash", "{nope"), tools.checkInput("Bash", "[1]"), tools.checkInput("Nope", "{}"), tools.checkInput("Bash", '{"command":"ls","timeout":5}')].join(" | "), "the input lacks file_path | file_path should be a string | the input is not valid JSON | the input is not an object | no tool named Nope | ");
   rmSync(folder, { recursive: true, force: true });

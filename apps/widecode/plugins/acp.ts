@@ -595,9 +595,9 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
     const subagent = input !== null && typeof input.subagent_type === "string";
     // One of widecode's tools, as the agent names it after the server (opencode's widecode_AskUser).
     const tool = own.find((t) => title === t.name || title.endsWith("widecode_" + t.name.replace(/[^A-Za-z0-9_-]/g, "_"))) ?? null;
-    // The agent's skill tool (opencode's `skill`), the skill's name in its input.
+    // The agent's skill tool (opencode's `skill`, the harness's `Skill`), the skill's name in its input.
     const announcedAs = announced && known === undefined ? title : (known?.tool ?? "");
-    const skill = announcedAs === "skill" && input !== null ? str(input.name) : "";
+    const skill = announcedAs.toLowerCase() === "skill" && input !== null ? str(input.name) : "";
     const named = todos.length > 0 || subagent || tool !== null || skill.length > 0 || (known?.named ?? false);
     calls.set(callId, { kind, named, tool: announcedAs });
     const facts: widecode.CallFacts = {};

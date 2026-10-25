@@ -8,13 +8,17 @@
 // answered with it; Esc cancels a held turn; a model error is a notice; /new starts another
 // session; the tools command answers the Available tab; the chosen harness shows as the agent; the
 // Sessions tab lists the first session with the title the fake model gave, opening it again shows
-// its turns from its file, /title names it, a side question runs in a fork forgotten after,
+// its turns from its file, /title names it, a side question runs in a fork forgotten after, the
+// folder's skill shows in the Skills tab and a Skill call is a run of it, AskUser over widecode's
+// MCP server puts its question in the request panel and takes the answer back,
 // /compact summarizes the conversation and the status bar shows the context after.
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "@widecode/conversation/conversation.ts";
 import { Item, TEXT, THINKING, TOOL, Turn } from "@widecode/conversation/model.ts";
+import { Answer, Reply } from "@widecode/conversation/requests.ts";
+import { skillRuns } from "@widecode/conversation/skills.ts";
 import { NoStateFile } from "@light/kernel/settings.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
@@ -29,6 +33,8 @@ const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-harness-"));
   const home = mkdtempSync(join(tmpdir(), "widecode-harness-home-"));
   writeFileSync(join(folder, "a.txt"), "one\n");
+  mkdirSync(join(folder, ".claude", "skills", "greet"), { recursive: true });
+  writeFileSync(join(folder, ".claude", "skills", "greet", "SKILL.md"), "---\ndescription: Greet the user\n---\nSay hello warmly.\n");
   const fixture = join(home, "model.jsonl");
   writeFileSync(
     fixture,
@@ -41,6 +47,10 @@ const main = async (): Promise<void> => {
       '{"match":"result","text":"Edited."}',
       '{"match":"hold","text":"Holding","hold":true}',
       '{"match":"fail","error":"model unavailable"}',
+      '{"match":"greet","text":"Loading the skill.","tools":[{"name":"Skill","input":{"name":"greet"}}]}',
+      '{"match":"result","text":"Hello, warmly."}',
+      '{"match":"ask","text":"Asking.","tools":[{"name":"mcp__widecode__AskUser","input":{"questions":[{"question":"Which color?","header":"Color","options":[{"label":"Red","description":"warm"},{"label":"Blue"}]}]}}]}',
+      '{"match":"result","text":"Red it is."}',
     ].join("\n") + "\n",
   );
   const log = join(home, "trace.log");
@@ -56,6 +66,8 @@ const main = async (): Promise<void> => {
           name: "harness",
           command: ["node", main, "--harness", "--harness-home", home, "--log", log, "--harness-fake", fixture],
           tools: ["node", main, "--harness-tools", "{mode}"],
+          // The user's skills from a home of the test's, so the machine's own stay out.
+          skills: ["env", "HOME=" + home, "node", main, "--harness-skills", "--harness-home", home],
           sessions: ["node", main, "--harness-sessions", "--harness-home", home],
           forget: ["node", main, "--harness-forget", "{session}", "--harness-home", home],
           midTurn: true,
@@ -112,6 +124,28 @@ const main = async (): Promise<void> => {
   eq("the code column follows it", c.model.lastEdit, join(folder, "a.txt"));
   eq("the file changed", readFileSync(join(folder, "a.txt"), "utf8"), "one\ntwo\n");
 
+  // The skills: the folder's in the Skills tab from the skills command, a Skill call a run of it.
+  ok("the folder's skill in the Skills tab, from the skills command", await until(() => c.model.skillsKnown && c.model.skills.some((k) => k.name === "greet")));
+  eq("with its description, its source and its file", c.model.skills.filter((k) => k.name === "greet").map((k) => k.description + " | " + k.source + " | " + k.path).join(""), "Greet the user | project | " + join(folder, ".claude", "skills", "greet", "SKILL.md"));
+  ok("a turn loading it", await turn("greet me"));
+  const loaded = last().body.children.find((i: Item) => i.kind === TOOL) ?? null;
+  eq("the call: a skill, the skill's text as its result", loaded === null || loaded.result === null ? "" : loaded.category + " " + loaded.summary + " | " + loaded.result.text, "skill greet | The skill greet, from " + join(folder, ".claude", "skills", "greet") + ":\n\nSay hello warmly.");
+  eq("a run of it in the Skills tab", skillRuns(c.model).map((r) => r.name + " " + r.state).join(","), "greet done");
+
+  // widecode's own tools over its MCP server: AskUser's question in the request panel, the answer back to the model.
+  w.host.roles.chat.submit("ask me");
+  ok("AskUser's question in the request panel", await until(() => c.model.openRequests().length === 1));
+  const asked = c.model.openRequests()[0];
+  eq("its question and options", asked.category + " " + asked.questions[0].question + " " + asked.questions[0].options.map((o) => o.label).join("/"), "question Which color? Red/Blue");
+  const reply = new Reply("answered");
+  const pick = new Answer(asked.questions[0].question, false);
+  pick.labels.push("Red");
+  reply.answers.push(pick);
+  c.respond(asked, reply);
+  ok("answered: the turn goes on", await until(() => idle()));
+  const askCall = last().body.children.find((i: Item) => i.kind === TOOL) ?? null;
+  eq("the call holds the answer, the reply after it", (askCall === null || askCall.result === null ? "" : askCall.result.text) + " | " + last().body.children.filter((i: Item) => i.kind === TEXT).map((i: Item) => i.text).join("|"), 'The user answered:\n"Which color?": Red | Asking.|Red it is.');
+
   const held = c.model.turns.length;
   w.host.roles.chat.submit("hold on");
   await until(() => c.model.turns.length > held && last().body.children.some((i: Item) => i.kind === TEXT));
@@ -143,7 +177,7 @@ const main = async (): Promise<void> => {
   eq("the tools command answers the Available tab, with the calls counted", available().split("|").slice(0, 8).join("|"), "harness|Read  ×1|Write|Edit  ×1|Bash  ×1|Grep|Glob|LS");
   eq("plan mode", c.setMode("plan"), "");
   await until(() => available().startsWith("harness|Read  ×1|Grep"));
-  eq("plan mode offers the read-only tools", available().split("|").slice(0, 6).join("|"), "harness|Read  ×1|Grep|Glob|LS|widecode  MCP");
+  eq("plan mode offers the read-only tools", available().split("|").slice(0, 7).join("|"), "harness|Read  ×1|Grep|Glob|LS|Skill  ×1|widecode  MCP");
 
   const sessions = sent().split('"method":"session/new"').length - 1;
   const firstSession = c.sessionId;

@@ -96,7 +96,7 @@ const main = async (): Promise<void> => {
   const r = last().result;
   eq("the turn's end", r === null ? "none" : r.subtype + " " + String(r.isError), "end_turn false");
   ok("the handshake: initialize, then a session in the folder", sent().includes('"method":"initialize"') && sent().includes('"method":"session/new","params":{"cwd":"' + folder + '"'));
-  ok("then from the agent, the new one first", await until(() => sessionRows()[0] === "● Session fake-1") && sessionRows()[2] === "An earlier session" && sent().includes('"method":"session/list","params":{"cwd":"' + folder + '"}'));
+  ok("then from the agent, the new one first", await until(() => sessionRows()[0] === "● Session fake-1" && sessionRows()[2] === "An earlier session" && sent().includes('"method":"session/list","params":{"cwd":"' + folder + '"}')));
 
   ok("two messages", await turn("two"));
   eq("as two blocks", kinds(last().body.children) + " " + last().body.children.map((i: Item) => i.text).join(" "), "text,text First. Second.");

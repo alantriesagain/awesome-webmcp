@@ -13,7 +13,17 @@ import { LoopListener } from "./listener.ts";
 import { messagesTokens } from "./tokens.ts";
 import { ModelClient, ModelRequest, StreamEnd, StreamListener } from "../model/client.ts";
 import { CANCELLED, END_TURN, FAILED, MAX_TOKENS, Message, Part, TEXT, THINKING, TOOL_CALL, TOOL_RESULT, TOOL_USE, Usage, textPart } from "../model/message.ts";
-import { ToolContext, ToolOutcome, ToolSet } from "../tools/tool.ts";
+import { McpLink } from "../tools/mcp.ts";
+import { Tool, ToolContext, ToolOutcome, ToolSet } from "../tools/tool.ts";
+import { turnNote } from "../prompt/system.ts";
+
+const two = (n: number): string => (n < 10 ? "0" : "") + String(n);
+
+/** Today's date, the local one. */
+const today = (): string => {
+  const d = new Date();
+  return String(d.getFullYear()) + "-" + two(d.getMonth() + 1) + "-" + two(d.getDate());
+};
 
 /** What a tool result keeps for the model: the text, within this. */
 const RESULT_MAX = 40000;
@@ -42,6 +52,13 @@ export class LoopSession {
   readonly reads = new Set<string>();
   /** The model's window, what the compaction threshold is cut from. */
   window = 200000;
+  /** The session's MCP servers and their tools, offered beside the mode's. */
+  servers: McpLink[] = [];
+  extraTools: Tool[] = [];
+  /** What the Skill tool reads: the folder's skills when trusted, the user's home, the harness's folder. */
+  trusted = false;
+  home = "";
+  harnessRoot = "";
   /** The context's size after the last request (its real count), and how many messages there were then. */
   contextTokens = 0;
   sinceIndex = 0;
@@ -93,7 +110,7 @@ export const danglingResults = (s: LoopSession): Message | null => {
     r.callId = p.callId;
     r.text = "interrupted";
     r.isError = true;
-    r.acpJson = ToolOutcome.failed("interrupted").json("other");
+    r.acpJson = ToolOutcome.failed("interrupted").json("other", p.name);
     m.parts.push(r);
   }
   return m;
@@ -130,8 +147,9 @@ export class AgentLoop {
     const user = new Message("user", s.nextUserId());
     user.parts.push(textPart(text));
     this.add(s, user, listener);
-    const tools = this.tools.forMode(s.mode);
     for (;;) {
+      // The mode's tools as it stands now (a plan approved mid-turn leaves plan mode).
+      const tools = this.tools.forMode(s.mode).plus(s.extraTools);
       if (s.contextEstimate() > compactThreshold(s.window, this.compactAt)) {
         const c = await this.compactContext(s, this.keepTokens, "", abort);
         if (c !== null && c.error.length === 0) {
@@ -263,7 +281,11 @@ export class AgentLoop {
       const p = calls.get(id);
       if (p !== undefined) p.inputJson += json;
     };
-    const req = new ModelRequest(s.model, s.system, withSummary(s.summary, s.messages));
+    const planTool = s.extraTools.find((t) => t.name.endsWith("__PresentPlan")) ?? null;
+    const system = s.system.slice();
+    system.push(turnNote(today(), s.mode, planTool !== null ? planTool.name : ""));
+    const req = new ModelRequest(s.model, system, withSummary(s.summary, s.messages));
+    req.systemCached = s.system.length;
     req.effort = s.effort;
     req.toolsJson = tools.json(this.extras);
     return this.client.stream(req, sl, abort);
@@ -272,6 +294,10 @@ export class AgentLoop {
   /** Run the batch: one at a time when any call mutates, else together. */
   private async batch(s: LoopSession, calls: Call[], tools: ToolSet, listener: LoopListener, abort: Abort): Promise<void> {
     const ctx = new ToolContext(s.cwd, s.mode, s.reads);
+    ctx.servers = s.servers;
+    ctx.trusted = s.trusted;
+    ctx.home = s.home;
+    ctx.harnessRoot = s.harnessRoot;
     const sequential = calls.some((c) => {
       const t = tools.find(c.part.name);
       return t === null || t.mutating;
@@ -310,7 +336,7 @@ export class AgentLoop {
       r.text = o.text.length > RESULT_MAX ? o.text.slice(0, RESULT_MAX) + "\n[… cut at " + String(RESULT_MAX) + " characters]" : o.text;
       r.isError = o.isError;
       const t = tools.find(c.part.name);
-      r.acpJson = o.json(t !== null ? t.kind : "other");
+      r.acpJson = o.json(t !== null ? t.kind : "other", t !== null ? t.title : c.part.name);
       m.parts.push(r);
     }
     return m;

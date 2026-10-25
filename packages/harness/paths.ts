@@ -4,6 +4,8 @@ import { join } from "node:path";
 
 export class HarnessPaths {
   readonly storeRoot: string;
+  /** The user's home, whose `.agents/skills` and `.claude/skills` hold the user's skills ("" for none). */
+  userHome = "";
 
   constructor(storeRoot: string) {
     this.storeRoot = storeRoot;

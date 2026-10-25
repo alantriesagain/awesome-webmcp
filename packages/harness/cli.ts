@@ -17,6 +17,7 @@ import { ModelClient } from "./model/client.ts";
 import { FakeClient } from "./model/fake.ts";
 import { ModelInfo, ModelRegistry, NO_THINKING, Provider } from "./model/registry.ts";
 import { HarnessPaths } from "./paths.ts";
+import { scanSkills, skillsJson } from "./prompt/skills.ts";
 import { SessionStore, sessionsJson } from "./session/store.ts";
 import { ToolSet, builtInTools } from "./tools/tool.ts";
 
@@ -70,8 +71,10 @@ export const harnessMain = (storeRoot: string, args: string[], build: string): P
     process.stdout.write(toolsListing(tools) + "\n");
     return done(0);
   }
+  paths.userHome = process.env["HOME"] ?? "";
+  // The skills of the folder the command runs in (`cd <folder> && ...`), the user's and the harness's.
   if (args.includes("--harness-skills")) {
-    process.stdout.write("[]\n");
+    process.stdout.write(skillsJson(scanSkills(process.cwd(), true, paths.userHome, paths.root())) + "\n");
     return done(0);
   }
   // The sessions side commands run in the folder (`cd <folder> && ...`), whose sessions they mean.
