@@ -276,6 +276,17 @@ Measure before changing a performance path.
 - [x] **App tests for the config migration preserving every key, and the quit flush.** Migration
       preserves every key; the quit flush order is covered by `quit.test.ts`.
 
+## Milestone I: peers, the LAN git bridge
+
+The machines on one network share repositories with each other, fetch-first, no hub (`packages/peers`, the `peers` plugin, `README.md` "Peers").
+
+- [x] **The bridge's core.** A machine's identity (ed25519, the id its key's SHA-256), the registry (peers with mutual tokens, shares by root commit with a branch filter and an allow list), pairing by a six-digit code and an HMAC proof, the smart HTTP server piping `upload-pack --stateless-rpc` (and `receive-pack` for hosted repositories), one daemon per machine with a loopback control API and a state file, `widecode --peers-daemon`. (`eaf2190`)
+- [x] **The Peers tab, the segment, the namespace.** `api.peers` (`ensure`, `request`, `share`, `remote`, `fetch`, `remotes`); a peer's copy matched by root commit becomes a remote named after it, its token in the local git config; auto-fetch keeps ahead and behind live. (`180bc46`)
+- [x] **Discovery, and the daemon started by the real app alone.** mDNS through avahi and dns-sd, nearby machines joinable by name; the launcher a host field only `startWidecode` sets, auto-start only when the bridge is in use or asked for, at most three starts thirty seconds apart. (`701e0a6`)
+- [x] **The Git tab's peers.** The paired peers with a remote here, their branches against ours, Enter for their log, the `peer` compare base, the badge. (`2f1b796`)
+- [x] **Hosted repositories.** `/peers host <name>` makes a bare repository under the store that paired peers push into; empty until the first push gives it its id.
+- [ ] **Later.** TLS pinned by peer id; an in-process mDNS responder over dgram; a push from the tab; the daemon as a login item.
+
 ## Deferred or skip
 
 - **Storage: files or models.** The durable state is split across file services (`Store`,

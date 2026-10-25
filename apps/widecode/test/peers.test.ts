@@ -7,7 +7,7 @@
 // config, the auto-fetch brings its commit, and the row says ↓1; /peers fetch says so too; /peers
 // forget removes it and its token stops working.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createWidecode } from "../src/compose.ts";
@@ -124,6 +124,11 @@ const main = async (): Promise<void> => {
   await until(() => message().startsWith("fetched mac"));
   ok("/peers fetch says what the peer has", message().includes("1 commit you do not have on main"));
   ok("the Git badge and the segment see it", tab !== null && tab.badge().some((r) => r.text === "↓1"));
+
+  // Hosting a bare repository by name: it shows as hosted, taking pushes at its key.
+  app.host.kernel.commands.run("/peers host mirror");
+  await until(() => rows().some((r) => r.includes("mirror") && r.includes("hosted")));
+  ok("/peers host: a hosted repository under the store", rows().some((r) => r.includes("mirror") && r.includes("takes pushes at h/mirror")) && existsSync(join(storeA, "peers", "hosted", "mirror.git", "HEAD")));
 
   // Before the forget, the other machine fetches from this one with the token this one gave it.
   const theirToken = b.registry.peerById(a.identity.id)!.tokenWePresent;

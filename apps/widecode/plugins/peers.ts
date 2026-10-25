@@ -6,7 +6,8 @@
 // paired yet are listed as nearby, and a join may name one. Enter fetches the peer under the cursor, s shares or
 // unshares this folder's repository, p shows a code, x forgets the peer under the cursor, r reads
 // again. `/peers` opens the tab; `/peers pair`, `/peers join <host[:port]> <code>`, `/peers share`,
-// `/peers unshare`, `/peers fetch <peer>`, `/peers forget <peer>`, `/peers name <name>` and
+// `/peers unshare`, `/peers host <name|path>` (a bare repository peers may push into), `/peers fetch
+// <peer>`, `/peers forget <peer>`, `/peers name <name>` and
 // `/peers stop` do the same from the composer. The daemon (widecode --peers-daemon) does the serving
 // and is started when this plugin needs it; auto-fetch keeps ahead and behind live. Nothing here
 // touches a working tree: a fetch writes refs only.
@@ -142,9 +143,15 @@ widecode.plugin({
       for (const s of shared) if (s.mode === "live" && s.repoId === myRepoId && myRepoId.length > 0) return s;
       return null;
     };
+    /** The peer's copy of this folder's repository: a hosted one first (it takes pushes too), else its live checkout. */
     const match = (p: PeerView): Offered | null => {
-      for (const o of p.repos) if (myRepoId.length > 0 && o.repoId === myRepoId) return o;
-      return null;
+      let live: Offered | null = null;
+      for (const o of p.repos) {
+        if (myRepoId.length === 0 || o.repoId !== myRepoId) continue;
+        if (o.mode === "hosted") return o;
+        if (live === null) live = o;
+      }
+      return live;
     };
     const peerNamed = (name: string): PeerView | null => {
       for (const p of peers) if (p.name === name || p.id === name || p.id.startsWith(name)) return p;
@@ -199,7 +206,7 @@ widecode.plugin({
       if (r.kind === "repo") {
         const s = shared[r.repo ?? 0];
         const mine = s.repoId === myRepoId && s.mode === "live";
-        const tail = (s.branches !== null ? " · " + s.branches.join(",") : "") + (s.allow !== null ? " · " + String(s.allow.length) + " allowed" : "") + (mine ? " · this folder" : "");
+        const tail = (s.branches !== null ? " · " + s.branches.join(",") : "") + (s.allow !== null ? " · " + String(s.allow.length) + " allowed" : "") + (mine ? " · this folder" : "") + (s.mode === "hosted" ? " · takes pushes at " + s.key : "");
         return { bg, runs: [{ text: "   ● ", fg: T.ok }, { text: u.clip(s.name, Math.max(4, width - 8 - u.width(tail))), fg: mine ? T.link : "", bold: mine }, { text: " " + s.mode, fg: DIM }, { text: tail, fg: DIM }] };
       }
       if (r.kind === "share") return { bg, runs: [{ text: "   ○ ", fg: DIM }, { text: "share this folder", fg: T.link }, { text: " (s)", fg: DIM }] };
@@ -220,7 +227,7 @@ widecode.plugin({
         const o = p.repos[r.repo ?? 0];
         const same = o.repoId === myRepoId && myRepoId.length > 0;
         const tip = branch.length > 0 && o.tips[branch] !== undefined ? " · " + branch + " " + o.tips[branch].slice(0, 7) : "";
-        return { bg, runs: [{ text: "      " + (same ? "● " : "  "), fg: T.link }, { text: u.clip(o.name, Math.max(4, width - 12 - u.width(tip))), fg: same ? T.link : "" }, { text: " " + o.mode + (same ? " · same as this folder" : "") + tip, fg: DIM }] };
+        return { bg, runs: [{ text: "      " + (same ? "● " : "  "), fg: T.link }, { text: u.clip(o.name, Math.max(4, width - 12 - u.width(tip))), fg: same ? T.link : "" }, { text: " " + o.mode + (same ? (o.mode === "hosted" ? " · this folder's, takes pushes" : " · same as this folder") : "") + tip, fg: DIM }] };
       }
       if (r.kind === "nearby") {
         const n = nearby[r.near ?? 0];
@@ -450,6 +457,19 @@ widecode.plugin({
       await refresh(false, true);
     };
 
+    /** Host a bare repository: a new one under the store by name, or an existing bare one by its path. */
+    const host = async (arg: string): Promise<void> => {
+      const what = arg.trim();
+      if (what.length === 0) return api.tell("/peers host <name> makes a bare repository peers may push into; /peers host /path/to/repo.git hosts one that exists");
+      if (!(await up())) return;
+      const byPath = what.includes("/");
+      const a = await req("POST", "/api/host", byPath ? { name: what.replace(/\/+$/, "").split("/").pop() ?? what, path: what } : { name: what, path: "" });
+      if (a.status !== 200) return api.tell("could not host " + what + ": " + u.str(rec(parse(a.text)).error));
+      const r = rec(rec(parse(a.text)).repo);
+      api.tell("hosting " + u.str(r.name) + " at " + u.str(r.key) + ": paired machines may push to http://" + (me.addresses[0] ?? "<this address>") + ":" + String(me.port) + "/" + u.str(r.key));
+      await refresh(false, true);
+    };
+
     const unshareHere = async (): Promise<void> => {
       const s = myShare();
       if (s === null) return api.tell("this folder's repository is not shared");
@@ -544,7 +564,7 @@ widecode.plugin({
 
     api.commands.add({
       name: "/peers",
-      usage: "[pair | join <host[:port]> <code> | share | unshare | fetch <peer> | forget <peer> | name <name> | stop]",
+      usage: "[pair | join <host[:port]> <code> | share | unshare | host <name|path> | fetch <peer> | forget <peer> | name <name> | stop]",
       help: "the machines on this network sharing repositories with this one",
       run: (arg) => {
         const parts = arg.trim().split(/\s+/);
@@ -556,6 +576,7 @@ widecode.plugin({
         if (verb === "join") return void pairJoin(rest);
         if (verb === "share") return void shareHere();
         if (verb === "unshare") return void unshareHere();
+        if (verb === "host") return void host(rest);
         if (verb === "fetch" || verb === "forget") {
           const p = peerNamed(rest);
           if (p === null) return api.tell(rest.length > 0 ? "no peer named " + rest : "/peers " + verb + " <peer>");
@@ -578,9 +599,9 @@ widecode.plugin({
           });
           return;
         }
-        api.tell("/peers " + verb + "? pair, join, share, unshare, fetch, forget, name or stop");
+        api.tell("/peers " + verb + "? pair, join, share, unshare, host, fetch, forget, name or stop");
       },
-      complete: (arg) => ["pair", "join ", "share", "unshare", "fetch ", "forget ", "name ", "stop"].filter((v) => v.startsWith(arg.trim())),
+      complete: (arg) => ["pair", "join ", "share", "unshare", "host ", "fetch ", "forget ", "name ", "stop"].filter((v) => v.startsWith(arg.trim())),
     });
 
     api.every(refreshMs, () => {

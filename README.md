@@ -216,6 +216,14 @@ Enter switches. A command's name completes the same way after "/", and `/effort`
 
 Other commands: `pnpm probes` runs the compiler probes into `probes/RESULTS.md`.
 
+## Peers: the machines on your network
+
+widecode shares a machine's repositories with the machines paired with it over the LAN, in place and read-only, and the other side fetches. Each machine runs one daemon (`widecode --peers-daemon`, started by the app when the bridge is in use or asked for) that serves git's smart HTTP protocol out of the shared checkouts, announces itself over mDNS (avahi on Linux, dns-sd on macOS) and keeps a registry under `~/.widecode/peers/`: its keypair, the peers it paired with and their tokens, what it shares. Nothing is written into a repository, and a working tree is never touched: a fetch writes refs.
+
+Pairing is a six-digit code: `/peers pair` shows one here for two minutes; `/peers join <host:port> <code>` (or a nearby machine's name) on the other machine exchanges keys and mutual tokens. `/peers share` shares this folder's repository (at its root, every local branch and tag; the registry keeps a branch filter and an allow list per repository). A paired peer's copy of this repository is matched by root commit and set up as a remote named after the peer, its token in the local git config (`http.<url>.extraHeader`, never in a URL); the plugin fetches it when the peer appears and every two minutes, so the Peers tab and the Git tab say how far ahead or behind each copy is. `/peers host <name>` makes a bare repository under the store that paired peers may push into (`/peers host /path/to/repo.git` hosts one that exists), fetched and pushed at `/h/<name>`; a live checkout is fetched at `/r/<rootCommit>`.
+
+The Peers tab (beside Git) lists this machine and its shares, the paired peers with what they offer and the machines nearby not paired yet, and the pairing code; Enter fetches, `s` shares or unshares, `p` pairs, `x` forgets, `r` reads again. The status bar's `peers` segment says how many peers are online, or which one is ahead. Requests from outside the private address ranges are refused; a forgotten peer's token stops working at once. The daemon's flags: `--port` (7337 by default), `--name`, `--bind`, `--no-discovery`; the plugin's section of config.json: `autoFetch`, `refreshMs`.
+
 ## Layout
 
 | Directory | What it is |

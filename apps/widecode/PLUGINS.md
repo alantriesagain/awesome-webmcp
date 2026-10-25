@@ -458,7 +458,7 @@ phase, the agent's events) and the screen as it was.
 | `files` | the Files tab; `c`; `/files` | | the switch |
 | `sessions` | the Sessions tab, a chosen session's details in the code column, Enter opening it here and t in a new terminal; `/resume /rename /title`, F4; the title policy | `titles`, `titleModel`, `terminal` | |
 | `git` | the Git tab; `b` and the compare base; a session's starting commit | | |
-| `peers` | the Peers tab and segment: this machine's shared repositories, the paired machines and what they offer, the machines nearby (mDNS through avahi or dns-sd), pairing, fetch, `/peers` | `autoFetch`, `refreshMs` | the daemon it starts |
+| `peers` | the Peers tab and segment: this machine's shared repositories, the paired machines and what they offer, the machines nearby (mDNS through avahi or dns-sd), pairing, fetch, hosted bare repositories peers push into, `/peers` | `autoFetch`, `refreshMs` | the daemon it starts |
 | `agents` | the Agents tab of the tools column: the session's subagents, one's steps shown in the code column | | |
 | `changes` | the changes strip of the band, under the code column; `[ ]`, Alt+↑↓ | | |
 | `status` | the session table under the chat and the calls' under the tools column, their segments and command cells | `separator`, `lines`, `toolsLines` | |

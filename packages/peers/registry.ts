@@ -68,7 +68,8 @@ export class Peer {
 
 /** A repository this machine shares: "live" is a working checkout served read-only, "hosted" a bare repository that takes pushes. */
 export class SharedRepo {
-  readonly repoId: string;
+  /** The oldest root commit; "" for a hosted repository nobody pushed to yet. */
+  repoId: string;
   readonly path: string;
   name: string;
   mode: string;
@@ -96,7 +97,7 @@ export class SharedRepo {
   }
 
   toJson(): unknown {
-    const v: unknown = { repoId: this.repoId, path: this.path, name: this.name, mode: this.mode, branches: this.branches, allow: this.allow };
+    const v: unknown = { key: this.key, repoId: this.repoId, path: this.path, name: this.name, mode: this.mode, branches: this.branches, allow: this.allow };
     return v;
   }
 
@@ -111,8 +112,9 @@ export class SharedRepo {
     if (r === null) return null;
     const repoId = str(r["repoId"]);
     const path = str(r["path"]);
-    if (repoId.length === 0 || path.length === 0) return null;
-    return new SharedRepo(repoId, path, str(r["name"]), str(r["mode"]), Array.isArray(r["branches"]) ? strs(r["branches"]) : null, Array.isArray(r["allow"]) ? strs(r["allow"]) : null);
+    const mode = str(r["mode"]);
+    if (path.length === 0 || (repoId.length === 0 && mode !== "hosted")) return null;
+    return new SharedRepo(repoId, path, str(r["name"]), mode, Array.isArray(r["branches"]) ? strs(r["branches"]) : null, Array.isArray(r["allow"]) ? strs(r["allow"]) : null);
   }
 }
 
@@ -188,7 +190,7 @@ export class Registry {
 
   /** The live checkout identified by `repoId` (what another machine's copy matches). */
   repoById(repoId: string): SharedRepo | null {
-    for (const s of this.repos) if (!s.hosted && s.repoId === repoId) return s;
+    for (const s of this.repos) if (!s.hosted && s.repoId === repoId && repoId.length > 0) return s;
     return null;
   }
 

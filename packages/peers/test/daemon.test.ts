@@ -1,7 +1,9 @@
 // The daemon as a process would see it: one per store (a second start is refused while the first
 // lives), the state file a client reads, the control API behind its token, pairing between two
 // daemons over the loopback, and the stop that removes the file.
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { SpawnOptions, spawnCapped } from "@light/lib/process.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DaemonClient, DaemonOptions, processAlive, readDaemonState, startDaemon } from "@widecode/peers";
@@ -74,6 +76,22 @@ const main = async (): Promise<void> => {
   ok("a peer's offers come through the daemon", noOffer.ok && noOffer.text.includes('"repos":[]'));
   const unknownPeer = await client.request("POST", "/api/peer/repos", { peerId: "nobody" });
   eqn("an unknown peer is 404", unknownPeer.status, 404);
+  // Hosting: a bare repository made by name under the store, empty until the first push, which gives it its id.
+  const hosted = await client.request("POST", "/api/host", { name: "mirror", path: "" });
+  ok("a hosted repository is made by name", hosted.ok && hosted.text.includes('"key":"h/mirror"'));
+  ok("as a bare repository under the store", existsSync(join(a.paths.hosted, "mirror.git", "HEAD")));
+  ok("with no id yet", a.registry.repoByKey("h/mirror") !== null && a.registry.repoByKey("h/mirror")!.repoId === "");
+  ok("a bad name is refused", (await client.request("POST", "/api/host", { name: "bad name", path: "" })).status === 400);
+  const src = join(root, "src");
+  mkdirSync(src);
+  spawnSync("sh", ["-c", "git init -q -b main '" + src + "' && echo x > '" + src + "/a.txt' && git -C '" + src + "' add . && git -C '" + src + "' -c user.email=t@t -c user.name=t commit -qm first"], { encoding: "utf8" });
+  const bToken = b.registry.peerById(a.identity.id)!.tokenWePresent;
+  const po = new SpawnOptions();
+  po.timeoutMs = 30000;
+  const pushed = await spawnCapped("env", ["GIT_TERMINAL_PROMPT=0", "git", "-C", src, "-c", "credential.helper=", "-c", "http.extraHeader=Authorization: Bearer " + bToken, "push", "-q", "http://127.0.0.1:" + String(a.port) + "/h/mirror", "main"], po);
+  eq("the other machine pushes into it", pushed.err, "");
+  const stateAfter = await client.request("GET", "/api/state", null);
+  ok("after the push the hosted repository has its id", stateAfter.ok && a.registry.repoByKey("h/mirror")!.repoId.length === 40);
   const shareNothing = await client.request("POST", "/api/share", { path: join(root, "nowhere") });
   eqn("sharing a missing folder is 400", shareNothing.status, 400);
   const forgot = await client.request("POST", "/api/forget", { peerId: b.identity.id });

@@ -342,9 +342,9 @@ export class Daemon {
   /** Share the repository at `path`: the record, or why not. A hosted one must be bare; a live one must not. */
   async share(path: string, name: string, mode: string, branches: string[] | null, allow: string[] | null): Promise<SharedRepo | string> {
     if (!existsSync(path) || !statSync(path).isDirectory()) return "not a folder: " + path;
-    const repoId = await this.rootCommitOf(path);
-    if (repoId.length === 0) return "not a git repository with a commit: " + path;
     const bare = await this.isBare(path);
+    const repoId = await this.rootCommitOf(path);
+    if (repoId.length === 0 && !(mode === "hosted" && bare)) return "not a git repository with a commit: " + path;
     if (mode === "hosted" && !bare) return "a hosted repository is a bare one; this is a checkout: " + path;
     if (mode !== "hosted" && bare) return "a bare repository is hosted, not served live: " + path;
     if (!bare) {
@@ -358,6 +358,41 @@ export class Daemon {
     this.registry.save();
     this.note("sharing " + repo.key + " (" + label + ", " + repo.mode + ") at " + path);
     return repo;
+  }
+
+  /**
+   * Host a bare repository named `name`: the one at `path`, or a new empty one made under the store's
+   * hosted folder when `path` is "". Paired peers may push into it (the allow list applies).
+   */
+  async host(name: string, path: string): Promise<SharedRepo | string> {
+    const label = name.trim();
+    if (!/^[A-Za-z0-9._-]+$/.test(label)) return "a hosted repository's name is letters, digits, dots, dashes and underscores" + (label.length > 0 ? ": " + label : "");
+    let where = path;
+    if (where.length === 0) {
+      where = join(this.paths.hosted, label.endsWith(".git") ? label : label + ".git");
+      if (!existsSync(where)) {
+        mkdirSync(this.paths.hosted, { recursive: true, mode: 0o700 });
+        const o = new SpawnOptions();
+        o.timeoutMs = 20000;
+        const run: ProcessRun = await spawnCapped(this.git, ["init", "-q", "--bare", where], o);
+        if (!run.ok) return "cannot make " + where + ": " + (run.error.length > 0 ? run.error : run.err);
+        this.note("made the bare repository " + where);
+      }
+    }
+    return this.share(where, label.replace(/\.git$/, ""), "hosted", null, null);
+  }
+
+  /** A hosted repository that has a commit now (pushed since it was made) gets its root commit as its id. */
+  async fillRepoIds(): Promise<void> {
+    let changed = false;
+    for (const s of this.registry.repos) {
+      if (!s.hosted || s.repoId.length > 0) continue;
+      const id = await this.rootCommitOf(s.path);
+      if (id.length === 0) continue;
+      s.repoId = id;
+      changed = true;
+    }
+    if (changed) this.registry.save();
   }
 
   unshare(key: string): boolean {
@@ -452,6 +487,12 @@ export class Daemon {
       return plain(res, 401, "unauthorized");
     }
     this.seen(peer.id, from, 0, Date.now());
+    if (url.path === "/repos") {
+      void this.fillRepoIds().then(() => {
+        if (!this.gitServer.serve(req, res, peer)) plain(res, 404, "not found");
+      });
+      return;
+    }
     if (!this.gitServer.serve(req, res, peer)) plain(res, 404, "not found");
   }
 
@@ -460,7 +501,10 @@ export class Daemon {
     if (token !== this.localToken) return plain(res, 401, "unauthorized");
     const url = new RequestUrl(req.url ?? "/");
     const now = Date.now();
-    if (req.method === "GET" && url.path === "/api/state") return json(res, 200, this.stateJson(now));
+    if (req.method === "GET" && url.path === "/api/state") {
+      await this.fillRepoIds();
+      return json(res, 200, this.stateJson(now));
+    }
     if (req.method !== "POST") return plain(res, 405, "only POST");
     const body = recordOf(parseJson(await readBody(req))) ?? {};
     try {
@@ -478,6 +522,11 @@ export class Daemon {
         }
         case "/api/share": {
           const r = await this.share(str(body["path"]), str(body["name"]), str(body["mode"]), Array.isArray(body["branches"]) ? strs(body["branches"]) : null, Array.isArray(body["allow"]) ? strs(body["allow"]) : null);
+          if (typeof r === "string") return json(res, 400, { error: r });
+          return json(res, 200, { repo: r.toJson() });
+        }
+        case "/api/host": {
+          const r = await this.host(str(body["name"]), str(body["path"]));
           if (typeof r === "string") return json(res, 400, { error: r });
           return json(res, 200, { repo: r.toJson() });
         }
