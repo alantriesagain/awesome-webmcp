@@ -193,6 +193,9 @@ const main = async (): Promise<void> => {
   await until(() => branchRows().startsWith("11b"));
   eq("and all of them on demand", branchRows(), "11b fewer branches");
   unmount(app.shell);
+  // The plugins stopped and their processes ended before the repository goes: a git call started after would find no folder.
+  app.host.kernel.stop();
+  app.js.killProcesses();
   ws.close();
   rmSync(repo, { recursive: true, force: true });
   done();

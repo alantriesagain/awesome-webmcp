@@ -340,8 +340,9 @@ risks); each slice below is one commit with its tests.
       `html.ts`, `WebSearch` with the chain (searxng, google, brave, tavily; duckduckgo opt-in).
       Google refuses a fresh headless profile as unusual traffic from this machine (October 2026),
       so a search here needs SearXNG or a key; Anthropic's server-side search is left for later.
-- [ ] **The selftest and the docs.** The `harness` selftest, README.md "The harness", PLUGINS.md's
-      wording of the harness folder, `light-native coverage --apps` with the daemon's code.
+- [x] **The selftest and the docs.** The `harness` selftest, README.md "The harness",
+      `light-native coverage --apps` with the daemon's code (static). PLUGINS.md keeps "The
+      harness" as the folder's heading, which AGENTS.md and the docs the binary carries name.
 - [ ] **Later.** The OpenAI-compatible client; a `browser` tool over the DevTools protocol; subagents;
       a deny list from `permissions.deny`; branching; images in tool results; the native `fetch`
       behind `HttpStream`; prices refreshed from the providers.

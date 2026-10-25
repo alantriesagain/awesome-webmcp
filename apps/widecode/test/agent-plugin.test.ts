@@ -129,7 +129,7 @@ const main = async (): Promise<void> => {
   ok("/new stops its process", !c.started);
 
   eq("Claude Code again", w.host.session.useAgent("claude") + c.agent.id(), "claude");
-  ok("an agent no plugin brought: said", w.host.session.useAgent("nope") === "no agent named nope (there are opencode, dsh, claude, echo)");
+  eq("an agent no plugin brought: said", w.host.session.useAgent("nope"), "no agent named nope (there are opencode, dsh, harness, claude, echo)");
 
   w.host.kernel.stop();
   w.js.killProcesses();

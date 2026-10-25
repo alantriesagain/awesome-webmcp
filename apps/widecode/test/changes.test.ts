@@ -98,11 +98,11 @@ const main = async (): Promise<void> => {
   let strip: JsBand | null = null;
   for (const b of app.host.screen.band) if (b.id === "changes" && b.view instanceof JsBand) strip = b.view;
   const bar = (width: number): Line[] => (strip !== null ? strip.lines(width) : []);
-  // The file opens once read and diffed (longer on a busy machine): until the strip names it.
+  // The file opens once read and diffed (longer on a busy machine, seconds in a full parallel run): until the strip names it.
   const open = async (path: string): Promise<void> => {
     app.code.open(path);
     const name = path.slice(path.lastIndexOf("/") + 1);
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 300; i++) {
       await wait(50);
       if (bar(160).map(textOf)[1].includes("▸ " + name)) break;
     }

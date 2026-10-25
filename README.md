@@ -72,6 +72,7 @@ pnpm widecode -- --agent opencode              # talk to opencode over ACP inste
 pnpm light-native selftest widecode shell               # in a pty on a temp repo: tree, diff, a write followed within 1 s
 pnpm light-native selftest widecode fake                # a turn against a fake CLI replaying recorded traffic
 pnpm light-native selftest widecode fake-acp            # a permission and a question over widecode's MCP server, answered from the panel, against a fake ACP agent
+pnpm light-native selftest widecode harness             # widecode's own agent on its fake model: a command and a reply, then AskUser answered from the panel
 NATIVE_LIVE=1 pnpm light-native selftest widecode live-turn   # also live-interrupt, live-ask, live-plan, live-agent, live-edit, live-quit
 NATIVE_LIVE=1 pnpm light-native selftest widecode live-acp    # opencode over ACP runs a command and replies (its free model); also live-acp-ask, live-acp-plan
 ```
@@ -229,6 +230,51 @@ Enter switches. A command's name completes the same way after "/", and `/effort`
 
 Other commands: `pnpm probes` runs the compiler probes into `probes/RESULTS.md`.
 
+## The harness: widecode's own agent
+
+`widecode --agent harness` (or `"agent": "harness"` in config.json) talks to widecode's own coding
+agent, in the spirit of pi: the same binary started as `widecode --harness`, speaking ACP on stdio
+to the acp plugin, calling model APIs directly and running its own tools. It needs an API key, not
+a subscription: `widecode --harness-auth deepseek` (or `anthropic`) reads one from stdin into
+`~/.widecode/auth.json`, readable by the user alone, and `DEEPSEEK_API_KEY` or `ANTHROPIC_API_KEY`
+in the environment take precedence. `widecode --harness-models` lists the models and which
+providers have a key. Anthropic's models and DeepSeek's (through its Anthropic-format endpoint)
+are built in; another provider that serves the Anthropic Messages API is an entry of
+`harness.providers`.
+
+Its tools are named as Claude Code names them: Read, Write, Edit, Bash, Grep, Glob, LS, Skill,
+WebFetch and WebSearch, and widecode's own over its MCP server (AskUser and PresentPlan in the
+request panel, the harness folder's tools). It asks no permission: every call runs, as in pi. Plan
+mode (/plan, Shift+Tab) offers the read-only tools alone. Run risky work in a container or a
+worktree. Its system prompt holds the project's prompt.md, the instructions in AGENTS.md and
+CLAUDE.md from the repository's root down (a trusted folder's) and the skills found in the
+folder's `.agents/skills` and `.claude/skills`, the user's `~/.agents/skills` and
+`~/.claude/skills`, and `~/.widecode/harness/skills`.
+
+Sessions are JSONL files under `~/.widecode/harness/sessions/`, listed in the Sessions tab, shown
+again when opened, named by the provider's cheapest model after the first turn (`/title` asks again
+or takes the words after it). Past the context threshold (the window less a reserve, or
+`harness.compactAt`, 200,000 tokens by default) the earlier messages are summarized; `/compact
+[hint]` does it at once. WebFetch reads a page through headless Chromium (Playwright's, or one on
+PATH; curl without one). WebSearch tries SearXNG, Google through the browser, then Brave's and
+Tavily's APIs; Google refuses a fresh headless browser on some networks, and SearXNG or a key
+avoids that:
+
+```json
+{
+  "agent": "harness",
+  "harness": {
+    "model": "deepseek/deepseek-v4-pro",
+    "effort": "high",
+    "compactAt": 200000,
+    "search": { "searxng": "http://127.0.0.1:8080" },
+    "browser": { "command": "" }
+  }
+}
+```
+
+The package is `packages/harness` (its README has the files); PLAN.md's milestone J is its plan.
+
 ## Peers: the machines on your network
 
 widecode shares a machine's repositories with the machines paired with it over the LAN, in place and read-only, and the other side fetches. Each machine runs one daemon (`widecode --peers-daemon`, started by the app when the bridge is in use or asked for) that serves git's smart HTTP protocol out of the shared checkouts, announces itself over mDNS (avahi on Linux, dns-sd on macOS) and keeps a registry under `~/.widecode/peers/`: its keypair, the peers it paired with and their tokens, what it shares. Nothing is written into a repository, and a working tree is never touched: a fetch writes refs.
@@ -244,7 +290,7 @@ The Peers tab (beside Git) lists this machine with its shares (◆ marks this fo
 | Directory | What it is |
 |---|---|
 | `light/packages/native/*`, `light/packages/tui/*` | light's packages: `@light/cli` (`light-native`, the tooling: `prepare`, `build`, `run`, `selftest`, `test`, `coverage`, `typecheck`, `check`, `probes`, `install`, `desktop`), and `lib`, `highlight`, `plugins`, `workspace`, `test`, `kernel`, `ui`, `markdown`: what the core's modules share; the tokenizers; the embedded JavaScript; a folder's files and git; the tests' helpers; the plugin kernel; the palette and the windowed list; Markdown as lines (light's `packages/README.md`) |
-| `packages/agent`, `conversation`, `screen`, `code`, `chat` | the `@widecode/*` packages, each with its README: the `claude -p` sidecar and the MCP server; the conversation with an agent; the screen plugins contribute to; the code column; the chat views |
+| `packages/agent`, `conversation`, `harness`, `screen`, `code`, `chat` | the `@widecode/*` packages, each with its README: the `claude -p` sidecar and the MCP server; the conversation with an agent; widecode's own agent (`widecode --harness`); the screen plugins contribute to; the code column; the chat views |
 | `apps/widecode` | the Claude frontend, a native core and JS plugins (`PLUGINS.md`): `plugins/<id>.ts` (the built-in plugins: chat, code, tools, agents, files, sessions, git, changes, status, models, languages, and the agents' claude and acp), `widecode.d.ts` (the plugin API's types), `src/` (controllers, views, the plugin runtime and the API's answers, the store and the harness folder), `test/` (its tests, fixtures, fakes and goldens) |
 | `apps/desktop` | the desktop app: `contract.ts` (the bridge's methods and events, imported by both sides), `src/main.ts` (the backend: a `DesktopApp` on light's desktop host with the Claude sidecar as `AgentService`, `--selftest`), `web/` (the page: one light component, its importmap) |
 | `probes/` | the proof of concept's scriptc experiments and the rules they produced (`probes/README.md`), `p0-workspace/` the probe of the workspace's import route; light's `native/probes/` continues them |

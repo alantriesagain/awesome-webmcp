@@ -1,0 +1,3 @@
+{"match":"run","text":"Running it.","tools":[{"name":"Bash","input":{"command":"echo selftest-ran","description":"Echo a word"}}]}
+{"match":"result","text":"PONG"}
+{"match":"ask","text":"Asking.","tools":[{"name":"mcp__widecode__AskUser","input":{"questions":[{"question":"Which color?","header":"Color","options":[{"label":"Red"},{"label":"Blue"}]}]}}]}

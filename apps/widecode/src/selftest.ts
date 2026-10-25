@@ -5,6 +5,8 @@
 //                   see the answer on screen
 //   fake-acp        the fake ACP agent asks permission for a call; allow it with a key, the call runs;
 //                   then it asks a question over widecode's MCP server (AskUser), answered with a key
+//   harness         widecode's own agent, the binary's `--harness` on its fake model: a turn runs a
+//                   command and replies; then AskUser over widecode's MCP server, answered with a key
 //   live-acp        opencode over ACP runs a command and replies; the call and the reply on screen
 //   live-acp-ask    opencode asks a question with widecode's AskUser; answer it with a key; it repeats it
 //   live-acp-plan   opencode in plan mode presents a plan with PresentPlan; approved, it leaves plan
@@ -72,6 +74,7 @@ export class Selftest {
     this.w.host.conversationChanged.add("selftest", () => this.conversation());
     if (this.name === "fake") this.w.host.roles.chat.submit("Reply with exactly the word PONG and nothing else.");
     else if (this.name === "fake-acp") this.w.host.roles.chat.submit("ask");
+    else if (this.name === "harness") this.w.host.roles.chat.submit("run it");
     else if (this.name === "live-acp") this.w.host.roles.chat.submit("Use the bash tool to run exactly: ls. Then reply with exactly the word PONG.");
     else if (this.name === "live-turn") this.w.host.roles.chat.submit("Reply with exactly: PONG");
     else if (this.name === "live-interrupt") this.w.host.roles.chat.submit("Use the Bash tool to run exactly: python3 -c \"import time; time.sleep(30)\" and then say finished.");
@@ -130,6 +133,32 @@ export class Selftest {
         else this.fail("PONG not on screen");
       }, 100);
       this.w.host.conversationChanged.remove("selftest");
+      return;
+    }
+    if (this.name === "harness") {
+      const panel = this.w.chat.pane.panel;
+      const idle = last.result !== null && !panel.active && !m.running && m.pending.length === 0;
+      if (this.step === 0 && idle) {
+        this.step = 1;
+        const ran = last.body.children.some((i: Item) => i.kind === TOOL && i.category === RUN && i.result !== null && i.result.text.includes("selftest-ran"));
+        setTimeout(() => {
+          const screen = this.screen;
+          const text = screen !== null ? screen() : "";
+          log("selftest harness ran a command: " + String(ran) + "; screen shows PONG: " + String(text.includes("PONG")));
+          if (!ran || !text.includes("PONG")) this.fail(ran ? "PONG not on screen" : "no command ran");
+          else this.w.host.roles.chat.submit("ask");
+        }, 100);
+      } else if (this.step === 1 && panel.active) {
+        this.step = 2;
+        log("selftest panel open: " + (panel.item !== null ? panel.item.name : ""));
+        setTimeout(() => this.w.shell.handleKey(new KeyEvent("char", "2", false, false, false)), 300);
+      } else if (this.step === 2 && idle) {
+        this.step = 3;
+        const got = lastText(last).includes('"Which color?": Blue');
+        log("selftest answered over MCP; the harness got Blue: " + String(got));
+        if (got) this.pass();
+        else this.fail("the answer did not reach the harness");
+      }
       return;
     }
     const asking = this.name === "live-ask" || this.name === "live-acp-ask";

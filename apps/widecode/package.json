@@ -147,6 +147,71 @@
           ]
         ]
       },
+      "harness": {
+        "homeEnv": "WIDECODE_HOME",
+        "home": {
+          "config.json": {
+            "agent": "harness",
+            "plugins": {
+              "acp": {
+                "agents": {
+                  "harness": {
+                    "name": "harness",
+                    "command": [
+                      "{widecode}",
+                      "--harness",
+                      "--harness-fake",
+                      "test/fixtures/harness-model.jsonl"
+                    ],
+                    "tools": [
+                      "{widecode}",
+                      "--harness-tools",
+                      "{mode}"
+                    ],
+                    "skills": [
+                      "{widecode}",
+                      "--harness-skills"
+                    ],
+                    "sessions": [
+                      "{widecode}",
+                      "--harness-sessions"
+                    ],
+                    "forget": [
+                      "{widecode}",
+                      "--harness-forget",
+                      "{session}"
+                    ],
+                    "midTurn": true,
+                    "own": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "checks": [
+          [
+            "started in the pty",
+            "started 200x40"
+          ],
+          [
+            "the harness ran a command and replied",
+            "selftest harness ran a command: true; screen shows PONG: true"
+          ],
+          [
+            "AskUser over widecode's MCP server opened the panel",
+            "selftest panel open: AskUser"
+          ],
+          [
+            "answered with a key: the harness got it",
+            "selftest answered over MCP; the harness got Blue: true"
+          ],
+          [
+            "selftest ok",
+            "selftest ok"
+          ]
+        ]
+      },
       "live-turn": {
         "live": "claude",
         "args": [
