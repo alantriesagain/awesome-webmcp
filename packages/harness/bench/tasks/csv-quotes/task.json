@@ -1,0 +1,1 @@
+{ "prompt": "parseCsv in src/csv.mjs mishandles quoted fields. Make it follow RFC 4180: a field in double quotes may hold commas, line breaks and doubled double quotes (\"\" stands for one \"); a line break at the very end adds no row; rows are arrays of strings. `node test.mjs` has a few cases; it is not complete.", "timeoutMs": 300000 }

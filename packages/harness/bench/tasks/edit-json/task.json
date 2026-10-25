@@ -1,0 +1,1 @@
+{ "prompt": "In package.json, add an npm script named `lint` that runs `eslint .`, and raise the version's patch number by one. Change nothing else.", "timeoutMs": 180000 }

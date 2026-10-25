@@ -1,0 +1,1 @@
+{ "prompt": "The tests fail: run `node test.mjs` to see. Find the bug and fix it in src/, without changing test.mjs.", "timeoutMs": 240000 }

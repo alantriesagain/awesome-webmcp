@@ -349,6 +349,10 @@ risks); each slice below is one commit with its tests.
       DeepSeek's chat endpoint found the Grep and Glob schemas sent as invalid JSON since the
       edits slice (an escaped quote lost in a single-quoted string); fixed, with a test that every
       schema parses.
+- [x] **A benchmark.** `bench/`: eight tasks with hidden checks and solutions, a runner over ACP
+      (any ACP agent, the model and effort through the session's options), JSONL records and a
+      table. First live run: the harness passed all eight on DeepSeek Flash and V4 Pro; opencode's
+      free DeepSeek V4.1 Flash passed five of six.
 - [ ] **Later.** A `browser` tool over the DevTools protocol; subagents; a deny list from
       `permissions.deny`; branching; images in tool results; the native `fetch` behind
       `HttpStream`; prices refreshed from the providers.

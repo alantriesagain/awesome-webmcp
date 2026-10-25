@@ -1,0 +1,1 @@
+{ "prompt": "Rename the function fetchUserName to loadUserName everywhere in this project, its definition and every use. `node src/main.mjs` must still print the same output.", "timeoutMs": 240000 }

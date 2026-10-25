@@ -1,0 +1,14 @@
+{
+  "name": "bench-app",
+  "version": "1.4.3",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.mjs",
+    "test": "node --test",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "chalk": "^5.3.0"
+  }
+}

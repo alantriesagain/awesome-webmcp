@@ -1,0 +1,1 @@
+{ "prompt": "Add a `--json` flag to todo.mjs: with it, `node todo.mjs list --json` prints the todos as a JSON array of objects with `id`, `title` and `done`, instead of the text lines. Without the flag it prints as it does now.", "timeoutMs": 240000 }

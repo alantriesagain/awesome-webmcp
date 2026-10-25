@@ -1,0 +1,1 @@
+{ "prompt": "mapLimit in src/pool.mjs should run `fn` over the items with at most `limit` calls in flight at once and resolve with the results in the items' order, rejecting with the first error. It runs everything at once and loses the order when calls finish out of turn. Fix it.", "timeoutMs": 300000 }

@@ -10,3 +10,4 @@ apps/widecode/src/runtime/builtin.ts
 apps/widecode/src/runtime/docs.ts
 apps/widecode/src/runtime/build-info.ts
 probes/out/
+packages/harness/bench/results/

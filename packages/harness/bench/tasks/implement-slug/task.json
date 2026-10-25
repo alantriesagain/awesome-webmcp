@@ -1,0 +1,1 @@
+{ "prompt": "Implement `slugify` in src/slug.mjs as README.md describes. Keep the export as it is.", "timeoutMs": 240000 }

@@ -20,4 +20,24 @@ widecode's own coding agent, the harness: a daemon of widecode's binary (`wideco
 
 Google refuses searches from a fresh headless profile as unusual traffic on some machines; SearXNG (`docker run -p 8080:8080 searxng/searxng`, with `json` in its `search.formats`) or a key (`widecode --harness-auth brave`, `widecode --harness-auth tavily`, or `BRAVE_API_KEY`, `TAVILY_API_KEY`) searches without that.
 
+## The benchmark
+
+`bench/` measures agents on real models: eight small tasks, two of them harder (an RFC 4180 parser, a concurrency limit) (`bench/tasks/<name>/`: a repository, a
+prompt, a check the agent never sees, and a solution the test checks the check against), run over
+ACP, so the harness, opencode and the DeepSeek Harness are measured alike. A run copies the task
+into a temp git repository, starts the agent there, chooses the model and effort through the
+session's options, sends the prompt, follows the turn (cancelled past the task's time), runs the
+check, and deletes the session. It records the time to the first token and in all, the calls by
+tool and those that failed, the tokens, the context and the cost the agent reported; the records go
+to `bench/results/` (ignored by git) and a table is printed.
+
+```
+node packages/harness/bench/run.ts --model deepseek/deepseek-flash,opencode/kimi-k2.6 --repeat 2 --budget 1
+node packages/harness/bench/run.ts --agent opencode --model opencode/big-pickle --tasks fix-bug,edit-json
+node packages/harness/bench/run.ts --report packages/harness/bench/results/*.jsonl
+```
+
+It talks to real models and spends real money; `--budget` stops starting runs once the reported
+cost passes it. `test/bench.test.ts` runs it on the fake model.
+
 The entry in config.json is a default of the ACP plugin, chosen with `"agent": "harness"` or `--agent harness`. A key: `DEEPSEEK_API_KEY` or `ANTHROPIC_API_KEY` in the environment, or `widecode --harness-auth deepseek` with the key on stdin. Tests: `light-native test harness` (the ACP framing, the agent over the fake model with a tool batch, its session file, a load in another process and a resume, the Anthropic request and its events, the HTTP stream by both ways against `test/fake-model.mjs`, the tools over a temp folder, the session store and the replay, the registry, costs and keys); the app's `test/harness-agent.test.ts` drives the daemon under node as the fake agent is driven, the Sessions tab and a side question's fork included.
