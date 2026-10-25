@@ -4,7 +4,7 @@ widecode is a native core and JavaScript plugins. The core is compiled by script
 the layout, the views (tabs, the status band, rows), the chat, code and tools widgets, the services
 (files, git, the watcher, the Claude session, the store, titles, processes) and the tokenizers.
 Every feature is a plugin running in an embedded QuickJS: the chat and code columns' wiring, the
-Tools, Agents, Files, Sessions and Git tabs, the changes and status bars, the models, the languages,
+Tools, Agents, Skills, Files, Sessions and Git tabs, the changes and status bars, the models, the languages,
 and the agents: Claude Code, and the ones that speak ACP (opencode, the DeepSeek Harness). Plugins can be switched off in
 `config.json`, replaced by a file of the same id, and edited while widecode runs.
 
@@ -84,17 +84,17 @@ stops.
 
 | Part | What it gives |
 |---|---|
-| `commands` | `add({ name, usage, help, run(arg), complete(arg) })`, `run("/files changed")` (any plugin's command); `complete` names the values the argument takes given what is typed, listed above the composer (↑↓ choose, Enter runs the command with one, Tab fills it in) |
+| `commands` | `add({ name, usage, help, run(arg), complete(arg) })`, `run("/files changed")` (any plugin's command), `remove(name)` (one of the plugin's own; one it replaced comes back); `complete` names the values the argument takes given what is typed, listed above the composer (↑↓ choose, Enter runs the command with one, Tab fills it in) |
 | `keys` | `action({ id, scope, help, key, run(key, count) })` an action a keymap can bind, with its default key(s); `add(spec, scope, hint, run(key))` a key bound to a function (an action named `<plugin>:<spec>`); `layer(id, table)` a keymap over the actions, `on()` and `off()`; `run(id, count)` an action by name (see Keys below) |
 | `composer` | the chat's composer, for a keymap plugin that edits it: `get()` (its lines, caret, whether it is empty, whether the suggestion strip shows or the request panel is open), `set(lines, row, col)`, `insert(text)`, `setLabel(text)` (its border title, a mode indicator) |
 | `on(hook, run)` | `conversationChanged`, `sessionsChanged` (a session record of the folder changed: a title, a cost), `filesLoaded`, `statusLoaded`, `folderChanged`, `folderOpened`, `baseChanged`, `fileShown`, `messageSending`, `keymapChanged`, `messageChanged` (the status message set by `tell`, or cleared), `toolsChanged` (a tool added or dropped, after the runtime settled), `harnessChanged` (the project's `prompt.md` saved, or the folder trusted); a listener gets nothing and reads what changed |
 | `tell`, `note` | a message in the status bar for a while; a line in the log |
 | `ui` | `panel({...})` a tab of a tab column (`column`: `side`, the files column, or `tools`, beside the chat; with a `badge()` for its link on the band), `band({...})` a strip of the status band under a column (`under`: `chat`, `tools`, `side`, `code`), `segment({...})` a status segment; `drawSegment` and `pressSegment` reach any plugin's segment |
 | `widgets` | `chat({...})` and `code({...})` mount the core's widgets as columns, `tools({...})` the Tools tab in the tools column; the plugin that mounts one plays its role for the others |
-| `chat`, `code` | the roles: `submit`, `showChat`, `loadEarlier`; `open`, `openCommit`, `openAgent` (a subagent's steps), `openCall` (a tool call whole), `view({ id, count, rows, press })` (a view of the plugin's own rows, `show(title)` putting it in place of the file, Esc back), `path`, `inCommit`, `inAgent`, `position`, `scroll`, `moveHunk`, `setWrap` |
+| `chat`, `code` | the roles: `submit`, `showChat`, `loadEarlier`; `open`, `openCommit`, `openAgent` (a subagent's steps), `openCall` (a tool call whole), `view({ id, count, rows, press })` (a view of the plugin's own rows, `show(title)` putting it in place of the file, Esc back), `markdown(title, text)` (a text rendered as the chat renders markdown, in place of the file), `path`, `inCommit`, `inAgent`, `position`, `scroll`, `moveHunk`, `setWrap` |
 | `state` | `folder()` (branch, marks, counts), `changes()` (newest first), `paths()`, `base()`, `active()`, `panels()`, `columns()`, `commands()`, `batch()` (the watcher's latest), `info()` (Claude Code's status line input), `note()`, `screen(columns)` (the screen as drawn, the named columns cropped to their cells), `log(n)` (the last lines of the log) |
 | `actions` | `focus`, `showPanel`, `quit`, `openFolder`, `setBase`, `relative`; `loadFiles`, `loadStatus` (promises) |
-| `agent` | the conversation with the agent: `info` (which agent), `send`, `interrupt`, `reset`, `resume`, the model, effort and mode, its id and title, its first exchange, the agent's edits, its subagents (`agents()`), the tools it has (`tools()`) |
+| `agent` | the conversation with the agent: `info` (which agent), `send`, `interrupt`, `reset`, `resume`, the model, effort and mode, its id and title, its first exchange, the agent's edits, its subagents (`agents()`), the tools it has (`tools()`), the skills it has and the session's skill runs (`skills()`) |
 | `state.keymap`, `keys.keymap` | the keymap in use (`"default"`, or a plugin's id); a keymap a plugin brings, for /keymap and config.json's `"keymap"` (hook `keymapChanged`) |
 | `agents`, `conversation` | `register({ id, name, start, send, … })` an agent the conversation can talk to; `apply(events)` its messages, as the conversation's changes (see Agents below); `ask(request)` a question or plan for the user from one of widecode's tools, a promise of the reply |
 | `tools` | `add({ name, description, input, call(args) })` one of widecode's own tools, which agents call over MCP; `server()` where widecode's MCP server listens, for an agent's plugin to offer it (see widecode's own tools below) |
@@ -136,7 +136,7 @@ key. `api.keys.add(spec, scope, hint, run)` is the same with a name made from th
 
 Key specs are modifiers then the key: `f5`, `alt+down`, `shift+tab`, `ctrl+char:c`, `char:]`, or
 `*` for any key. A scope is `""` (anywhere), a column (`chat`, `tools`, `side`, `code`), a tab
-(`calls`, `agents`, `available`; `files`, `sessions`, `git`), or `input`, the composer, in effect
+(`calls`, `agents`, `available`; `files`, `sessions`, `git`, `skills`), or `input`, the composer, in effect
 while the chat column is active and tried last. A key goes to the shown tab's actions, then the
 active column's, then the global ones, then the composer's; in a scope, the key's own actions come
 first (the one added last first), then the scope's `*` actions, until one returns true. A `*`
@@ -214,10 +214,13 @@ cost), text, thinking and calls (`block`, then `text` deltas, `facts`, `input`, 
 `finish`), notices, a side question and its answer (`aside`), queued messages given back
 (`withdrawn`), requests for the user (`request`: questions, a plan, a permission), the
 session's id, model, mode and commands (`session`, `mode`), the tools it has and its MCP servers
-(`tools`: each with its server, the name its calls carry, and what the mode lets it do), the
-status (`usage`), and the
+(`tools`: each with its server, the name its calls carry, and what the mode lets it do), the skills
+it has (`skills`: each with what it is for, where it comes from, its file and the text that calls
+it from the composer; `partial` while the list is what the plugin read from disk before the agent
+said), the status (`usage`), and the
 process's state (`process`: `running`, `ended`). A call's facts are what the views show: its kind
-(`category`: read, edit, run, search, fetch, agent, todo, other), its line (`summary`), the files it
+(`category`: read, edit, run, search, fetch, agent, todo, skill, other), its line (`summary`; a skill
+call's is the skill's name, which the Skills tab follows), the files it
 touches (`paths`), a command whole, a todo list, the tool it is of when its name is another
 (`tool`, so the Available tab counts it). `widecode.d.ts` lists every event and its fields.
 A batch happens when it is applied, unless an `at` event says when. Events from an agent the
@@ -460,10 +463,11 @@ phase, the agent's events) and the screen as it was.
 | `git` | the Git tab; `b` and the compare base; a session's starting commit | | |
 | `peers` | the Peers tab and segment: this machine's shared repositories, each paired machine with every repository it offers and how this machine's copy stands against it (↓ commits to fetch, ↑, level, not here), the machines nearby (mDNS through avahi or dns-sd), pairing, fetch, clone, hosted bare repositories peers push into, a page in the code column with a repository's commits to fetch, `/peers` | `autoFetch`, `refreshMs` | the daemon it starts |
 | `agents` | the Agents tab of the tools column: the session's subagents, one's steps shown in the code column | | |
+| `skills` | the Skills tab of the files column: the agent's skills by where each comes from, with what each is for and its runs this session; the session's skill runs above them, live; Enter or a press shows a skill's SKILL.md in the code column, rendered as markdown, and puts what calls it in the composer, `v` goes to the file; each skill called by a slash is a command, completed above the composer; `/skills` | | |
 | `changes` | the changes strip of the band, under the code column; `[ ]`, Alt+↑↓ | | |
 | `status` | the session table under the chat and the calls' under the tools column, their segments and command cells | `separator`, `lines`, `toolsLines` | |
 | `models` | F5, `/model`, `/effort`, the `model` segment | `list` (Claude Code's), `agents` (another agent's, by id), `effort` (`default`, by `providers`, by `models`) | the model chosen, by agent; the effort chosen, by model, provider and overall |
-| `claude` | Claude Code as the agent: its CLI over stream-json, its records read into the conversation, its transcripts resumed and listed, its status line data | `id`, `projects` | |
+| `claude` | Claude Code as the agent: its CLI over stream-json, its records read into the conversation, its transcripts resumed and listed, its status line data, its skills (from disk before it starts) | `id`, `projects`, `configDir` | |
 | `acp` | the agents spoken to over ACP, opencode and the DeepSeek Harness by default: their session, started with widecode, their turns, calls, diffs, todo lists, subagents, permissions, model, effort and mode (config options), and sessions; widecode's MCP server offered to them | `agents` | sessions made and not written to, deleted when left |
 | `ask` | widecode's tools for an agent without its own: `AskUser` (questions in the request panel), `PresentPlan` (a plan to approve, leaving plan mode) | `names` | |
 | `harness` | widecode's tools for the agent to probe and reshape widecode itself, over the MCP server: `screen`, `state`, `log`, `api`, `check`, `reload`, `config` (The harness, above) | | |

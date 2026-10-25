@@ -12,6 +12,8 @@ import { type CustomEvent, View, html } from "@bootstrapp/light/native/tui";
 import { Bridge, OK } from "@light/plugins/engine.ts";
 import { cells } from "../api/values.ts";
 import { PANEL_SLOTS, slotOf } from "./slots.ts";
+import { renderMarkdown } from "@light/markdown/markdown.ts";
+import { palette } from "@light/ui/palette.ts";
 
 /** Rows fetched per call into JS. */
 const WINDOW = 64;
@@ -128,6 +130,33 @@ export class JsRows extends LineSource {
     }
     const at = index - this.from;
     return at < this.cached.length ? this.cached[at] : new Line();
+  }
+}
+
+/** A text a plugin shows in the code column, rendered as the chat renders markdown, at the width the view has. */
+export class MarkdownRows extends LineSource {
+  readonly text: string;
+  private width = -1;
+  private lines: Line[] = [];
+
+  constructor(text: string) {
+    super();
+    this.text = text;
+  }
+
+  override prepare(width: number): void {
+    if (width === this.width) return;
+    this.width = width;
+    this.lines = renderMarkdown(this.text.replace(/\s+$/, ""), Math.max(1, width - 1), [new Run(" ", "")], palette.messageFg);
+  }
+
+  count(): number {
+    return this.lines.length;
+  }
+
+  line(index: number, width: number): Line {
+    this.prepare(width);
+    return index >= 0 && index < this.lines.length ? this.lines[index] : new Line();
   }
 }
 

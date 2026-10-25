@@ -118,6 +118,13 @@ error -32601.
   `apply_patch` are `edit`'s) and its pattern decides, `ask` when none does, and a tool whose last
   rule for its permission denies `*` is taken from the model. Plan mode denies `edit` but on
   `.opencode/plans/*.md` (and the same folder under opencode's data folder).
+- Nor of its skills. `opencode debug skill` prints every skill it loads as JSON, `[{name,
+  description, location, content}]` (about 140 KB with the contents; a built-in one's location is
+  `<built-in>`): the project's `.claude/skills` and `.opencode/skill`, the user's `~/.claude/skills`
+  (its synced folder included) and `~/.config/opencode/skill`. The model loads one with the `skill`
+  tool, the skill's `name` in its input; the entry's `skills` command reads the list once the
+  session is made. A skill is not one of `available_commands_update`'s commands (those are
+  `.opencode/command/*.md`), so one is asked for in words.
 - A live call's first `tool_call` is titled with its tool's name (`bash`, `read`, `edit`,
   `widecode_AskUser`); a loaded session's calls come titled with what they did, so their tool is
   not known.

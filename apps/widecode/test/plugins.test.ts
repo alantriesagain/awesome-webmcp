@@ -121,13 +121,13 @@ const main = async (): Promise<void> => {
 
   w = createWidecode(ws, new Conversation(ws.folder), JSON.parse('{"agents": false}'));
   let lines = await show(w);
-  eq("agents off: the side tabs stay (the fourth beside the first)", links(w, lines), "Files 1    Peers|Sessions|Git");
+  eq("agents off: the side tabs stay (the fourth beside the first)", links(w, lines), "Files 1    Peers|Sessions   Skills|Git");
   ok("agents off: no Agents tab, nothing opens a subagent", !w.host.screen.panels.some((p) => p.id === "agents") && w.host.screen.panelsIn("tools").map((p) => p.id).join(" ") === "calls available");
   end(w);
 
   w = createWidecode(ws, new Conversation(ws.folder), JSON.parse('{"git": false}'));
   lines = await show(w);
-  eq("git off: no Git tab", w.host.screen.panelsIn("side").map((p) => p.id).join(" ") + " · " + links(w, lines), "files sessions peers · Files 1|Sessions|Peers");
+  eq("git off: no Git tab", w.host.screen.panelsIn("side").map((p) => p.id).join(" ") + " · " + links(w, lines), "files sessions peers skills · Files 1    Skills|Sessions|Peers");
   w.host.screen.showPanel("files");
   ok("no b, no compare row", !press(w, "char", "b") && !lines.some((l) => l.includes(" vs  HEAD ")));
   ok("the languages are back with their plugin", languageForPath("a.ts") === "typescript");
@@ -200,7 +200,7 @@ const main = async (): Promise<void> => {
   end(w);
 
   const defaults = composeWidecode(ws, new Conversation(ws.folder)).defaults();
-  eq("every built-in plugin answers its defaults", defaults.map((d) => d.id + (d.value === true ? "" : "*")).join(" "), "acp* agents ask* changes chat claude* code emacs files git harness languages models* peers* sessions* status* tools vi");
+  eq("every built-in plugin answers its defaults", defaults.map((d) => d.id + (d.value === true ? "" : "*")).join(" "), "acp* agents ask* changes chat claude* code emacs files git harness languages models* peers* sessions* skills status* tools vi");
   ws.close();
   rmSync(repo, { recursive: true, force: true });
   done();

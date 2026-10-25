@@ -21,6 +21,8 @@
  * - `plan`: a todo list of three entries, as a `todowrite` call's input (a plan update with
  *   `--legacy`);
  * - `task`: a subagent's call (`subagent_type`, `description`, `prompt` in its input);
+ * - `skill`: a `skill` tool call loading the skill "alpha" (its `name` in the input), then a command
+ *   and a message, as a skill's run goes on;
  * - `slow`: a chunk, then nothing until session/cancel ends the turn as cancelled;
  * - `work`: a call that runs 800 ms, then "Worked."; a prompt sent while it runs is taken into the
  *   turn, as opencode takes one (the reply adds "Also: <its text>"), and every prompt of the turn is
@@ -41,7 +43,9 @@
  *
  * With `--tools <mode>` it prints the mode's tools as opencode's `debug agent <mode>` does (JSON, its
  * `tools` an object of names, `invalid` and `question` among them, and its permission rules: in
- * plan mode edit only on plans, bash asked for, glob denied) and exits.
+ * plan mode edit only on plans, bash asked for, glob denied) and exits. With `--skills` it prints
+ * its skills as opencode's `debug skill` does (a JSON list of `name`, `description`, `location` and
+ * `content`: one of the folder's, one built in) and exits.
  *
  * With `--dsh` it speaks as the DeepSeek Harness (`dsh --profile acp`) does: initialize
  * advertises session/list and session/resume but no loadSession, no fork and no modes; the config
@@ -88,6 +92,15 @@ if (toolsAt >= 0) {
       { permission: "glob", pattern: "*", action: "deny" },
     );
   process.stdout.write(JSON.stringify({ name: mode, mode: "primary", permission, tools }, null, 2) + "\n");
+  process.exit(0);
+}
+
+if (process.argv.includes("--skills")) {
+  const skills = [
+    { name: "alpha", description: "The first skill: use it when asked for alpha.", location: process.cwd() + "/.claude/skills/alpha/SKILL.md", content: "# Alpha\n\nDo the alpha thing." },
+    { name: "customize", description: "Built into the agent.", location: "<built-in>", content: "" },
+  ];
+  process.stdout.write(JSON.stringify(skills, null, 2) + "\n");
   process.exit(0);
 }
 
@@ -281,6 +294,13 @@ const prompt = (id, sessionId, params) => {
     const input = { description: "find the tests", prompt: "Look for the test files and list them.", subagent_type: "explore" };
     update(sessionId, { sessionUpdate: "tool_call", toolCallId: "call_task", title: "task", kind: "think", status: "pending", rawInput: input });
     update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: "call_task", status: "completed", title: "find the tests", content: [{ type: "content", content: text("test/a.test.ts") }], rawOutput: { output: "test/a.test.ts" } });
+    end("end_turn");
+  } else if (first === "skill") {
+    update(sessionId, { sessionUpdate: "tool_call", toolCallId: "call_skill", title: "skill", kind: "other", status: "pending", rawInput: { name: "alpha" } });
+    update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: "call_skill", status: "completed", title: "alpha", content: [{ type: "content", content: text("# Alpha\n\nDo the alpha thing.") }], rawOutput: { output: "# Alpha" } });
+    const input = { command: "ls -1", description: "List files", cwd };
+    update(sessionId, { sessionUpdate: "tool_call", toolCallId: "call_skill_run", title: "ls -1", kind: "execute", status: "completed", locations: [{ path: cwd }], rawInput: input, content: [{ type: "content", content: text("a.txt") }], rawOutput: { output: "a.txt\n" } });
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Alpha done.") });
     end("end_turn");
   } else if (first === "question") callTool(id, sessionId, /ask/i, { questions: [{ question: "Which color?", header: "Color", options: [{ label: "Red", description: "warm" }, { label: "Blue" }] }] });
   else if (first === "present") callTool(id, sessionId, /plan/i, { plan: "1. Write the test\n2. Make it pass" });

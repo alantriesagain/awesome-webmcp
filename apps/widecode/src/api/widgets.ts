@@ -6,7 +6,7 @@ import type { JsRuntime } from "../runtime/runtime.ts";
 import { OK } from "@light/plugins/engine.ts";
 import { HostAnswer } from "@light/plugins/engine.ts";
 import { str, num, strs, json, answer, answerText, objectText, refuse, commitOf, cells } from "./values.ts";
-import { JsRows } from "../runtime/views.ts";
+import { JsRows, MarkdownRows } from "../runtime/views.ts";
 import { insertText } from "@bootstrapp/light/native/tui";
 
 /** A code view's key in the runtime's table: the plugin's id and the view's. */
@@ -98,6 +98,10 @@ export const answerWidgets = (rt: JsRuntime, name: string, a: unknown[]): HostAn
       h.roles.code.openView(rows, str(a[2]), pressFn >= 0 ? (row: number) => { rt.invoke(owner, pressFn, JSON.stringify([row])); } : null);
       return answer(null);
     }
+    case "code.markdown":
+      // A text rendered as the chat renders markdown, in place of the file, under a title.
+      h.roles.code.openView(new MarkdownRows(str(a[1])), str(a[0]), null);
+      return answer(null);
     case "code.refresh": {
       const rows = rt.views.codeView(viewKey(str(a[0]), str(a[1])));
       if (rows !== null && rt.code !== null && rt.code.pane.view.source === rows) {
@@ -176,6 +180,7 @@ export const NAMESPACE_CODE = new PreludePart("code", `        open: (path) => c
         openAgent: (agent) => call("code.openAgent", String(agent)),
         openCall: (call_) => call("code.openCall", String(call_)),
         inAgent: () => call("code.inAgent"),
+        markdown: (title, text) => call("code.markdown", String(title), String(text)),
         view: (v) => {
           const vid = String(v.id);
           const press = typeof v.press === "function" ? fn((row) => { v.press(row); }) : -1;

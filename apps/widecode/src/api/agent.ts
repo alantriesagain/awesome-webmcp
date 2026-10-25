@@ -7,6 +7,7 @@ import type { JsRuntime } from "../runtime/runtime.ts";
 import { Option } from "@widecode/conversation/agent.ts";
 import { programCounts } from "@widecode/conversation/command.ts";
 import { agentDescription, agentStatus, agentType, agentsOf } from "@widecode/conversation/agents.ts";
+import { skillRuns } from "@widecode/conversation/skills.ts";
 import { applyEvents } from "@widecode/conversation/events.ts";
 import { Ask } from "@widecode/conversation/requests.ts";
 import { attachImages } from "@widecode/conversation/attach.ts";
@@ -75,6 +76,15 @@ export const answerAgent = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
       const programs: string[] = [];
       for (const p of programCounts(m.commands())) programs.push(objectText(["program", "calls"], [json(p.program), String(p.calls)]));
       return answerText(objectText(["known", "ownKnown", "tools", "servers", "programs"], [json(m.availableKnown), json(m.ownKnown), "[" + tools.join(",") + "]", "[" + servers.join(",") + "]", "[" + programs.join(",") + "]"]));
+    }
+    case "agent.skills": {
+      // The skills the agent has, each with where it comes from, its file and the text that calls it; and the session's skill runs.
+      const m = h.conversation.model;
+      const skills: string[] = [];
+      for (const s of m.skills) skills.push(objectText(["name", "description", "source", "path", "command"], [json(s.name), json(s.description), json(s.source), json(s.path), json(s.command)]));
+      const runs: string[] = [];
+      for (const r of skillRuns(m)) runs.push(objectText(["name", "callId", "state", "startedMs", "endedMs", "calls"], [json(r.name), json(r.callId), json(r.state), String(r.startedMs), String(r.endedMs), String(r.calls)]));
+      return answerText(objectText(["known", "partial", "skills", "runs"], [json(m.skillsKnown), json(m.skillsPartial), "[" + skills.join(",") + "]", "[" + runs.join(",") + "]"]));
     }
     case "agent.agents": {
       // The session's subagents: each call's id, kind, task, where it stands, and what it is doing or said.
@@ -252,4 +262,5 @@ export const NAMESPACE_AGENT = new PreludePart("agent", `        info: () => cal
         agents: () => call("agent.agents"),
         sideQuestion: (question) => call("agent.sideQuestion", String(question)),
         tools: () => call("agent.tools"),
+        skills: () => call("agent.skills"),
 `);

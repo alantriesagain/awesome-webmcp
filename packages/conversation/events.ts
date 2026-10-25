@@ -3,7 +3,7 @@
 // the model and the status. Each event names a call of the model (model.ts); widecode.d.ts types
 // them for plugins. A block is named by the parent call it is under ("" for the turn) and its key
 // (the adapter's own: a message and its index, a call's id).
-import { ChatModel, Item, PatchHunk, ServerInfo, TaskInfo, Todo, ToolInfo, ToolResult, TurnResult, AGENT, EDIT, READ, RUN, SEARCH, TEXT, THINKING, TOOL } from "./model.ts";
+import { ChatModel, Item, PatchHunk, ServerInfo, SkillInfo, TaskInfo, Todo, ToolInfo, ToolResult, TurnResult, AGENT, EDIT, READ, RUN, SEARCH, TEXT, THINKING, TOOL } from "./model.ts";
 import { programsOf } from "./command.ts";
 import { isRecord, listOf, num, str, strs, text } from "@light/lib/json.ts";
 import { Choice, Question } from "./requests.ts";
@@ -40,6 +40,8 @@ interface Ev {
   written?: unknown;
   todos?: unknown;
   tools?: unknown;
+  skills?: unknown;
+  source?: unknown;
   texts?: unknown;
   tool?: unknown;
   server?: unknown;
@@ -281,6 +283,7 @@ const EVENT_TYPES = [
   "withdrawn",
   "aside",
   "tools",
+  "skills",
   "request",
   "cancelRequest",
   "usage",
@@ -444,6 +447,22 @@ const applyEvent = (model: ChatModel, info: StatusInfo, e: Ev): boolean => {
     model.servers = servers;
     model.availableKnown = true;
     model.ownKnown = e.partial !== true;
+    model.bump();
+  } else if (type === "skills") {
+    const skills: SkillInfo[] = [];
+    for (const v of listOf(e.skills)) {
+      const t = ev(v);
+      if (t === null || str(t.name).length === 0) continue;
+      const skill = new SkillInfo(str(t.name));
+      skill.description = str(t.description);
+      skill.source = str(t.source);
+      skill.path = str(t.path);
+      skill.command = str(t.command);
+      skills.push(skill);
+    }
+    model.skills = skills;
+    model.skillsKnown = true;
+    model.skillsPartial = e.partial === true;
     model.bump();
   } else if (type === "request") requestOf(model, str(e.id), e);
   // Answered without the panel (an answer the user gave before covers it), else withdrawn by the agent.

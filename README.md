@@ -118,14 +118,27 @@ to some files or asks for: in plan mode, edit and write only on plan files). A p
 all of that in the status bar. Agents: the session's subagents, where each stands and what it is
 doing or reported; a press shows one's steps in the code column, live while it runs.
 
-The files column has three tabs, their links on the band under it (a press on one, or Tab in the
+The files column has five tabs, their links on the band under it (a press on one, or Tab in the
 column; F4 or `/resume` opens Sessions). Files: an All │ Changed switch (a press, or `c`), then the tree, changed names in their
 change's color. Sessions: the folder's sessions, ↑↓, Enter resumes (with the file the code column
 showed in it), `n` starts a new one; the terminal's title follows the session's. Git,
 read-only: what the changes are compared with (`b` cycles: HEAD; where this branch left the main
 branch; where this session started, recorded with its first message), the branches (ahead and behind
 their upstream), and a branch's log with this session's commits marked ●; a commit opens to its
-files, a file shows that commit's change in the code column (Esc returns to the work tree). The code
+files, a file shows that commit's change in the code column (Esc returns to the work tree). Peers:
+the LAN git bridge (below). Skills: the skills the agent has (the project's and the user's read from
+disk at launch, Claude Code's own once it starts; an ACP agent's from its entry's skills command,
+opencode's `opencode debug skill`), by where each comes
+from (the project's `.claude/skills`, the user's, a plugin's, the agent's own), with what each SKILL.md
+says it is for and how many times it ran this session; above them the session's skill runs, newest
+first, each with where it stands, the calls the turn made after the skill and for how long, live
+while one runs. ↑↓ and Enter or a press show the skill's SKILL.md in the code column, rendered as
+markdown, and put what
+calls the skill in the composer (`/name ` for Claude Code, a sentence to finish for an agent whose
+skills are asked for in words), the focus staying there for the arguments; `v` goes to the file;
+Enter on a run shows the call that loaded the skill. Each skill Claude Code calls by
+a slash is a command of widecode too, so typing `/` in the composer completes it with its
+description. `/skills` shows the tab. The code
 column shows the file with its changes in place (a new file as plain code), colored (JavaScript, TypeScript, JSON, CSS, HTML,
 Markdown with its fenced code), `n`/`p` between changes, `f` to stop or resume following Claude's
 edits, and `w` or the box at its foot to wrap long lines (at a space, under their own indentation).

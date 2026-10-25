@@ -317,7 +317,21 @@ declare namespace widecode {
     scope?: string;
   }
 
-  /** What the views know about a call: its kind (read, edit, run, search, fetch, agent, todo, other), its one line, the files it touches, a command whole, what it wrote, a todo list, a subagent's kind, task and prompt. */
+  /**
+   * A skill the agent has, in a `skills` event: its name, what it is for, where it comes from
+   * ("project", "user", a plugin's name, "built-in"), its file ("" for one built into the agent) and
+   * the text that calls it from the composer ("/name" for Claude Code; "" for an agent whose skills
+   * are asked for in words).
+   */
+  interface AgentSkill {
+    name: string;
+    description?: string;
+    source?: string;
+    path?: string;
+    command?: string;
+  }
+
+  /** What the views know about a call: its kind (read, edit, run, search, fetch, agent, todo, skill, other), its one line (a skill call's: the skill's name), the files it touches, a command whole, what it wrote, a todo list, a subagent's kind, task and prompt. */
   interface CallFacts {
     category?: string;
     /** The tool it is of, as the agent's list of tools names it, when the call's name is another. */
@@ -349,6 +363,8 @@ declare namespace widecode {
     | { type: "aside"; id: string; question?: string; text?: string; done?: boolean; error?: string }
     /** The tools the agent has now (each with its MCP server's name, "" for its own) and its MCP servers; `partial` when it lists none of its own. */
     | { type: "tools"; tools: AgentTool[]; servers?: { name: string; status?: string }[]; partial?: boolean }
+    /** The skills the agent has now; `partial` while the list is what its plugin found on disk before the agent said (the agent's own come with its start). */
+    | { type: "skills"; skills: AgentSkill[]; partial?: boolean }
     | { type: "mode"; mode: string }
     | { type: "status"; status: string }
     | { type: "take"; text: string; parts?: string[] }
@@ -511,6 +527,8 @@ declare namespace widecode {
       add(command: Command): void;
       /** Run any registered command ("/files changed"); false when none has that name. */
       run(text: string): boolean;
+      /** Drop this plugin's command `name` (one it replaced comes back); false when the plugin has none of that name. */
+      remove(name: string): boolean;
     };
     keys: {
       /**
@@ -702,6 +720,8 @@ declare namespace widecode {
        * redraws it while it shows, `shown()` says whether it does.
        */
       view(view: { id: string; count(): number; rows(from: number, count: number, width: number): Row[]; press?(row: number): void }): CodeViewHandle;
+      /** Show `text` in place of the file, rendered as the chat renders markdown, under `title` (Esc goes back). */
+      markdown(title: string, text: string): void;
       /** Scroll by `rows` (negative: up), to the top, to the end. */
       scroll(rows: number): void;
       toTop(): void;
@@ -872,6 +892,15 @@ declare namespace widecode {
        * when the agent lists none of its own.
        */
       tools(): { known: boolean; ownKnown: boolean; tools: { name: string; server: string; access: string; scope: string; calls: number }[]; servers: { name: string; status: string }[]; programs: { program: string; calls: number }[] };
+      /**
+       * The skills the agent has, as its plugin last said (`known` false before it said; `partial`
+       * while the list is what the plugin found on disk before the agent started), each with
+       * where it comes from, its file and the text that calls it; and the session's skill runs, oldest
+       * first: a call that loaded a skill (`callId`, what openCall takes), or a skill the user typed
+       * (`callId` ""), where it stands (running, done, failed, stopped), when it started and ended
+       * (epoch ms; 0 for not yet) and how many calls the turn made after it.
+       */
+      skills(): { known: boolean; partial: boolean; skills: { name: string; description: string; source: string; path: string; command: string }[]; runs: { name: string; callId: string; state: string; startedMs: number; endedMs: number; calls: number }[] };
     };
     settings: {
       /** The plugin's section of config.json, null when it has none. */

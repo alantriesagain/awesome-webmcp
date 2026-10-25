@@ -75,6 +75,9 @@ export const answerUi = (rt: JsRuntime, name: string, a: unknown[]): HostAnswer 
     }
     case "commands.run":
       return answer(k.commands.run(str(a[0])));
+    case "commands.remove":
+      // Plugin `owner` drops its command `name`.
+      return answer(k.commands.remove(str(a[1]), str(a[0])));
     case "keys.add": {
       // A key bound to a function of plugin `owner`: an action named after the key (`<owner>:<spec>`); a spec of "" is a hint alone (named after its text).
       const owner = str(a[0]);
@@ -228,6 +231,7 @@ export const answerUi = (rt: JsRuntime, name: string, a: unknown[]): HostAnswer 
 /** The `commands` namespace of the plugin API, its JS side: the calls these answers take. */
 export const NAMESPACE_COMMANDS = new PreludePart("commands", `        add: (c) => call("commands.add", id, String(c.name), String(c.usage ?? ""), String(c.help ?? ""), fn((arg) => { c.run(arg); }), typeof c.complete === "function" ? fn((arg) => c.complete(arg) ?? []) : -1),
         run: (text) => call("commands.run", String(text)),
+        remove: (name) => call("commands.remove", id, String(name)),
 `);
 
 /** The `keys` namespace of the plugin API, its JS side: the calls these answers take. */

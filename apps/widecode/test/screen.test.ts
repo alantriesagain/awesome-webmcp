@@ -82,7 +82,9 @@ writeFileSync(join(sessionDir, "aaaaaaaa-1111-2222-3333-444444444444", "subagent
 
 const main = async (): Promise<void> => {
   const ws = await openWorkspace(repo, 100);
-  const config: unknown = { claude: { projects }, sessions: { terminal: false } };
+  // Claude Code's config folder, empty: the Skills tab lists none of this machine's.
+  const configDir = mkdtempSync(join(tmpdir(), "widecode-screen-config-"));
+  const config: unknown = { claude: { projects, configDir }, sessions: { terminal: false } };
   const app = createWidecode(ws, new Conversation(ws.folder), config);
   const widecodeHome = mkdtempSync(join(tmpdir(), "code-screen-widecode-"));
   const store = new Store(widecodeHome);
@@ -101,7 +103,7 @@ const main = async (): Promise<void> => {
     const x = app.shell.xOf(column);
     return shown.slice(-3).map((l) => l.slice(x, x + app.shell.widthOf(column)).trim()).filter((t) => t.length > 0).join("|");
   };
-  eq("the tabs' links on the band under the side column, the fourth beside the first", links(lines), "Files 2      Peers|Sessions 2|Git");
+  eq("the tabs' links on the band under the side column, the fourth beside the first", links(lines), "Files 2      Peers|Sessions 2   Skills|Git");
   ok("and the switch: all files, changed ones", has(lines, " All 3│ Changed 2 "));
   const toolsBand = links(lines, "tools").split("|");
   ok("the tools column beside the chat: its Tools, Available and Agents tabs, the calls' status beside them", app.shell.xOf("tools") === app.shell.widthOf("chat") && toolsBand[0].startsWith("Tools") && toolsBand[1].startsWith("Available") && toolsBand[1].includes("R 0 W 0 X 0 A 0") && toolsBand[2].startsWith("Agents"));
@@ -249,6 +251,9 @@ const main = async (): Promise<void> => {
   app.shell.handleKey(key("tab", ""));
   lines = screen();
   ok("then Peers", app.host.screen.shownIn("side") === "peers" && has(lines, "This machine"));
+  app.shell.handleKey(key("tab", ""));
+  lines = screen();
+  ok("then Skills: none on disk, more once Claude starts", app.host.screen.shownIn("side") === "skills" && has(lines, "More once Claude starts."));
   app.shell.handleKey(key("tab", ""));
   lines = screen();
   ok("then back to the files", app.host.screen.shownIn("side") === "files" && has(lines, "app.js") && app.shell.widthOf("side") === 24);

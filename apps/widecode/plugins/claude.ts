@@ -6,9 +6,15 @@
 // questions and plans for the request panel, and the status Claude Code's status line gets. A
 // permission prompt the user need not see is allowed at once; one about a path outside the
 // session's folders offers the folder, for the session or from now on. The Sessions tab lists the
-// folder's transcripts, titled by Claude Code's own records. Its section of config.json: { "id":
-// "claude", "projects": "" } (the id it is chosen by; where Claude Code keeps sessions, "" for
-// $CLAUDE_CONFIG_DIR/projects, else ~/.claude/projects).
+// folder's transcripts, titled by Claude Code's own records. The skills Claude Code lists at start
+// go to the conversation with what each SKILL.md says it is for (the project's under .claude/skills,
+// the user's under ~/.claude/skills and its synced folder, a plugin's under the plugin's path; a
+// bundled skill has no file), each called by typing its name with a slash; before it starts, the
+// project's (once the folder is trusted), the user's and the synced ones are read from disk as a
+// partial list; a Skill call is a skill call for the Skills tab. Its section of config.json: { "id":
+// "claude", "projects": "", "configDir": "" } (the id it is chosen by; where Claude Code keeps
+// sessions, "" for $CLAUDE_CONFIG_DIR/projects, else ~/.claude/projects; where it keeps its config,
+// with its skills folder, "" for $CLAUDE_CONFIG_DIR, else ~/.claude).
 
 type Ev = widecode.ConversationEvent;
 
@@ -29,6 +35,10 @@ const { parse } = widecode.util;
 
 /** The window of a transcript a resume reads, and each "load earlier" before it. */
 const HISTORY_BYTES = 4 * 1024 * 1024;
+/** How much of a SKILL.md is read for its frontmatter. */
+const FRONTMATTER_BYTES = 8192;
+/** What Claude Code puts before a synced skill's name (those under ~/.claude/skills/synced/<id>/). */
+const SYNCED_PREFIX = "anthropic-skills:";
 /** Lines kept of the live stream and of the loaded history; the model is rebuilt from them. */
 const LIVE_MAX = 8000;
 const HISTORY_MAX = 40000;
@@ -50,6 +60,7 @@ const CATEGORIES: string[][] = [
   ["todo", "TodoWrite"],
   ["question", "AskUserQuestion"],
   ["plan", "ExitPlanMode"],
+  ["skill", "Skill"],
 ];
 const EDIT_TOOLS = ["Edit", "MultiEdit", "Write", "NotebookEdit"];
 
@@ -497,6 +508,8 @@ class Reader {
   readonly requests = new Map<string, { tool: string; input: unknown }>();
   private readonly emit: (e: Ev) => void;
   private readonly readFile: (path: string) => string | null;
+  /** The skills an init record names, each with its file and description (the plugins the record lists locate a plugin's; the folder, a project's). */
+  private readonly skillsOf: (names: string[], plugins: unknown[], folder: string) => widecode.AgentSkill[];
   private compacted = false;
   /** What each live message streams: its key prefix and its blocks' keys by index, by parent call. */
   private streams = new Map<string, { msg: string; keys: Map<number, string> }>();
@@ -514,9 +527,10 @@ class Reader {
   private wasStamped = false;
   private ids = 0;
 
-  constructor(emit: (e: Ev) => void, readFile: (path: string) => string | null) {
+  constructor(emit: (e: Ev) => void, readFile: (path: string) => string | null, skillsOf: (names: string[], plugins: unknown[], folder: string) => widecode.AgentSkill[]) {
     this.emit = emit;
     this.readFile = readFile;
+    this.skillsOf = skillsOf;
   }
 
   private parentOf(parent: string): string {
@@ -748,6 +762,7 @@ class Reader {
       const commands = list(r.slash_commands).filter((c): c is string => typeof c === "string");
       this.emit({ type: "session", id: str(r.session_id), model: str(r.model), mode: str(r.permissionMode), cwd: str(r.cwd), ...(commands.length > 0 ? { commands } : {}) });
       if (Array.isArray(r.tools)) this.emit(toolsOf(r));
+      if (Array.isArray(r.skills)) this.emit({ type: "skills", skills: this.skillsOf(list(r.skills).filter((c): c is string => typeof c === "string"), list(r.plugins), this.folder) });
     } else if (sub === "status") {
       if (str(r.permissionMode).length > 0) this.emit({ type: "mode", mode: str(r.permissionMode) });
       this.emit({ type: "status", status: str(r.status) });
@@ -888,7 +903,7 @@ const folderKeptLabel = (shown: string): string => "Allow " + shown + " from now
 const allowResponse = (requestId: string, input: unknown, folder = "", kept = false): string =>
   '{"type":"control_response","response":{"subtype":"success","request_id":' + JSON.stringify(requestId) + ',"response":{"behavior":"allow","updatedInput":' + inputJson(input) + (folder.length > 0 ? ',"updatedPermissions":[{"type":"addDirectories","directories":[' + JSON.stringify(folder) + '],"destination":' + (kept ? '"localSettings"' : '"session"') + "}]" : "") + "}}}";
 
-const claudeAgent = (api: widecode.Api, id: string, projects: string): widecode.AgentAdapter => {
+const claudeAgent = (api: widecode.Api, id: string, projects: string, config: string): widecode.AgentAdapter => {
   let proc: widecode.ProcessHandle | null = null;
   let processes = 0;
   /** widecode's MCP server as this plugin's agent sees it, and whether the CLI restarts at the turn's end to pick up a change to the harness. */
@@ -945,7 +960,97 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string): widecode.
     api.conversation.apply(batch);
   };
   const readFile = (path: string): string | null => api.fs.text(path);
-  let reader = new Reader(emit, readFile);
+  /** Claude Code's config folder (the section's, else $CLAUDE_CONFIG_DIR, else ~/.claude): its skills folder is under it. */
+  const configDir = (): string => {
+    if (config.length > 0) return config;
+    const env = api.fs.env("CLAUDE_CONFIG_DIR");
+    return env.length > 0 ? env : api.fs.home() + "/.claude";
+  };
+  /** What a SKILL.md's frontmatter says the skill is for ("" when it says nothing): the `description:` line, or the indented lines after one that holds a `|` or `>`. */
+  const descriptionOf = (path: string): string => {
+    const head = api.fs.read(path, 0, FRONTMATTER_BYTES);
+    if (!head.startsWith("---")) return "";
+    const end = head.indexOf("\n---", 3);
+    const lines = (end > 0 ? head.slice(3, end) : head.slice(3)).split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (!lines[i].startsWith("description:")) continue;
+      let value = lines[i].slice("description:".length).trim();
+      if (value.length === 0 || value === "|" || value === ">") {
+        const more: string[] = [];
+        for (let j = i + 1; j < lines.length && /^\s/.test(lines[j]); j++) more.push(lines[j].trim());
+        value = more.join(" ");
+      }
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+      return value.replace(/\s+/g, " ").trim();
+    }
+    return "";
+  };
+  /** Skills read already, by name (a skill's file does not move while Claude runs here), and the folder they were read for. */
+  const skillCache = new Map<string, widecode.AgentSkill>();
+  let skillFolder = "";
+  /** Where skill `name` lives and whose it is: a plugin's (`plugin:skill`, under the plugin's path the init record gives, else among the synced skills), else the project's (under `folder`), the user's, a synced one's; "" for a bundled skill. */
+  const skillFile = (name: string, plugins: unknown[], folder: string): { path: string; source: string } => {
+    const skillsDir = configDir() + "/skills";
+    const synced = (short: string): string => {
+      for (const e of api.fs.list(skillsDir + "/synced")) {
+        if (e.file) continue;
+        const path = skillsDir + "/synced/" + e.name + "/" + short + "/SKILL.md";
+        if (api.fs.stat(path) !== null) return path;
+      }
+      return "";
+    };
+    const colon = name.indexOf(":");
+    if (colon > 0) {
+      const prefix = name.slice(0, colon);
+      const short = name.slice(colon + 1);
+      for (const v of plugins) {
+        const p = rec(v);
+        if (p === null || str(p.name) !== prefix || str(p.path).length === 0 || str(p.path) === "builtin") continue;
+        const path = str(p.path) + "/skills/" + short + "/SKILL.md";
+        if (api.fs.stat(path) !== null) return { path, source: prefix };
+      }
+      return { path: synced(short), source: prefix };
+    }
+    const project = folder + "/.claude/skills/" + name + "/SKILL.md";
+    if (folder.length > 0 && api.fs.stat(project) !== null) return { path: project, source: "project" };
+    const user = skillsDir + "/" + name + "/SKILL.md";
+    if (api.fs.stat(user) !== null) return { path: user, source: "user" };
+    const path = synced(name);
+    return { path, source: path.length > 0 ? "user" : "built-in" };
+  };
+  const skillsOf = (names: string[], plugins: unknown[], folder: string): widecode.AgentSkill[] => {
+    if (folder !== skillFolder) skillCache.clear();
+    skillFolder = folder;
+    const out: widecode.AgentSkill[] = [];
+    for (const name of names) {
+      let s = skillCache.get(name);
+      if (s === undefined) {
+        const file = skillFile(name, plugins, folder);
+        s = { name, description: file.path.length > 0 ? descriptionOf(file.path) : "", source: file.source, path: file.path, command: "/" + name };
+        skillCache.set(name, s);
+      }
+      out.push(s);
+    }
+    return out;
+  };
+  /** The skills on disk, before Claude says: the trusted project's, the user's and the synced ones (named as Claude names them), each with its description; Claude's bundled skills and a plugin's come with its init record. */
+  const scanSkills = (): widecode.AgentSkill[] => {
+    const at = api.state.active().folder;
+    const names: string[] = [];
+    const withSkill = (dir: string): string[] => api.fs.list(dir).filter((e) => !e.file && api.fs.stat(dir + "/" + e.name + "/SKILL.md") !== null).map((e) => e.name);
+    if (at.length > 0 && api.harness.info().trusted) for (const n of withSkill(at + "/.claude/skills")) names.push(n);
+    const skillsDir = configDir() + "/skills";
+    for (const n of withSkill(skillsDir)) if (!names.includes(n)) names.push(n);
+    for (const e of api.fs.list(skillsDir + "/synced")) if (!e.file) for (const n of withSkill(skillsDir + "/synced/" + e.name)) if (!names.includes(SYNCED_PREFIX + n)) names.push(SYNCED_PREFIX + n);
+    return skillsOf(names, [], at);
+  };
+  /** The skills found on disk go to the conversation as a partial list, while this agent is the one it talks to, until Claude's own. */
+  const announceScanned = (): void => {
+    if (api.agent.info().id !== id) return;
+    emit({ type: "skills", skills: scanSkills(), partial: true });
+    flush();
+  };
+  let reader = new Reader(emit, readFile, skillsOf);
   let status = new Status();
   /** The listing's cache (by file name: its size and time, and what it read). */
   const listed = new Map<string, { size: number; mtimeMs: number; s: Listed }>();
@@ -1002,13 +1107,15 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string): widecode.
   /** The model again (a new one, from the conversation): the loaded history's active branch, then the CLI's lines since. */
   const rebuild = (): void => {
     sentStatus = "";
-    reader = new Reader(emit, readFile);
+    reader = new Reader(emit, readFile, skillsOf);
     reader.folder = folder;
     status = new Status();
     for (const r of activeChain(history)) applyRecord(r, true);
     // The CLI's cost per print-mode process, kept in the transcript off the message chain.
     for (const line of history) if (line.startsWith('{"type":"cost-state"')) status.apply(rec(parse(line)) ?? {}, 0);
     emit({ type: "close" });
+    // The transcript holds no init record: the skills on disk stand until the CLI's lines (an init among them) say.
+    emit({ type: "skills", skills: scanSkills(), partial: true });
     for (const line of live) applyRecord(parse(line), false);
     status.f.sessionId = resumed;
     status.f.transcriptPath = fileOf(resumed);
@@ -1241,7 +1348,12 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string): widecode.
   });
   api.on("harnessChanged", () => {
     if (proc !== null) restartWanted = true;
+    // The folder trusted: its skills join the list.
+    if (!api.agent.started()) announceScanned();
   });
+  // The skills on disk, once the agent is registered, in each folder opened, and after /new.
+  api.after(0, announceScanned);
+  api.on("folderOpened", () => api.after(0, announceScanned));
 
   return {
     id,
@@ -1410,10 +1522,11 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string): widecode.
       historyStart = 0;
       history = [];
       live = [];
-      reader = new Reader(emit, readFile);
+      reader = new Reader(emit, readFile, skillsOf);
       reader.folder = folder;
       status = new Status();
       sentStatus = "";
+      api.after(0, announceScanned);
     },
     receive(text) {
       // A line, or a batch of them (JSON lines hold no raw newline).
@@ -1454,11 +1567,11 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string): widecode.
 
 widecode.plugin({
   id: "claude",
-  defaults: () => ({ id: "claude", projects: "" }),
+  defaults: () => ({ id: "claude", projects: "", configDir: "" }),
   activate(api) {
     const section = rec(api.settings.section());
     const agentId = section !== null && str(section.id).length > 0 ? str(section.id) : "claude";
-    api.agents.register(claudeAgent(api, agentId, str(section?.projects)));
+    api.agents.register(claudeAgent(api, agentId, str(section?.projects), str(section?.configDir)));
   },
 });
 

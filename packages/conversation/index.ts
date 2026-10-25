@@ -6,6 +6,7 @@ export * from "./status-info.ts";
 export * from "./activity.ts";
 export * from "./agents.ts";
 export * from "./calls.ts";
+export * from "./skills.ts";
 export * from "./render.ts";
 export * from "./agent.ts";
 export * from "./model-source.ts";

@@ -59,6 +59,23 @@ export class ToolInfo {
   }
 }
 
+/**
+ * A skill the agent has: its name, what it is for, where it comes from ("project", "user", a
+ * plugin's name, "built-in"), its file ("" for one built into the agent) and the text that calls it
+ * from the composer ("/name" for Claude Code; "" for an agent whose skills are asked for in words).
+ */
+export class SkillInfo {
+  readonly name: string;
+  description = "";
+  source = "";
+  path = "";
+  command = "";
+
+  constructor(name: string) {
+    this.name = name;
+  }
+}
+
 /** An MCP server the agent was given, and where it stands ("connected", "pending", "failed", "" when unknown). */
 export class ServerInfo {
   readonly name: string;
@@ -102,6 +119,8 @@ export const AGENT = "agent";
 export const TODO = "todo";
 export const QUESTION = "question";
 export const PLAN = "plan";
+/** A call that loads a skill (Claude Code's Skill tool, opencode's skill tool): its summary is the skill's name. */
+export const SKILL = "skill";
 export const OTHER = "other";
 
 export class Item {
@@ -253,6 +272,10 @@ export class ChatModel {
   servers: ServerInfo[] = [];
   availableKnown = false;
   ownKnown = false;
+  /** The skills the agent has, once it says (`skillsKnown`); `skillsPartial` while the list is what its plugin found on disk before the agent said. */
+  skills: SkillInfo[] = [];
+  skillsKnown = false;
+  skillsPartial = false;
   /** The queued messages the agent last gave back (↑ in the composer takes them), and a counter that moves each time. */
   withdrawn: string[] = [];
   withdrawnRev = 0;

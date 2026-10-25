@@ -13,10 +13,14 @@
 // tab lists its sessions from session/list while it runs, when it offers that, else from the
 // entry's "sessions" command (it prints them as JSON). ACP does not say which tools an agent has:
 // the entry's "tools" command prints them for the mode ({mode} in it), as opencode's
-// `debug agent <mode>` does, read once the session is made and again as its mode changes. Its section:
+// `debug agent <mode>` does, read once the session is made and again as its mode changes. Nor
+// which skills: the entry's "skills" command prints them (opencode's `debug skill`: a list of name,
+// description, location and content), read once the session is made; a call of the agent's `skill`
+// tool, the skill's name in its input, is a skill call for the Skills tab. Its section:
 // { "agents": { "opencode": { "name": "opencode", "command": ["opencode", "acp"],
 //   "sessions": ["opencode", "session", "list", "--format", "json"],
-//   "tools": ["opencode", "debug", "agent", "{mode}"] } } }; an entry with the id of a default replaces it.
+//   "tools": ["opencode", "debug", "agent", "{mode}"], "skills": ["opencode", "debug", "skill"] } } };
+// an entry with the id of a default replaces it.
 // Two agents ship: opencode, and the DeepSeek Harness (`dsh`, the `dsh --profile acp` command). An
 // agent that advertises session/load (opencode) replays a past session's turns; one that only
 // advertises session/resume (the DeepSeek Harness) reopens it without them.
@@ -30,6 +34,8 @@ interface Entry {
   sessions: string[];
   /** A command that prints the tools of the mode named in it as {mode}, as JSON ([] for none). */
   tools: string[];
+  /** A command that prints the agent's skills as JSON (a list of name, description and location; [] for none). */
+  skills: string[];
   /** A command that deletes the session named in it as {session} (a side question's fork; [] for none). */
   forget: string[];
   /** Whether the agent takes a prompt into the turn that runs (opencode does): a message queued meanwhile goes after its next call. */
@@ -42,6 +48,7 @@ const DEFAULT_AGENTS: Record<string, Entry> = {
     command: ["opencode", "acp"],
     sessions: ["opencode", "session", "list", "--format", "json"],
     tools: ["opencode", "debug", "agent", "{mode}"],
+    skills: ["opencode", "debug", "skill"],
     forget: ["opencode", "session", "delete", "{session}"],
     midTurn: true,
   },
@@ -50,6 +57,7 @@ const DEFAULT_AGENTS: Record<string, Entry> = {
     command: ["dsh", "--profile", "acp"],
     sessions: [],
     tools: [],
+    skills: [],
     forget: [],
     midTurn: false,
   },
@@ -100,6 +108,25 @@ const listedOf = (v: unknown): { names: string[]; rules: Rule[] } | null => {
   return { names: Object.keys(tools).filter((name) => tools[name] === true && name !== "invalid" && name !== "question"), rules };
 };
 
+/**
+ * The skills a skills command printed, as opencode's `debug skill` does: a list of `{ name,
+ * description, location, content }`, one built in located at `<built-in>`. Each with where it comes
+ * from: the folder's are the project's, one under the home folder the user's, a built-in one the
+ * agent's. None is called from the composer: the agent loads one when asked for it in words.
+ */
+const skillsOf = (v: unknown, cwd: string, home: string): widecode.AgentSkill[] => {
+  const out: widecode.AgentSkill[] = [];
+  for (const x of list(v)) {
+    const s = obj(x);
+    if (s === null || str(s.name).length === 0) continue;
+    const location = str(s.location);
+    const builtIn = location === "<built-in>" || location.length === 0;
+    const source = builtIn ? "built-in" : cwd.length > 0 && location.startsWith(cwd + "/") ? "project" : home.length > 0 && location.startsWith(home + "/") ? "user" : "";
+    out.push({ name: str(s.name), description: str(s.description), source, path: builtIn ? "" : location, command: "" });
+  }
+  return out;
+};
+
 /** What a side question's fork is told before the question. */
 const SIDE_PROMPT = "Answer briefly, from what you know of this session so far and without tools:\n\n";
 
@@ -123,7 +150,7 @@ const agentsOf = (section: unknown): Record<string, Entry> => {
     const words = (v: unknown): string[] => list(v).filter((w): w is string => typeof w === "string" && w.length > 0);
     const command = words(e?.command);
     if (e === null || command.length === 0) continue;
-    out[id] = { name: str(e.name).length > 0 ? str(e.name) : id, command, sessions: words(e.sessions), tools: words(e.tools), forget: words(e.forget), midTurn: e.midTurn === true };
+    out[id] = { name: str(e.name).length > 0 ? str(e.name) : id, command, sessions: words(e.sessions), tools: words(e.tools), skills: words(e.skills), forget: words(e.forget), midTurn: e.midTurn === true };
   }
   return out;
 };
@@ -375,6 +402,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
   let own: { name: string; category: string }[] = [];
   /** Counts the readings of the agent's tools: a reading answers only while it is the last. */
   let toolReads = 0;
+  let skillReads = 0;
   /** The sessions listed last, the folder and when, and whether a listing is under way. */
   let listed: widecode.AgentSession[] = [];
   let listedFolder = "";
@@ -426,7 +454,8 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
   let userMessage = "";
   let plans = 0;
   /** The calls the agent announced: their kind (a later update may leave it out) and whether their input made them a todo list or a subagent (an update of one it did not announce makes it). */
-  const calls = new Map<string, { kind: string; named: boolean }>();
+  /** The calls seen: each one's kind, whether its facts are its input's (a todo list, a subagent, a skill, one of widecode's tools), and the tool it was announced as. */
+  const calls = new Map<string, { kind: string; named: boolean; tool: string }>();
   /** Requests out (id: what answers them) and the permissions asked (request id: its JSON-RPC id and options). */
   let seq = 0;
   const waiting = new Map<number, (result: unknown, error: string) => void>();
@@ -544,8 +573,11 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
     const subagent = input !== null && typeof input.subagent_type === "string";
     // One of widecode's tools, as the agent names it after the server (opencode's widecode_AskUser).
     const tool = own.find((t) => title === t.name || title.endsWith("widecode_" + t.name.replace(/[^A-Za-z0-9_-]/g, "_"))) ?? null;
-    const named = todos.length > 0 || subagent || tool !== null || (known?.named ?? false);
-    calls.set(callId, { kind, named });
+    // The agent's skill tool (opencode's `skill`), the skill's name in its input.
+    const announcedAs = announced && known === undefined ? title : (known?.tool ?? "");
+    const skill = announcedAs === "skill" && input !== null ? str(input.name) : "";
+    const named = todos.length > 0 || subagent || tool !== null || skill.length > 0 || (known?.named ?? false);
+    calls.set(callId, { kind, named, tool: announcedAs });
     const facts: widecode.CallFacts = {};
     // A call is announced with its tool's name as its title (opencode's bash, read, edit), then retitled.
     if (announced && known === undefined && title.length > 0) facts.tool = title;
@@ -577,9 +609,13 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
       facts.agentPrompt = str(input.prompt);
       facts.summary = str(input.subagent_type) + ": " + str(input.description);
     }
+    if (skill.length > 0) {
+      facts.category = "skill";
+      facts.summary = skill;
+    }
     if (diffs.length === 1 && (diffs[0].oldText === null || diffs[0].oldText === undefined)) facts.written = str(diffs[0].newText);
     else if (kind === "edit" && input !== null && typeof input.content === "string") facts.written = input.content;
-    const name = tool !== null ? (OWN_NAME[tool.category] ?? tool.name) : (NAME[kind] ?? "Tool");
+    const name = tool !== null ? (OWN_NAME[tool.category] ?? tool.name) : skill.length > 0 ? "Skill" : (NAME[kind] ?? "Tool");
     if (isNew) emit({ type: "block", key: callId, kind: "tool", id: callId, name, text: "", ...facts });
     else emit({ type: "facts", id: callId, ...facts });
     if (u.rawInput !== undefined) emit({ type: "input", key: callId, input: u.rawInput, ...(subagent ? { name: "Agent" } : todos.length > 0 ? { name: "Todo" } : {}) });
@@ -733,6 +769,30 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
     );
   };
 
+  /** The agent's skills, from the entry's skills command (none without one: the conversation is told an empty list, so the tab says so). */
+  const readSkills = (): void => {
+    const seq = ++skillReads;
+    const gen = generation;
+    const told = (v: unknown): void => {
+      if (seq !== skillReads || gen !== generation) return;
+      emit({ type: "skills", skills: skillsOf(v, cwd, api.fs.home()) });
+      flush();
+    };
+    if (entry.skills.length === 0) return told(null);
+    api.process.run("cd " + quote(cwd) + " && " + entry.skills.map(quote).join(" "), "", 15000).then(
+      (r) => {
+        let v: unknown = null;
+        try {
+          v = r.code === 0 ? JSON.parse(r.out) : null;
+        } catch {
+          v = null;
+        }
+        told(v);
+      },
+      () => told(null),
+    );
+  };
+
   /** The effort asked for before the session was ready or while its model switched goes, when the model has it and does not run on it. */
   const wantedEffort = (): void => {
     const level = wantEffort;
@@ -745,6 +805,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
   const sessionReady = (): void => {
     ready = true;
     readTools();
+    readSkills();
     if (wantMode.length > 0) setMode(wantMode);
     const model = wantModel;
     wantMode = "";
