@@ -1,24 +1,34 @@
 // Git, read-only: the Git tab and the compare base. The tab lists what the changes are compared
-// with (HEAD; where this branch left the main one; where this session started), the local branches
+// with (HEAD; where this branch left the main one; where this session started; what a peer has on
+// this branch), the local branches
 // (● the current one, ahead and behind their upstream, the last commit's age; the first 8, then a
 // row for the rest), and the log of the branch chosen, this session's commits marked ●. A commit
-// opens to its files with their lines; a file shows that commit's change in the code column. ↑↓
-// moves, Enter or → opens, ← closes, b moves to the next base. The tab reads git again when the
-// watcher sees the repository change. Nothing here checks out, stages or commits.
+// opens to its files with their lines; a file shows that commit's change in the code column. The
+// peers paired through the peers plugin that have a remote here are listed with their branches, each
+// against the local branch of its name (↓ what they have that we do not), and Enter shows one's log;
+// the badge says how far the peer furthest ahead is. ↑↓ moves, Enter or → opens, ← closes, b moves
+// to the next base. The tab reads git again when the watcher sees the repository
+// change. Nothing here checks out, stages or commits: a fetch is the peers plugin's.
 
 type Run = widecode.Run;
 
 interface Row {
-  kind: "compare" | "note" | "empty" | "section" | "more" | "branch" | "commit" | "file";
+  kind: "compare" | "note" | "empty" | "section" | "more" | "branch" | "peer" | "rbranch" | "commit" | "file";
   section?: string;
   index?: number;
   file?: number;
+  /** A peer's index (peer and rbranch rows) and a branch's within it (rbranch). */
+  peer?: number;
+  rbranch?: number;
   text?: string;
 }
 
+type PeerRemote = { id: string; name: string; remote: string; online: boolean; lastSeenMs: number };
+type RemoteBranch = { name: string; ref: string; sha: string; commitMs: number; local: boolean; ahead: number; behind: number };
+
 const T = widecode.theme;
-const BASES = ["head", "branch", "session"];
-const BASE_NAMES = ["HEAD", "branch", "session"];
+const BASES = ["head", "branch", "session", "peer"];
+const BASE_NAMES = ["HEAD", "branch", "session", "peer"];
 const COMPARE = " vs ";
 /** Branches listed before a "+N more" row (the current one and the most recently committed). */
 const BRANCHES_SHOWN = 8;
@@ -54,6 +64,14 @@ widecode.plugin({
     let info = "";
     /** Ahead and behind the upstream, for the tab's link ("" until read, or level). */
     let track = "";
+    /** The paired peers with a remote here, and each remote's branches as fetched. */
+    let peers: PeerRemote[] = [];
+    const peerBranches = new Map<string, RemoteBranch[]>();
+    /** The peer furthest ahead of the current branch, and by how much (0 when none). */
+    let peerAhead = 0;
+    let peerAheadName = "";
+    /** The remote branch refs the log may show (a peer's), beside the local branches. */
+    const peerRefs = new Set<string>();
 
     const layout = (): void => {
       const out: Row[] = [{ kind: "compare" }];
@@ -65,6 +83,14 @@ widecode.plugin({
           const n = allBranches ? branches.length : Math.min(branches.length, BRANCHES_SHOWN);
           for (let i = 0; i < n; i++) out.push({ kind: "branch", index: i });
           if (branches.length > BRANCHES_SHOWN) out.push({ kind: "more", text: allBranches ? "fewer branches" : "+" + String(branches.length - BRANCHES_SHOWN) + " more branches" });
+        }
+        if (peers.length > 0) {
+          out.push({ kind: "section", section: "peers" });
+          if (!folded.has("peers"))
+            peers.forEach((p, i) => {
+              out.push({ kind: "peer", peer: i });
+              (peerBranches.get(p.remote) ?? []).forEach((_b, k) => out.push({ kind: "rbranch", peer: i, rbranch: k }));
+            });
         }
         out.push({ kind: "section", section: "commits" });
         ours = new Set<string>();
@@ -94,17 +120,18 @@ widecode.plugin({
       const now = Date.now();
       if (r.kind === "compare") {
         const runs: Run[] = [{ text: COMPARE, fg: DIM }];
-        BASES.forEach((b, i) => {
+        const kinds = visibleBases();
+        kinds.forEach((b, i) => {
           const on = b === base;
-          runs.push({ text: " " + BASE_NAMES[i] + " ", fg: on ? T.link : DIM, bold: on, bg: on ? SELECTED_BG : "" });
-          if (i < BASES.length - 1) runs.push({ text: "│", fg: DIM });
+          runs.push({ text: " " + BASE_NAMES[BASES.indexOf(b)] + " ", fg: on ? T.link : DIM, bold: on, bg: on ? SELECTED_BG : "" });
+          if (i < kinds.length - 1) runs.push({ text: "│", fg: DIM });
         });
         return { runs };
       }
       if (r.kind === "note" || r.kind === "empty" || r.kind === "more") return { bg, runs: [{ text: "   " + u.clip(r.text ?? "", Math.max(1, width - 3)), fg: r.kind === "note" ? T.warn : r.kind === "more" ? T.link : DIM }] };
       if (r.kind === "section") {
         const open = !folded.has(r.section ?? "");
-        const title = r.section === "branches" ? "Branches (" + String(branches.length) + ")" : "Commits · " + logRef;
+        const title = r.section === "branches" ? "Branches (" + String(branches.length) + ")" : r.section === "peers" ? "Peers (" + String(peers.length) + ")" : "Commits · " + logRef;
         return { bg, runs: [{ text: " " + (open ? "▾ " : "▸ "), fg: DIM }, { text: u.clip(title, Math.max(1, width - 3)), fg: "", bold: true }] };
       }
       if (r.kind === "branch") {
@@ -117,6 +144,25 @@ widecode.plugin({
         const pad = width - 5 - u.width(name) - tail.length;
         if (pad > 0) runs.push({ text: " ".repeat(pad), fg: "" });
         if (track.length > 0) runs.push({ text: " " + track, fg: b.behind > 0 ? T.warn : T.ok });
+        runs.push({ text: " " + ago, fg: DIM });
+        return { bg, runs };
+      }
+      if (r.kind === "peer") {
+        const p = peers[r.peer ?? 0];
+        const state = p.online ? "online" : p.lastSeenMs > 0 ? "seen " + u.age(now - p.lastSeenMs) + " ago" : "not seen";
+        return { bg, runs: [{ text: "   " + (p.online ? "●" : "○") + " ", fg: p.online ? T.ok : DIM }, { text: u.clip(p.name, Math.max(4, width - 8 - state.length)), fg: "", bold: true }, { text: " · " + state, fg: p.online ? T.ok : DIM }] };
+      }
+      if (r.kind === "rbranch") {
+        const p = peers[r.peer ?? 0];
+        const b = (peerBranches.get(p.remote) ?? [])[r.rbranch ?? 0];
+        const track = b.local ? (b.behind > 0 ? "↓" + String(b.behind) : "") + (b.ahead > 0 ? (b.behind > 0 ? " " : "") + "↑" + String(b.ahead) : "") + (b.ahead === 0 && b.behind === 0 ? "level" : "") : "not here";
+        const ago = b.commitMs > 0 ? u.age(now - b.commitMs) : "";
+        const tail = " " + track + " " + ago;
+        const name = u.clip(b.name, Math.max(4, width - 6 - tail.length));
+        const runs: Run[] = [{ text: "     ", fg: "" }, { text: name, fg: b.ref === logRef ? T.link : "", bold: b.ref === logRef }];
+        const pad = width - 5 - u.width(name) - tail.length;
+        if (pad > 0) runs.push({ text: " ".repeat(pad), fg: "" });
+        runs.push({ text: " " + track, fg: b.behind > 0 ? T.warn : b.local ? T.ok : DIM });
         runs.push({ text: " " + ago, fg: DIM });
         return { bg, runs };
       }
@@ -171,12 +217,28 @@ widecode.plugin({
           }
           branches = await api.git.branches();
           const current = branches.find((b) => b.current);
-          if (!branches.some((b) => b.name === logRef)) logRef = current !== undefined ? current.name : "HEAD";
+          peers = await api.peers.remotes();
+          peerBranches.clear();
+          peerRefs.clear();
+          peerAhead = 0;
+          peerAheadName = "";
+          for (const p of peers) {
+            const list = await api.git.remoteBranches(p.remote);
+            peerBranches.set(p.remote, list);
+            for (const b of list) {
+              peerRefs.add(b.ref);
+              if (current !== undefined && b.name === current.name && b.behind > peerAhead) {
+                peerAhead = b.behind;
+                peerAheadName = p.name;
+              }
+            }
+          }
+          if (!branches.some((b) => b.name === logRef) && !peerRefs.has(logRef)) logRef = current !== undefined ? current.name : "HEAD";
           commits = await api.git.log(logRef, LOG_MAX);
           sessionBase = await findSessionBase();
           status = "";
           track = current !== undefined ? ((current.ahead > 0 ? "↑" + String(current.ahead) : "") + (current.behind > 0 ? "↓" + String(current.behind) : "")) : "";
-          info = (current !== undefined ? "⎇ " + current.name + (current.ahead > 0 ? " ↑" + String(current.ahead) : "") + (current.behind > 0 ? " ↓" + String(current.behind) : "") + (current.upstream.length > 0 ? " " + current.upstream : "") : "detached HEAD") + " · b compare";
+          info = (current !== undefined ? "⎇ " + current.name + (current.ahead > 0 ? " ↑" + String(current.ahead) : "") + (current.behind > 0 ? " ↓" + String(current.behind) : "") + (current.upstream.length > 0 ? " " + current.upstream : "") : "detached HEAD") + " · b compare" + (peerAhead > 0 ? " · " + peerAheadName + " ↓" + String(peerAhead) : "");
         } while (again);
       } finally {
         busy = false;
@@ -184,40 +246,64 @@ widecode.plugin({
       layout();
     };
 
-    /** Compare changes with HEAD, where the branch left the main one, or where this session started. */
-    const setBase = async (kind: string): Promise<void> => {
+    /** The peer furthest ahead on the current branch, with that branch as fetched here; null when none has it. */
+    const peerTip = (): { peer: PeerRemote; branch: RemoteBranch } | null => {
+      const current = branches.find((b) => b.current);
+      if (current === undefined) return null;
+      let best: { peer: PeerRemote; branch: RemoteBranch } | null = null;
+      for (const p of peers) for (const b of peerBranches.get(p.remote) ?? []) if (b.name === current.name && (best === null || b.behind > best.branch.behind)) best = { peer: p, branch: b };
+      return best;
+    };
+
+    /**
+     * Compare changes with HEAD, where the branch left the main one, where this session started, or
+     * what a peer has on this branch. Answers whether the base applied (`quiet` keeps a refusal silent).
+     */
+    const setBase = async (kind: string, quiet: boolean): Promise<boolean> => {
       let ref = "HEAD";
       let name = "HEAD";
       let note = "";
+      const refuse = (why: string): boolean => {
+        if (!quiet) api.tell(why);
+        return false;
+      };
       if (kind === "branch") {
         const main = await api.git.defaultBranch();
         const at = main.length > 0 ? await api.git.mergeBase(main) : "";
-        if (at.length === 0) {
-          api.tell(main.length === 0 ? "no main branch to compare with (origin's HEAD, main or master)" : "this branch shares no commit with " + main);
-          return;
-        }
-        if (at === (await api.git.head())) {
-          api.tell("this is " + main + " (or level with it): comparing with the branch is comparing with HEAD");
-          return;
-        }
+        if (at.length === 0) return refuse(main.length === 0 ? "no main branch to compare with (origin's HEAD, main or master)" : "this branch shares no commit with " + main);
+        if (at === (await api.git.head())) return refuse("this is " + main + " (or level with it): comparing with the branch is comparing with HEAD");
         ref = at;
         name = main;
         note = "where this branch left " + main + " · " + at.slice(0, 7);
       } else if (kind === "session") {
         const at = await findSessionBase();
-        if (at.length === 0) {
-          api.tell("this session's start is not known yet: it is recorded with its first message");
-          return;
-        }
+        if (at.length === 0) return refuse("this session's start is not known yet: it is recorded with its first message");
         ref = at;
         name = "session start";
         note = "since this session started · " + at.slice(0, 7);
+      } else if (kind === "peer") {
+        const tip = peerTip();
+        if (tip === null) return refuse(peers.length === 0 ? "no peer has a remote here (the Peers tab pairs one)" : "no peer has this branch fetched here");
+        ref = tip.branch.sha;
+        name = tip.branch.ref;
+        note = "what " + tip.peer.name + " has on " + tip.branch.name + " · " + tip.branch.sha.slice(0, 7);
       }
       base = kind;
       baseNote = note;
       layout();
       api.tell("comparing with " + (kind === "head" ? "HEAD" : note));
       api.actions.setBase(ref, kind, name);
+      return true;
+    };
+
+    /** The bases on offer: the peer one only while a peer has a remote here. */
+    const visibleBases = (): string[] => (peers.length > 0 ? BASES : BASES.filter((k) => k !== "peer"));
+
+    /** The next base after the current one (b); one that cannot apply says why and the base stays. */
+    const cycleBase = (): void => {
+      const kinds = visibleBases();
+      const at = kinds.indexOf(base);
+      void setBase(kinds[(at + 1) % kinds.length], false);
     };
 
     /** The selected row acted on: `how` is "enter", "right" (open) or "left" (close); `x` where a press was (-1 for a key). */
@@ -225,17 +311,17 @@ widecode.plugin({
       const r = rows[selected];
       if (r === undefined) return;
       if (r.kind === "compare") {
-        let pick = "";
-        if (x < 0) pick = BASES[(BASES.indexOf(base) + 1) % BASES.length];
+        if (x < 0) cycleBase();
         else {
+          let pick = "";
           let at = COMPARE.length;
-          BASES.forEach((b, i) => {
-            const w = BASE_NAMES[i].length + 2;
+          for (const b of visibleBases()) {
+            const w = BASE_NAMES[BASES.indexOf(b)].length + 2;
             if (x >= at && x < at + w) pick = b;
             at += w + 1;
-          });
+          }
+          if (pick.length > 0) void setBase(pick, false);
         }
-        if (pick.length > 0) void setBase(pick);
       } else if (r.kind === "section") {
         const open = !folded.has(r.section ?? "");
         if (how === "enter" || (how === "left") === open) {
@@ -249,6 +335,16 @@ widecode.plugin({
           logRef = branches[r.index ?? 0].name;
           void refresh();
         }
+      } else if (r.kind === "rbranch") {
+        if (how !== "left") {
+          const b = (peerBranches.get(peers[r.peer ?? 0].remote) ?? [])[r.rbranch ?? 0];
+          if (b !== undefined) {
+            logRef = b.ref;
+            void refresh();
+          }
+        }
+      } else if (r.kind === "peer") {
+        if (how !== "left") api.actions.showPanel("peers");
       } else if (r.kind === "commit") {
         const c = commits[r.index ?? 0];
         const open = expanded.has(c.sha);
@@ -291,7 +387,12 @@ widecode.plugin({
       width: (cols) => Math.max(34, Math.min(60, Math.floor(cols / 5))),
       count: () => rows.length,
       rows: (from, count, width) => rows.slice(from, from + count).map((r, i) => line(r, from + i, width)),
-      badge: () => (track.length > 0 ? [{ text: track, fg: T.warn }] : []),
+      badge: () => {
+        const out: Run[] = [];
+        if (track.length > 0) out.push({ text: track, fg: T.warn });
+        if (peerAhead > 0) out.push({ text: (out.length > 0 ? " " : "") + "↓" + String(peerAhead), fg: T.warn });
+        return out;
+      },
       info: () => [{ text: " " + info, fg: DIM }],
       press: (row, x) => {
         selected = row;
@@ -325,7 +426,7 @@ widecode.plugin({
       help: "compare",
       key: "char:b",
       run: () => {
-        void setBase(BASES[(BASES.indexOf(base) + 1) % BASES.length]);
+        cycleBase();
         return true;
       },
     });

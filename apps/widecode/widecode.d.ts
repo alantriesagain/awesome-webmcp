@@ -776,6 +776,8 @@ declare namespace widecode {
       aheadBehind(a: string, b: string): Promise<{ ahead: number; behind: number }>;
       /** The repository's oldest root commit, what the same repository is called on another machine ("" without one). */
       rootCommit(): Promise<string>;
+      /** The branches of `remote` as fetched here, each against the local branch of its name (`ahead` and `behind` -1 without one). */
+      remoteBranches(remote: string): Promise<{ name: string; ref: string; sha: string; commitMs: number; local: boolean; ahead: number; behind: number }[]>;
     };
     /** The LAN git bridge (the peers plugin): this machine's daemon, started when needed, and a peer's copy as a remote of this folder. */
     peers: {
@@ -793,6 +795,8 @@ declare namespace widecode {
       remote(peerId: string, key: string): Promise<string>;
       /** `git fetch --prune <remote>` in this folder, never prompting: the exit code and what git said. */
       fetch(remote: string): Promise<{ code: number; out: string; err: string }>;
+      /** The paired peers that have a remote named after them in this folder's repository, and whether each was seen in the last minutes. */
+      remotes(): Promise<{ id: string; name: string; remote: string; online: boolean; lastSeenMs: number }[]>;
     };
     sessions: {
       /** The folder's sessions with the agent, newest first. */

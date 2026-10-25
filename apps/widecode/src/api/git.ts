@@ -2,7 +2,7 @@
 // read as promises (branches, the log, a commit's files, the bases), each settled for the plugin.
 import { PreludePart } from "@light/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
-import { AheadBehind, Branch, Commit, CommitFile, LOG_MAX, readAheadBehind, readBranches, readCommitAt, readCommitFiles, readDefaultBranch, readHeadCommit, readLog, readMergeBase, readRootCommit } from "@light/workspace/git-log.ts";
+import { AheadBehind, Branch, Commit, CommitFile, LOG_MAX, RemoteBranch, readAheadBehind, readBranches, readCommitAt, readCommitFiles, readDefaultBranch, readHeadCommit, readLog, readMergeBase, readRemoteBranches, readRootCommit } from "@light/workspace/git-log.ts";
 import { HostAnswer } from "@light/plugins/engine.ts";
 import { str, num, json, refuse, commitOf, commitText, branchText, fileText, listText, objectText } from "./values.ts";
 
@@ -31,6 +31,14 @@ export const answerGit = (rt: JsRuntime, name: string, a: unknown[]): HostAnswer
       return rt.settled(str(a[0]), num(a[3]), readAheadBehind(ws.repo, ws.folder, str(a[1]), str(a[2])).then((r: AheadBehind) => objectText(["ahead", "behind"], [String(r.ahead), String(r.behind)])));
     case "git.rootCommit":
       return rt.settled(str(a[0]), num(a[1]), readRootCommit(ws.repo, ws.folder).then((sha: string) => json(sha)));
+    case "git.remoteBranches":
+      return rt.settled(
+        str(a[0]),
+        num(a[2]),
+        readRemoteBranches(ws.repo, ws.folder, str(a[1])).then((list: RemoteBranch[]) =>
+          listText(list.map((b: RemoteBranch) => objectText(["name", "ref", "sha", "commitMs", "local", "ahead", "behind"], [json(b.name), json(b.ref), json(b.sha), String(b.commitMs), String(b.local), String(b.ahead), String(b.behind)]))),
+        ),
+      );
   }
   return null;
 };
@@ -45,4 +53,5 @@ export const NAMESPACE_GIT = new PreludePart("git", `        branches: () => lat
         commitAt: (ms) => later("git.commitAt", id, Number(ms)),
         aheadBehind: (a, b) => later("git.aheadBehind", id, String(a), String(b)),
         rootCommit: () => later("git.rootCommit", id),
+        remoteBranches: (remote) => later("git.remoteBranches", id, String(remote)),
 `);
