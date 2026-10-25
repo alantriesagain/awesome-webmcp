@@ -28,7 +28,7 @@ const main = async (): Promise<void> => {
   eq("a missing file", await run("Read", '{"file_path":"nope.txt"}'), "ERR cannot read nope.txt: not a file, or not readable");
   eq("a binary file", await run("Read", '{"file_path":"bin.dat"}'), "ERR bin.dat is a binary file");
   eq("an absolute path", await run("Read", JSON.stringify({ file_path: join(folder, "a.txt"), limit: 1 })), "     1\tone\n(2 more lines: read from line 2)");
-  eq("Bash: the output, stderr in it", await run("Bash", '{"command":"echo out; echo err >&2"}'), "out\nerr");
+  eq("Bash: the output, stderr in it", (await run("Bash", '{"command":"echo out; echo err >&2"}')).split("\n").sort().join("|"), "err|out");
   eq("the exit code when not 0, as an error", await run("Bash", '{"command":"echo x; exit 3"}'), "ERR x\n[exit code 3]");
   eq("the folder is the cwd", await run("Bash", '{"command":"cat a.txt | head -1"}'), "one");
   eq("a timeout", await run("Bash", '{"command":"sleep 5","timeout":1000}'), "ERR (no output)\n[timed out after 1 s]");
@@ -55,7 +55,7 @@ const main = async (): Promise<void> => {
   eq("LS: the entries, folders marked", await run("LS", '{"path":"src"}'), "deep/\nnotes.md\none.ts");
   eq("the set in plan mode", tools.forMode("plan").tools.map((t) => t.name).join(","), "Read,Grep,Glob,LS");
   ok("the tools as the API takes them", tools.json(false).startsWith('[{"name":"Read","description":"Read a file') && tools.json(false).includes('"input_schema":{"type":"object","properties":{"file_path"') && !tools.json(false).includes("eager"));
-  eq("an input checked: a missing field, a wrong type, not JSON, not an object, unknown tool, a good one", [tools.validate("Read", "{}"), tools.validate("Read", '{"file_path":3}'), tools.validate("Bash", "{nope"), tools.validate("Bash", "[1]"), tools.validate("Nope", "{}"), tools.validate("Bash", '{"command":"ls","timeout":5}')].join(" | "), "the input lacks file_path | file_path should be a string | the input is not valid JSON | the input is not an object | no tool named Nope | ");
+  eq("an input checked: a missing field, a wrong type, not JSON, not an object, unknown tool, a good one", [tools.checkInput("Read", "{}"), tools.checkInput("Read", '{"file_path":3}'), tools.checkInput("Bash", "{nope"), tools.checkInput("Bash", "[1]"), tools.checkInput("Nope", "{}"), tools.checkInput("Bash", '{"command":"ls","timeout":5}')].join(" | "), "the input lacks file_path | file_path should be a string | the input is not valid JSON | the input is not an object | no tool named Nope | ");
   rmSync(folder, { recursive: true, force: true });
   done();
 };

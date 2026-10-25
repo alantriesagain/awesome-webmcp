@@ -90,11 +90,11 @@ export class AcpAgent {
     const o = new ConfigOptions();
     for (const m of this.registry.models) {
       const p = this.registry.provider(m.provider);
-      o.models.push(new Choice(m.value(), m.name, p !== null ? p.name : m.provider));
+      o.models.push(new Choice(m.modelValue(), m.name, p !== null ? p.name : m.provider));
     }
     const wanted = this.registry.model(this.config.model);
     const model = wanted !== null ? wanted : this.registry.models.length > 0 ? this.registry.models[0] : null;
-    o.model = model !== null ? model.value() : "";
+    o.model = model !== null ? model.modelValue() : "";
     this.effortsOf(o, model);
     return o;
   }

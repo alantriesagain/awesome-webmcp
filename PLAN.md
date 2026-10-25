@@ -317,10 +317,16 @@ risks); each slice below is one commit with its tests.
       `test/fake-model.mjs`, the client end to end with a retry and a refused key), `tools`,
       `registry`; the app test's tool-calling turn. Open: the live probe of both HTTP paths
       (`test/probe/model.mjs`, `NATIVE_LIVE=1` with a key) decides the default.
-- [ ] **Edits and search.** `patch.ts`, `Write`, `Edit`, `glob-match.ts`, `Grep`, `Glob`, `LS`;
-      the diff block and `filediff.patch` the code column follows.
-- [ ] **Modes and the tool set.** `build` and `plan`, `current_mode_update`, the read-only set in
-      plan, `--harness-tools <mode>` from the set.
+- [x] **Edits and search.** `patch.ts` (the Myers line diff and the unified patch), `Write` and
+      `Edit` (a file read first, the mode and line endings kept, the change as a diff block and
+      `filediff.patch` the code column follows), `glob-match.ts`, `Grep` (ripgrep or grep), `Glob`
+      (the workspace's file list), `LS`. Tests: `patch`, `glob-match`, `edit`, `tools`; the app
+      test's edit turn. The second slice's live probe ran: DeepSeek's streams are recorded under
+      `test/fixtures` and read by `anthropic.test.ts`; the installed binary ran a real turn with
+      Read and Bash over the node HTTP path natively, which stays the default.
+- [x] **Modes and the tool set.** `build` and `plan` as the mode option, `current_mode_update`,
+      the read-only set in plan, `--harness-tools <mode>` answered from the set (done with the
+      earlier slices; the app test covers /plan and the Available tab in both modes).
 - [ ] **Sessions.** The JSONL tree, replay on load, resume, fork as a file, `--harness-sessions`,
       `--harness-forget`, titles and `/title`.
 - [ ] **Compaction.** The estimate, the threshold and `compactAt`, the summary, `/compact`.

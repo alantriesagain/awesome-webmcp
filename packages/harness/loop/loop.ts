@@ -186,7 +186,7 @@ export class AgentLoop {
     const one = async (c: Call): Promise<void> => {
       if (abort.aborted) return;
       const p = c.part;
-      const why = tools.validate(p.name, p.inputJson);
+      const why = tools.checkInput(p.name, p.inputJson);
       const onStart = listener.onToolStart;
       if (onStart !== null) onStart(p.callId, p.name, p.inputJson.length > 0 ? p.inputJson : "{}");
       let outcome: ToolOutcome;

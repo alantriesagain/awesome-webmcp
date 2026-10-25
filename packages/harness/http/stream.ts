@@ -8,6 +8,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { request as httpRequest, type ClientRequest, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
+import { type Socket } from "node:net";
 import { StringDecoder } from "node:string_decoder";
 import { objectText } from "@light/lib/json.ts";
 
@@ -147,6 +148,9 @@ export class HttpStream {
       }
       this.req = req;
       req.on("error", (e: Error) => finish(this.aborted ? "aborted" : e.message));
+      // A socket error after the request was destroyed (the server ending a held stream) has no
+      // listener of its own and would end the process.
+      req.on("socket", (socket: Socket) => socket.on("error", () => {}));
       req.write(r.body);
       req.end();
     });

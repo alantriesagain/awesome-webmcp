@@ -48,7 +48,7 @@ export class ModelInfo {
   }
 
   /** `provider/id`, the value the options carry. */
-  value(): string {
+  modelValue(): string {
     return this.provider + "/" + this.id;
   }
 }
@@ -108,7 +108,7 @@ export class ModelRegistry {
 
   /** The model `value` names (`provider/id`), or null. */
   model(value: string): ModelInfo | null {
-    for (const m of this.models) if (m.value() === value) return m;
+    for (const m of this.models) if (m.modelValue() === value) return m;
     return null;
   }
 

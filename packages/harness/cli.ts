@@ -81,7 +81,7 @@ export const harnessMain = (storeRoot: string, args: string[], build: string): P
     for (const p of r.providers) {
       const key = auth.keyFor(p);
       process.stdout.write(p.name + " (" + p.id + "): " + (key.length > 0 ? "key set" : "no key: set " + p.keyEnv + " or run widecode --harness-auth " + p.id) + "\n");
-      for (const m of r.models) if (m.provider === p.id) process.stdout.write("  " + m.value() + "  " + m.name + "\n");
+      for (const m of r.models) if (m.provider === p.id) process.stdout.write("  " + m.modelValue() + "  " + m.name + "\n");
     }
     return done(0);
   }
@@ -122,7 +122,7 @@ export const harnessMain = (storeRoot: string, args: string[], build: string): P
         for (const m of registry.models) {
           const p = registry.provider(m.provider);
           if (p !== null && auth.keyFor(p).length > 0) {
-            config.model = m.value();
+            config.model = m.modelValue();
             break;
           }
         }
@@ -150,7 +150,7 @@ export const harnessMain = (storeRoot: string, args: string[], build: string): P
     process.on("SIGTERM", () => end("signal SIGTERM"));
     process.on("SIGINT", () => end("signal SIGINT"));
     server.listen();
-    log("listening on stdio" + (fixture !== null ? ", the fake model from " + fixture : "") + "; the store " + storeRoot + "; models " + registry.models.map((m) => m.value()).join(", ") + "; http " + config.http);
+    log("listening on stdio" + (fixture !== null ? ", the fake model from " + fixture : "") + "; the store " + storeRoot + "; models " + registry.models.map((m) => m.modelValue()).join(", ") + "; http " + config.http);
   });
 };
 

@@ -113,7 +113,7 @@ export class ToolSet {
   }
 
   /** Why `inputJson` is not an input for `name` ("" when it is): not JSON, not an object, a required field missing, a field of the wrong type. */
-  validate(name: string, inputJson: string): string {
+  checkInput(name: string, inputJson: string): string {
     const t = this.find(name);
     if (t === null) return "no tool named " + name;
     let parsed: unknown = null;
