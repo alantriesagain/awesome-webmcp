@@ -87,7 +87,8 @@ const main = async (): Promise<void> => {
   ok("a message sent while Claude is idle shows as sent at once", first.some((l) => l.startsWith("› Run the shell command")) && !first.some((l) => l.includes("queued")));
   eq("and under it, Claude is taking it", activity(first), "Sending… 0s");
   eq("the CLI's copy of it does not show it twice", String(at("user:replay").filter((l) => l.includes("<Me>: Run the shell command")).length), "1");
-  eq("a tool running: its name and what its command does", activity(at("assistant:Bash")), "Running Bash Sleep for 6 seconds then e… 0s · turn 0s · Esc interrupts");
+  // The clocks tick while the line is read (a second on a busy machine): their seconds are not the point.
+  eq("a tool running: its name and what its command does", activity(at("assistant:Bash")).replace(/\b\d+s\b/g, "Ns"), "Running Bash Sleep for 6 seconds then e… Ns · turn Ns · Esc interrupts");
   const second = at("sent2");
   eq("a message sent meanwhile is queued under that line, with how to take it back", second.slice(-3).map((l) => (SPINNER.includes(l[0]) ? "activity" : l)).join(" | "), "activity | ⧗ queued: Also, at the end, say the word BANANA. |   ↑ in an empty composer takes it back to edit");
   eq("the turn over: nothing says Claude is busy", activity(at("result")), "");
