@@ -132,6 +132,25 @@ const listenOn = (server: Server, port: number, host: string): Promise<number> =
     });
   });
 
+/**
+ * A request to another machine's daemon: never pooled (`Connection: close`, so a daemon restarted on
+ * the other side is never spoken to over a dead connection) and tried twice when the first attempt
+ * fails outright.
+ */
+export const peerFetch = async (url: string, headers: Record<string, string>): Promise<Response> => {
+  const all: Record<string, string> = { ...headers, connection: "close" };
+  try {
+    return await fetch(url, { headers: all });
+  } catch (first) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    try {
+      return await fetch(url, { headers: all });
+    } catch {
+      throw first;
+    }
+  }
+};
+
 /** Whether `p` answers 200 within `ms`; a slow or failed request is false (said to `why`) and left to end on its own. */
 const raceOk = (p: Promise<Response>, ms: number, why: (text: string) => void): Promise<boolean> =>
   new Promise((resolve) => {
@@ -356,6 +375,8 @@ export class Daemon {
     const label = name.length > 0 ? name : basename(path).replace(/\.git$/, "");
     if (mode === "hosted" && !/^[A-Za-z0-9._-]+$/.test(label)) return "a hosted repository's name is letters, digits, dots, dashes and underscores: " + label;
     const repo = new SharedRepo(repoId, path, label, mode, branches, allow);
+    const had = this.registry.repoByKey(repo.key);
+    if (had !== null && had.path !== path) return (repo.hosted ? "a hosted repository named " + label : "this repository") + " is already shared from " + had.path + "; unshare it first" + (repo.hosted ? "" : ", or host a bare mirror for a second copy");
     this.registry.share(repo);
     this.registry.save();
     this.note("sharing " + repo.key + " (" + label + ", " + repo.mode + ") at " + path);
@@ -423,7 +444,7 @@ export class Daemon {
   async pingPeer(peer: Peer, nowMs: number): Promise<boolean> {
     if (peer.address.length === 0 || peer.port <= 0) return false;
     const url = "http://" + urlHost(peer.address) + ":" + String(peer.port) + "/ping";
-    const ok = await raceOk(fetch(url), 2000, (why: string) => this.note("ping " + peer.name + " at " + url + ": " + why));
+    const ok = await raceOk(peerFetch(url, {}), 2500, (why: string) => this.note("ping " + peer.name + " at " + url + ": " + why));
     if (ok) this.seen(peer.id, "", 0, nowMs);
     return ok;
   }
@@ -443,7 +464,7 @@ export class Daemon {
     if (peer.address.length === 0 || peer.port <= 0) return "";
     const url = "http://" + urlHost(peer.address) + ":" + String(peer.port) + "/repos";
     try {
-      const res = await fetch(url, { headers: { authorization: "Bearer " + peer.tokenWePresent } });
+      const res = await peerFetch(url, { authorization: "Bearer " + peer.tokenWePresent });
       if (res.status !== 200) {
         this.note("repos of " + peer.name + " at " + url + ": status " + String(res.status) + " " + (await res.text()).trim().slice(0, 120));
         return "";

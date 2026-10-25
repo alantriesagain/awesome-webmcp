@@ -7,7 +7,7 @@
 // peer's address, remote, branches against ours and what it offers). Enter opens the page, f
 // fetches the peer under the cursor, s shares or unshares this folder, p shows a code, x forgets a
 // peer, r reads again. `/peers` opens the tab; `/peers pair`, `/peers join <host[:port]> <code>`,
-// `/peers share`, `/peers unshare`, `/peers host <name|path>`, `/peers fetch <peer>`, `/peers forget
+// `/peers share [path]`, `/peers unshare`, `/peers host <name|path>`, `/peers fetch <peer>`, `/peers forget
 // <peer>`, `/peers name <name>` and `/peers stop` do the same from the composer. The daemon
 // (widecode --peers-daemon) does the serving and is started when this plugin needs it; auto-fetch
 // keeps ahead and behind live. Nothing here touches a working tree: a fetch writes refs only.
@@ -364,6 +364,8 @@ widecode.plugin({
       } else put("› p   show a code for two minutes; the other machine joins with " + joinLine(), "");
       put("› /peers join <host:port> <code>", "");
       put("      join a machine showing a code; a nearby machine's name works as the host", DIM);
+      put("› /peers share <path>", "");
+      put("      share another checkout of this machine", DIM);
       put("› /peers host <name>", "");
       put("      a bare repository paired machines push into", DIM);
       blank();
@@ -615,6 +617,16 @@ widecode.plugin({
       await refresh(false, true);
     };
 
+    /** Share the checkout at `path` (another folder of this machine), live. */
+    const sharePath = async (path: string): Promise<void> => {
+      if (!(await up())) return;
+      const a = await req("POST", "/api/share", { path });
+      if (a.status !== 200) return api.tell("could not share " + path + ": " + u.str(rec(parse(a.text)).error));
+      const r = rec(rec(parse(a.text)).repo);
+      api.tell("sharing " + u.str(r.name) + " with the paired machines (" + u.str(r.key) + ")");
+      await refresh(false, true);
+    };
+
     /** Host a bare repository: a new one under the store by name, or an existing bare one by its path. */
     const host = async (arg: string): Promise<void> => {
       const what = arg.trim();
@@ -753,7 +765,7 @@ widecode.plugin({
 
     api.commands.add({
       name: "/peers",
-      usage: "[pair | join <host[:port]> <code> | share | unshare | host <name|path> | fetch <peer> | forget <peer> | name <name> | stop]",
+      usage: "[pair | join <host[:port]> <code> | share [path] | unshare | host <name|path> | fetch <peer> | forget <peer> | name <name> | stop]",
       help: "the machines on this network sharing repositories with this one",
       run: (arg) => {
         const parts = arg.trim().split(/\s+/);
@@ -763,7 +775,7 @@ widecode.plugin({
         if (verb === "name" || verb === "fetch" || verb === "forget" || verb === "unshare") void up();
         if (verb === "pair") return void pairStart();
         if (verb === "join") return void pairJoin(rest);
-        if (verb === "share") return void shareHere();
+        if (verb === "share") return void (rest.length > 0 ? sharePath(rest) : shareHere());
         if (verb === "unshare") return void unshareHere();
         if (verb === "host") return void host(rest);
         if (verb === "fetch" || verb === "forget") {

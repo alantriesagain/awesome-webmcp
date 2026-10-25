@@ -138,6 +138,8 @@ const main = async (): Promise<void> => {
   ok("a peer outside the allow list gets 404", refused.code !== 0 && (refused.err.includes("404") || refused.err.includes("not found")));
   await daemon.share(repo, "live", "live", null, null);
 
+  const twice = await daemon.share(clone, "", "live", null, null);
+  ok("a second checkout of the same repository is refused, not swapped in", typeof twice === "string" && twice.includes("already shared from " + repo));
   const pushLive = await git("-C", clone, "-c", auth, "push", "-q", url, "HEAD:refs/heads/from-mac");
   ok("a push to a live repository is refused", pushLive.code !== 0 && pushLive.err.includes("403"));
 

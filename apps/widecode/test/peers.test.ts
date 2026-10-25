@@ -125,6 +125,19 @@ const main = async (): Promise<void> => {
   ok("/peers fetch says what the peer has", message().includes("1 commit you do not have on main"));
   ok("the Git badge and the segment see it", tab !== null && tab.badge().some((r) => r.text === "↓1"));
 
+  // Another repository of this machine, shared by its path from this session.
+  const repoC = join(root, "other");
+  mkdirSync(repoC);
+  git("init -q " + repoC);
+  writeFileSync(join(repoC, "c.txt"), "other\n");
+  git("-C " + repoC + " add . && git -C " + repoC + " -c user.email=t@t -c user.name=t commit -qm other");
+  app.host.kernel.commands.run("/peers share " + repoC);
+  await until(() => rows().some((r) => r.includes("• other") && r.includes("live")));
+  ok("/peers share <path>: another repository of this machine is shared too", rows().some((r) => r.includes("• other") && r.includes("live")) && a.registry.repos.length === 2);
+  app.host.kernel.commands.run("/peers share " + repoB);
+  await until(() => message().includes("already shared"));
+  ok("a second checkout of this folder's repository is refused with the reason", message().includes("already shared from " + repo));
+
   // Hosting a bare repository by name: it shows as hosted, taking pushes at its key.
   app.host.kernel.commands.run("/peers host mirror");
   await until(() => rows().some((r) => r.includes("mirror") && r.includes("hosted")));

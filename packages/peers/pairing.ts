@@ -128,7 +128,7 @@ export const joinPeer = async (registry: Registry, identity: Identity, myPort: n
   let status = 0;
   let text = "";
   try {
-    const res = await fetch("http://" + urlHost(address) + ":" + String(port) + "/pair", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body.toJson()) });
+    const res = await fetch("http://" + urlHost(address) + ":" + String(port) + "/pair", { method: "POST", headers: { "content-type": "application/json", connection: "close" }, body: JSON.stringify(body.toJson()) });
     status = res.status;
     text = await res.text();
   } catch (err) {
