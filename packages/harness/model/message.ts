@@ -73,12 +73,15 @@ export class Usage {
   output = 0;
   cacheRead = 0;
   cacheWrite = 0;
+  /** What the provider said the request cost in dollars (below 0: it did not say). */
+  reportedCost = -1;
 
   add(other: Usage): void {
     this.input += other.input;
     this.output += other.output;
     this.cacheRead += other.cacheRead;
     this.cacheWrite += other.cacheWrite;
+    if (other.reportedCost >= 0) this.reportedCost = (this.reportedCost < 0 ? 0 : this.reportedCost) + other.reportedCost;
   }
 
   /** What the context held at this request: the input with what the cache served and wrote, plus the output. */

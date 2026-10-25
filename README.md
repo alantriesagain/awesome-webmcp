@@ -239,8 +239,10 @@ a subscription: `widecode --harness-auth deepseek` (or `anthropic`) reads one fr
 `~/.widecode/auth.json`, readable by the user alone, and `DEEPSEEK_API_KEY` or `ANTHROPIC_API_KEY`
 in the environment take precedence. `widecode --harness-models` lists the models and which
 providers have a key. Anthropic's models, DeepSeek's (through its Anthropic-format endpoint) and
-OpenCode Zen's (Claude on its Anthropic-format endpoint; DeepSeek, Kimi, GLM and Qwen on its
-OpenAI-compatible one; `widecode --harness-auth opencode`, or `OPENCODE_API_KEY`) are built in.
+OpenCode Zen's (Claude and Qwen on its Anthropic-format endpoint; DeepSeek, GLM, MiniMax and Kimi
+on its OpenAI-compatible one; `widecode --harness-auth opencode`, or `OPENCODE_API_KEY`) are built
+in. Zen serves a key the models its account has enabled; `widecode --harness-models` marks the
+others.
 Another provider is an entry of `harness.providers`, speaking the Anthropic Messages API, or with
 `"api": "openai"` an OpenAI-compatible chat completions API (OpenRouter, Groq, a local server):
 `"openrouter": {"api": "openai", "baseUrl": "https://openrouter.ai/api/v1", "keyEnv":

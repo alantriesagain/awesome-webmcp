@@ -110,6 +110,8 @@ eq(
 eq("the end: tool use, the input without the cached share, the cached share, the output", got.reader.end.stopReason + " " + String(got.reader.end.usage.input) + " " + String(got.reader.end.usage.cacheRead) + " " + String(got.reader.end.usage.output) + " " + String(got.reader.done), "tool_use 20 100 30 true");
 const openai = read(chunk({ content: "Hi" }, "stop") + "data: " + JSON.stringify({ choices: [], usage: { prompt_tokens: 50, completion_tokens: 2, prompt_tokens_details: { cached_tokens: 40 } } }) + "\n\ndata: [DONE]\n\n");
 eq("OpenAI's cached share; a stop", openai.reader.end.stopReason + " " + String(openai.reader.end.usage.input) + " " + String(openai.reader.end.usage.cacheRead), "end_turn 10 40");
+const billed = read(chunk({ content: "Hi" }, "stop") + "data: " + JSON.stringify({ choices: [], usage: { prompt_tokens: 3820, completion_tokens: 142, prompt_tokens_details: { cached_tokens: 3712 }, cost: 0.00022507 } }) + "\n\ndata: [DONE]\n\n");
+eq("the cost a provider reports (OpenCode Zen's), and none when it says nothing", String(billed.reader.end.usage.reportedCost) + " " + String(openai.reader.end.usage.reportedCost), "0.00022507 -1");
 eq("cut at the length", read(chunk({ content: "Hi" }, "length")).reader.end.stopReason, "max_tokens");
 eq("the content filter", read(chunk({}, "content_filter")).reader.end.error, "the provider's content filter stopped the reply");
 eq("an error chunk", read('data: {"error":{"type":"overloaded","message":"busy now"}}\n\n').reader.end.stopReason + " " + read('data: {"error":{"message":"busy now"}}\n\n').reader.end.error, "error busy now");
@@ -171,8 +173,9 @@ const main = async (): Promise<void> => {
 
   const built = ModelRegistry.builtIn();
   const zen = built.models.filter((x) => x.provider === "opencode");
-  eq("OpenCode Zen's models, each on its endpoint", zen.map((x) => x.id + "=" + built.apiOf(x)).join(" "), "claude-haiku-4-5=anthropic claude-sonnet-5=anthropic claude-sonnet-5-5=anthropic claude-opus-5-5=anthropic claude-fable-5-1=anthropic deepseek-v4.1-flash=openai deepseek-v4-pro=openai kimi-k2.6=openai kimi-k3=openai glm-5.3=openai qwen3.8-max=openai");
-  const claude = built.model("opencode/claude-sonnet-5");
+  eq("OpenCode Zen's models, each on its endpoint", zen.map((x) => x.id + "=" + built.apiOf(x)).join(" "), "claude-haiku-5-5=anthropic claude-sonnet-5-5=anthropic claude-opus-5-5=anthropic claude-fable-5-1=anthropic qwen3.8-flash=anthropic qwen3.6-plus=anthropic deepseek-v4.1-flash=openai deepseek-v4-pro=openai glm-5.3-flash=openai glm-5.3=openai minimax-m3=openai kimi-k3=openai");
+  eq("Anthropic's extras on Zen's Anthropic endpoint alone, by the model's say", zen.map((x) => (built.extrasOf(x) ? "on" : "off")).join(","), "on,on,on,on,on,on,off,off,off,off,off,off");
+  const claude = built.model("opencode/claude-sonnet-5-5");
   const ds = built.model("opencode/deepseek-v4.1-flash");
   eq("Claude's base and DeepSeek's provider base, the key's variable", (claude !== null ? claude.baseUrl : "") + " " + (built.provider("opencode")?.baseUrl ?? "") + " " + (built.provider("opencode")?.keyEnv ?? "") + " " + (ds !== null ? ds.efforts.join("/") : ""), "https://opencode.ai/inference/anthropic https://opencode.ai/inference/openai/v1 OPENCODE_API_KEY on/off");
   rmSync(folder, { recursive: true, force: true });

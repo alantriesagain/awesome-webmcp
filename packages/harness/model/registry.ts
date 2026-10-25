@@ -58,6 +58,8 @@ export class ModelInfo {
   reasoningField = "reasoning_content";
   /** Whether it reads images (a prompt's, a Read of an image file). */
   vision = false;
+  /** Whether its API takes Anthropic's extras: "on", "off", or "" for its provider's say. */
+  extras = "";
 
   constructor(provider: string, id: string, name: string) {
     this.provider = provider;
@@ -103,16 +105,17 @@ const deepseek = (id: string, name: string, input: number, output: number, cache
 /** The efforts a model's thinking kind takes. */
 export const effortsFor = (thinking: string): string[] => (thinking === TOGGLE ? ["on", "off"] : thinking === EFFORT ? ["low", "medium", "high"] : thinking === NO_THINKING ? [] : ["low", "medium", "high"]);
 
-/** A Claude model on OpenCode Zen's Anthropic-format endpoint. */
-const zenClaude = (id: string, name: string, input: number, output: number, cacheRead: number, window: number, thinking: string, efforts: string[]): ModelInfo => {
+/** A model on OpenCode Zen's Anthropic-format endpoint (Claude, Qwen), which takes Anthropic's extras. */
+const zenClaude = (id: string, name: string, input: number, output: number, cacheRead: number, cacheWrite: number, window: number, thinking: string, efforts: string[]): ModelInfo => {
   const m = new ModelInfo("opencode", id, name);
   m.api = ANTHROPIC_API;
   m.baseUrl = "https://opencode.ai/inference/anthropic";
+  m.extras = "on";
   m.window = window;
   m.inputPrice = input;
   m.outputPrice = output;
   m.cacheReadPrice = cacheRead;
-  m.cacheWritePrice = input >= 0 ? input * 1.25 : -1;
+  m.cacheWritePrice = cacheWrite;
   m.thinking = thinking;
   m.efforts = efforts;
   m.vision = true;
@@ -120,7 +123,7 @@ const zenClaude = (id: string, name: string, input: number, output: number, cach
 };
 
 /** A model on OpenCode Zen's chat completions endpoint (its provider's). */
-const zenChat = (id: string, name: string, input: number, output: number, cacheRead: number, window: number, thinking: string): ModelInfo => {
+const zenChat = (id: string, name: string, input: number, output: number, cacheRead: number, window: number, thinking: string, vision: boolean): ModelInfo => {
   const m = new ModelInfo("opencode", id, name);
   m.window = window;
   m.maxOutput = 32000;
@@ -130,6 +133,7 @@ const zenChat = (id: string, name: string, input: number, output: number, cacheR
   m.cacheWritePrice = input;
   m.thinking = thinking;
   m.efforts = effortsFor(thinking);
+  m.vision = vision;
   return m;
 };
 
@@ -153,18 +157,28 @@ export class ModelRegistry {
     const zen = new Provider("opencode", "OpenCode Zen", "https://opencode.ai/inference/openai/v1", "OPENCODE_API_KEY", false);
     zen.api = OPENAI_API;
     r.providers.push(zen);
-    r.models.push(zenClaude("claude-haiku-4-5", "Claude Haiku 4.5", -1, -1, -1, 200000, BUDGET, ["off", "low", "medium", "high"]));
-    r.models.push(zenClaude("claude-sonnet-5", "Claude Sonnet 5", -1, -1, -1, 1000000, ADAPTIVE, EFFORTS));
-    r.models.push(zenClaude("claude-sonnet-5-5", "Claude Sonnet 5.5", 2, 10, 0.2, 1000000, ADAPTIVE, EFFORTS));
-    r.models.push(zenClaude("claude-opus-5-5", "Claude Opus 5.5", 4, 20, 0.2, 1000000, ADAPTIVE, EFFORTS));
-    r.models.push(zenClaude("claude-fable-5-1", "Claude Fable 5.1", -1, -1, -1, 1000000, ADAPTIVE, EFFORTS));
-    r.models.push(zenChat("deepseek-v4.1-flash", "DeepSeek V4.1 Flash", 0.3, 1.2, 0.006, 1000000, TOGGLE));
-    r.models.push(zenChat("deepseek-v4-pro", "DeepSeek V4 Pro", -1, -1, -1, 1000000, TOGGLE));
-    r.models.push(zenChat("kimi-k2.6", "Kimi K2.6", -1, -1, -1, 256000, NO_THINKING));
-    r.models.push(zenChat("kimi-k3", "Kimi K3", -1, -1, -1, 256000, NO_THINKING));
-    r.models.push(zenChat("glm-5.3", "GLM 5.3", -1, -1, -1, 200000, TOGGLE));
-    r.models.push(zenChat("qwen3.8-max", "Qwen 3.8 Max", -1, -1, -1, 256000, NO_THINKING));
+    // Claude and Qwen on Zen's Anthropic-format endpoint, which takes Anthropic's extras.
+    r.models.push(zenClaude("claude-haiku-5-5", "Claude Haiku 5.5", 0.1, 0.5, 0.01, 0.125, 1000000, ADAPTIVE, ["low", "medium", "high"]));
+    r.models.push(zenClaude("claude-sonnet-5-5", "Claude Sonnet 5.5", 2, 10, 0.2, 2.5, 1000000, ADAPTIVE, EFFORTS));
+    r.models.push(zenClaude("claude-opus-5-5", "Claude Opus 5.5", 4, 20, 0.2, 5, 1000000, ADAPTIVE, EFFORTS));
+    r.models.push(zenClaude("claude-fable-5-1", "Claude Fable 5.1", 10, 50, 0.25, 12.5, 1000000, ADAPTIVE, EFFORTS));
+    r.models.push(zenClaude("qwen3.8-flash", "Qwen 3.8 Flash", 0.15, 0.47, 0.016, 0.2, 1000000, BUDGET, ["low", "medium", "high"]));
+    r.models.push(zenClaude("qwen3.6-plus", "Qwen 3.6 Plus", 0.5, 3, 0.05, 0.625, 262144, BUDGET, ["low", "medium", "high"]));
+    r.models.push(zenChat("deepseek-v4.1-flash", "DeepSeek V4.1 Flash", 0.3, 1.2, 0.006, 1000000, TOGGLE, true));
+    r.models.push(zenChat("deepseek-v4-pro", "DeepSeek V4 Pro", 1.74, 3.48, 0.145, 1000000, TOGGLE, false));
+    r.models.push(zenChat("glm-5.3-flash", "GLM 5.3 Flash", 0.15, 0.5, 0.03, 1000000, TOGGLE, true));
+    r.models.push(zenChat("glm-5.3", "GLM 5.3", 1.4, 4.4, 0.26, 1000000, TOGGLE, false));
+    r.models.push(zenChat("minimax-m3", "MiniMax M3", 0.3, 1.2, 0.06, 512000, NO_THINKING, true));
+    r.models.push(zenChat("kimi-k3", "Kimi K3", 3, 15, 0.3, 1048576, NO_THINKING, true));
     return r;
+  }
+
+  /** Whether `m`'s API takes Anthropic's extras (cache breakpoints, eager input streaming, the effort): its own say, else its provider's. */
+  extrasOf(m: ModelInfo): boolean {
+    if (m.extras === "on") return true;
+    if (m.extras === "off") return false;
+    const p = this.provider(m.provider);
+    return p !== null && p.anthropicExtras;
   }
 
   /** The API `m` speaks: its own, else its provider's. */

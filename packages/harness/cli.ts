@@ -8,7 +8,7 @@
 // providers have a key) and `--harness-auth <provider>` (a key read from stdin into auth.json).
 import { join } from "node:path";
 import { log, nameLog, openLogIn } from "@light/lib/log.ts";
-import { errorMessage } from "@light/lib/json.ts";
+import { errorMessage, listOf, parseJson, recordOf, str } from "@light/lib/json.ts";
 import { AcpAgent } from "./acp/agent.ts";
 import { AcpServer, Incoming } from "./acp/server.ts";
 import { Auth } from "./auth.ts";
@@ -20,7 +20,8 @@ import { HarnessPaths } from "./paths.ts";
 import { scanSkills, skillsJson } from "./prompt/skills.ts";
 import { findBrowser } from "./tools/browser.ts";
 import { DenyRule, listingRules, parseRules, rulesIn } from "./tools/permissions.ts";
-import { WebSettings, searchOrder } from "./tools/web.ts";
+import { Fetched, WebSettings, httpText, searchOrder } from "./tools/web.ts";
+import { Abort } from "./loop/abort.ts";
 import { SessionStore, sessionsJson } from "./session/store.ts";
 import { ToolSet, builtInTools } from "./tools/tool.ts";
 
@@ -113,12 +114,26 @@ export const harnessMain = (storeRoot: string, args: string[], build: string): P
   const auth = new Auth(paths.authPath());
   if (args.includes("--harness-models")) {
     const r = registryFor(config, false);
-    for (const p of r.providers) {
-      const key = auth.keyFor(p);
-      process.stdout.write(p.name + " (" + p.id + "): " + (key.length > 0 ? "key set" : "no key: set " + p.keyEnv + " or run widecode --harness-auth " + p.id) + "\n");
-      for (const m of r.models) if (m.provider === p.id) process.stdout.write("  " + m.modelValue() + "  " + m.name + "\n");
-    }
-    return done(0);
+    const zen = r.provider("opencode");
+    const zenKey = zen !== null ? auth.keyFor(zen) : "";
+    // Zen answers its list with the models the key has enabled; another is refused ("Model access is disabled").
+    const enabled = zenKey.length > 0 ? httpText("GET", "https://opencode.ai/inference/v1/models", [["authorization", "Bearer " + zenKey]], "", config.http, new Abort()) : null;
+    const listing = enabled !== null ? enabled : new Promise<Fetched>((settle) => settle(new Fetched()));
+    return listing.then((got: Fetched) => {
+      const ids = new Set<string>();
+      if (got.status === 200) for (const v of listOf(recordOf(parseJson(got.body))?.["data"])) ids.add(str(recordOf(v)?.["id"]));
+      for (const p of r.providers) {
+        const key = auth.keyFor(p);
+        process.stdout.write(p.name + " (" + p.id + "): " + (key.length > 0 ? "key set" : "no key: set " + p.keyEnv + " or run widecode --harness-auth " + p.id) + "\n");
+        for (const m of r.models) {
+          if (m.provider !== p.id) continue;
+          const note = p.id === "opencode" && ids.size > 0 && !ids.has(m.id) ? "  (not enabled for this key)" : "";
+          process.stdout.write("  " + m.modelValue() + "  " + m.name + note + "\n");
+        }
+        if (p.id === "opencode" && key.length > 0 && got.status !== 200) process.stdout.write("  (the list of models the key has could not be read" + (got.error.length > 0 ? ": " + got.error : "") + ")\n");
+      }
+      return 0;
+    });
   }
   const authFor = argValue(args, "--harness-auth");
   if (authFor !== null) {

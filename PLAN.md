@@ -390,9 +390,14 @@ Pending, roughly in order of value (October 2026):
       with refs, click and type by ref, keys, select, scroll, wait for text, evaluate, screenshot,
       tabs), the guards (deny rules by domain, mutating, out of plan mode), and a test over a local
       page with a form.
-- [ ] **OpenCode Zen, live.** With a key: check that its Anthropic endpoint takes `x-api-key`,
-      whether it takes cache breakpoints (`anthropicExtras`, off by default for it), the model ids
-      against `opencode models opencode`, and the prices; then a benchmark run over its models.
+- [x] **OpenCode Zen, live.** Its Anthropic endpoint takes `x-api-key` and Anthropic's extras (a
+      second request read 5,902 tokens from the cache); a key is served the models its account has
+      enabled (44 of 90), the others refused, four of the earlier rows among them; the lineup is
+      the enabled ones checked with a tool, prices from opencode's list, the cost Zen reports per
+      request used. The benchmark, one run of each task: all 48 passed on Claude Haiku 5.5 ($0.016
+      in all, 11.5 s a task), DeepSeek V4.1 Flash ($0.030, 8.6 s), GLM 5.3 Flash ($0.020, 18.6 s),
+      Qwen 3.8 Flash ($0.024, 51.1 s), MiniMax M3 ($0.057, 20.8 s), Kimi K3 ($0.307, 63.1 s; its
+      add-flag run passed its check but its turn ran past the task's 240 s).
 - [ ] **A long call's progress to the client.** The loop hears a Bash call's output as it comes and a
       subagent's calls, but the agent does not forward `onToolOutput`: send them as
       `tool_call_update` content while the call runs.

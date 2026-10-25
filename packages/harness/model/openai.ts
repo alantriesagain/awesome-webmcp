@@ -184,6 +184,9 @@ export class ChatReader {
     }
     const output = num(u["completion_tokens"], -1);
     if (output >= 0) this.end.usage.output = output;
+    // A provider that bills the request says what it cost (OpenCode Zen's `cost`).
+    const cost = num(u["cost"], -1);
+    if (cost >= 0) this.end.usage.reportedCost = cost;
   }
 
   /** The stream is over: the calls ended, the stop reason from the finish reason. */
@@ -291,7 +294,8 @@ export class OpenAiClient {
         reader.end.error = end.error;
         return reader.end;
       }
-      return failed(status > 0 ? errorOf(status, errorBody) : end.error);
+      const why = status > 0 ? errorOf(status, errorBody) : end.error;
+      return failed(why.includes("Model access is disabled") ? why + " (the model is not enabled for this key: widecode --harness-models marks the ones it has)" : why);
     }
   }
 }

@@ -96,6 +96,9 @@ reader.take(ev("message_delta", '{"type":"message_delta","delta":{"stop_reason":
 reader.take(ev("message_stop", '{"type":"message_stop"}'));
 eq("thinking with its signature, text, a tool call with its input in pieces", heard.join(" "), 'think:Hmm. sig:abc text:I will read it. call:toolu_9:Read json:toolu_9:{"file_pa json:toolu_9:th":"a.txt"} end:toolu_9');
 eq("the stop reason and the usage", reader.end.stopReason + " " + String(reader.end.usage.input) + "/" + String(reader.end.usage.output) + "/" + String(reader.end.usage.cacheRead) + "/" + String(reader.end.usage.cacheWrite) + " " + String(reader.stopped), "tool_use 120/42/500/30 true");
+const zen = new AnthropicReader(new StreamListener());
+zen.take(ev("message_delta", '{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":166,"cache_read_input_tokens":5902,"cost":0.00015302}}'));
+eq("the cost a provider reports (OpenCode Zen's)", String(zen.end.usage.reportedCost) + " " + String(reader.end.usage.reportedCost), "0.00015302 -1");
 
 const refused = new AnthropicReader(new StreamListener());
 refused.take(ev("message_delta", '{"type":"message_delta","delta":{"stop_reason":"refusal","stop_details":{"type":"refusal","category":"cyber"}},"usage":{"output_tokens":0}}'));

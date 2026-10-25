@@ -58,7 +58,7 @@ export const messagesJson = (messages: Message[], extras: boolean): string => {
 
 /** The request's body for `model` at `provider`. */
 export const requestBody = (req: ModelRequest, model: ModelInfo, provider: Provider): string => {
-  const extras = provider.anthropicExtras;
+  const extras = model.extras === "on" || (model.extras !== "off" && provider.anthropicExtras);
   const parts: string[] = ['"model":' + JSON.stringify(model.id), '"max_tokens":' + String(model.maxOutput), '"stream":true'];
   const cachedAt = (req.systemCached > 0 ? req.systemCached : req.system.length) - 1;
   if (req.system.length > 0) parts.push('"system":[' + req.system.map((s, i) => textBlock(s, extras && i === cachedAt)).join(",") + "]");
@@ -173,6 +173,9 @@ export class AnthropicReader {
     if (read >= 0) this.end.usage.cacheRead = read;
     const write = num(u["cache_creation_input_tokens"], -1);
     if (write >= 0) this.end.usage.cacheWrite = write;
+    // A provider that bills the request says what it cost (OpenCode Zen's `cost`).
+    const cost = num(u["cost"], -1);
+    if (cost >= 0) this.end.usage.reportedCost = cost;
   }
 }
 
@@ -247,7 +250,8 @@ export class AnthropicClient {
         reader.end.error = end.error;
         return reader.end;
       }
-      return failed(status > 0 ? errorOf(status, errorBody) : end.error);
+      const why = status > 0 ? errorOf(status, errorBody) : end.error;
+      return failed(why.includes("Model access is disabled") ? why + " (the model is not enabled for this key: widecode --harness-models marks the ones it has)" : why);
     }
   }
 }

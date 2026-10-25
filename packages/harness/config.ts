@@ -92,6 +92,7 @@ export class HarnessConfig {
         if (str(m["baseUrl"]).length > 0) info.baseUrl = str(m["baseUrl"]);
         if (str(m["reasoningField"]).length > 0) info.reasoningField = str(m["reasoningField"]);
         info.vision = m["vision"] === true;
+        if (typeof m["anthropicExtras"] === "boolean") info.extras = m["anthropicExtras"] === true ? "on" : "off";
         // Thinking as the model's API asks for it: by default a budget on an Anthropic-format API, nothing on a chat completions one.
         const chat = (info.api.length > 0 ? info.api : provider.api) === OPENAI_API;
         const thinking = str(m["thinking"]);

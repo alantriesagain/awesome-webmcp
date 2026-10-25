@@ -297,8 +297,7 @@ export class AcpAgent {
     const m = this.registry.model(s.options.model);
     s.window = m !== null ? m.window : DEFAULT_WINDOW;
     s.loop.window = s.window;
-    const p = m !== null ? this.registry.provider(m.provider) : null;
-    this.loop.extras = p === null || p.anthropicExtras;
+    this.loop.extras = m === null || this.registry.extrasOf(m);
   }
 
   /** A session's answer to new, load, resume and fork: its id and options; then what it offers. */
@@ -529,17 +528,13 @@ export class AcpAgent {
     listener.onThinking = (messageId: string, delta: string) => this.server.notify("session/update", chunkUpdate(s.id, "agent_thought_chunk", messageId, delta));
     listener.onUsage = (usage: Usage) => {
       s.used = usage.context();
-      const m = this.registry.model(s.loop.model);
-      if (m !== null) {
-        const cost = costUsd(m, usage.input, usage.output, usage.cacheRead, usage.cacheWrite);
-        if (cost >= 0) s.costUsd = (s.costUsd < 0 ? 0 : s.costUsd) + cost;
-      }
+      const cost = this.costOf(s, usage);
+      if (cost >= 0) s.costUsd = (s.costUsd < 0 ? 0 : s.costUsd) + cost;
       this.server.notify("session/update", usageUpdate(s.id, s.used, s.window, s.costUsd));
     };
     // A subagent's requests: their cost counts, the context shown stays the session's.
     listener.onSubUsage = (usage: Usage) => {
-      const m = this.registry.model(s.loop.model);
-      const cost = m !== null ? costUsd(m, usage.input, usage.output, usage.cacheRead, usage.cacheWrite) : -1;
+      const cost = this.costOf(s, usage);
       if (cost < 0) return;
       s.costUsd = (s.costUsd < 0 ? 0 : s.costUsd) + cost;
       this.server.notify("session/update", usageUpdate(s.id, s.used, s.window, s.costUsd));
@@ -663,6 +658,13 @@ export class AcpAgent {
   /** How many sessions this process holds (tests). */
   count(): number {
     return this.sessions.size;
+  }
+
+  /** What a request cost: what the provider said, else the model's prices applied (below 0: unknown). */
+  private costOf(s: HarnessSession, usage: Usage): number {
+    if (usage.reportedCost >= 0) return usage.reportedCost;
+    const m = this.registry.model(s.loop.model);
+    return m !== null ? costUsd(m, usage.input, usage.output, usage.cacheRead, usage.cacheWrite) : -1;
   }
 
   /** The messages of session `id`'s context (tests). */
