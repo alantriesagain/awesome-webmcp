@@ -1,5 +1,6 @@
 // The plugin API's `peers` calls, answered for the runtime (runtime.ts dispatches by namespace):
-// the LAN git bridge's daemon reached over its control API (started when none answers), this
+// the LAN git bridge's daemon reached over its control API (started by the real app when the bridge
+// is in use or asked for, and by nothing else), this
 // folder's repository shared through it, and a peer's copy set up as a remote of this folder, its
 // token written to the local git config (never into a URL, never handed to the plugin).
 import { PreludePart } from "@light/plugins/prelude.ts";
@@ -22,6 +23,13 @@ const clientOf = (rt: JsRuntime): DaemonClient => {
     clients.set(root, c);
   }
   return c;
+};
+
+/** Whether this machine's registry has anything in it: a peer paired or a repository shared. */
+const bridgeInUse = (c: DaemonClient): boolean => {
+  const r = new Registry(c.paths.registry);
+  r.load();
+  return r.peers.length + r.repos.length > 0;
 };
 
 const gitIn = async (folder: string, args: string[]): Promise<{ code: number; out: string; err: string }> => {
@@ -85,8 +93,14 @@ const fetchRemote = async (rt: JsRuntime, remote: string): Promise<string> => {
 /** Plugin call `name` with its arguments `a`, answered; null for a call of another namespace. */
 export const answerPeers = (rt: JsRuntime, name: string, a: unknown[]): HostAnswer | null => {
   switch (name) {
-    case "peers.ensure":
-      return rt.settled(str(a[0]), num(a[1]), clientOf(rt).ensure(process.execPath, []).then((ok: boolean) => json(ok)));
+    case "peers.ensure": {
+      // A daemon is started by the real app alone (the host's launcher), and only when the bridge is
+      // asked for (`start`) or already in use here (a peer paired or a repository shared).
+      const c = clientOf(rt);
+      const launcher = rt.host.peersLauncher;
+      const want = launcher.length > 0 && (a[1] === true || bridgeInUse(c));
+      return rt.settled(str(a[0]), num(a[2]), c.ensure(want ? launcher : "", []).then((ok: boolean) => json(ok)));
+    }
     case "peers.request":
       return rt.settled(str(a[0]), num(a[4]), requestText(rt, str(a[1]), str(a[2]), a[3] === undefined ? null : a[3]));
     case "peers.share":
@@ -100,7 +114,7 @@ export const answerPeers = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
 };
 
 /** The `peers` namespace of the plugin API, its JS side: the calls these answers take. */
-export const NAMESPACE_PEERS = new PreludePart("peers", `        ensure: () => later("peers.ensure", id),
+export const NAMESPACE_PEERS = new PreludePart("peers", `        ensure: (start) => later("peers.ensure", id, start === true),
         request: (method, path, body) => later("peers.request", id, String(method), String(path), body === undefined ? null : body),
         share: () => later("peers.share", id),
         remote: (peerId, key) => later("peers.remote", id, String(peerId), String(key)),

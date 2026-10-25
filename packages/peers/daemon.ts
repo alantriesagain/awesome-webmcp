@@ -14,6 +14,7 @@ import { GitServer, bearerOf, isPrivateAddress, json, plain, remoteAddressOf, Re
 import { Identity, loadOrCreateIdentity, newToken, saveIdentity } from "./identity.ts";
 import { JoinRequest, PairOffer, acceptJoin, joinPeer, newPairCode } from "./pairing.ts";
 import { Peer, Registry, SharedRepo } from "./registry.ts";
+import { Advertiser, Browser, Seen } from "./discovery.ts";
 
 export const DEFAULT_PORT = 7337;
 const MAX_BODY = 1048576;
@@ -43,6 +44,10 @@ export class DaemonOptions {
   /** The name to announce; "" keeps the identity's. */
   name = "";
   git = "git";
+  /** Announce this machine and look for the others over mDNS (avahi, dns-sd); off, peers are reached by typed addresses only. */
+  discovery = true;
+  /** How often the network is browsed, in ms. */
+  browseMs = 30000;
 }
 
 /** The state file: how a session finds the running daemon. */
@@ -175,6 +180,11 @@ export class Daemon {
   offer: PairOffer | null = null;
   port = 0;
   localPort = 0;
+  /** Machines announcing themselves that are not paired with this one. */
+  nearby: Seen[] = [];
+  readonly advertiser = new Advertiser();
+  readonly browser = new Browser();
+  private browsing: ReturnType<typeof setInterval> | null = null;
   private lan: Server | null = null;
   private local: Server | null = null;
   private stateWritten = false;
@@ -229,7 +239,40 @@ export class Daemon {
     chmodSync(this.paths.state, 0o600);
     this.stateWritten = true;
     this.note("listening on " + o.bind + ":" + String(port) + ", control on 127.0.0.1:" + String(localPort) + ", id " + this.identity.id.slice(0, 8) + " " + this.identity.name);
+    if (o.discovery) {
+      this.advertiser.onLog = (line: string) => this.note(line);
+      this.advertiser.start(this.identity.id, this.identity.name, port);
+      void this.browse();
+      this.browsing = setInterval(() => {
+        void this.browse();
+      }, o.browseMs);
+    }
     return "";
+  }
+
+  /** One look at the network: paired machines seen are marked, the others listed as nearby. */
+  async browse(): Promise<void> {
+    const found = await this.browser.browse();
+    this.noteSeen(found, Date.now());
+  }
+
+  /** What a browse found, taken in: a paired peer's address, port and time move; an unknown id is nearby. */
+  noteSeen(found: Seen[], nowMs: number): void {
+    const nearby: Seen[] = [];
+    for (const s of found) {
+      if (s.id === this.identity.id || s.id.length === 0) continue;
+      if (this.registry.peerById(s.id) !== null) this.seen(s.id, s.address, s.port, nowMs);
+      else nearby.push(s);
+    }
+    this.nearby = nearby;
+  }
+
+  /** `address` as typed: a paired or nearby machine's name stands for its address and port. */
+  resolveTarget(address: string, port: number): { address: string; port: number } {
+    const peer = this.registry.peerNamed(address);
+    if (peer !== null && peer.address.length > 0) return { address: peer.address, port: peer.port > 0 ? peer.port : port };
+    for (const s of this.nearby) if (s.name === address || s.id === address || s.id.startsWith(address) || s.host === address) return { address: s.address, port: s.port > 0 ? s.port : port };
+    return { address, port };
   }
 
   /** Whether the state file is still ours (a stop removes it; another daemon may have replaced it). */
@@ -239,6 +282,9 @@ export class Daemon {
   }
 
   stop(): void {
+    this.advertiser.stop();
+    if (this.browsing !== null) clearInterval(this.browsing);
+    this.browsing = null;
     const lan = this.lan;
     const local = this.local;
     this.lan = null;
@@ -262,9 +308,10 @@ export class Daemon {
     this.offer = null;
   }
 
-  /** Join the host at `address:port` with `code`: the peer recorded, or why not. */
+  /** Join the host at `address:port` (or a nearby machine's name) with `code`: the peer recorded, or why not. */
   pairJoin(address: string, port: number, code: string, nowMs: number): Promise<Peer | string> {
-    return joinPeer(this.registry, this.identity, this.port, address, port, code, nowMs);
+    const target = this.resolveTarget(address, port);
+    return joinPeer(this.registry, this.identity, this.port, target.address, target.port, code, nowMs);
   }
 
   /** The oldest root commit of the repository at `path`, "" when it is not one (or has no commit). */
@@ -370,7 +417,8 @@ export class Daemon {
     const peers = this.registry.peers.map((p: Peer) => p.toPublicJson());
     const repos = this.registry.repos.map((s: SharedRepo) => s.toJson());
     const offer = this.offer !== null && this.offer.live(nowMs) ? this.offer.toJson() : null;
-    const v: unknown = { id: this.identity.id, name: this.identity.name, port: this.port, addresses: lanAddresses(), startedMs: this.startedMs, peers, repos, pairing: offer };
+    const nearby = this.nearby.map((s: Seen) => s.toJson());
+    const v: unknown = { id: this.identity.id, name: this.identity.name, port: this.port, addresses: lanAddresses(), startedMs: this.startedMs, discovery: this.advertiser.running, peers, repos, nearby, pairing: offer };
     return v;
   }
 
@@ -440,8 +488,10 @@ export class Daemon {
         case "/api/seen":
           this.seen(str(body["id"]), str(body["address"]), num(body["port"], 0), now);
           return json(res, 200, { ok: true });
-        case "/api/peers/refresh":
-          return json(res, 200, { online: await this.refreshPeers(now) });
+        case "/api/peers/refresh": {
+          if (this.browsing !== null) await this.browse();
+          return json(res, 200, { online: await this.refreshPeers(now), nearby: this.nearby.map((s: Seen) => s.toJson()) });
+        }
         case "/api/peer/repos": {
           const peer = this.registry.peerById(str(body["peerId"]));
           if (peer === null) return json(res, 404, { error: "no such peer" });

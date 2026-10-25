@@ -54,6 +54,13 @@ export class Host extends ConversationHolder {
   onDump: (() => void) | null = null;
   /** The last lines of the log, for a plugin's state.log. */
   readonly notes: string[] = [];
+  /**
+   * The program that runs as the peers daemon (`<it> --peers-daemon`): the widecode binary itself,
+   * set by the real entry alone (startup.ts, never under --selftest). Empty, the peers bridge only
+   * looks for a daemon and never starts one: a test, or any other program hosting the app, must not
+   * run itself again. The daemon it would start ran the app, whose plugin started another, once.
+   */
+  peersLauncher = "";
   private editSeq = 0;
   private pendingOpen = "";
   private pendingOpenAt = 0;

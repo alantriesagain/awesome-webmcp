@@ -2,7 +2,8 @@
 // port it serves on, the repositories it shares), the machines paired with it (online or last
 // seen, the repositories they offer matched to this folder's by root commit, the current branch's
 // ahead and behind against their copy once fetched) and pairing (the six-digit code shown here, or
-// the one to type from the other side). Enter fetches the peer under the cursor, s shares or
+// the one to type from the other side); machines announcing themselves on the network that are not
+// paired yet are listed as nearby, and a join may name one. Enter fetches the peer under the cursor, s shares or
 // unshares this folder's repository, p shows a code, x forgets the peer under the cursor, r reads
 // again. `/peers` opens the tab; `/peers pair`, `/peers join <host[:port]> <code>`, `/peers share`,
 // `/peers unshare`, `/peers fetch <peer>`, `/peers forget <peer>`, `/peers name <name>` and
@@ -23,10 +24,11 @@ const AUTO_FETCH_MS = 120000;
 const ONLINE_MS = 180000;
 
 interface RowSpec {
-  kind: "section" | "me" | "serving" | "repo" | "share" | "peer" | "peer-repo" | "pairing" | "hint" | "empty";
+  kind: "section" | "me" | "serving" | "repo" | "share" | "peer" | "peer-repo" | "nearby" | "pairing" | "hint" | "empty";
   section?: string;
   peer?: number;
   repo?: number;
+  near?: number;
   text?: string;
 }
 
@@ -67,6 +69,14 @@ interface PeerView {
 interface Pairing {
   code: string;
   expiresMs: number;
+}
+
+/** A machine announcing itself on the network that is not paired with this one. */
+interface Nearby {
+  id: string;
+  name: string;
+  address: string;
+  port: number;
 }
 
 const rec = (v: unknown): Record<string, unknown> => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
@@ -116,6 +126,8 @@ widecode.plugin({
     let shared: Shared[] = [];
     let peers: PeerView[] = [];
     let pairing: Pairing | null = null;
+    let nearby: Nearby[] = [];
+    let discovery = false;
     let daemon = "starting";
     let myRepoId = "";
     let branch = "";
@@ -149,17 +161,18 @@ widecode.plugin({
       }
       out.push({ kind: "section", section: "peers" });
       if (!folded.has("peers")) {
-        if (peers.length === 0) out.push({ kind: "empty", text: "no peer paired yet" });
+        if (peers.length === 0 && nearby.length === 0) out.push({ kind: "empty", text: discovery ? "no peer paired yet, none announcing itself nearby" : "no peer paired yet" });
         peers.forEach((p, i) => {
           out.push({ kind: "peer", peer: i });
           p.repos.forEach((_o, k) => out.push({ kind: "peer-repo", peer: i, repo: k }));
         });
+        nearby.forEach((_n, i) => out.push({ kind: "nearby", near: i }));
       }
       out.push({ kind: "section", section: "pairing" });
       if (!folded.has("pairing")) {
         if (pairing !== null && pairing.expiresMs > Date.now()) out.push({ kind: "pairing" });
         out.push({ kind: "hint", text: pairing !== null && pairing.expiresMs > Date.now() ? "on the other machine: /peers join " + (me.addresses[0] ?? "<this address>") + ":" + String(me.port) + " " + pairing.code : "p shows a code for another machine to join with" });
-        out.push({ kind: "hint", text: "/peers join <host:port> <code> joins a machine showing one" });
+        out.push({ kind: "hint", text: "/peers join <host:port> <code> joins a machine showing one" + (nearby.length > 0 ? " (a nearby name works: /peers join " + nearby[0].name + " <code>)" : "") });
       }
       rows = out;
       if (selected >= rows.length) selected = Math.max(0, rows.length - 1);
@@ -180,8 +193,8 @@ widecode.plugin({
         return { bg, runs: [{ text: " " + (open ? "▾ " : "▸ "), fg: DIM }, { text: u.clip(sectionTitle(r.section ?? ""), Math.max(1, width - 3)), fg: "", bold: true }] };
       }
       if (r.kind === "serving") {
-        if (daemon !== "running") return text(daemon === "starting" ? "starting the daemon…" : "daemon not running (" + daemon + ")", T.warn);
-        return text("serving on :" + String(me.port) + (me.addresses.length > 0 ? " · " + me.addresses.join(" ") : "") + " · id " + me.id.slice(0, 8), DIM);
+        if (daemon !== "running") return text(daemon === "starting" ? "starting the daemon…" : daemon === "not running" ? "the daemon is not running: it starts when this tab is opened or /peers is used" : "daemon " + daemon, T.warn);
+        return text("serving on :" + String(me.port) + (me.addresses.length > 0 ? " · " + me.addresses.join(" ") : "") + " · id " + me.id.slice(0, 8) + (discovery ? "" : " · not announced"), DIM);
       }
       if (r.kind === "repo") {
         const s = shared[r.repo ?? 0];
@@ -208,6 +221,11 @@ widecode.plugin({
         const same = o.repoId === myRepoId && myRepoId.length > 0;
         const tip = branch.length > 0 && o.tips[branch] !== undefined ? " · " + branch + " " + o.tips[branch].slice(0, 7) : "";
         return { bg, runs: [{ text: "      " + (same ? "● " : "  "), fg: T.link }, { text: u.clip(o.name, Math.max(4, width - 12 - u.width(tip))), fg: same ? T.link : "" }, { text: " " + o.mode + (same ? " · same as this folder" : "") + tip, fg: DIM }] };
+      }
+      if (r.kind === "nearby") {
+        const n = nearby[r.near ?? 0];
+        const tail = " · nearby, not paired · " + n.address + ":" + String(n.port);
+        return { bg, runs: [{ text: "   ○ ", fg: DIM }, { text: u.clip(n.name, Math.max(4, width - 6 - u.width(tail))), fg: "" }, { text: tail, fg: DIM }] };
       }
       if (r.kind === "pairing") {
         const left = pairing !== null ? Math.max(0, Math.round((pairing.expiresMs - now) / 1000)) : 0;
@@ -236,7 +254,7 @@ widecode.plugin({
       shown: () => {
         layout();
         panel.refresh();
-        void refresh(true);
+        void refresh(true, true);
         panel.reveal(selected);
       },
     });
@@ -274,7 +292,12 @@ widecode.plugin({
       daemon = "running";
       const r = rec(parse(a.text));
       me = { id: u.str(r.id), name: u.str(r.name), port: u.num(r.port, 0), addresses: list(r.addresses).map((x) => u.str(x)) };
+      discovery = r.discovery === true;
       shared = list(r.repos).map(sharedOf);
+      nearby = list(r.nearby).map((v) => {
+        const n = rec(v);
+        return { id: u.str(n.id), name: u.str(n.name), address: u.str(n.address), port: u.num(n.port, 0) };
+      });
       const pr = rec(r.pairing);
       pairing = u.str(pr.code).length > 0 ? { code: u.str(pr.code), expiresMs: u.num(pr.expiresMs, 0) } : null;
       const now = Date.now();
@@ -341,15 +364,19 @@ widecode.plugin({
       redraw();
     };
 
-    /** Read everything again: the daemon's state, each online peer's offers, and (when due) a fetch of each. */
-    const refresh = async (pings: boolean): Promise<void> => {
+    /**
+     * Read everything again: the daemon's state, each online peer's offers, and (when due) a fetch of
+     * each. `start` asks the app to start the daemon when none answers (the user opened the tab or
+     * used /peers); a timer's refresh starts one only when the bridge is already in use here.
+     */
+    const refresh = async (pings: boolean, start: boolean): Promise<void> => {
       if (refreshing) return;
       refreshing = true;
       try {
         if (daemon !== "running") {
-          const ok = await api.peers.ensure();
+          const ok = await api.peers.ensure(start);
           if (!ok) {
-            daemon = "could not start";
+            daemon = start ? "could not start" : "not running";
             redraw();
             return;
           }
@@ -375,7 +402,20 @@ widecode.plugin({
       }
     };
 
+    /** The daemon answering, started for the user's action when it was not; false (and told) when it could not be. */
+    const up = async (): Promise<boolean> => {
+      if (daemon === "running") return true;
+      const ok = await api.peers.ensure(true);
+      if (!ok) {
+        daemon = "could not start";
+        redraw();
+        api.tell("the peers daemon could not start; /log says why");
+      }
+      return ok;
+    };
+
     const pairStart = async (): Promise<void> => {
+      if (!(await up())) return;
       const a = await req("POST", "/api/pair/start");
       if (a.status !== 200) return api.tell("could not start pairing: " + (a.status === 0 ? "the daemon is not running" : a.text));
       const r = rec(parse(a.text));
@@ -393,18 +433,21 @@ widecode.plugin({
       const parts = arg.trim().split(/\s+/);
       if (parts.length < 2 || parts[0].length === 0) return api.tell("/peers join <host[:port]> <code>");
       const hp = hostPort(parts[0]);
+      if (!(await up())) return;
+      // A name is resolved by the daemon: a paired or nearby machine's.
       const a = await req("POST", "/api/pair/join", { address: hp.address, port: hp.port, code: parts[1] });
       if (a.status !== 200) return api.tell("could not join " + parts[0] + ": " + u.str(rec(parse(a.text)).error));
       const peer = rec(rec(parse(a.text)).peer);
       api.tell("paired with " + u.str(peer.name) + " at " + hp.address + ":" + String(hp.port));
-      await refresh(true);
+      await refresh(true, true);
     };
 
     const shareHere = async (): Promise<void> => {
+      if (!(await up())) return;
       const r = await api.peers.share();
       if (r.error.length > 0) return api.tell("could not share this folder: " + r.error);
       api.tell("sharing this folder's repository with the paired machines (" + r.key + ")");
-      await refresh(false);
+      await refresh(false, true);
     };
 
     const unshareHere = async (): Promise<void> => {
@@ -412,13 +455,13 @@ widecode.plugin({
       if (s === null) return api.tell("this folder's repository is not shared");
       await req("POST", "/api/unshare", { key: s.key });
       api.tell("no longer sharing " + s.name);
-      await refresh(false);
+      await refresh(false, false);
     };
 
     const forget = async (p: PeerView): Promise<void> => {
       await req("POST", "/api/forget", { peerId: p.id });
       api.tell("forgot " + p.name + "; its token no longer works here");
-      await refresh(false);
+      await refresh(false, false);
     };
 
     const act = (how: string, _x: number): void => {
@@ -494,7 +537,7 @@ widecode.plugin({
       help: "read again",
       key: "char:r",
       run: () => {
-        void refresh(true);
+        void refresh(true, true);
         return true;
       },
     });
@@ -508,6 +551,7 @@ widecode.plugin({
         const verb = parts[0] ?? "";
         const rest = parts.slice(1).join(" ");
         if (verb.length === 0) return api.actions.showPanel("peers");
+        if (verb === "name" || verb === "fetch" || verb === "forget" || verb === "unshare") void up();
         if (verb === "pair") return void pairStart();
         if (verb === "join") return void pairJoin(rest);
         if (verb === "share") return void shareHere();
@@ -521,7 +565,7 @@ widecode.plugin({
           if (rest.length === 0) return api.tell("/peers name <name>");
           void req("POST", "/api/rename", { name: rest }).then((a) => {
             api.tell(a.status === 200 ? "this machine is now " + rest + " to its peers" : "could not rename: " + a.text);
-            void refresh(false);
+            void refresh(false, false);
           });
           return;
         }
@@ -541,14 +585,14 @@ widecode.plugin({
 
     api.every(refreshMs, () => {
       if (daemon === "stopped") return;
-      void refresh(true);
+      void refresh(true, false);
     });
     api.every(1000, () => {
       if (pairing !== null && api.state.active().panel === "peers") panel.refresh();
     });
     layout();
     api.after(2000, () => {
-      void refresh(true);
+      void refresh(true, false);
     });
   },
 });

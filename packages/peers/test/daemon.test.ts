@@ -23,6 +23,7 @@ const main = async (): Promise<void> => {
   const o = new DaemonOptions();
   o.port = 0;
   o.bind = "127.0.0.1";
+  o.discovery = false;
   o.name = "desk";
   const a = await startDaemon(storeA, o);
   ok("the first daemon starts", typeof a !== "string");
@@ -43,6 +44,7 @@ const main = async (): Promise<void> => {
   const ob = new DaemonOptions();
   ob.port = 0;
   ob.bind = "127.0.0.1";
+  ob.discovery = false;
   ob.name = "mac";
   const b = await startDaemon(storeB, ob);
   ok("a second machine's daemon starts over its own store", typeof b !== "string");

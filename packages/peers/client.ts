@@ -1,6 +1,7 @@
 // A session's side of the daemon: the state file says where it listens and with which token; a
 // request goes to the control API; `ensure` starts the daemon detached when none answers (the
-// sessions plugin's recipe: setsid where there is one, a subshell elsewhere, every stream closed).
+// sessions plugin's recipe: setsid where there is one, a subshell elsewhere, every stream closed),
+// a bounded number of times, and only when given the program to start.
 import { spawnCapped, SpawnOptions } from "@light/lib/process.ts";
 import { DaemonPaths, DaemonState, daemonAnswers, readDaemonState } from "./daemon.ts";
 
@@ -25,12 +26,30 @@ const wait = (ms: number): Promise<void> =>
     setTimeout(() => resolve(), ms);
   });
 
+/** How long a started daemon gets to answer, and how long before another start is tried. */
+export const LAUNCH_POLL_MS = 5000;
+export const LAUNCH_WAIT_MS = 30000;
+/** How many times one client starts a daemon in its life: past this, something is wrong and it stops trying. */
+export const LAUNCHES_MAX = 3;
+
 export class DaemonClient {
   readonly paths: DaemonPaths;
   state: DaemonState | null = null;
+  /** How many daemons this client started, and when the last one was. */
+  launches = 0;
+  launchedMs = 0;
+  /** How long `ensure` waits for a started daemon (tests shorten it). */
+  pollMs = LAUNCH_POLL_MS;
+  /** Hears a line for the log. */
+  onLog: ((line: string) => void) | null = null;
 
   constructor(storeRoot: string) {
     this.paths = new DaemonPaths(storeRoot);
+  }
+
+  private note(line: string): void {
+    const fn = this.onLog;
+    if (fn !== null) fn(line);
   }
 
   /** Read the state file and ask the daemon it names; false when none answers. */
@@ -46,17 +65,36 @@ export class DaemonClient {
     return "if command -v setsid >/dev/null 2>&1; then setsid -f " + run + "; else (" + run + " &); fi";
   }
 
-  /** A daemon answering: the one running, or one started now (`executable --peers-daemon`), waited for up to five seconds. */
+  /**
+   * A daemon answering: the one running, or one started now (`executable --peers-daemon`) and waited
+   * for. With no `executable` nothing is started. A start is tried at most LAUNCHES_MAX times in this
+   * client's life and never twice within LAUNCH_WAIT_MS, so a program that is not widecode (one that
+   * ignores the flag) is run a bounded number of times, not once per refresh.
+   */
   async ensure(executable: string, extra: string[]): Promise<boolean> {
     if (await this.probe()) return true;
+    if (executable.length === 0) return false;
+    const now = Date.now();
+    if (this.launches >= LAUNCHES_MAX) {
+      this.note("peers: the daemon was started " + String(this.launches) + " times and never answered; not trying again");
+      return false;
+    }
+    if (now - this.launchedMs < LAUNCH_WAIT_MS) return false;
+    this.launches++;
+    this.launchedMs = now;
     const o = new SpawnOptions();
     o.timeoutMs = 5000;
     const run = await spawnCapped("sh", ["-c", DaemonClient.launchLine(executable, extra)], o);
-    if (!run.ok) return false;
-    for (let i = 0; i < 25; i++) {
+    if (!run.ok) {
+      this.note("peers: could not start the daemon: " + (run.error.length > 0 ? run.error : run.err));
+      return false;
+    }
+    const steps = Math.max(1, Math.round(this.pollMs / 200));
+    for (let i = 0; i < steps; i++) {
       await wait(200);
       if (await this.probe()) return true;
     }
+    this.note("peers: the daemon started from " + executable + " did not answer within " + String(this.pollMs) + " ms");
     return false;
   }
 

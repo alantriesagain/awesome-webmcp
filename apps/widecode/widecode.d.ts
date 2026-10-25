@@ -779,8 +779,12 @@ declare namespace widecode {
     };
     /** The LAN git bridge (the peers plugin): this machine's daemon, started when needed, and a peer's copy as a remote of this folder. */
     peers: {
-      /** A daemon answering: the one running, or one started now (`widecode --peers-daemon`); false when none could. */
-      ensure(): Promise<boolean>;
+      /**
+       * A daemon answering: the one running, or one the real app starts now (`widecode --peers-daemon`)
+       * when the bridge is in use here (a peer paired, a repository shared) or `start` asks for it; false
+       * when none answers. A test or another program hosting the app never starts one.
+       */
+      ensure(start?: boolean): Promise<boolean>;
       /** `method` `path` on the daemon's control API, `body` sent as JSON: the status (0 when nothing answered) and the text. */
       request(method: string, path: string, body?: unknown): Promise<{ status: number; text: string }>;
       /** Share this folder's repository (at its root) with the paired peers, live: the share's key, or why not. */

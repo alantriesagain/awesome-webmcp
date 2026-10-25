@@ -102,7 +102,7 @@ stops.
 | `harness` | `info()`: the project's `.widecode/` as it stands (present, trusted, its plugin files, its prompt, its config beside the user's and the result of one over the other, the tools the agent sees) |
 | `sessions`, `store`, `titles` | the folder's sessions with the agent (their titles, first and last prompts, folder, model, time and size) and `rev()`, which moves when the agent's list changed; widecode's record of a session; short titles Claude writes for Claude Code's sessions |
 | `git` | reads, as promises: `branches`, `log`, `commitFiles`, `defaultBranch`, `mergeBase`, `head`, `commitAt`, `aheadBehind(a, b)`, `rootCommit` |
-| `peers` | the LAN git bridge: `ensure()` (this machine's daemon, started when needed), `request(method, path, body)` on its control API, `share()` this folder's repository, `remote(peerId, key)` a peer's copy as a remote of this folder (its token in the local git config), `fetch(remote)` |
+| `peers` | the LAN git bridge: `ensure(start)` (this machine's daemon, started by the real app when the bridge is in use or `start` asks), `request(method, path, body)` on its control API, `share()` this folder's repository, `remote(peerId, key)` a peer's copy as a remote of this folder (its token in the local git config), `fetch(remote)` |
 | `files` | `tree(expanded, changedOnly)`: the visible rows of the folder's tree |
 | `languages` | `add({ id, extensions, fences, tokenizer })` with one of the core's tokenizers |
 | `process` | `run(command, input, timeoutMs)`: a promise of `{ code, out, err, timedOut }`; `spawn(command, { cwd }, { lines, exit, error })`: a process that keeps running, its output in batches of lines, `write(line)`, `stop(graceMs)`, `kill()` |
@@ -458,7 +458,7 @@ phase, the agent's events) and the screen as it was.
 | `files` | the Files tab; `c`; `/files` | | the switch |
 | `sessions` | the Sessions tab, a chosen session's details in the code column, Enter opening it here and t in a new terminal; `/resume /rename /title`, F4; the title policy | `titles`, `titleModel`, `terminal` | |
 | `git` | the Git tab; `b` and the compare base; a session's starting commit | | |
-| `peers` | the Peers tab and segment: this machine's shared repositories, the paired machines and what they offer, pairing, fetch, `/peers` | `autoFetch`, `refreshMs` | the daemon it starts |
+| `peers` | the Peers tab and segment: this machine's shared repositories, the paired machines and what they offer, the machines nearby (mDNS through avahi or dns-sd), pairing, fetch, `/peers` | `autoFetch`, `refreshMs` | the daemon it starts |
 | `agents` | the Agents tab of the tools column: the session's subagents, one's steps shown in the code column | | |
 | `changes` | the changes strip of the band, under the code column; `[ ]`, Alt+↑↓ | | |
 | `status` | the session table under the chat and the calls' under the tools column, their segments and command cells | `separator`, `lines`, `toolsLines` | |

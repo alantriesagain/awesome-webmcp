@@ -1,4 +1,4 @@
-// `widecode --peers-daemon [--port <n>] [--name <name>] [--bind <address>]`: the daemon as a
+// `widecode --peers-daemon [--port <n>] [--name <name>] [--bind <address>] [--no-discovery]`: the daemon as a
 // process. Its log is a file of its own under the store's logs; SIGTERM and a state file that went
 // away (a `/peers stop`, or a daemon that replaced this one) end it; the servers keep it alive.
 import { join } from "node:path";
@@ -24,6 +24,7 @@ export const peersDaemonMain = (storeRoot: string, args: string[], build: string
     if (name !== null) o.name = name;
     const bind = argValue(args, "--bind");
     if (bind !== null) o.bind = bind;
+    if (args.includes("--no-discovery")) o.discovery = false;
     void startDaemon(storeRoot, o, (line: string) => log(line)).then((r: Daemon | string) => {
       if (typeof r === "string") {
         log("not started: " + r);

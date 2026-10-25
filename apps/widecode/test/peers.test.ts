@@ -48,16 +48,20 @@ writeFileSync(join(repoB, "b.txt"), "from the other machine\n");
 git("-C " + repoB + " add . && git -C " + repoB + " -c user.email=t@t -c user.name=t commit -qm 'second, elsewhere'");
 
 const main = async (): Promise<void> => {
+  // Both daemons on the loopback and quiet: announced over mDNS, the host machine's avahi would hand
+  // each the other's Wi-Fi address, where nothing listens here.
   const oa = new DaemonOptions();
   oa.port = 0;
   oa.bind = "127.0.0.1";
   oa.name = "desk";
+  oa.discovery = false;
   const a = await startDaemon(storeA, oa);
   if (typeof a === "string") throw new Error(a);
   const ob = new DaemonOptions();
   ob.port = 0;
   ob.bind = "127.0.0.1";
   ob.name = "mac";
+  ob.discovery = false;
   const b = await startDaemon(storeB, ob);
   if (typeof b === "string") throw new Error(b);
   const sharedB = await b.share(repoB, "", "live", null, null);

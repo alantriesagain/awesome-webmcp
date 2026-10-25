@@ -72,6 +72,7 @@ const main = async (): Promise<void> => {
   const o = new DaemonOptions();
   o.port = 0;
   o.bind = "127.0.0.1";
+  o.discovery = false;
   eq("the daemon starts", await daemon.start(o), "");
   ok("on a port", daemon.port > 0 && daemon.localPort > 0);
 

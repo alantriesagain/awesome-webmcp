@@ -133,6 +133,13 @@ These share the "something went away while a callback was running" theme.
 - [x] **`SessionController.open` can prepare an agent that is about to be retired.** The old agent
       is attached but not started; the folder's plugins load, `folderOpened` re-chooses it, and the
       conversation prepares after that.
+- [x] **The peers plugin ran whatever program it was in as the daemon.** `ensure()` started
+      `process.execPath --peers-daemon`; under the native test runner that is the test binary, which
+      ignores the flag and runs the test again, whose app's plugin starts another, each detached by
+      `setsid -f`: 875 processes and 16 GB. The launcher is a host field the real entry alone sets
+      (never under `--selftest`, never for `createWidecode`), auto-start waits for the bridge to be in
+      use here or asked for by the user, and a client starts a daemon at most three times, thirty
+      seconds apart. (`api/peers.ts`, `packages/peers/client.ts`, `startup.ts`, `controllers/host.ts`)
 - [ ] **Subagents launched from a widecode session stall before their first tool result.** Three
       Explore agents (Claude Code's Agent tool, in the background) each wrote one sentence and ran no
       tool for 42 minutes, took no notice of a message sent to them, and had to be killed. Suspects:
