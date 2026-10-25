@@ -289,6 +289,52 @@ The machines on one network share repositories with each other, fetch-first, no 
 - [ ] **Later.** TLS pinned by peer id; an in-process mDNS responder over dgram; a push from the tab; the daemon as a login item.
 - [x] **The native `fetch` failed against a peer's daemon for minutes while curl reached it.** Seen three times on the Mac: a daemon's requests to the Linux daemon answered `fetch failed` for a stretch; a fresh native process looping every ten seconds failed from its first attempt for 150 s against one Linux daemon instance (loopback fine throughout, curl from the same Mac fine against the same instance), then every variant (no headers, `Connection: close`, another header) succeeded against the next instance. Not pooling, not the header, not process age. Daemon-to-peer requests go through the curl binary now (`peer-request.ts`), one process and one connection per request, which git uses for the same peers anyway. For the fork: a native `fetch` to a LAN host that curl reaches, failing without detail. (`packages/peers/peer-request.ts`)
 
+## Milestone J: the harness, widecode's own agent
+
+A coding agent of widecode's own, in pi's spirit: a daemon of the binary (`widecode --harness`)
+speaking ACP on stdio to the acp plugin, talking to model APIs directly (the Anthropic Messages
+API first, which DeepSeek serves too), running its own tools without approvals (pi's posture;
+plan mode is read-only), keeping JSONL sessions, reading the web through headless Chromium
+(`packages/harness`, the `harness` entry of the acp plugin, README.md "The harness"). The whole
+design is the plan approved on 2026-10-25 (the architecture, the ACP contract, the decisions, the
+risks); each slice below is one commit with its tests.
+
+- [x] **The skeleton and the entry.** `packages/harness` as a member; `AcpServer` (stdin lines,
+      ids echoed, requests out, a trace file) and `AcpAgent` (initialize, session/new, load and
+      resume of a session the process holds, fork, prompt with steering, cancel, set_config_option,
+      list); `Message`/`Part`; `ModelClient` with the `FakeClient` scripted from a JSONL fixture; a
+      text-only turn in `AgentLoop`; the base system prompt with the project's text from
+      `_meta.widecode`; `widecode --harness` dispatched in `main.ts` with its own log folder and
+      crash monitor; the acp plugin's `harness` entry with `{widecode}`, `own` and `_meta`. Tests:
+      `acp-server.test.ts`, `agent.test.ts`, `imports.test.ts`; `apps/widecode/test/harness-agent.test.ts`.
+- [x] **The Anthropic client, Read and Bash.** `SseSplitter`, `HttpStream` with `node` and `curl`,
+      the Anthropic request (cache breakpoints, thinking and effort by model, usage), the registry
+      with the Anthropic and DeepSeek rows and prices, `costUsd`, `Auth` and `--harness-auth`,
+      `--harness-models`, the config's providers; `Tool`, `Read`, `Bash` with the capped child
+      runner; batches (one at a time when a call mutates); `tool_call` updates; `usage_update`
+      with the cost; cancel; retries on 429, 529 and server errors. Tests: `sse`, `anthropic`
+      (the request's text, the events read), `http-stream` (both ways against
+      `test/fake-model.mjs`, the client end to end with a retry and a refused key), `tools`,
+      `registry`; the app test's tool-calling turn. Open: the live probe of both HTTP paths
+      (`test/probe/model.mjs`, `NATIVE_LIVE=1` with a key) decides the default.
+- [ ] **Edits and search.** `patch.ts`, `Write`, `Edit`, `glob-match.ts`, `Grep`, `Glob`, `LS`;
+      the diff block and `filediff.patch` the code column follows.
+- [ ] **Modes and the tool set.** `build` and `plan`, `current_mode_update`, the read-only set in
+      plan, `--harness-tools <mode>` from the set.
+- [ ] **Sessions.** The JSONL tree, replay on load, resume, fork as a file, `--harness-sessions`,
+      `--harness-forget`, titles and `/title`.
+- [ ] **Compaction.** The estimate, the threshold and `compactAt`, the summary, `/compact`.
+- [ ] **Skills, context files and widecode's tools.** The skills scan, the `Skill` tool, AGENTS.md
+      and CLAUDE.md, `--harness-skills`; widecode's MCP tools called over HTTP.
+- [ ] **The web.** `browser.ts`, `WebFetch` through headless Chromium with the curl fallback,
+      `html.ts`, `WebSearch` with the chain (searxng, google, brave, tavily, anthropic; duckduckgo
+      opt-in).
+- [ ] **The selftest and the docs.** The `harness` selftest, README.md "The harness", PLUGINS.md's
+      wording of the harness folder, `light-native coverage --apps` with the daemon's code.
+- [ ] **Later.** The OpenAI-compatible client; a `browser` tool over the DevTools protocol; subagents;
+      a deny list from `permissions.deny`; branching; images in tool results; the native `fetch`
+      behind `HttpStream`; prices refreshed from the providers.
+
 ## Deferred or skip
 
 - **Storage: files or models.** The durable state is split across file services (`Store`,

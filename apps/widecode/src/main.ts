@@ -15,6 +15,9 @@
 //   --ephemeral         sessions are not saved (--no-session-persistence)
 //   --peers-daemon      run the LAN git bridge's daemon instead of the app (@widecode/peers cli.ts;
 //                       --port, --name, --bind), with no terminal; the peers plugin starts it
+//   --harness           run widecode's own agent, the harness, speaking ACP on stdio instead of the
+//                       app (@widecode/harness cli.ts; the acp plugin starts it); --harness-tools,
+//                       --harness-skills, --harness-sessions and --harness-forget are its side commands
 // F12 writes the screen's text to the log, and /log says where it is. The log follows the run: its
 // start, sessions and turns, every few minutes that it is alive, how it ended (quit, a signal, the
 // exit code), and an uncaught error with the trail of what ran last and the screen as it was. The terminal's title is the session's, or the folder's
@@ -28,6 +31,7 @@ import { resolve } from "node:path";
 import { argValue, hasArg, log, logPath, nameLog, openLog } from "@light/lib/log.ts";
 import { Terminal } from "@bootstrapp/light/native/tui";
 import { peersDaemonMain } from "@widecode/peers/cli.ts";
+import { harnessMain, isHarnessArgs } from "@widecode/harness/cli.ts";
 import { Store } from "./services/store.ts";
 import { BUILD, StartupHooks, startWidecode } from "./startup.ts";
 
@@ -36,8 +40,9 @@ if (hasArg("--version")) {
   process.exit(0);
 }
 
-// The daemon shares nothing with the app below: no terminal, no folder, its own log.
+// A daemon shares nothing with the app below: no terminal, no folder, its own log.
 if (hasArg("--peers-daemon")) void peersDaemonMain(Store.defaultRoot(), process.argv.slice(2), BUILD).then((code: number) => process.exit(code));
+else if (isHarnessArgs(process.argv.slice(2))) void harnessMain(Store.defaultRoot(), process.argv.slice(2), BUILD).then((code: number) => process.exit(code));
 else runApp();
 
 function runApp(): void {

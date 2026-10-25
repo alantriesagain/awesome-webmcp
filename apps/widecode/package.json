@@ -16,6 +16,7 @@
     "@widecode/chat": "workspace:*",
     "@widecode/code": "workspace:*",
     "@widecode/conversation": "workspace:*",
+    "@widecode/harness": "workspace:*",
     "@widecode/peers": "workspace:*",
     "@widecode/screen": "workspace:*"
   },

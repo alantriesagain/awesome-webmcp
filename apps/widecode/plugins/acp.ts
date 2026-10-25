@@ -21,7 +21,9 @@
 //   "sessions": ["opencode", "session", "list", "--format", "json"],
 //   "tools": ["opencode", "debug", "agent", "{mode}"], "skills": ["opencode", "debug", "skill"] } } };
 // an entry with the id of a default replaces it.
-// Two agents ship: opencode, and the DeepSeek Harness (`dsh`, the `dsh --profile acp` command). An
+// Three agents ship: opencode, the DeepSeek Harness (`dsh`, the `dsh --profile acp` command), and
+// widecode's own, the harness (`{widecode} --harness`, the running binary, `own: true`: the
+// project's prompt and trust go to it in `_meta.widecode` with each session and prompt). An
 // agent that advertises session/load (opencode) replays a past session's turns; one that only
 // advertises session/resume (the DeepSeek Harness) reopens it without them.
 
@@ -40,6 +42,8 @@ interface Entry {
   forget: string[];
   /** Whether the agent takes a prompt into the turn that runs (opencode does): a message queued meanwhile goes after its next call. */
   midTurn: boolean;
+  /** widecode's own agent, the harness: the project's prompt and trust go to it in `_meta.widecode`, and `{widecode}` in its commands is the running binary. */
+  own: boolean;
 }
 
 const DEFAULT_AGENTS: Record<string, Entry> = {
@@ -51,6 +55,7 @@ const DEFAULT_AGENTS: Record<string, Entry> = {
     skills: ["opencode", "debug", "skill"],
     forget: ["opencode", "session", "delete", "{session}"],
     midTurn: true,
+    own: false,
   },
   dsh: {
     name: "DeepSeek Harness",
@@ -60,8 +65,22 @@ const DEFAULT_AGENTS: Record<string, Entry> = {
     skills: [],
     forget: [],
     midTurn: false,
+    own: false,
+  },
+  harness: {
+    name: "harness",
+    command: ["{widecode}", "--harness"],
+    sessions: ["{widecode}", "--harness-sessions"],
+    tools: ["{widecode}", "--harness-tools", "{mode}"],
+    skills: ["{widecode}", "--harness-skills"],
+    forget: ["{widecode}", "--harness-forget", "{session}"],
+    midTurn: true,
+    own: true,
   },
 };
+
+/** `words` with `{widecode}` made the running binary's path (the harness's commands). */
+const resolved = (api: widecode.Api, words: string[]): string[] => words.map((w) => (w === "{widecode}" ? api.fs.executable() : w));
 
 /** A permission rule of opencode's: what a call of `permission` (a tool's) on `pattern` gets. */
 interface Rule {
@@ -150,7 +169,7 @@ const agentsOf = (section: unknown): Record<string, Entry> => {
     const words = (v: unknown): string[] => list(v).filter((w): w is string => typeof w === "string" && w.length > 0);
     const command = words(e?.command);
     if (e === null || command.length === 0) continue;
-    out[id] = { name: str(e.name).length > 0 ? str(e.name) : id, command, sessions: words(e.sessions), tools: words(e.tools), skills: words(e.skills), forget: words(e.forget), midTurn: e.midTurn === true };
+    out[id] = { name: str(e.name).length > 0 ? str(e.name) : id, command, sessions: words(e.sessions), tools: words(e.tools), skills: words(e.skills), forget: words(e.forget), midTurn: e.midTurn === true, own: e.own === true };
   }
   return out;
 };
@@ -369,7 +388,7 @@ const alive = (api: widecode.Api, pid: number): boolean => pid > 0 && api.fs.sta
 /** Delete session `sid` of `entry` with its forget command, run in `folder`, the outcome noted as `what`. */
 const deleteSession = (api: widecode.Api, entry: Entry, folder: string, sid: string, what: string): void => {
   if (entry.forget.length === 0) return;
-  const words = entry.forget.map((w) => w.split("{session}").join(sid));
+  const words = resolved(api, entry.forget).map((w) => w.split("{session}").join(sid));
   api.process.run("cd " + quote(folder) + " && " + words.map(quote).join(" "), "", 15000).then(
     (r) => api.note(entry.name + ": " + (r.code === 0 ? "deleted " + what + " " + sid : "could not delete " + what + " " + sid + ": " + (r.timedOut ? "timed out" : r.err.trim()))),
     (e) => api.note(entry.name + ": could not delete " + what + " " + sid + ": " + String(e)),
@@ -403,6 +422,9 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
   /** Counts the readings of the agent's tools: a reading answers only while it is the last. */
   let toolReads = 0;
   let skillReads = 0;
+  /** What the harness is told in `_meta.widecode` with each session and prompt: the project's prompt text and whether the folder is trusted (an entry with `own`). */
+  let harnessPrompt = "";
+  const metaOf = (): Record<string, unknown> => (entry.own ? { _meta: { widecode: { systemPrompt: harnessPrompt, trusted: api.harness.info().trusted } } } : {});
   /** The sessions listed last, the folder and when, and whether a listing is under way. */
   let listed: widecode.AgentSession[] = [];
   let listedFolder = "";
@@ -754,7 +776,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
       flush();
     };
     if (entry.tools.length === 0 || (mode.length === 0 && entry.tools.some((w) => w.includes("{mode}")))) return told(null);
-    const words = entry.tools.map((w) => w.split("{mode}").join(mode));
+    const words = resolved(api, entry.tools).map((w) => w.split("{mode}").join(mode));
     api.process.run("cd " + quote(cwd) + " && " + words.map(quote).join(" "), "", 15000).then(
       (r) => {
         let v: unknown = null;
@@ -779,7 +801,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
       flush();
     };
     if (entry.skills.length === 0) return told(null);
-    api.process.run("cd " + quote(cwd) + " && " + entry.skills.map(quote).join(" "), "", 15000).then(
+    api.process.run("cd " + quote(cwd) + " && " + resolved(api, entry.skills).map(quote).join(" "), "", 15000).then(
       (r) => {
         let v: unknown = null;
         try {
@@ -838,7 +860,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
 
   const newSessionWith = (mcpServers: unknown[]): void => {
     const gen = generation;
-    rpc("session/new", { cwd, mcpServers }, (result, error) => {
+    rpc("session/new", { cwd, mcpServers, ...metaOf() }, (result, error) => {
       if (gen !== generation) return;
       if (error.length > 0) {
         notice(entry.name + " could not start a session", "error", error);
@@ -883,7 +905,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
 
   const loadWith = (sid: string, mcpServers: unknown[]): void => {
     const gen = generation;
-    rpc("session/load", { sessionId: sid, cwd, mcpServers }, (result, error) => {
+    rpc("session/load", { sessionId: sid, cwd, mcpServers, ...metaOf() }, (result, error) => {
       if (gen !== generation) return;
       userDone();
       closeBlock();
@@ -918,7 +940,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
 
   const resumeWith = (sid: string, mcpServers: unknown[]): void => {
     const gen = generation;
-    rpc("session/resume", { sessionId: sid, cwd, mcpServers }, (result, error) => {
+    rpc("session/resume", { sessionId: sid, cwd, mcpServers, ...metaOf() }, (result, error) => {
       if (gen !== generation) return;
       userDone();
       closeBlock();
@@ -989,7 +1011,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
     }
     const gen = generation;
     prompts++;
-    rpc("session/prompt", { sessionId: session, prompt: blocks }, (result, answerError) => {
+    rpc("session/prompt", { sessionId: session, prompt: blocks, ...metaOf() }, (result, answerError) => {
       if (gen !== generation) return;
       prompts--;
       if (answerError.length > 0 && promptError.length === 0) promptError = answerError;
@@ -1117,7 +1139,8 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
     sweep(api, entries, fresh);
     // Its lines and its end are heard while it is the process (one killed is replaced at once).
     const seq = ++processes;
-    const p = api.process.spawn(entry.command, { cwd: folder }, {
+    const command = resolved(api, entry.command);
+    const p = api.process.spawn(command, { cwd: folder }, {
       lines: (ls) => {
         if (seq === processes) lines(ls);
       },
@@ -1126,7 +1149,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
       },
       error: (text) => api.note(id + ": " + text.trimEnd()),
     });
-    if (!p.started) return "cannot start " + entry.command.join(" ");
+    if (!p.started) return "cannot start " + command.join(" ");
     proc = p;
     emit({ type: "process", state: "running" });
     rpc("initialize", { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: "widecode", version: String(widecode.version) } }, (result, error) => {
@@ -1230,7 +1253,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
     }
     if (entry.sessions.length === 0) return;
     listing = true;
-    api.process.run("cd " + quote(folder) + " && " + entry.sessions.map(quote).join(" "), "", 10000).then(
+    api.process.run("cd " + quote(folder) + " && " + resolved(api, entry.sessions).map(quote).join(" "), "", 10000).then(
       (r) => {
         let v: unknown = [];
         try {
@@ -1257,7 +1280,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
     emit({ type: "aside", id: aside, question });
     const gen = generation;
     const failed = (why: string): void => emit({ type: "aside", id: aside, error: why });
-    rpc("session/fork", { sessionId: session, cwd, mcpServers: [] }, (result, error) => {
+    rpc("session/fork", { sessionId: session, cwd, mcpServers: [], ...metaOf() }, (result, error) => {
       if (gen !== generation) return;
       const fork = str(obj(result)?.sessionId);
       if (error.length > 0 || fork.length === 0) return failed(error.length > 0 ? error : entry.name + " made no fork");
@@ -1298,6 +1321,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
     eager: true,
     start(o) {
       const folder = o.cwd;
+      harnessPrompt = o.systemPrompt;
       if (proc !== null) {
         // The process runs with no session (after /new): a new one, on the model and effort chosen.
         if (initialized && !ready && !replaying) {

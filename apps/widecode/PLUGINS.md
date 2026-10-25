@@ -245,8 +245,12 @@ entry, with the command that starts it in ACP mode:
 }
 ```
 
-Two agents ship by default: `opencode` and `dsh` (`dsh --profile acp`, the DeepSeek Harness,
-installed with `npm install -g @deepseek-ai/dsh`). An entry with the id of a default replaces it.
+Three agents ship by default: `opencode`, `dsh` (`dsh --profile acp`, the DeepSeek Harness,
+installed with `npm install -g @deepseek-ai/dsh`) and `harness`, widecode's own agent, served by
+the running binary (`{widecode}` in an entry's commands is its path): `widecode --harness` speaks
+ACP on stdio, and its side commands answer the entry's `tools`, `skills`, `sessions` and `forget`.
+An entry with `own: true` gets the project's prompt text and trust in `_meta.widecode` with each
+session and prompt. An entry with the id of a default replaces it.
 
 A session is listed from the agent's `session/list` while it runs and offers it, else from the
 entry's `sessions` command, which prints them as JSON. ACP does not say which tools an agent has:

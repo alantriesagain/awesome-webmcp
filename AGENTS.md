@@ -22,6 +22,7 @@ patches light needs).
 | `packages/screen` | the screen plugins contribute to: columns, tabs, band strips, segments, `ScreenController`, the column element |
 | `packages/code` | the code column: a file with its changes in place, the view, a subagent's steps, a call's page, the `CodeTarget` role |
 | `packages/chat` | the chat views: the transcript with the composer, the request panel, the completion strip, the Tools tab, the `ChatTarget` and `ToolsTarget` roles, on a `ChatHost` the app provides |
+| `packages/harness` | widecode's own coding agent, the harness: a daemon of the binary (`widecode --harness`) speaking ACP over stdio to the ACP plugin, talking to model APIs directly, running its own tools, keeping its own sessions (`PLAN.md`, milestone J) |
 | `apps/widecode` | widecode, the Claude Code frontend for wide terminals (chat, files, code), installed as `widecode`: a native core and JS plugins; a project's `.widecode/` is its harness, which the agent edits |
 | `apps/desktop` | the chat as a desktop app: a scriptc backend on light's desktop host, a light page in the system web view |
 | `probes/` | one-file compiler probes from widecode's start and the rules they produced (`probes/README.md`); `p0-workspace/` is the probe the workspace's import route rests on; light's `native/probes/` continues the work |
@@ -61,7 +62,7 @@ patches light needs).
   name (`@bootstrapp/light/native/tui`, `@bootstrapp/light/native/tui/lines.ts`, `@light/lib/json.ts`); a
   relative import never leaves the member.
 - The dependency order: light's packages (lib, highlight; plugins, workspace; test; kernel, ui;
-  markdown), then agent; conversation; screen; code; chat; then the apps. A package never imports
+  markdown), then agent; conversation; harness; screen; code; chat; then the apps. A package never imports
   an app, nor a package after it in this order; light's packages never import one of these.
 - An app's `native` block names its entry, its binary, its FFI manifest (`@light/plugins/native/ffi.json`
   for one with plugins), its prepare steps (shell lines run in its folder before a build, a test
