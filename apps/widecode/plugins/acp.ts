@@ -305,6 +305,15 @@ const unifiedHunks = (diff: string): { oldStart: number; newStart: number; lines
 /** A word for `sh`, quoted. */
 const quote = (w: string): string => "'" + w.replace(/'/g, "'\\''") + "'";
 
+/**
+ * The shell line that runs `words` in `folder` for what they print: their output goes to a file,
+ * then to the plugin. An agent's CLI that writes a large listing and exits without waiting for it
+ * to drain (opencode's, under Bun) loses what a pipe could not hold, 64 KB natively, and its JSON
+ * no longer parses; a file holds it all, and `cat` waits for the pipe.
+ */
+const throughFile = (folder: string, words: string[]): string =>
+  "cd " + quote(folder) + ' && f=$(mktemp) && { ' + words.map(quote).join(" ") + ' > "$f"; c=$?; cat "$f"; rm -f "$f"; exit $c; }';
+
 /** A time as epoch ms: a number (seconds when it is small) or a date's text. */
 const msOf = (v: unknown): number => {
   if (typeof v === "number") return v < 1e12 ? v * 1000 : v;
@@ -803,7 +812,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
     };
     if (entry.tools.length === 0 || (mode.length === 0 && entry.tools.some((w) => w.includes("{mode}")))) return told(null);
     const words = resolved(api, entry.tools).map((w) => w.split("{mode}").join(mode));
-    api.process.run("cd " + quote(cwd) + " && " + words.map(quote).join(" "), "", 15000).then(
+    api.process.run(throughFile(cwd, words), "", 15000).then(
       (r) => {
         let v: unknown = null;
         try {
@@ -827,7 +836,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
       flush();
     };
     if (entry.skills.length === 0) return told(null);
-    api.process.run("cd " + quote(cwd) + " && " + resolved(api, entry.skills).map(quote).join(" "), "", 15000).then(
+    api.process.run(throughFile(cwd, resolved(api, entry.skills)), "", 15000).then(
       (r) => {
         let v: unknown = null;
         try {
@@ -1280,7 +1289,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
     }
     if (entry.sessions.length === 0) return;
     listing = true;
-    api.process.run("cd " + quote(folder) + " && " + resolved(api, entry.sessions).map(quote).join(" "), "", 10000).then(
+    api.process.run(throughFile(folder, resolved(api, entry.sessions)), "", 10000).then(
       (r) => {
         let v: unknown = [];
         try {

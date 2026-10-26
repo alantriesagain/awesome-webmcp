@@ -127,7 +127,8 @@ const main = async (): Promise<void> => {
   c.reset();
   ok("not said yet", await until(() => tab(w) === " 0 skills|   Known once Fake starts."));
   w.host.roles.chat.submit("hello");
-  ok("its skills from its command: the folder's as the project's, a built-in one", await until(() => tab(w) === " 2 skills| project|   alpha  The first skill: use it when asked for alpha.| built-in|   customize  Built into the agent."));
+  // Its listing is over 64 KB, as opencode's is: read whole, through a file, natively too.
+  ok("its skills from its command, a listing larger than a pipe holds: the folder's as the project's, the built-in ones", await until(() => tab(w) === " 3 skills| project|   alpha  The first skill: use it when asked for alpha.| built-in|   customize  Built into the agent.|   zeta  A skill with a long body."));
   eq("called in words: no command of theirs, and Claude Code's are gone", String(w.host.kernel.commands.find("/alpha")) + " " + String(w.host.kernel.commands.find("/beta")), "null null");
   const q = w.host.screen.findPanel("skills");
   if (q !== null) q.press(1, 0);
@@ -136,7 +137,7 @@ const main = async (): Promise<void> => {
   eq("a built-in skill has no file: a page about it in the code column, the composer filled", w.code.pane.agent.peek() + " · " + shown() + " · " + w.chat.pane.input.value(), "customize · built into Fake ·  customize|| Built into Fake: no file to show.|| Built into the agent.|| Ask Fake for it in words. · Use the customize skill: ");
   setValue(w.chat.pane.input, "");
   w.host.roles.chat.submit("skill");
-  ok("its skill tool's call is a run, done with the command after it", await until(() => tab(w).startsWith(" 2 skills · 1 run| Runs| ● alpha  done · 1 call · T| project|   alpha  The first skill: use it when asked for alpha.  ×1|")));
+  ok("its skill tool's call is a run, done with the command after it", await until(() => tab(w).startsWith(" 3 skills · 1 run| Runs| ● alpha  done · 1 call · T| project|   alpha  The first skill: use it when asked for alpha.  ×1|")));
 
   // One with no skills command.
   eq("another", w.host.session.useAgent("old"), "");

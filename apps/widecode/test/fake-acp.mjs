@@ -45,7 +45,8 @@
  * `tools` an object of names, `invalid` and `question` among them, and its permission rules: in
  * plan mode edit only on plans, bash asked for, glob denied) and exits. With `--skills` it prints
  * its skills as opencode's `debug skill` does (a JSON list of `name`, `description`, `location` and
- * `content`: one of the folder's, one built in) and exits.
+ * `content`: one of the folder's, two built in, one with a body of 240 KB, as long as opencode's
+ * listing and more) and exits.
  *
  * With `--dsh` it speaks as the DeepSeek Harness (`dsh --profile acp`) does: initialize
  * advertises session/list and session/resume but no loadSession, no fork and no modes; the config
@@ -99,6 +100,8 @@ if (process.argv.includes("--skills")) {
   const skills = [
     { name: "alpha", description: "The first skill: use it when asked for alpha.", location: process.cwd() + "/.claude/skills/alpha/SKILL.md", content: "# Alpha\n\nDo the alpha thing." },
     { name: "customize", description: "Built into the agent.", location: "<built-in>", content: "" },
+    // Its content as long as opencode's built-in one and more: the listing passes 64 KB, what a pipe holds.
+    { name: "zeta", description: "A skill with a long body.", location: "<built-in>", content: "Step.\n".repeat(40000) },
   ];
   process.stdout.write(JSON.stringify(skills, null, 2) + "\n");
   process.exit(0);
