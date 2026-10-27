@@ -299,8 +299,10 @@ const prompt = (id, sessionId, params) => {
     update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: "call_task", status: "completed", title: "find the tests", content: [{ type: "content", content: text("test/a.test.ts") }], rawOutput: { output: "test/a.test.ts" } });
     end("end_turn");
   } else if (first === "skill") {
-    update(sessionId, { sessionUpdate: "tool_call", toolCallId: "call_skill", title: "skill", kind: "other", status: "pending", rawInput: { name: "alpha" } });
-    update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: "call_skill", status: "completed", title: "alpha", content: [{ type: "content", content: text("# Alpha\n\nDo the alpha thing.") }], rawOutput: { output: "# Alpha" } });
+    // As opencode 1.19 sends it (recorded October 2026): announced with an empty input, the skill's name in the next update, retitled when done.
+    update(sessionId, { sessionUpdate: "tool_call", toolCallId: "call_skill", title: "skill", kind: "other", status: "pending", locations: [], rawInput: {} });
+    update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: "call_skill", status: "in_progress", kind: "other", title: "skill", locations: [], rawInput: { name: "alpha" } });
+    update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: "call_skill", status: "completed", title: "Loaded skill: alpha", content: [{ type: "content", content: text('<skill_content name="alpha">\n# Alpha\n\nDo the alpha thing.') }], rawOutput: { output: "# Alpha" } });
     const input = { command: "ls -1", description: "List files", cwd };
     update(sessionId, { sessionUpdate: "tool_call", toolCallId: "call_skill_run", title: "ls -1", kind: "execute", status: "completed", locations: [{ path: cwd }], rawInput: input, content: [{ type: "content", content: text("a.txt") }], rawOutput: { output: "a.txt\n" } });
     update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Alpha done.") });
