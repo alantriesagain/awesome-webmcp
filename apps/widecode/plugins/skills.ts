@@ -9,7 +9,9 @@
 // (a page about a bundled skill, which has none), and puts what calls it in the
 // composer ("/name " for Claude Code; "Use the name skill: " for an agent whose skills are asked
 // for in words), ready for arguments and Enter; `v` goes to the file alone; Enter on a run shows
-// the call that loaded the skill. Each skill Claude Code calls
+// the call that loaded the skill. A run that ended is kept in the project's records, so each
+// skill's row also says how many times it ran there across sessions, and a press says how many of
+// those the user typed and how many the agent chose. Each skill Claude Code calls
 // by a slash is a command here too, so the strip above the composer completes it with its
 // description as "/" is typed; /skills shows the tab.
 
@@ -26,6 +28,7 @@ const SOURCE_RANK: Record<string, number> = { project: 0, user: 1, "built-in": 3
 
 type Skill = { name: string; description: string; source: string; path: string; command: string };
 type SkillRun = { name: string; callId: string; state: string; startedMs: number; endedMs: number; calls: number };
+type Usage = { name: string; runs: number; typed: number; failed: number; lastMs: number };
 
 /** A row of the tab: a group's header, a run, a skill, or a line of words. */
 interface Line {
@@ -55,6 +58,9 @@ widecode.plugin({
     /** The skill commands this plugin registered, by name, and the list they were made from. */
     let registered: string[] = [];
     let registeredFrom = "";
+    /** Each skill's runs across the project's sessions, and the ended runs kept this process (session and run). */
+    let usage = new Map<string, Usage>();
+    const kept = new Set<string>();
 
     const agentName = (): string => api.agent.info().name;
     const running = (): number => runs.filter((r) => r.state === "running").length;
@@ -116,10 +122,34 @@ widecode.plugin({
       partial = got.partial;
       skills = got.skills;
       runs = got.runs;
+      keep();
       syncCommands();
       rebuild();
       panel.refresh();
     };
+    /** Each run that ended goes into the project's records once, then the totals are read again. */
+    const keep = (): void => {
+      const session = api.agent.sessionId();
+      if (session.length > 0)
+        for (const r of runs) {
+          if (r.state === "running") continue;
+          const key = session + ":" + (r.callId.length > 0 ? r.callId : "typed:" + String(r.startedMs)) + ":" + r.state;
+          if (kept.has(key)) continue;
+          if (api.store.saveSkillRun({ skill: r.name, callId: r.callId, state: r.state, startedMs: r.startedMs, endedMs: r.endedMs, calls: r.calls })) kept.add(key);
+        }
+      usage = new Map(api.store.skillUsage().map((x) => [x.name, x]));
+    };
+
+    /** What the project's records say of skill `name`: its runs, typed and chosen, and the last ("" for none). */
+    const usageNote = (name: string): string => {
+      const x = usage.get(name);
+      if (x === undefined || x.runs === 0) return "not run in this project yet";
+      const parts = [String(x.runs) + (x.runs === 1 ? " run" : " runs") + " in this project", String(x.typed) + " typed", String(x.runs - x.typed) + " chosen by the agent"];
+      if (x.failed > 0) parts.push(String(x.failed) + " failed");
+      if (x.lastMs > 0) parts.push("last " + u.elapsed(Math.max(0, Date.now() - x.lastMs)) + " ago");
+      return parts.join(" · ");
+    };
+
     /** Read again soon: the conversation changes many times a second while the agent works. */
     const soon = (): void => {
       if (pending) return;
@@ -144,7 +174,7 @@ widecode.plugin({
       const text = callText(s);
       api.composer.set([text], 0, u.graphemes(text).length);
       api.actions.focus("chat");
-      api.tell((s.command.length > 0 ? "Enter sends " + s.command + " to " + agentName() : "say what " + s.name + " should do, then Enter") + (s.description.length > 0 ? " · " + s.description : ""));
+      api.tell((s.command.length > 0 ? "Enter sends " + s.command + " to " + agentName() : "say what " + s.name + " should do, then Enter") + " · " + usageNote(s.name));
     };
 
     /** A SKILL.md without its frontmatter (the name and description between the first two `---` lines, which the tab shows already). */
@@ -213,9 +243,10 @@ widecode.plugin({
             out.push({ bg, runs: cells });
             continue;
           }
-          // A skill's runs at the row's end, then the name, then its description in what is left.
+          // A skill's runs at the row's end (this session's, then the project's in all), then the name, then its description in what is left.
           const times = l.skill !== null ? runs.filter((r) => r.name === l.text).length : 0;
-          const tail = times > 0 ? "×" + String(times) : "";
+          const total = l.skill !== null ? (usage.get(l.text)?.runs ?? 0) : 0;
+          const tail = (times > 0 ? "×" + String(times) + (total > 0 ? " · " : "") : "") + (total > 0 ? String(total) + (total === 1 ? " run" : " runs") : "");
           const room = width - (tail.length > 0 ? tail.length + 2 : 0);
           const cells: Run[] = [{ text: (l.kind === "head" ? " " : "   ") + u.clip(l.text, Math.max(4, room - 4)), fg: l.kind === "note" ? DIM : "", bold: l.kind === "head" || i === selected }];
           const left = room - u.runsWidth(cells) - 2;

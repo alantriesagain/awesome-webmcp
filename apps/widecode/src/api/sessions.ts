@@ -6,6 +6,7 @@ import type { JsRuntime } from "../runtime/runtime.ts";
 import { HostAnswer } from "@light/plugins/engine.ts";
 import { Limits } from "@widecode/conversation/session-store.ts";
 import type { ListedSession } from "./values.ts";
+import { SkillRunRow } from "../services/sessions.ts";
 import { str, num, list, json, answer, answerText, objectText } from "./values.ts";
 
 /** A session record's fields as a plugin passes them, every one `unknown`. */
@@ -19,6 +20,16 @@ interface SessionFields {
   model?: unknown;
   effort?: unknown;
   contextWindow?: unknown;
+}
+
+/** A skill run as a plugin passes it, every field `unknown`. */
+interface SkillRunFields {
+  skill?: unknown;
+  callId?: unknown;
+  state?: unknown;
+  startedMs?: unknown;
+  endedMs?: unknown;
+  calls?: unknown;
 }
 
 /** Plugin call `name` with its arguments `a`, answered; null for a call of another namespace. */
@@ -84,6 +95,34 @@ export const answerSessions = (rt: JsRuntime, name: string, a: unknown[]): HostA
       store.saveSession(meta);
       return answer(true);
     }
+    case "store.saveSkillRun": {
+      // A skill run that ended, kept in the folder by its session and its call (or a typed one's start).
+      const records = h.session.records;
+      const r = a[0] !== null && typeof a[0] === "object" && !Array.isArray(a[0]) ? (a[0] as SkillRunFields) : null;
+      const session = h.conversation.sessionId;
+      if (records === null || r === null || str(r.skill).length === 0 || session.length === 0) return answer(false);
+      const row = new SkillRunRow();
+      const callId = str(r.callId);
+      row.id = session + ":" + (callId.length > 0 ? callId : "typed:" + String(Math.max(0, num(r.startedMs))));
+      row.session = session;
+      row.agent = h.conversation.agent.id();
+      row.skill = str(r.skill);
+      row.typed = callId.length === 0;
+      row.state = str(r.state);
+      row.startedMs = Math.max(0, num(r.startedMs));
+      row.endedMs = Math.max(0, num(r.endedMs));
+      row.calls = Math.max(0, num(r.calls));
+      records.saveSkillRun(row);
+      return answer(true);
+    }
+    case "store.skillUsage": {
+      const records = h.session.records;
+      const out: string[] = [];
+      if (records !== null)
+        for (const u of records.skillUsage())
+          out.push(objectText(["name", "runs", "typed", "failed", "lastMs"], [json(u.name), String(u.runs), String(u.typed), String(u.failed), String(u.lastMs)]));
+      return answerText("[" + out.join(",") + "]");
+    }
     case "store.saveLimits": {
       // The account's rate limits as the agent last reported them, read by the next run's status.
       const store = h.session.store;
@@ -127,6 +166,8 @@ export const NAMESPACE_SESSIONS = new PreludePart("sessions", `        list: () 
 /** The `store` namespace of the plugin API, its JS side: the calls these answers take. */
 export const NAMESPACE_STORE = new PreludePart("store", `        session: (sid) => call("store.session", String(sid)),
         updateSession: (sid, fields) => call("store.updateSession", String(sid), fields),
+        saveSkillRun: (r) => call("store.saveSkillRun", { skill: String(r.skill ?? ""), callId: String(r.callId ?? ""), state: String(r.state ?? ""), startedMs: Number(r.startedMs ?? 0), endedMs: Number(r.endedMs ?? 0), calls: Number(r.calls ?? 0) }),
+        skillUsage: () => call("store.skillUsage"),
         saveLimits: (l) => call("store.saveLimits", Number(l.fiveHourPct ?? -1), Number(l.fiveHourResets ?? 0), Number(l.weekPct ?? -1), Number(l.weekResets ?? 0)),
 `);
 

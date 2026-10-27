@@ -7,15 +7,18 @@
 // press on a skill shows its file in the code column (a project's as a file, another's text as a
 // view) and puts its command in the composer, `v` goes to the file. An ACP agent's skills come from its entry's skills command
 // (test/fake-acp.mjs --skills, as opencode's `debug skill`), called in words, so no command of
-// theirs is registered (Claude Code's are dropped); its skill tool's call is a run. One with no
-// skills command lists none. Switched off, there is no tab.
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+// theirs is registered (Claude Code's are dropped); its skill tool's call is a run. A run that
+// ended is kept in the folder's records (`.widecode/skills.jsonl`): a row says this session's runs
+// and the project's across sessions and agents, a press says how many were typed and chosen. One
+// with no skills command lists none. Switched off, there is no tab.
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "@widecode/conversation/conversation.ts";
 import { NoStateFile } from "@light/kernel/settings.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { composeWidecode, Widecode } from "../src/compose.ts";
+import { Store } from "../src/services/store.ts";
 import { Run } from "@bootstrapp/light/native/tui/lines.ts";
 import { KeyEvent, setValue } from "@bootstrapp/light/native/tui";
 import { done, eq, ok } from "@light/test/assert.ts";
@@ -55,6 +58,9 @@ const main = async (): Promise<void> => {
     },
   };
   w.start(config, new NoStateFile(), []);
+  // A store: the folder's records keep the skill runs.
+  const home = mkdtempSync(join(tmpdir(), "widecode-skills-home-"));
+  await w.host.useStore(new Store(home));
   // Trusted, as the app marks a folder it works in: the project's skills count.
   w.host.session.setTrusted(true);
   await w.host.load();
@@ -107,6 +113,24 @@ const main = async (): Promise<void> => {
   c.receive(JSON.stringify({ type: "result", subtype: "success", is_error: false, duration_ms: 1200, total_cost_usd: 0.01, result: "Done." }));
   ok("done with the turn", await until(() => tab(w).includes("| ● alpha  done · 1 call · T|") && tab(w).startsWith(" 3 skills · 1 run| Runs|")));
   eq("the badge counts the skills when none runs", p !== null ? p.badge().map((r: Run) => r.text).join("") : "", "3");
+  /** The runs the folder's records keep: skill, typed or not, how it ended, the calls after it. */
+  const keptRuns = (): string => {
+    let text = "";
+    try {
+      text = readFileSync(join(folder, ".widecode", "skills.jsonl"), "utf8");
+    } catch {
+      return "";
+    }
+    const rows = new Map<string, string>();
+    for (const line of text.split("\n")) {
+      if (line.trim().length === 0) continue;
+      const r = JSON.parse(line) as { id: string; skill: string; typed: boolean; state: string; calls: number; agent: string };
+      rows.set(r.id, r.agent + ":" + r.skill + ":" + (r.typed ? "typed" : "chosen") + ":" + r.state + ":" + String(r.calls));
+    }
+    return [...rows.values()].join(" ");
+  };
+  ok("the ended run is kept in the project's records", await until(() => keptRuns() === "claude:alpha:chosen:done:1"));
+  ok("its row says this session's runs and the project's", await until(() => tab(w).includes("|   alpha  The first skill.  ×1 · 1 run|")));
 
   // A skill the user typed: the message opens its turn, then Claude Code echoes the command.
   c.receive(JSON.stringify({ type: "user", message: { role: "user", content: "/beta now" } }));
@@ -116,6 +140,11 @@ const main = async (): Promise<void> => {
   eq("a typed skill is a run too, newest first", tab(w).slice(0, typed.length), typed);
   c.receive(JSON.stringify({ type: "result", subtype: "success", is_error: false, duration_ms: 300, total_cost_usd: 0.01, result: "Ok." }));
   ok("ended with its turn", await until(() => tab(w).includes("| ● beta  done · 0 calls · T · typed|")));
+  ok("kept too, as typed", await until(() => keptRuns() === "claude:alpha:chosen:done:1 claude:beta:typed:done:0"));
+  const betaRow = tab(w).split("|").slice(1).findIndex((r: string) => r.startsWith("   beta"));
+  if (p !== null) p.press(betaRow, 0);
+  ok("a press on a skill says its runs in the project: typed, chosen, the last", w.host.screen.message.peek().includes(" · 1 run in this project · 1 typed · 0 chosen by the agent · last "));
+  setValue(w.chat.pane.input, "");
   if (p !== null) p.press(1, 0);
   ok("a press on a typed run says what it was", w.host.screen.message.peek().startsWith("beta was typed as a command: done · 0 calls"));
   if (p !== null) p.press(2, 0);
@@ -128,7 +157,7 @@ const main = async (): Promise<void> => {
   ok("not said yet", await until(() => tab(w) === " 0 skills|   Known once Fake starts."));
   w.host.roles.chat.submit("hello");
   // Its listing is over 64 KB, as opencode's is: read whole, through a file, natively too.
-  ok("its skills from its command, a listing larger than a pipe holds: the folder's as the project's, the built-in ones", await until(() => tab(w) === " 3 skills| project|   alpha  The first skill: use it when asked for alpha.| built-in|   customize  Built into the agent.|   zeta  A skill with a long body."));
+  ok("its skills from its command, a listing larger than a pipe holds: the folder's as the project's (with the run Claude Code made of it in this project), the built-in ones", await until(() => tab(w) === " 3 skills| project|   alpha  The first skill: use it when asked for alp… 1 run| built-in|   customize  Built into the agent.|   zeta  A skill with a long body."));
   eq("called in words: no command of theirs, and Claude Code's are gone", String(w.host.kernel.commands.find("/alpha")) + " " + String(w.host.kernel.commands.find("/beta")), "null null");
   const q = w.host.screen.findPanel("skills");
   if (q !== null) q.press(1, 0);
@@ -137,7 +166,8 @@ const main = async (): Promise<void> => {
   eq("a built-in skill has no file: a page about it in the code column, the composer filled", w.code.pane.agent.peek() + " · " + shown() + " · " + w.chat.pane.input.value(), "customize · built into Fake ·  customize|| Built into Fake: no file to show.|| Built into the agent.|| Ask Fake for it in words. · Use the customize skill: ");
   setValue(w.chat.pane.input, "");
   w.host.roles.chat.submit("skill");
-  ok("its skill tool's call is a run, done with the command after it", await until(() => tab(w).startsWith(" 3 skills · 1 run| Runs| ● alpha  done · 1 call · T| project|   alpha  The first skill: use it when asked for alpha.  ×1|")));
+  ok("its skill tool's call is a run, done with the command after it, counted with the project's", await until(() => tab(w).startsWith(" 3 skills · 1 run| Runs| ● alpha  done · 1 call · T| project|   alpha  The first skill: use it when asked f… ×1 · 2 runs|")));
+  ok("kept with the agent that ran it", await until(() => keptRuns().endsWith(" fake:alpha:chosen:done:1") && keptRuns().split(" ").length === 3));
 
   // One with no skills command.
   eq("another", w.host.session.useAgent("old"), "");

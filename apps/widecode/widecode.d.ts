@@ -827,6 +827,10 @@ declare namespace widecode {
       session(id: string): SessionRecord | null;
       /** Keep `fields` for session `id`; false when there is no store. */
       updateSession(id: string, fields: Partial<SessionRecord>): boolean;
+      /** Keep a skill run that ended in the folder's records (by the chosen agent's session and the run's call, or a typed run's start, so keeping it again writes over it); false when there is no store or session. */
+      saveSkillRun(run: { skill: string; callId: string; state: string; startedMs: number; endedMs: number; calls: number }): boolean;
+      /** Each skill's runs kept in the folder across its sessions: how many, how many the user typed, how many failed, when the last started. */
+      skillUsage(): { name: string; runs: number; typed: number; failed: number; lastMs: number }[];
       /** Keep the account's rate limits as the agent reported them (percent used, -1 unknown; resets in epoch seconds). */
       saveLimits(limits: { fiveHourPct: number; fiveHourResets: number; weekPct: number; weekResets: number }): boolean;
     };

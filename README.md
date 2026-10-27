@@ -131,9 +131,11 @@ the LAN git bridge (below). Skills: the skills the agent has (the project's and 
 disk at launch, Claude Code's own once it starts; an ACP agent's from its entry's skills command,
 opencode's `opencode debug skill`), by where each comes
 from (the project's `.claude/skills`, the user's, a plugin's, the agent's own), with what each SKILL.md
-says it is for and how many times it ran this session; above them the session's skill runs, newest
-first, each with where it stands, the calls the turn made after the skill and for how long, live
-while one runs. ↑↓ and Enter or a press show the skill's SKILL.md in the code column, rendered as
+says it is for, how many times it ran this session and how many in the project across sessions and
+agents (each run that ended is kept in `.widecode/skills.jsonl`); above them the session's skill
+runs, newest first, each with where it stands, the calls the turn made after the skill and for how
+long, live while one runs. A press on a skill also says how many of the project's runs were typed
+and how many the agent chose, and when it last ran. ↑↓ and Enter or a press show the skill's SKILL.md in the code column, rendered as
 markdown, and put what
 calls the skill in the composer (`/name ` for Claude Code, a sentence to finish for an agent whose
 skills are asked for in words), the focus staying there for the arguments; `v` goes to the file;
