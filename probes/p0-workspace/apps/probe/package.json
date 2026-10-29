@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@bootstrapp/light": "workspace:*",
+    "@lightstart/light": "workspace:*",
     "@tui/probe-lib": "workspace:*",
     "@tui/probe-ffi": "workspace:*"
   },

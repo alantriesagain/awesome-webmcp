@@ -6,8 +6,8 @@
 //
 // Natively every item is one `Item` class told apart by `kind`, since a subclass would lose its
 // identity through base-typed collections.
-import { Line } from "@bootstrapp/light/native/tui/lines.ts";
-import { signal } from "@bootstrapp/light/signals";
+import { Line } from "@lightstart/light/native/tui/lines.ts";
+import { signal } from "@lightstart/light/signals";
 import { Question } from "./requests.ts";
 
 export const TEXT = 0;

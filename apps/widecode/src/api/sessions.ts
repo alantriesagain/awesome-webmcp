@@ -133,7 +133,8 @@ export const answerSessions = (rt: JsRuntime, name: string, a: unknown[]): HostA
       l.sevenDay.usedPercent = num(a[2]);
       l.sevenDay.resetsAt = Math.max(0, num(a[3]));
       l.updatedMs = Date.now();
-      store.saveLimits(l);
+      const agent = h.conversation.agent.id();
+      store.saveLimits(l, agent.length > 0 ? agent : "claude");
       return answer(true);
     }
     case "titles.configure":

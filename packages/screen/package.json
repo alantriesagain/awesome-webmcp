@@ -9,7 +9,7 @@
     "./*": "./*"
   },
   "dependencies": {
-    "@bootstrapp/light": "workspace:*",
+    "@lightstart/light": "workspace:*",
     "@light/kernel": "workspace:*",
     "@light/lib": "workspace:*",
     "@light/ui": "workspace:*",

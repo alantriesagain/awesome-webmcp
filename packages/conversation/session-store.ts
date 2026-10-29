@@ -1,7 +1,7 @@
 // What a conversation keeps about its sessions and reads back: a session's record (its title, the
-// model it ran on, its costs, the commit it started on, the file shown in it) and the account's
-// rate limits as the agent last reported them. The app's store holds them wherever it keeps its
-// data; the conversation reads and writes them through this class.
+// model it ran on, its costs, the commit it started on, the file shown in it) and each agent's
+// rate limits as it last reported them. The app's store holds them wherever it keeps its data; the
+// conversation reads and writes them through this class.
 
 import { num, recordOf, text } from "@light/lib/json.ts";
 
@@ -84,8 +84,8 @@ export class Limits {
 
 /** The records' store, as the conversation uses it. */
 export abstract class SessionStore {
-  /** The account's rate limits as last reported. */
-  abstract limits(): Limits;
+  /** Agent `agent`'s rate limits as last reported. */
+  abstract limits(agent: string): Limits;
   /** Session `id`'s record in `folder`, or null. */
   abstract session(id: string, folder: string): SessionMeta | null;
   /** Session `id`'s record in `folder`, made when there is none. */

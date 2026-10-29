@@ -3,7 +3,7 @@
 // the shell's template as `<wc-column title ?active left right .view>`, its width and flex the
 // box's own; the mouse's press, move and release bubble to the shell, which turns a press on a
 // border into a drag resizing the column.
-import { View, define, html } from "@bootstrapp/light/native/tui";
+import { View, define, html } from "@lightstart/light/native/tui";
 import { palette } from "@light/ui/palette.ts";
 
 export class ColumnView extends View {

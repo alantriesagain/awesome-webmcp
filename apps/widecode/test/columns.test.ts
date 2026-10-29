@@ -12,7 +12,7 @@ import { Conversation } from "@widecode/conversation/conversation.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { ColumnWidths, settingOf } from "../src/views/column-widths.ts";
 import { createWidecode } from "../src/compose.ts";
-import { DEFAULT_STYLE, MouseEvent, TElement, TRoot, frames, hitTest, layout, mount, unmount } from "@bootstrapp/light/native/tui";
+import { DEFAULT_STYLE, MouseEvent, TElement, TRoot, frames, hitTest, layout, mount, unmount } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@light/test/assert.ts";
 
 const ids = ["chat", "tools", "side", "code"];

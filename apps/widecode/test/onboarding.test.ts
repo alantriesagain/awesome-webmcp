@@ -16,7 +16,7 @@ import { openWorkspace } from "@light/workspace/workspace.ts";
 import { AgentChoice, HarnessFile, Onboarding, folderCarries, runOnboarding, welcome, welcomeText } from "../src/views/onboarding.ts";
 import { createWidecode, Widecode } from "../src/compose.ts";
 import { Run } from "@light/ui/line-view.ts";
-import { KeyEvent } from "@bootstrapp/light/native/tui";
+import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@light/test/assert.ts";
 
 const chatOf = (w: Widecode): string => {

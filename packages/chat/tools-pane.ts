@@ -5,17 +5,17 @@
 // (a subagent's call, its steps); the chat's "· N tools" line shows its calls here. The list follows
 // new calls until it is scrolled up. It plays the host's tools role once a plugin mounts it.
 import { Panel } from "@widecode/screen/contributions.ts";
-import { Run } from "@bootstrapp/light/native/tui/lines.ts";
+import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { palette } from "@light/ui/palette.ts";
 import { span } from "@light/ui/duration.ts";
-import { spinnerAt } from "@bootstrapp/light/native/tui/ticks.ts";
+import { spinnerAt } from "@lightstart/light/native/tui/ticks.ts";
 import { callMs, callState, DONE, FAILED, RUNNING } from "@widecode/conversation/calls.ts";
 import { ChatModel, Item, PROMPT, TOOL } from "@widecode/conversation/model.ts";
 import { toolSummary } from "@widecode/conversation/render.ts";
 import { ChatHost } from "./host.ts";
 import { ModelSource } from "@widecode/conversation/model-source.ts";
-import { Line } from "@bootstrapp/light/native/tui/lines.ts";
-import { stringWidth } from "@bootstrapp/light/native/tui";
+import { Line } from "@lightstart/light/native/tui/lines.ts";
+import { stringWidth } from "@lightstart/light/native/tui";
 import { clipText } from "@light/ui/text.ts";
 
 

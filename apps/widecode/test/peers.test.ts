@@ -16,7 +16,7 @@ import { createWidecode } from "../src/compose.ts";
 import { Conversation } from "@widecode/conversation/conversation.ts";
 import { JsPanel } from "../src/runtime/views.ts";
 import { DaemonOptions, startDaemon } from "@widecode/peers";
-import { KeyEvent, TRoot, mount, unmount } from "@bootstrapp/light/native/tui";
+import { KeyEvent, TRoot, mount, unmount } from "@lightstart/light/native/tui";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { SpawnOptions, spawnCapped } from "@light/lib/process.ts";
 import { done, eq, ok } from "@light/test/assert.ts";

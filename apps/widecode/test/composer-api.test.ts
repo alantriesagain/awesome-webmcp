@@ -12,7 +12,7 @@ import { PluginSource } from "@light/plugins/sources.ts";
 import { NoStateFile } from "@light/kernel/settings.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
-import { DEFAULT_STYLE, KeyEvent, TRoot, frames, layout, mount } from "@bootstrapp/light/native/tui";
+import { DEFAULT_STYLE, KeyEvent, TRoot, frames, layout, mount } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@light/test/assert.ts";
 
 const plugin = `widecode.plugin({

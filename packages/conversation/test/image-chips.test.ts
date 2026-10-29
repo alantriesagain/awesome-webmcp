@@ -1,7 +1,7 @@
 // A prompt's "[Image #N]" chips: drawn in the link color, and the chip a press at a column lands on
 // (the file a press opens). The prompt's own lines carry the files (PromptImages), so a press on a
 // chip knows which to open.
-import { Line } from "@bootstrapp/light/native/tui/lines.ts";
+import { Line } from "@lightstart/light/native/tui/lines.ts";
 import { chipAt, promptLines } from "../render.ts";
 import { palette } from "@light/ui/palette.ts";
 import { done, eq } from "@light/test/assert.ts";

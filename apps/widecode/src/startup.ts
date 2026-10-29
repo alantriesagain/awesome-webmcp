@@ -11,7 +11,7 @@ import { NoStateFile } from "@light/kernel/settings.ts";
 import { checkSource } from "./api/plugins.ts";
 import { AgentChoice, HarnessFile, Onboarding, folderCarries, runOnboarding } from "./views/onboarding.ts";
 import { Conversation } from "@widecode/conversation/conversation.ts";
-import { FLUSH_AFTER, FLUSH_RENDER, FLUSH_VIEWS, type KeyEvent, Renderer, TInput, Terminal, frames, runApp } from "@bootstrapp/light/native/tui";
+import { FLUSH_AFTER, FLUSH_RENDER, FLUSH_VIEWS, type KeyEvent, Renderer, TInput, Terminal, frames, runApp } from "@lightstart/light/native/tui";
 import { Selftest } from "./selftest.ts";
 import { Store } from "./services/store.ts";
 import { BUILD_TIME, BUILD_VERSION } from "./runtime/build-info.ts";
@@ -168,9 +168,8 @@ export const startWidecode = async (term: Terminal, folder: string, selftest: st
       const id = host.conversation.model.sessionId.length > 0 ? host.conversation.model.sessionId : host.conversation.resumeId;
       if (id.length > 0 && !hasArg("--ephemeral")) {
         const home = homedir();
-        const where = host.workspace.folder.startsWith(home + "/") ? "~" + host.workspace.folder.slice(home.length) : host.workspace.folder;
         const title = host.conversation.title.length > 0 ? " (" + host.conversation.title + ")" : "";
-        console.log("To come back to this session" + title + ":\n  cd " + where + " && " + basename(process.execPath) + " --resume " + id);
+        console.log("To come back to this session" + title + ":\n " + basename(process.execPath) + " --resume " + id);
       }
       w.js.mcp.close();
       process.exit(0);

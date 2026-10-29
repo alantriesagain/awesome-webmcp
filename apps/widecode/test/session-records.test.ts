@@ -50,7 +50,7 @@ eq("the records newest first, the imported one among them", again.all().map((r) 
 ok("the hook fired as rows landed", fired > 0);
 await again.open(other);
 ok("another folder's records are its own", again.session("s-1", other) === null && again.all().length === 0);
-eq("the limits are the store's", String(again.limits().fiveHour.usedPercent), "-1");
+eq("the limits are the store's", String(again.limits("claude").fiveHour.usedPercent), "-1");
 await again.close();
 rmSync(home, { recursive: true, force: true });
 rmSync(project, { recursive: true, force: true });

@@ -11,8 +11,8 @@
 // width, so a streaming delta re-renders only the block it changed.
 import { palette } from "@light/ui/palette.ts";
 import { stamp, took } from "@light/ui/duration.ts";
-import { Line, Run } from "@bootstrapp/light/native/tui/lines.ts";
-import { stringWidth } from "@bootstrapp/light/native/tui/width.ts";
+import { Line, Run } from "@lightstart/light/native/tui/lines.ts";
+import { stringWidth } from "@lightstart/light/native/tui/width.ts";
 import { callState, FAILED, RUNNING, STOPPED } from "./calls.ts";
 import { programCounts } from "./command.ts";
 import { clipText, expandTabs, wrap } from "@light/ui/text.ts";

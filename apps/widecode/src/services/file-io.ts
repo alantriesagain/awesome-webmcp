@@ -3,7 +3,7 @@
 // over it.
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { JsonlIO } from "@bootstrapp/light/model";
+import type { JsonlIO } from "@lightstart/light/model";
 import { writeAtomic } from "@light/lib/fs.ts";
 
 export const fileIO = (): JsonlIO => ({

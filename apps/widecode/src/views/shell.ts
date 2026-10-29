@@ -11,7 +11,7 @@ import { Host } from "../controllers/host.ts";
 import { BandPart, Column } from "@widecode/screen/contributions.ts";
 import { Action, Binder } from "@light/kernel/actions.ts";
 import { joinLabels } from "@light/kernel/keys.ts";
-import { type CustomEvent, type KeyEvent, type MouseEvent, View, html, signal, key } from "@bootstrapp/light/native/tui";
+import { type CustomEvent, type KeyEvent, type MouseEvent, View, html, signal, key } from "@lightstart/light/native/tui";
 import { LineCopy } from "@light/ui/line-view.ts";
 import { ColumnWidths } from "./column-widths.ts";
 import { TabColumn } from "./tab-column.ts";

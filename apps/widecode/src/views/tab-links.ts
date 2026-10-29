@@ -3,8 +3,8 @@
 // its plugin gives (a count, ahead and behind), the shown one highlighted. A press shows the tab;
 // Tab in the column still moves through them.
 import { Host } from "../controllers/host.ts";
-import { Run } from "@bootstrapp/light/native/tui/lines.ts";
-import { type MouseEvent, View, html, stringWidth } from "@bootstrapp/light/native/tui";
+import { Run } from "@lightstart/light/native/tui/lines.ts";
+import { type MouseEvent, View, html, stringWidth } from "@lightstart/light/native/tui";
 import { colorOr, palette } from "@light/ui/palette.ts";
 
 const ROWS = 3;

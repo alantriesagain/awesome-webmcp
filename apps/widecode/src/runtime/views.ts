@@ -8,7 +8,7 @@
 import { Panel } from "@widecode/screen/contributions.ts";
 import { isRecord, parseJson } from "@light/lib/json.ts";
 import { Line, LinePress, LineSource, LineView, Run } from "@light/ui/line-view.ts";
-import { type CustomEvent, View, html } from "@bootstrapp/light/native/tui";
+import { type CustomEvent, View, html } from "@lightstart/light/native/tui";
 import { Bridge, OK } from "@light/plugins/engine.ts";
 import { cells } from "../api/values.ts";
 import { PANEL_SLOTS, slotOf } from "./slots.ts";

@@ -9,7 +9,7 @@ import { Column } from "@widecode/screen/contributions.ts";
 import { ChatTarget } from "@widecode/chat/roles.ts";
 import { Host } from "../controllers/host.ts";
 import { Binder } from "@light/kernel/actions.ts";
-import { type KeyEvent } from "@bootstrapp/light/native/tui";
+import { type KeyEvent } from "@lightstart/light/native/tui";
 import { ChatPane } from "@widecode/chat/chat-pane.ts";
 
 export class ChatWidget extends ChatTarget {

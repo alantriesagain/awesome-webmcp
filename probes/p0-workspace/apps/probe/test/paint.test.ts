@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { Caret, Clip, DEFAULT_STYLE, Screen, TRoot, View, frames, html, layout, mount, paint } from "@bootstrapp/light/native";
+import { Caret, Clip, DEFAULT_STYLE, Screen, TRoot, View, frames, html, layout, mount, paint } from "@lightstart/light/native";
 
 class Box extends View {
   override render(): unknown {

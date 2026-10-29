@@ -96,6 +96,7 @@ const main = async (): Promise<void> => {
   const after = new Store(fresh);
   const afterConfig = after.loadConfig([]).plugins as { sessions?: { titles?: unknown } } | null;
   ok("its config and limits came along", afterConfig !== null && afterConfig.sessions !== undefined && afterConfig.sessions.titles === false && after.limits().fiveHour.usedPercent === 12);
+  eq("a flat limits file is Claude Code's, not another agent's", String(after.limits("opencode").fiveHour.usedPercent), "-1");
   const kept = JSON.parse(readFileSync(join(fresh, "config.json"), "utf8")) as { clipboard?: unknown; columns?: unknown; permissions?: unknown; agent?: unknown; keymap?: unknown };
   ok("the migration keeps the keys it did not move", kept.clipboard === "osc52" && JSON.stringify(kept.columns) === '{"chat":40}' && JSON.stringify(kept.permissions) === '{"ask":["Bash(rm *)"]}' && kept.agent === "opencode" && kept.keymap === "vi");
   const afterRecords = new SessionRecords(after, new Hook());
@@ -105,6 +106,11 @@ const main = async (): Promise<void> => {
   await afterRecords.close();
   ok("the old folder stays with the record it could not move", existsSync(old) && existsSync(join(old, "sessions", "gone.json")));
   eq("a second run does nothing", new Store(fresh).migrateFrom(old), "");
+  const movedOther = new Limits();
+  movedOther.fiveHour.usedPercent = 7;
+  after.saveLimits(movedOther, "opencode");
+  const reread = new Store(fresh);
+  eq("a flat file's windows stay Claude's as another agent's are added", String(reread.limits().fiveHour.usedPercent) + " " + String(reread.limits("opencode").fiveHour.usedPercent), "12 7");
   rmSync(fresh, { recursive: true, force: true });
 
   const l = new Limits();
@@ -114,6 +120,14 @@ const main = async (): Promise<void> => {
   store.saveLimits(l);
   const lb = new Store(home).limits();
   eq("limits round trip", String(lb.fiveHour.usedPercent) + "/" + String(lb.fiveHour.resetsAt) + " " + String(lb.sevenDay.usedPercent), "4/1791939600 39");
+  const other = new Limits();
+  other.fiveHour.usedPercent = 77;
+  other.fiveHour.resetsAt = 1791939900;
+  other.sevenDay.usedPercent = 12;
+  store.saveLimits(other, "opencode");
+  const oc = new Store(home).limits("opencode");
+  const cc = new Store(home).limits("claude");
+  eq("an agent's limits are its own; another's are kept", String(oc.fiveHour.usedPercent) + "/" + String(oc.sevenDay.usedPercent) + " " + String(cc.fiveHour.usedPercent) + "/" + String(cc.fiveHour.resetsAt), "77/12 4/1791939600");
 
   eq("a title cleaned", cleanTitle('\n**Title:** "Rename the helper."\nmore'), "Rename the helper");
   eq("titles shown in order: widecode's, Claude Code's, the first prompt", [shownTitle("Mine", "Claude's", "prompt"), shownTitle("", "Claude's", "prompt"), shownTitle("", "", "a very long first prompt that goes on and on past fifty characters")].join(" | "), "Mine | Claude's | a very long first prompt that goes on and on past…");

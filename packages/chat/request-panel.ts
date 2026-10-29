@@ -9,7 +9,7 @@ import { palette } from "@light/ui/palette.ts";
 import { Item, PLAN } from "@widecode/conversation/model.ts";
 import { ChatHost } from "./host.ts";
 import { Answer, Question, Reply } from "@widecode/conversation/requests.ts";
-import { type KeyEvent, type MouseEvent, TemplateResult, View, html } from "@bootstrapp/light/native/tui";
+import { type KeyEvent, type MouseEvent, TemplateResult, View, html } from "@lightstart/light/native/tui";
 
 /** What the user has done on one question: the options marked (a multi-select) and the answer recorded, if any. */
 export class Draft {

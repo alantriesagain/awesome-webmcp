@@ -1,8 +1,8 @@
 // widecode's own data, what Claude Code does not keep. Global, in ~/.widecode (or $WIDECODE_HOME):
 // `config.json`, the settings: a "plugins" object with each plugin's section (false switches it
 // off), written with every plugin's defaults on first run so it can be edited; `state.json`, what
-// plugins keep between runs; and `limits.json`, the last rate-limit windows seen, so the status bar
-// has them at start. Per
+// plugins keep between runs; and `limits.json`, each agent's last rate-limit windows, so the status
+// bar has them at start and another agent's are not shown for it. Per
 // project, in `<folder>/.widecode/sessions/<id>.json`, so it travels with the project: a session's
 // title and what widecode measured (cost across CLI processes, thinking tokens); `.widecode/` holds a
 // `.gitignore` of `*`, so git (and so the changes widecode shows) leaves it out. Files are written
@@ -410,11 +410,11 @@ export class Store {
     }
   }
 
-  limits(): Limits {
-    return this.limitsStore.limits();
+  limits(agent = "claude"): Limits {
+    return this.limitsStore.limits(agent);
   }
 
-  saveLimits(l: Limits): void {
-    this.limitsStore.saveLimits(l);
+  saveLimits(l: Limits, agent = "claude"): void {
+    this.limitsStore.saveLimits(l, agent);
   }
 }

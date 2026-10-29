@@ -7,7 +7,7 @@
 import { Conversation } from "./conversation.ts";
 import { ChatModel } from "./model.ts";
 import { RenderContext } from "./render.ts";
-import { Line, LineSource } from "@bootstrapp/light/native/tui/lines.ts";
+import { Line, LineSource } from "@lightstart/light/native/tui/lines.ts";
 
 /** What holds the conversation a source draws: an app may replace the conversation (another folder opened), so a source asks each time. */
 export abstract class ConversationHolder {

@@ -18,7 +18,7 @@ import { stamp } from "@light/ui/duration.ts";
 import { findCall } from "@widecode/conversation/calls.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
-import { Line } from "@bootstrapp/light/native/tui/lines.ts";
+import { Line } from "@lightstart/light/native/tui/lines.ts";
 import { budget, done, eq, ok } from "@light/test/assert.ts";
 import { contentText, projectDir, rec, str } from "./support/claude-records.ts";
 import { registerLanguages } from "@light/highlight/languages.ts";

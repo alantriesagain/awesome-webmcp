@@ -7,7 +7,7 @@ import { OK } from "@light/plugins/engine.ts";
 import { HostAnswer } from "@light/plugins/engine.ts";
 import { str, num, strs, json, answer, answerText, objectText, refuse, commitOf, cells } from "./values.ts";
 import { JsRows, MarkdownRows } from "../runtime/views.ts";
-import { insertText } from "@bootstrapp/light/native/tui";
+import { insertText } from "@lightstart/light/native/tui";
 
 /** A code view's key in the runtime's table: the plugin's id and the view's. */
 const viewKey = (owner: string, id: string): string => owner + "\n" + id;

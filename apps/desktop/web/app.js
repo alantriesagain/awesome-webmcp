@@ -3,15 +3,15 @@
  * light component, fed by the backend's events and sending turns through the bridge. Mirrors
  * apps/harness/src/app.ts, the terminal screen, with the browser's own text box.
  */
-import View from "@bootstrapp/light";
-import titleBar from "@bootstrapp/light/components/app/title-bar.js";
-import { html, key } from "@bootstrapp/light/html";
-import { connect } from "@bootstrapp/light/native/desktop/client.js";
+import View from "@lightstart/light";
+import titleBar from "@lightstart/light/components/app/title-bar.js";
+import { html, key } from "@lightstart/light/html";
+import { connect } from "@lightstart/light/native/desktop/client.js";
 
 /** @import { HarnessApi, HarnessEvents } from "../contract.ts" */
 /** @typedef {{ id: number, role: string, text: string }} Message */
 
-/** @type {import("@bootstrapp/light/native/desktop/types.ts").Desktop<HarnessApi, HarnessEvents>} */
+/** @type {import("@lightstart/light/native/desktop/types.ts").Desktop<HarnessApi, HarnessEvents>} */
 const desktop = connect();
 let nextId = 1;
 

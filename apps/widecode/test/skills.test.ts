@@ -19,8 +19,8 @@ import { NoStateFile } from "@light/kernel/settings.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { composeWidecode, Widecode } from "../src/compose.ts";
 import { Store } from "../src/services/store.ts";
-import { Run } from "@bootstrapp/light/native/tui/lines.ts";
-import { KeyEvent, setValue } from "@bootstrapp/light/native/tui";
+import { Run } from "@lightstart/light/native/tui/lines.ts";
+import { KeyEvent, setValue } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@light/test/assert.ts";
 import { until, wait } from "@light/test/headless.ts";
 

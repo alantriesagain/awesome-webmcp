@@ -18,7 +18,7 @@ import { mergePlugins } from "../src/services/harness.ts";
 import { Store } from "../src/services/store.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { composeWidecode, Widecode } from "../src/compose.ts";
-import { Caret, Clip, DEFAULT_STYLE, Screen, TRoot, frames, layout, mount, paint, KeyEvent } from "@bootstrapp/light/native/tui";
+import { Caret, Clip, DEFAULT_STYLE, Screen, TRoot, frames, layout, mount, paint, KeyEvent } from "@lightstart/light/native/tui";
 import { Run } from "@light/ui/line-view.ts";
 import { done, eq, ok } from "@light/test/assert.ts";
 import { until } from "@light/test/headless.ts";

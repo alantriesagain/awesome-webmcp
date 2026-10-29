@@ -11,8 +11,8 @@ import { join } from "node:path";
 import { Conversation } from "@widecode/conversation/conversation.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
-import { Line, LineSource, Run } from "@bootstrapp/light/native/tui/lines.ts";
-import { copyRows, DEFAULT_STYLE, frames, hitTest, layout, MouseEvent, mount, selectRuns, TElement, TRoot, unmount } from "@bootstrapp/light/native/tui";
+import { Line, LineSource, Run } from "@lightstart/light/native/tui/lines.ts";
+import { copyRows, DEFAULT_STYLE, frames, hitTest, layout, MouseEvent, mount, selectRuns, TElement, TRoot, unmount } from "@lightstart/light/native/tui";
 import { wrap } from "@light/ui/text.ts";
 import { done, eq } from "@light/test/assert.ts";
 

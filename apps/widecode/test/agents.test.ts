@@ -10,10 +10,10 @@ import { agentsOf, agentStatus } from "@widecode/conversation/agents.ts";
 import { Conversation } from "@widecode/conversation/conversation.ts";
 import { itemLines, RenderContext } from "@widecode/conversation/render.ts";
 import { JsPanel } from "../src/runtime/views.ts";
-import { Run } from "@bootstrapp/light/native/tui/lines.ts";
+import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
-import { KeyEvent } from "@bootstrapp/light/native/tui";
+import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@light/test/assert.ts";
 
 interface Frame {

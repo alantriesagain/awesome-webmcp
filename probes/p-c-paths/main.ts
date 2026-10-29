@@ -1,5 +1,5 @@
 // P-C (paths): the same import through a tsconfig `paths` alias.
-import { signal, effect } from "@bootstrapp/light/signals/index.js";
+import { signal, effect } from "@lightstart/light/signals/index.js";
 
 const s = signal("x");
 let last = "";

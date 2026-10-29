@@ -15,7 +15,7 @@ import { PluginSource } from "@light/plugins/sources.ts";
 import { Store } from "../src/services/store.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { composeWidecode, Widecode } from "../src/compose.ts";
-import { KeyEvent } from "@bootstrapp/light/native/tui";
+import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@light/test/assert.ts";
 
 const vi = `widecode.plugin({

@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createWidecode } from "../src/compose.ts";
 import { Conversation } from "@widecode/conversation/conversation.ts";
-import { KeyEvent, MouseEvent, hitTest, insertText } from "@bootstrapp/light/native/tui";
+import { KeyEvent, MouseEvent, hitTest, insertText } from "@lightstart/light/native/tui";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { projectDir } from "./support/claude-records.ts";
 import { Store } from "../src/services/store.ts";

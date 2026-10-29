@@ -6,8 +6,8 @@
 // merged over. The agent chosen and the trust are signals; the hooks announce the conversation's
 // changes to plugins. One of light's controllers, as the app's state is.
 import { join } from "node:path";
-import { signal } from "@bootstrapp/light/native/tui";
-import { Controller } from "@bootstrapp/light/controller/class.ts";
+import { signal } from "@lightstart/light/native/tui";
+import { Controller } from "@lightstart/light/controller/class.ts";
 import { Agent } from "@widecode/conversation/agent.ts";
 import { activityOf, stepOf } from "@widecode/conversation/activity.ts";
 import { Conversation } from "@widecode/conversation/conversation.ts";
@@ -148,6 +148,7 @@ export class SessionController extends Controller {
           a.attach(c);
           c.agent = a;
           c.info.modelHint = c.modelHintFor(c.modelName);
+          c.refreshLimits();
         }
         this.agentId.value = want;
         c.changed();

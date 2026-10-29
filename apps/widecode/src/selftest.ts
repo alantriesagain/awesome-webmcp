@@ -24,7 +24,7 @@ import { resolve } from "node:path";
 import { log, trail } from "@light/lib/log.ts";
 import { Widecode } from "./compose.ts";
 import { AGENT, Item, NOTICE, RUN, TEXT, TOOL, Turn } from "@widecode/conversation/model.ts";
-import { KeyEvent } from "@bootstrapp/light/native/tui";
+import { KeyEvent } from "@lightstart/light/native/tui";
 import { CodeFile } from "@widecode/code/diff.ts";
 
 /** The turn's last text item, "" when none. */

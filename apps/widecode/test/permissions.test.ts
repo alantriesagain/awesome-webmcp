@@ -15,7 +15,7 @@ import { Conversation } from "@widecode/conversation/conversation.ts";
 import { mergePermissions } from "../src/services/harness.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
-import { KeyEvent } from "@bootstrapp/light/native/tui";
+import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@light/test/assert.ts";
 import { until } from "@light/test/headless.ts";
 

@@ -74,6 +74,49 @@ const firstLine = (text: string): string => {
   return cut >= 0 ? text.slice(0, cut) + " …" : text;
 };
 
+/** What Claude Code says when a rate limit stops a turn; "" for any other result. */
+const LIMIT_WORDS = /(session|weekly|week|usage|rate|five[- ]hour|5[- ]hour)\s+limit|hit your .{0,24}limit|limit (?:reached|exceeded)|out of (?:usage|credits)/i;
+const limitMessage = (r: Rec): string => {
+  if (r.is_error !== true) return "";
+  const parts: string[] = [];
+  for (const e of list(r.errors)) if (typeof e === "string") parts.push(e);
+  if (str(r.result).length > 0) parts.push(str(r.result));
+  if (str(r.subtype).length > 0) parts.push(str(r.subtype));
+  const text = parts.join("\n").trim();
+  return LIMIT_WORDS.test(text) ? text : "";
+};
+
+const unitMs = (unit: string): number => {
+  const c = unit.charAt(0).toLowerCase();
+  return c === "d" ? 86400000 : c === "h" ? 3600000 : c === "m" ? 60000 : 1000;
+};
+
+/** When a limit message says it resets (epoch ms; 0 when it does not say). "resets in 3h 20m" first, then a clock time on this machine. */
+const resetFrom = (text: string, now: number): number => {
+  const lower = text.toLowerCase();
+  const inHours = /resets?\s+in\s+(\d+)\s*(?:h|hr|hrs|hour|hours)(?:\s+(\d+)\s*(?:m|min|mins|minute|minutes))?/.exec(lower);
+  if (inHours !== null) return now + Number(inHours[1]) * 3600000 + Number(inHours[2] ?? "0") * 60000;
+  const inOne = /resets?\s+in\s+(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)/.exec(lower);
+  if (inOne !== null) return now + Number(inOne[1]) * unitMs(inOne[2]);
+  const pm = /resets?\s+(?:at\s+|around\s+|before\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/.exec(lower);
+  if (pm !== null) {
+    let hour = Number(pm[1]) % 12;
+    if (pm[3] === "pm") hour += 12;
+    const d = new Date(now);
+    d.setHours(hour, Number(pm[2] ?? "0"), 0, 0);
+    const at = d.getTime();
+    return at > now ? at : at + 86400000;
+  }
+  const clock = /resets?\s+(?:at\s+|around\s+)?(\d{1,2}):(\d{2})\b/.exec(lower);
+  if (clock !== null) {
+    const d = new Date(now);
+    d.setHours(Number(clock[1]), Number(clock[2]), 0, 0);
+    const at = d.getTime();
+    return at > now ? at : at + 86400000;
+  }
+  return 0;
+};
+
 const countLines = (text: string): number => (text.length === 0 ? 0 : text.split("\n").length);
 
 /** A call as this plugin knows it: its tool, input (whole, or streamed so far), result's diff. */
@@ -800,8 +843,10 @@ class Reader {
     const isError = r.is_error === true;
     if (reason === "aborted_streaming" || reason === "aborted_tools") this.emit({ type: "notice", text: "Interrupted", tone: "info", once: true });
     else if (isError) {
+      const limit = limitMessage(r);
       const errors = list(r.errors).filter((e): e is string => typeof e === "string");
-      this.emit({ type: "notice", text: "Error: " + str(r.subtype), tone: "error", detail: errors.length > 0 ? errors.join("\n") : str(r.result), ifOpen: true });
+      if (limit.length > 0) this.emit({ type: "notice", text: firstLine(limit), tone: "error", ifOpen: true });
+      else this.emit({ type: "notice", text: "Error: " + str(r.subtype), tone: "error", detail: errors.length > 0 ? errors.join("\n") : str(r.result), ifOpen: true });
     }
     this.emit({ type: "end", error: isError, status: str(r.subtype), reason, durationMs: num(r.duration_ms), costUsd: num(r.total_cost_usd), text: str(r.result) });
     this.turnChanged();
@@ -930,6 +975,11 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
   /** Whether a message started a turn that has not ended, and how many more were written meanwhile (the CLI holds them in its queue, which a restart would lose). */
   let turnOpen = false;
   let sentDuringTurn = 0;
+  /** The last message written, for a retry after a limit; whether this plugin is sending it again; and when that is due (0: not scheduled), with a count that drops the run a newer choice replaces. */
+  let lastPrompt: { text: string; images: { mediaType: string; data: string; path?: string }[] } | null = null;
+  let retrying = false;
+  let retryAt = 0;
+  let retryGen = 0;
   /** The options the process started with, and its folder. */
   let folder = "";
   /** The session resumed ("" for a new one), the part of its file loaded (byte offset; 0: all of it). */
@@ -1213,6 +1263,9 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     if (r.type === "result") {
       sendStatus();
       finishedTurn(r);
+      const limit = limitMessage(r);
+      // After the batch is applied: the turn's end closes its requests, and this one belongs after it.
+      if (limit.length > 0) api.after(0, () => offerLimit(limit));
     } else if (r.type === "rate_limit_event") {
       const f = status.f;
       api.store.saveLimits({ fiveHourPct: f.fiveHourPct ?? -1, fiveHourResets: f.fiveHourResets ?? 0, weekPct: f.weekPct ?? -1, weekResets: f.weekResets ?? 0 });
@@ -1355,6 +1408,112 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
   api.after(0, announceScanned);
   api.on("folderOpened", () => api.after(0, announceScanned));
 
+  /** When the limit's window resets (epoch ms; 0 when unknown): the agent's reported one, else what the message says. */
+  const resetOf = (text: string): number => {
+    const now = Date.now();
+    const f = status.f;
+    const week = /week|seven[- ]day|7[- ]day/i.test(text);
+    const fiveAt = (f.fiveHourResets ?? 0) * 1000;
+    const weekAt = (f.weekResets ?? 0) * 1000;
+    const live = (at: number): boolean => at > now + 1000;
+    if (week) return live(weekAt) ? weekAt : resetFrom(text, now);
+    if (live(fiveAt) && (f.fiveHourPct ?? -1) >= 99) return fiveAt;
+    if (live(weekAt) && (f.weekPct ?? -1) >= 99) return weekAt;
+    if (live(fiveAt)) return fiveAt;
+    return resetFrom(text, now);
+  };
+
+  const cancelRetry = (): void => {
+    retryGen++;
+    retryAt = 0;
+  };
+
+  const sendMessage = (text: string, images: { mediaType: string; data: string; path?: string }[]): string => {
+    if (!retrying) cancelRetry();
+    lastPrompt = { text, images };
+    const content: unknown[] = images.map((i) => ({ type: "image", source: { type: "base64", media_type: i.mediaType, data: i.data } }));
+    content.push({ type: "text", text });
+    // Its uuid lets it be taken back while it waits in the CLI's queue (cancel_async_message).
+    const uuid = uuidV4();
+    queued.push({ uuid, text });
+    if (turnOpen) sentDuringTurn++;
+    turnOpen = true;
+    write(JSON.stringify({ type: "user", session_id: "", uuid, message: { role: "user", content }, parent_tool_use_id: null }));
+    return "";
+  };
+
+  const retryLast = (): void => {
+    retryAt = 0;
+    const last = lastPrompt;
+    if (last === null || api.agent.info().id !== id) return;
+    emit({ type: "notice", text: "Retrying after the limit reset", tone: "info" });
+    flush();
+    retrying = true;
+    try {
+      if (proc === null) {
+        const r = api.agent.send(last.text);
+        if (r.error.length > 0) api.tell(r.error);
+      } else {
+        emit({ type: "turn", text: last.text, images: last.images.length });
+        sendMessage(last.text, last.images);
+        flush();
+      }
+    } finally {
+      retrying = false;
+    }
+  };
+
+  const scheduleRetry = (at: number, known: boolean): void => {
+    const now = Date.now();
+    const when = known ? (at > now ? at : now + 3000) : now + 5 * 60000;
+    const gen = ++retryGen;
+    retryAt = when;
+    api.after(when - now + 5000, () => {
+      if (gen !== retryGen) return;
+      retryLast();
+    });
+    const left = widecode.util.elapsed(Math.max(0, when - now));
+    api.tell("retrying in " + left);
+    emit({ type: "notice", text: (known ? "Retry scheduled when the limit resets · in " : "Retry scheduled in five minutes · in ") + left, tone: "info" });
+    flush();
+  };
+
+  /** The turn stopped by a limit: say what it was, and let the user wait, switch model, or send the message again when it resets. */
+  const offerLimit = (text: string): void => {
+    if (retryAt > 0) return;
+    const now = Date.now();
+    const reset = resetOf(text);
+    const known = reset > 0;
+    const when = known ? (reset > now ? reset : now + 3000) : now + 5 * 60000;
+    const left = widecode.util.elapsed(Math.max(0, when - now));
+    const retryLabel = known ? "Retry in " + left : "Retry in 5 min";
+    api.conversation
+      .ask({
+        category: "question",
+        name: "Claude limit",
+        questions: [
+          {
+            question: "Claude hit its limit. How should widecode go on?",
+            header: "Limit",
+            options: [
+              { label: "Wait", description: "do nothing; send a message yourself when you are ready" },
+              { label: "Change model", description: "put /model in the composer to pick another model" },
+              { label: retryLabel, description: known ? "send the same message again when the limit resets" : "the reset time is unknown; try again in five minutes" },
+            ],
+          },
+        ],
+      })
+      .then((reply) => {
+        if (reply.state !== "answered" || reply.answers.length === 0) return;
+        const label = reply.answers[0].labels.length > 0 ? reply.answers[0].labels[0] : "";
+        if (label === "Change model") {
+          api.composer.set(["/model "], 0, 7);
+          api.actions.focus("chat");
+          api.tell("pick the model to switch to");
+        } else if (label === retryLabel) scheduleRetry(when, known);
+      });
+  };
+
   return {
     id,
     name: "Claude",
@@ -1363,15 +1522,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
       return start(o);
     },
     send(text, images) {
-      const content: unknown[] = images.map((i) => ({ type: "image", source: { type: "base64", media_type: i.mediaType, data: i.data } }));
-      content.push({ type: "text", text });
-      // Its uuid lets it be taken back while it waits in the CLI's queue (cancel_async_message).
-      const uuid = uuidV4();
-      queued.push({ uuid, text });
-      if (turnOpen) sentDuringTurn++;
-      turnOpen = true;
-      write(JSON.stringify({ type: "user", session_id: "", uuid, message: { role: "user", content }, parent_tool_use_id: null }));
-      return "";
+      return sendMessage(text, images);
     },
     withdraw() {
       if (withdrawing) return "";
@@ -1470,6 +1621,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
       write('{"type":"control_response","response":{"subtype":"success","request_id":' + JSON.stringify(request.id) + ',"response":' + replyJson(asked?.input ?? null, reply) + "}}");
     },
     resume(sid) {
+      cancelRetry();
       folder = api.state.active().folder;
       resumed = sid;
       sides = [];
@@ -1512,6 +1664,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
       return false;
     },
     reset() {
+      cancelRetry();
       if (proc !== null) proc.stop(3000);
       processes++;
       proc = null;
@@ -1535,11 +1688,13 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
       flush();
     },
     stop() {
+      cancelRetry();
       if (proc !== null) proc.stop(3000);
       processes++;
       proc = null;
     },
     kill() {
+      cancelRetry();
       if (proc !== null) proc.kill();
       processes++;
       proc = null;

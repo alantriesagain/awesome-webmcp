@@ -7,10 +7,10 @@
 // second model beside them (`.widecode/skills.jsonl`), summed per skill for the Skills tab.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { openJsonl } from "@bootstrapp/light/model/jsonl";
-import { LiveRows, modelQuery } from "@bootstrapp/light/model/binder";
-import type { Store as ModelStore } from "@bootstrapp/light/model/types.ts";
-import { effect } from "@bootstrapp/light/signals";
+import { openJsonl } from "@lightstart/light/model/jsonl";
+import { LiveRows, modelQuery } from "@lightstart/light/model/binder";
+import type { Store as ModelStore } from "@lightstart/light/model/types.ts";
+import { effect } from "@lightstart/light/signals";
 import { recordOf, text } from "@light/lib/json.ts";
 import { Hook } from "@light/lib/hook.ts";
 import { Limits, SessionMeta, SessionStore } from "@widecode/conversation/session-store.ts";
@@ -210,8 +210,8 @@ export class SessionRecords extends SessionStore {
       );
   }
 
-  override limits(): Limits {
-    return this.store.limits();
+  override limits(agent: string): Limits {
+    return this.store.limits(agent);
   }
 
   /** Every save landed. */

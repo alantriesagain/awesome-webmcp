@@ -15,7 +15,7 @@ import { RenderContext } from "@widecode/conversation/render.ts";
 import { NoStateFile } from "@light/kernel/settings.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
-import { Run } from "@bootstrapp/light/native/tui/lines.ts";
+import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { done, eq, ok } from "@light/test/assert.ts";
 import { until } from "@light/test/headless.ts";
 import { chatProblems } from "./support/chat-invariants.ts";

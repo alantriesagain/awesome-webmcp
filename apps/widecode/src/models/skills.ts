@@ -4,9 +4,9 @@
 // loaded the skill, or the time a typed one started), so a session shown again writes over its own
 // rows. The fields: the session and agent, the skill, whether the user typed it or the agent chose
 // it, how it ended, when it started and ended, the calls the turn made after it.
-import T from "@bootstrapp/light/types";
-import { defineModel } from "@bootstrapp/light/model";
-import type { ModelSchema } from "@bootstrapp/light/model";
+import T from "@lightstart/light/types";
+import { defineModel } from "@lightstart/light/model";
+import type { ModelSchema } from "@lightstart/light/model";
 
 const schema: ModelSchema = {
   session: T.string(""),

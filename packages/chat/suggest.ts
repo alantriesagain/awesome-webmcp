@@ -5,7 +5,7 @@
 // command's).
 import { palette } from "@light/ui/palette.ts";
 import { Suggestion } from "@light/kernel/commands.ts";
-import { View, graphemes, html, signal } from "@bootstrapp/light/native/tui";
+import { View, graphemes, html, signal } from "@lightstart/light/native/tui";
 
 export class AtToken {
   /** Grapheme index of the "@" in the line. */

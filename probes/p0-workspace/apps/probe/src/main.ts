@@ -1,5 +1,5 @@
-import { Caret, Clip, DEFAULT_STYLE, Screen, TRoot, View, frames, html, layout, mount, paint, signal } from "@bootstrapp/light/native";
-import { Controller } from "@bootstrapp/light/controller/class.ts";
+import { Caret, Clip, DEFAULT_STYLE, Screen, TRoot, View, frames, html, layout, mount, paint, signal } from "@lightstart/light/native";
+import { Controller } from "@lightstart/light/controller/class.ts";
 import { Greeter, Keyed } from "@tui/probe-lib";
 import { two } from "@tui/probe-lib/lines.ts";
 

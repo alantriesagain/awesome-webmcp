@@ -12,13 +12,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "@widecode/conversation/conversation.ts";
-import { stringWidth } from "@bootstrapp/light/native/tui/width.ts";
+import { stringWidth } from "@lightstart/light/native/tui/width.ts";
 import { PluginSource, sourcesIn } from "@light/plugins/sources.ts";
 import { NoStateFile } from "@light/kernel/settings.ts";
 import { Store } from "../src/services/store.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { composeWidecode, Widecode } from "../src/compose.ts";
-import { KeyEvent } from "@bootstrapp/light/native/tui";
+import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@light/test/assert.ts";
 
 const greeter = `widecode.plugin({

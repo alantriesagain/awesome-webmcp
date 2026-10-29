@@ -4,7 +4,7 @@
 // survives a switch.
 import { Host } from "../controllers/host.ts";
 import { Panel } from "@widecode/screen/contributions.ts";
-import { type CustomEvent, type MouseEvent, View, html } from "@bootstrapp/light/native/tui";
+import { type CustomEvent, type MouseEvent, View, html } from "@lightstart/light/native/tui";
 import { LinePress } from "@light/ui/line-view.ts";
 import { colorOr } from "@light/ui/palette.ts";
 

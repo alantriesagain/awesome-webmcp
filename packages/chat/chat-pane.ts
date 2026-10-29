@@ -12,7 +12,7 @@
 // its last line forward and past the newest to the draft. A typed line goes to the chat role.
 import { palette } from "@light/ui/palette.ts";
 import { clock } from "@light/ui/duration.ts";
-import { spinnerAt } from "@bootstrapp/light/native/tui/ticks.ts";
+import { spinnerAt } from "@lightstart/light/native/tui/ticks.ts";
 import { activityOf, stepOf } from "@widecode/conversation/activity.ts";
 import { ChatModel, Item } from "@widecode/conversation/model.ts";
 import { ChatHost } from "./host.ts";
@@ -23,7 +23,7 @@ import { atToken, matchPaths, SuggestStrip } from "./suggest.ts";
 import { CallGroup, PromptImages, chipAt, promptLines, turnLines } from "@widecode/conversation/render.ts";
 import { Line, LinePress, LineView } from "@light/ui/line-view.ts";
 import { ModelSource } from "@widecode/conversation/model-source.ts";
-import { type CustomEvent, type ChangeEvent, type SubmitEvent, TInput, View, graphemes, html, insertText, setValue, signal } from "@bootstrapp/light/native/tui";
+import { type CustomEvent, type ChangeEvent, type SubmitEvent, TInput, View, graphemes, html, insertText, setValue, signal } from "@lightstart/light/native/tui";
 import { clipText } from "@light/ui/text.ts";
 
 /** What the strip lists: paths for an @token, commands' names, a command's argument's values. */

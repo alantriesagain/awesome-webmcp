@@ -4,6 +4,6 @@
   "private": true,
   "type": "module",
   "exports": { ".": "./index.ts", "./*": "./*" },
-  "dependencies": { "@bootstrapp/light": "workspace:*" },
+  "dependencies": { "@lightstart/light": "workspace:*" },
   "devDependencies": { "@types/node": "^24.0.0" }
 }

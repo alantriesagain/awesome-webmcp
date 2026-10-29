@@ -3,9 +3,9 @@
 // Sessions tab and a resume read back: the title and who gave it, when it was made and last changed,
 // its cost and thinking tokens across the agent's processes, the model and effort it ran on, the
 // context window the agent last reported, the commit it started on, the file the code column showed, the agent it belongs to.
-import T from "@bootstrapp/light/types";
-import { defineModel } from "@bootstrapp/light/model";
-import type { ModelSchema } from "@bootstrapp/light/model";
+import T from "@lightstart/light/types";
+import { defineModel } from "@lightstart/light/model";
+import type { ModelSchema } from "@lightstart/light/model";
 
 const schema: ModelSchema = {
   title: T.string(""),

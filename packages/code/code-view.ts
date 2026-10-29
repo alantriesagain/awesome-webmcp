@@ -9,7 +9,7 @@ import { palette } from "@light/ui/palette.ts";
 import { ADDED, CodeFile, CodeLine, REMOVED } from "./diff.ts";
 import { languageForPath, TOKEN_COLORS, tokenStyle } from "@light/highlight";
 import { Line, LinePress, LineSource, LineView, Run } from "@light/ui/line-view.ts";
-import { type CustomEvent, type MouseEvent, View, html, signal, sliceCells, stringWidth } from "@bootstrapp/light/native/tui";
+import { type CustomEvent, type MouseEvent, View, html, signal, sliceCells, stringWidth } from "@lightstart/light/native/tui";
 
 
 /** A line's text as runs in its tokens' colors (removed lines a shade dimmer). */

@@ -4,8 +4,8 @@
 // drawn from a SegmentContext.
 import { StatusInfo } from "@widecode/agent/status-info.ts";
 import { LineView } from "@light/ui/line-view.ts";
-import { Run } from "@bootstrapp/light/native/tui/lines.ts";
-import { TInput, View, signal } from "@bootstrapp/light/native/tui";
+import { Run } from "@lightstart/light/native/tui/lines.ts";
+import { TInput, View, signal } from "@lightstart/light/native/tui";
 import { Keyed } from "@light/kernel/registry.ts";
 
 export class Column {

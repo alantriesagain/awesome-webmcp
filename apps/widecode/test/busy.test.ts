@@ -11,7 +11,7 @@ import { Conversation } from "@widecode/conversation/conversation.ts";
 import { contentText, rec, str } from "./support/claude-records.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
-import { Run } from "@bootstrapp/light/native/tui/lines.ts";
+import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { done, eq, ok } from "@light/test/assert.ts";
 
 interface Frame {

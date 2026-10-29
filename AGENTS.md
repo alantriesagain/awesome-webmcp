@@ -6,7 +6,7 @@ terminal host `native/tui`, the desktop shell), compiled by scriptc into one sta
 JavaScript engine (no Node, Bun or Deno at runtime). The one engine allowed is an embedded QuickJS
 for plugins a user changes while the app runs (`@light/plugins`); an app's core stays compiled. It
 is a pnpm workspace that links light: `light` is the checkout beside this one (`../light`, consumed
-as `@bootstrapp/light`), and light's packages for native apps (`@light/<name>`, light's
+as `@lightstart/light`), and light's packages for native apps (`@light/<name>`, light's
 `packages/README.md`) are members here too; `packages/*` are what these apps share
 (`@widecode/<dirname>`), `apps/*` the apps. What an app needs from the framework (a widget, a host
 capability, a fix in the renderer) goes into light, what any native app could use goes into light's
@@ -57,9 +57,9 @@ patches light needs).
   `exports: { ".": "./index.ts", "./*": "./*" }`: every export target is a `.ts` file, which is
   what lets scriptc compile a bare import of a linked package as program source (a `.js` target
   would make it an npm package and fail the build, probe p0).
-- A member declares in its package.json every member and `@bootstrapp/light` it imports, as
+- A member declares in its package.json every member and `@lightstart/light` it imports, as
   `workspace:*`; `@light/test` and `@types/node` are devDependencies. Imports are by
-  name (`@bootstrapp/light/native/tui`, `@bootstrapp/light/native/tui/lines.ts`, `@light/lib/json.ts`); a
+  name (`@lightstart/light/native/tui`, `@lightstart/light/native/tui/lines.ts`, `@light/lib/json.ts`); a
   relative import never leaves the member.
 - The dependency order: light's packages (lib, highlight; plugins, workspace; test; kernel, ui;
   markdown), then agent; conversation; harness; screen; code; chat; then the apps. A package never imports

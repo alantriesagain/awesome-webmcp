@@ -1,7 +1,7 @@
 // The screen's registries: a later column or tab of the same id replaces the earlier one, and one
 // owner's removal takes only its own.
 import { Kernel } from "@light/kernel/kernel.ts";
-import { View } from "@bootstrapp/light/native/tui";
+import { View } from "@lightstart/light/native/tui";
 import { Column, Panel } from "../contributions.ts";
 import { ScreenController } from "../screen.ts";
 import { done, eq } from "@light/test/assert.ts";

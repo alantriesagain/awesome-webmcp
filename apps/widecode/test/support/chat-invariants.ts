@@ -5,7 +5,7 @@
 import { callState, RUNNING } from "@widecode/conversation/calls.ts";
 import { ChatModel, Item, TOOL, Turn } from "@widecode/conversation/model.ts";
 import { RenderContext, turnLines } from "@widecode/conversation/render.ts";
-import { stringWidth } from "@bootstrapp/light/native/tui/width.ts";
+import { stringWidth } from "@lightstart/light/native/tui/width.ts";
 
 /** The calls under `items` still running, by name, at any depth. */
 const running = (items: Item[], out: string[]): void => {

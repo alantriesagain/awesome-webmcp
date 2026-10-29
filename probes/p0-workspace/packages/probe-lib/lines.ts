@@ -1,4 +1,4 @@
-import { Line } from "@bootstrapp/light/tdom/lines.ts";
+import { Line } from "@lightstart/light/tdom/lines.ts";
 
 export const two = (): Line[] => {
   const a = new Line();

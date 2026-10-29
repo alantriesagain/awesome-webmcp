@@ -29,7 +29,7 @@ import { existsSync, statSync } from "node:fs";
 import { errorMessage } from "@light/lib/json.ts";
 import { resolve } from "node:path";
 import { argValue, hasArg, log, logPath, nameLog, openLog } from "@light/lib/log.ts";
-import { Terminal } from "@bootstrapp/light/native/tui";
+import { Terminal } from "@lightstart/light/native/tui";
 import { peersDaemonMain } from "@widecode/peers/cli.ts";
 import { harnessMain, isHarnessArgs } from "@widecode/harness/cli.ts";
 import { Store } from "./services/store.ts";

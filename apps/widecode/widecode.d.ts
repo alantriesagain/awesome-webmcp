@@ -831,7 +831,7 @@ declare namespace widecode {
       saveSkillRun(run: { skill: string; callId: string; state: string; startedMs: number; endedMs: number; calls: number }): boolean;
       /** Each skill's runs kept in the folder across its sessions: how many, how many the user typed, how many failed, when the last started. */
       skillUsage(): { name: string; runs: number; typed: number; failed: number; lastMs: number }[];
-      /** Keep the account's rate limits as the agent reported them (percent used, -1 unknown; resets in epoch seconds). */
+      /** Keep the chosen agent's rate limits as it reported them (percent used, -1 unknown; resets in epoch seconds). */
       saveLimits(limits: { fiveHourPct: number; fiveHourResets: number; weekPct: number; weekResets: number }): boolean;
     };
     /** Short titles Claude writes for sessions, with a small model, one request at a time (Claude Code's sessions only). */

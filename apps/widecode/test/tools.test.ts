@@ -14,8 +14,8 @@ import { callMs, callState, findCall } from "@widecode/conversation/calls.ts";
 import { span } from "@light/ui/duration.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
-import { Run } from "@bootstrapp/light/native/tui/lines.ts";
-import { KeyEvent } from "@bootstrapp/light/native/tui";
+import { Run } from "@lightstart/light/native/tui/lines.ts";
+import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@light/test/assert.ts";
 
 interface Frame {

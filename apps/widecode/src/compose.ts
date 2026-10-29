@@ -17,7 +17,7 @@ import { Workspace } from "@light/workspace/workspace.ts";
 import { ChatWidget } from "./views/chat-widget.ts";
 import { CodeWidget } from "./views/code-widget.ts";
 import { ToolsWidget } from "./views/tools-widget.ts";
-import { Screen } from "@bootstrapp/light/native/tui";
+import { Screen } from "@lightstart/light/native/tui";
 import { Shell } from "./views/shell.ts";
 
 export class Widecode {

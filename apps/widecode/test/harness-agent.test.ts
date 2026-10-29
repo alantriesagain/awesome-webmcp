@@ -22,8 +22,8 @@ import { skillRuns } from "@widecode/conversation/skills.ts";
 import { NoStateFile } from "@light/kernel/settings.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
-import { Run } from "@bootstrapp/light/native/tui/lines.ts";
-import { KeyEvent } from "@bootstrapp/light/native/tui";
+import { Run } from "@lightstart/light/native/tui/lines.ts";
+import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@light/test/assert.ts";
 import { until } from "@light/test/headless.ts";
 

@@ -18,7 +18,7 @@ import { Conversation } from "@widecode/conversation/conversation.ts";
 import { JsBand } from "../src/runtime/views.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { createWidecode, Widecode } from "../src/compose.ts";
-import { Line, Run } from "@bootstrapp/light/native/tui/lines.ts";
+import { Line, Run } from "@lightstart/light/native/tui/lines.ts";
 import { done, eq, ok } from "@light/test/assert.ts";
 
 const wait = (ms: number): Promise<void> =>

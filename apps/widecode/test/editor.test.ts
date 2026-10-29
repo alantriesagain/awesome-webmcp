@@ -13,7 +13,7 @@ import { Conversation } from "@widecode/conversation/conversation.ts";
 import { osc52 } from "@light/ui/clipboard.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
-import { KeyEvent } from "@bootstrapp/light/native/tui";
+import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@light/test/assert.ts";
 
 const main = async (): Promise<void> => {

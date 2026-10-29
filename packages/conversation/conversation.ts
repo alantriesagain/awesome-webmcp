@@ -87,7 +87,13 @@ export class Conversation {
     if (fn !== null) fn(text);
   }
 
-  /** A fresh status, with the last rate limits widecode saw and the session's stored cost. */
+  /** The agent whose limits the status shows: the chosen one, Claude Code's before a plugin's is chosen. */
+  private limitAgent(): string {
+    const id = this.agent.id();
+    return id.length > 0 ? id : "claude";
+  }
+
+  /** A fresh status, with the last rate limits the chosen agent saw and the session's stored cost. */
   freshInfo(): StatusInfo {
     const info = new StatusInfo();
     info.effort = this.effort;
@@ -95,13 +101,29 @@ export class Conversation {
     info.cwd = this.folder;
     const store = this.store;
     if (store !== null) {
-      const l = store.limits();
+      const l = store.limits(this.limitAgent());
       info.fiveHourPct = l.fiveHour.usedPercent;
       info.fiveHourResets = l.fiveHour.resetsAt;
       info.weekPct = l.sevenDay.usedPercent;
       info.weekResets = l.sevenDay.resetsAt;
     }
     return info;
+  }
+
+  /** Show the chosen agent's last rate limits (another agent's are not its own). */
+  refreshLimits(): void {
+    const info = this.info;
+    info.fiveHourPct = -1;
+    info.fiveHourResets = 0;
+    info.weekPct = -1;
+    info.weekResets = 0;
+    const store = this.store;
+    if (store === null) return;
+    const l = store.limits(this.limitAgent());
+    info.fiveHourPct = l.fiveHour.usedPercent;
+    info.fiveHourResets = l.fiveHour.resetsAt;
+    info.weekPct = l.sevenDay.usedPercent;
+    info.weekResets = l.sevenDay.resetsAt;
   }
 
   /** Start the agent's process and session now when the agent does that before any message (its choices come with its session); a failure is noted. */

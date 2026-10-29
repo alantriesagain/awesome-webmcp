@@ -14,7 +14,7 @@ import { PluginSource } from "@light/plugins/sources.ts";
 import { NoStateFile } from "@light/kernel/settings.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
-import { KeyEvent, MouseEvent, TElement, hitTest } from "@bootstrapp/light/native/tui";
+import { KeyEvent, MouseEvent, TElement, hitTest } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@light/test/assert.ts";
 import { Headless } from "@light/test/headless.ts";
 

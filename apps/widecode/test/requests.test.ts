@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createWidecode, Widecode } from "../src/compose.ts";
 import { Conversation } from "@widecode/conversation/conversation.ts";
-import { Caret, Clip, DEFAULT_STYLE, KeyEvent, Screen, TRoot, frames, layout, mount, paint, unmount } from "@bootstrapp/light/native/tui";
+import { Caret, Clip, DEFAULT_STYLE, KeyEvent, Screen, TRoot, frames, layout, mount, paint, unmount } from "@lightstart/light/native/tui";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { done, eq, ok } from "@light/test/assert.ts";
 

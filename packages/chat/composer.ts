@@ -5,7 +5,7 @@
 import { ChatHost } from "./host.ts";
 import { Binder } from "@light/kernel/actions.ts";
 import { chipImages, refKind } from "@widecode/conversation/attach.ts";
-import { ChangeEvent, type KeyEvent, TInput, backspace, clearInput, del, deleteWord, graphemes, insertText, killToEnd, killToStart, lineEnd, lineStart, moveLeft, moveRight, moveRow, newline, submit, wordLeft, wordRight } from "@bootstrapp/light/native/tui";
+import { ChangeEvent, type KeyEvent, TInput, backspace, clearInput, del, deleteWord, graphemes, insertText, killToEnd, killToStart, lineEnd, lineStart, moveLeft, moveRight, moveRow, newline, submit, wordLeft, wordRight } from "@lightstart/light/native/tui";
 
 /** The composer's text and caret at a moment. */
 export class Snapshot {

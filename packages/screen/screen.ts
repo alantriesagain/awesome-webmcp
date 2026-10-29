@@ -3,8 +3,8 @@
 // status segments), the terminal's focus and the clipboard. What the shell renders is signals:
 // `active` and `message` as they are, `tabs` and `layout` counters that move when a tab or the
 // screen's parts come or go. One of light's controllers, as the app's state is.
-import { type Signal, type TInput, signal } from "@bootstrapp/light/native/tui";
-import { Controller } from "@bootstrapp/light/controller/class.ts";
+import { type Signal, type TInput, signal } from "@lightstart/light/native/tui";
+import { Controller } from "@lightstart/light/controller/class.ts";
 import { Latest } from "@light/lib/timing.ts";
 import { Hook } from "@light/lib/hook.ts";
 import { Kernel } from "@light/kernel/kernel.ts";

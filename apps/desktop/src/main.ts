@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { AgentOptions } from "@widecode/agent";
 import { argValue, hasArg, log, nameLog, openLog } from "@light/lib/log.ts";
 import { AgentService } from "./agent-service.ts";
-import { DesktopApp, str } from "@bootstrapp/light/native/desktop";
+import { DesktopApp, str } from "@lightstart/light/native/desktop";
 
 /** The system prompt a run starts with, unless --system-prompt-file names one. */
 export const DEFAULT_SYSTEM_PROMPT =

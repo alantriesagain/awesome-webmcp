@@ -6,7 +6,7 @@ import { span } from "@light/ui/duration.ts";
 import { callMs, callState, findCall, RUNNING } from "@widecode/conversation/calls.ts";
 import { ChatModel } from "@widecode/conversation/model.ts";
 import { callPage } from "@widecode/conversation/render.ts";
-import { Line } from "@bootstrapp/light/native/tui/lines.ts";
+import { Line } from "@lightstart/light/native/tui/lines.ts";
 import { ConversationHolder, ModelSource } from "@widecode/conversation/model-source.ts";
 
 export class CallSource extends ModelSource {

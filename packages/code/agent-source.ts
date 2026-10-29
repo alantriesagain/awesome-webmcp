@@ -5,7 +5,7 @@ import { palette } from "@light/ui/palette.ts";
 import { agentPrompt, agentStatus, findAgent } from "@widecode/conversation/agents.ts";
 import { ChatModel } from "@widecode/conversation/model.ts";
 import { itemLines, promptLines } from "@widecode/conversation/render.ts";
-import { Line, Run } from "@bootstrapp/light/native/tui/lines.ts";
+import { Line, Run } from "@lightstart/light/native/tui/lines.ts";
 import { wrap } from "@light/ui/text.ts";
 import { ConversationHolder, ModelSource } from "@widecode/conversation/model-source.ts";
 

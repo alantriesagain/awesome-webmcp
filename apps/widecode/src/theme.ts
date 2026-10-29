@@ -1,7 +1,7 @@
 // widecode's look as its plugins get it: the process's palette (@light/ui) and the spinner as JSON
 // for the prelude (`widecode.theme`, themeJson). The core's views read the palette directly; the
 // syntax colors are the tokenizers' own (@light/highlight).
-import { SPINNER, TICK_MS } from "@bootstrapp/light/native/tui/ticks.ts";
+import { SPINNER, TICK_MS } from "@lightstart/light/native/tui/ticks.ts";
 import { palette } from "@light/ui/palette.ts";
 
 /** The theme as plugins get it, `widecode.theme` without its spinner function: JSON text for the prelude. */

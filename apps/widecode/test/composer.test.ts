@@ -19,7 +19,7 @@ import { osc52 } from "@light/ui/clipboard.ts";
 import { Store } from "../src/services/store.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { createWidecode, Widecode } from "../src/compose.ts";
-import { DEFAULT_STYLE, frames, KeyEvent, layout, mount, setValue, TRoot, unmount } from "@bootstrapp/light/native/tui";
+import { DEFAULT_STYLE, frames, KeyEvent, layout, mount, setValue, TRoot, unmount } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@light/test/assert.ts";
 
 /** A key as the terminal delivers it: the shell's actions, the composer's editing among them. */

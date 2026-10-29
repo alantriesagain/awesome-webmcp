@@ -3,7 +3,7 @@
 widecode and its desktop chat, native apps on [`light`](https://github.com/alantriesagain/light)
 compiled by scriptc into static binaries with **no JavaScript engine** (no Node, Bun or Deno at
 runtime). A pnpm workspace that links light: `light` is the checkout beside this one (`../light`
-on `main`, consumed as `@bootstrapp/light`), and light's packages for native apps (`@light/<name>`,
+on `main`, consumed as `@lightstart/light`), and light's packages for native apps (`@light/<name>`,
 light's `packages/README.md`) are members here too; `packages/*` are what these apps share
 (`@widecode/<name>`), `apps/*` the apps, each member with its own package.json declaring what it
 imports; `light-native` (`@light/cli`) builds, runs and gates them. `AGENTS.md` has the rules for
@@ -205,7 +205,7 @@ first run) and `"keymap"`, `keys.json` (the user's key bindings over the keymap:
 the action it runs, or null for none; `/help` names the actions and their keys), `state.json` (what
 is kept between runs: the code column's wrap, the Files switch, the widths columns were dragged to,
 the keymap /keymap chose),
-`limits.json` (the last 5-hour and weekly limits seen) and `logs/`, a file per run (`/log` says
+`limits.json` (each agent's last 5-hour and weekly limits, so one agent's are not shown for another) and `logs/`, a file per run (`/log` says
 which; the newest 30 kept) with the build, the flags, the sessions and turns, every five minutes
 that it is alive, how it ended, and an uncaught error with the trail of what ran last and the screen
 as it was, so a crash can be read afterwards (`"log": false` turns it off, `{"dir": "~/x",

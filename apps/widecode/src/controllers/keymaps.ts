@@ -3,7 +3,7 @@
 // its layers on when the state names it), and the user's keys.json over the keymap, read by
 // `onRead` and applied as the kernel's user layer. `changed` fires when the keymap in use changes.
 import { errorMessage } from "@light/lib/json.ts";
-import { Controller } from "@bootstrapp/light/controller/class.ts";
+import { Controller } from "@lightstart/light/controller/class.ts";
 import { Hook } from "@light/lib/hook.ts";
 import { Kernel } from "@light/kernel/kernel.ts";
 import { keyEntriesOf } from "@light/kernel/keys.ts";

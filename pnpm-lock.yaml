@@ -20,12 +20,12 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@bootstrapp/light':
-        specifier: workspace:*
-        version: link:../../light/packages/light
       '@light/lib':
         specifier: workspace:*
         version: link:../../light/packages/native/lib
+      '@lightstart/light':
+        specifier: workspace:*
+        version: link:../../light/packages/light
       '@widecode/agent':
         specifier: workspace:*
         version: link:../../packages/agent
@@ -36,9 +36,6 @@ importers:
 
   apps/widecode:
     dependencies:
-      '@bootstrapp/light':
-        specifier: workspace:*
-        version: link:../../light/packages/light
       '@light/highlight':
         specifier: workspace:*
         version: link:../../light/packages/native/highlight
@@ -60,6 +57,9 @@ importers:
       '@light/workspace':
         specifier: workspace:*
         version: link:../../light/packages/native/workspace
+      '@lightstart/light':
+        specifier: workspace:*
+        version: link:../../light/packages/light
       '@widecode/agent':
         specifier: workspace:*
         version: link:../../packages/agent
@@ -104,15 +104,15 @@ importers:
 
   packages/chat:
     dependencies:
-      '@bootstrapp/light':
-        specifier: workspace:*
-        version: link:../../light/packages/light
       '@light/kernel':
         specifier: workspace:*
         version: link:../../light/packages/tui/kernel
       '@light/ui':
         specifier: workspace:*
         version: link:../../light/packages/tui/ui
+      '@lightstart/light':
+        specifier: workspace:*
+        version: link:../../light/packages/light
       '@widecode/code':
         specifier: workspace:*
         version: link:../code
@@ -132,9 +132,6 @@ importers:
 
   packages/code:
     dependencies:
-      '@bootstrapp/light':
-        specifier: workspace:*
-        version: link:../../light/packages/light
       '@light/highlight':
         specifier: workspace:*
         version: link:../../light/packages/native/highlight
@@ -144,6 +141,9 @@ importers:
       '@light/workspace':
         specifier: workspace:*
         version: link:../../light/packages/native/workspace
+      '@lightstart/light':
+        specifier: workspace:*
+        version: link:../../light/packages/light
       '@widecode/conversation':
         specifier: workspace:*
         version: link:../conversation
@@ -157,9 +157,6 @@ importers:
 
   packages/conversation:
     dependencies:
-      '@bootstrapp/light':
-        specifier: workspace:*
-        version: link:../../light/packages/light
       '@light/lib':
         specifier: workspace:*
         version: link:../../light/packages/native/lib
@@ -169,6 +166,9 @@ importers:
       '@light/ui':
         specifier: workspace:*
         version: link:../../light/packages/tui/ui
+      '@lightstart/light':
+        specifier: workspace:*
+        version: link:../../light/packages/light
       '@widecode/agent':
         specifier: workspace:*
         version: link:../agent
@@ -217,9 +217,6 @@ importers:
 
   packages/screen:
     dependencies:
-      '@bootstrapp/light':
-        specifier: workspace:*
-        version: link:../../light/packages/light
       '@light/kernel':
         specifier: workspace:*
         version: link:../../light/packages/tui/kernel
@@ -229,6 +226,9 @@ importers:
       '@light/ui':
         specifier: workspace:*
         version: link:../../light/packages/tui/ui
+      '@lightstart/light':
+        specifier: workspace:*
+        version: link:../../light/packages/light
       '@widecode/agent':
         specifier: workspace:*
         version: link:../agent

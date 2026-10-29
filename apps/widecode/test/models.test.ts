@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { composeWidecode, createWidecode } from "../src/compose.ts";
 import { Conversation } from "@widecode/conversation/conversation.ts";
-import { KeyEvent } from "@bootstrapp/light/native/tui";
+import { KeyEvent } from "@lightstart/light/native/tui";
 import { modelName, StatusInfo } from "@widecode/conversation/status-info.ts";
 import { Store } from "../src/services/store.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";

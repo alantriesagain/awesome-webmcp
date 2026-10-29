@@ -4,6 +4,6 @@ import { done, eq, ok } from "@light/test/assert.ts";
 import { packagesLine, reachOf } from "@light/test/imports.ts";
 
 const reach = reachOf(".");
-eq("it reaches " + "@bootstrapp/light, @light/kernel, @light/lib, @light/ui, @widecode/agent", packagesLine(reach, "@widecode/screen"), "@bootstrapp/light, @light/kernel, @light/lib, @light/ui, @widecode/agent");
+eq("it reaches " + "@light/kernel, @light/lib, @light/ui, @lightstart/light, @widecode/agent", packagesLine(reach, "@widecode/screen"), "@light/kernel, @light/lib, @light/ui, @lightstart/light, @widecode/agent");
 ok("and no app", !Array.from(reach.packages).some((p) => !p.startsWith("@")));
 done();

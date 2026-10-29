@@ -12,7 +12,7 @@ import { CodeTarget } from "@widecode/code/target.ts";
 import { Host } from "../controllers/host.ts";
 import { Latest } from "@light/lib/timing.ts";
 import { Commit } from "@light/workspace/git-log.ts";
-import { LineSource } from "@bootstrapp/light/native/tui/lines.ts";
+import { LineSource } from "@lightstart/light/native/tui/lines.ts";
 import { AgentSource } from "@widecode/code/agent-source.ts";
 import { CallSource } from "@widecode/code/call-source.ts";
 import { CodePane } from "@widecode/code/code-view.ts";
