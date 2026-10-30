@@ -1531,6 +1531,7 @@ class SubagentRun {
   private seq = 0;
   private waiting: Waiter[] = [];
   private session = "";
+  private runSession = "";
   private modelConfig = "";
   private open = "";
   private openKind = "";
@@ -1576,7 +1577,8 @@ class SubagentRun {
 
   /** Keep this run's events under the project, so a later run can read its steps back. */
   private persist(): void {
-    const sid = this.api.agent.sessionId();
+    if (this.runSession.length === 0) this.runSession = this.api.agent.sessionId();
+    const sid = this.runSession;
     if (sid.length === 0 || this.history.length === 0) return;
     this.api.store.saveTaskTranscript(sid, this.callId, this.history.join("\n") + "\n");
   }
@@ -1603,6 +1605,7 @@ class SubagentRun {
   }
 
   start(prompt: string): Promise<string> {
+    this.runSession = this.api.agent.sessionId();
     this.busy = true;
     this.emit({ type: "facts", id: this.callId, category: "agent", summary: this.target.name + ": " + this.description, agentType: this.target.name, agentTask: this.description, agentPrompt: prompt });
     this.emit({ type: "task", id: this.callId, taskId: this.callId, description: this.description, agentType: this.target.name, background: this.background });
@@ -1762,9 +1765,13 @@ class SubagentRun {
 
   /** Tell the main agent a background run finished or failed, when it is running to hear it. */
   private notify(text: string, error: boolean): void {
-    this.api.note("background subagent " + this.callId + " " + (error ? "failed" : "finished"));
+    const status = error ? "failed" : "finished";
+    // A run of a session left since it started tells only the log: the agent now running never started it.
+    const elsewhere = this.api.agent.sessionId() !== this.runSession;
+    this.api.note("background subagent " + this.callId + " " + status + (elsewhere ? " in another session" : ""));
+    if (elsewhere) return;
     if (!this.api.agent.started()) return;
-    const line = "[background subagent " + this.callId + " " + (error ? "failed" : "finished") + "]\n" + text;
+    const line = "[background subagent " + this.callId + " " + status + "]\n" + text;
     const r = this.api.agent.send(line, { from: "task" });
     if (r.error.length > 0) this.api.note("background subagent " + this.callId + ": " + r.error);
   }
@@ -1784,10 +1791,19 @@ class SubagentRun {
       return;
     }
     const method = str(m.method);
+    if (method.length === 0) return;
     const params = obj(m.params);
-    if (params === null) return;
-    if (method === "session/update") this.update(obj(params.update));
-    else if (method === "session/request_permission") this.permission(m, params);
+    if (method === "session/update") {
+      if (params !== null) this.update(obj(params.update));
+      return;
+    }
+    if (method === "session/request_permission" && params !== null) {
+      this.permission(m, params);
+      return;
+    }
+    if (m.id !== undefined && m.id !== null && this.proc !== null) {
+      this.proc.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, error: { code: -32601, message: method + " is not supported" } }));
+    }
   }
 
   private update(u: Msg | null): void {
@@ -1938,8 +1954,9 @@ widecode.plugin({
         const prompt = str(args.prompt);
         if (prompt.length === 0) throw new Error("a subagent needs a prompt");
         const folder = api.state.active().folder;
+        const bare = (path: string): string => (path.length > 1 ? path.replace(/\/+$/, "") : path);
         const cwd = str(args.cwd);
-        if (cwd.length > 0 && cwd !== folder) throw new Error("a subagent runs in " + folder + ", not " + cwd);
+        if (cwd.length > 0 && bare(cwd) !== bare(folder)) throw new Error("a subagent runs in " + folder + ", not " + cwd);
         const isolation = str(args.isolation);
         if (isolation.length > 0 && isolation !== "worktree") throw new Error("isolation is \"worktree\" or none");
         const synthetic = ctx.toolUseId.length === 0;
@@ -1963,8 +1980,13 @@ widecode.plugin({
         const made = (): void => {
           preparing--;
         };
+        let cancelled = false;
+        ctx.onCancel(() => {
+          cancelled = true;
+        });
         return api.process.run("mkdir -p " + quote(folder + "/.widecode/worktrees") + " && git -C " + quote(folder) + " worktree add -b " + quote(branch) + " " + quote(path), "", 15000).then((r) => {
           made();
+          if (cancelled) return "The subagent was stopped before it started.";
           if (r.code !== 0) throw new Error("cannot make a worktree: " + (r.err.trim().length > 0 ? r.err.trim() : r.out.trim()));
           return startRun(path, path + " (branch " + branch + ")");
         }, (e: unknown) => {

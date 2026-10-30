@@ -68,6 +68,14 @@ const main = async (): Promise<void> => {
 
   c.model.closeTurn(null);
   c.model.openTurn("main", 0, true);
+  const slash = c.model.block("", "tcslash", TOOL, "toolu-slash", "Task", "");
+  ok("the trailing slash call is made", slash !== null);
+  if (slash === null) return;
+  const slashReply = await post('{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"Task","arguments":{"description":"slash","prompt":"hello","subagent_type":"deepseek","cwd":"' + folder + '/"},"_meta":{"claudecode/toolUseId":"toolu-slash"}}}');
+  ok("a folder with a trailing slash is the session's folder", slashReply.includes("Hello, world."));
+
+  c.model.closeTurn(null);
+  c.model.openTurn("main", 0, true);
   const slow = c.model.block("", "tc2", TOOL, "toolu-slow", "Task", "");
   ok("the slow call is made", slow !== null);
   if (slow === null) return;
@@ -76,6 +84,14 @@ const main = async (): Promise<void> => {
   await post('{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":2}}');
   await held;
   eq("cancelling stops the subagent", slow.task !== null ? slow.task.status : "none", "stopped");
+
+  c.model.closeTurn(null);
+  c.model.openTurn("main", 0, true);
+  const unknown = c.model.block("", "tcunknown", TOOL, "toolu-unknown", "Task", "");
+  ok("the unknown-request call is made", unknown !== null);
+  if (unknown === null) return;
+  const unknownReply = await post('{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"Task","arguments":{"description":"unknown","prompt":"unknown","subagent_type":"deepseek"},"_meta":{"claudecode/toolUseId":"toolu-unknown"}}}');
+  ok("an unknown request is answered with an error", unknownReply.includes("-32601") && unknownReply.includes("session/unknown_thing is not supported"));
 
   // A permission the subagent asks for is under its call, and the answer reaches the agent.
   c.model.closeTurn(null);

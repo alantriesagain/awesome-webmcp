@@ -23,6 +23,8 @@
  * - `task`: a subagent's call (`subagent_type`, `description`, `prompt` in its input);
  * - `skill`: a `skill` tool call loading the skill "alpha" (its `name` in the input), then a command
  *   and a message, as a skill's run goes on;
+ * - `unknown`: a request of a method widecode does not offer, then a message with the error it
+ *   answered (or none);
  * - `slow`: a chunk, then nothing until session/cancel ends the turn as cancelled;
  * - `work`: a call that runs 800 ms, then "Worked."; a prompt sent while it runs is taken into the
  *   turn, as opencode takes one (the reply adds "Also: <its text>"), and every prompt of the turn is
@@ -327,6 +329,12 @@ const prompt = (id, sessionId, params) => {
         for (const pid of w.ids) write({ id: pid, result: { stopReason: "end_turn", usage: { inputTokens: 10, outputTokens: 2 } } });
       }, 200);
     }, 800);
+  } else if (first === "unknown") {
+    ask("session/unknown_thing", { sessionId }, (_result, error) => {
+      const e = error ?? {};
+      update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Unknown request: " + String(e.code ?? "none") + " " + String(e.message ?? "")) });
+      end("end_turn");
+    });
   } else if (first === "slow") {
     update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Working…") });
     slow = { id, session: sessionId };
@@ -345,7 +353,7 @@ const handle = (m) => {
   if (m.method === undefined) {
     const then = answers.get(m.id);
     answers.delete(m.id);
-    if (then !== undefined) then(m.result);
+    if (then !== undefined) then(m.result, m.error);
     return;
   }
   const p = m.params ?? {};
