@@ -167,7 +167,6 @@ export const startWidecode = async (term: Terminal, folder: string, selftest: st
     const finish = (): void => {
       const id = host.conversation.model.sessionId.length > 0 ? host.conversation.model.sessionId : host.conversation.resumeId;
       if (id.length > 0 && !hasArg("--ephemeral")) {
-        const home = homedir();
         const title = host.conversation.title.length > 0 ? " (" + host.conversation.title + ")" : "";
         console.log("To come back to this session" + title + ":\n " + basename(process.execPath) + " --resume " + id);
       }

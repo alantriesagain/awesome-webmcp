@@ -196,6 +196,12 @@ puts its questions in the request panel and `PresentPlan` its plan, which approv
 switches the agent out of it and asks it to carry the plan out. Claude Code keeps its own tools for
 these.
 
+Claude's subagents can run on an ACP target instead: the acp section's `tasks.targets` gives a
+`Task` tool (Claude sees `mcp__widecode__Task`) whose `subagent_type` picks an entry, a model and
+what it is for, streams the run under the call and answers with its last words.
+`replaceClaudeSubagents` adds `--disallowedTools Task,Agent,TaskStop,SendMessage` to Claude's start,
+so its own subagent tools step aside; `plugins.claude.keepSubagents` keeps them.
+
 widecode keeps a project's sessions in the project, in `.widecode/sessions/<id>.json` (each
 session's title, model, cost across CLI processes, thinking tokens, the commit it started on), so
 the Sessions tab lists every session of the folder; `.widecode/` holds a `.gitignore` of `*`, so git

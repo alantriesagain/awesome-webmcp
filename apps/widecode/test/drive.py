@@ -13,7 +13,7 @@ import threading
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-BINARY = os.path.join(HERE, "..", "..", "..", "dist", "widecode")
+BINARY = os.path.join(HERE, "..", "dist", "widecode")
 
 KEYS = {
     "enter": "\r", "esc": "\x1b", "tab": "\t", "shift-tab": "\x1b[Z", "space": " ", "backspace": "\x7f",

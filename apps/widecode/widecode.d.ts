@@ -235,6 +235,15 @@ declare namespace widecode {
    * `widecode_AskUser`), what it does, its input's JSON schema, and what kind of call it is, as the
    * views draw it ("question" and "plan" show as their request, not as a call).
    */
+  interface ToolCallContext {
+    /** The MCP call's own id in the core. */
+    callId: string;
+    /** The agent's id for the call (`_meta["claudecode/toolUseId"]` for Claude Code; "" when it names none). */
+    toolUseId: string;
+    /** What ends the call's work when the agent cancels it. */
+    onCancel(run: () => void): void;
+  }
+
   interface Tool {
     name: string;
     description?: string;
@@ -243,7 +252,7 @@ declare namespace widecode {
     /** The agent plugins whose agents do not see it: those with a tool of their own for the need (`["claude"]` for a question, which Claude Code asks with AskUserQuestion). */
     except?: string[];
     /** A call with its arguments: answers text (a value that is not is sent as JSON), now or as a promise; an error thrown is the call's error. */
-    call(args: Record<string, unknown>): unknown;
+    call(args: Record<string, unknown>, ctx: ToolCallContext): unknown;
   }
 
   /** A request for the user, as `respond` gets it, and the user's reply. */
@@ -621,11 +630,18 @@ declare namespace widecode {
       /** Apply events (one, or a list: one call per batch of the agent's messages); answers how many applied. */
       apply(events: ConversationEvent | ConversationEvent[]): number;
       /**
-       * Put a request to the user for one of widecode's own tools (a request event's fields, without
-       * its type and id): the panel shows it, and the reply comes here, not to the agent. Its state is
-       * "cancelled" when the request went away first (its turn ended, the chat was cleared).
+       * Apply a subagent run's events (one, or a list) under call `callId` of the open turn: the
+       * conversation's model only, never its status. A call whose turn has closed takes nothing; an
+       * event with no parent is the call's own.
        */
-      ask(request: { category: "question" | "plan"; name?: string; questions?: { question: string; header?: string; multi?: boolean; options: { label: string; description?: string }[] }[]; plan?: string }): Promise<AgentReply>;
+      subagent(callId: string, events: ConversationEvent | ConversationEvent[]): number;
+      /**
+       * Put a request to the user for one of widecode's own tools (a request event's fields, without
+       * its type and id), under `parent` when it names a call: the panel shows it, and the reply comes
+       * here, not to the agent. Its state is "cancelled" when the request went away first (its turn
+       * ended, the chat was cleared).
+       */
+      ask(request: { category: "question" | "plan"; name?: string; questions?: { question: string; header?: string; multi?: boolean; options: { label: string; description?: string }[] }[]; plan?: string }, parent?: string): Promise<AgentReply>;
     };
     /**
      * widecode's own tools, which agents call over MCP (widecode's server listens on 127.0.0.1; each

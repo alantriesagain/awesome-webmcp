@@ -157,7 +157,7 @@ interface Msg {
   [key: string]: unknown;
 }
 
-const { obj, str, list } = widecode.util;
+const { obj, str, list, parse } = widecode.util;
 
 /** The section's agents over the defaults: an entry needs a command (a list of words). */
 const agentsOf = (section: unknown): Record<string, Entry> => {
@@ -171,6 +171,39 @@ const agentsOf = (section: unknown): Record<string, Entry> => {
     if (e === null || command.length === 0) continue;
     out[id] = { name: str(e.name).length > 0 ? str(e.name) : id, command, sessions: words(e.sessions), tools: words(e.tools), skills: words(e.skills), forget: words(e.forget), midTurn: e.midTurn === true, own: e.own === true };
   }
+  return out;
+};
+
+/** A subagent target: the `subagent_type` Claude names, the agent entry it runs on, its model ("" for the entry's default) and what it is for. */
+interface TaskTarget {
+  name: string;
+  agent: string;
+  model: string;
+  description: string;
+}
+
+/** The `tasks` section: whether Claude's own subagent tools are replaced, the targets, and the bounds. */
+interface TasksConfig {
+  replace: boolean;
+  targets: TaskTarget[];
+  maxConcurrent: number;
+  timeoutMs: number;
+}
+
+const tasksOf = (section: unknown): TasksConfig => {
+  const t = obj(obj(section)?.tasks);
+  const out: TasksConfig = { replace: t?.replaceClaudeSubagents === true, targets: [], maxConcurrent: 4, timeoutMs: 1800000 };
+  const targets = obj(t?.targets);
+  if (targets !== null)
+    for (const name of Object.keys(targets)) {
+      const e = obj(targets[name]);
+      if (e === null) continue;
+      const agent = str(e.agent).length > 0 ? str(e.agent) : name;
+      const model = str(e.model);
+      out.targets.push({ name, agent, model, description: str(e.description).length > 0 ? str(e.description) : "Runs on " + (model.length > 0 ? model : agent) });
+    }
+  if (typeof t?.maxConcurrent === "number" && t.maxConcurrent > 0) out.maxConcurrent = Math.floor(t.maxConcurrent);
+  if (typeof t?.timeoutMs === "number" && t.timeoutMs >= 1000) out.timeoutMs = Math.floor(t.timeoutMs);
   return out;
 };
 
@@ -1465,14 +1498,346 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
   };
 };
 
+/** A request waiting on the subagent's answer, with what hears it. */
+class Waiter {
+  readonly id: number;
+  readonly then: (result: Msg | null, error: string) => void;
+
+  constructor(id: number, then: (result: Msg | null, error: string) => void) {
+    this.id = id;
+    this.then = then;
+  }
+}
+
+/**
+ * One Task run: an ACP agent started for a target, its session and prompt, mapped into the
+ * conversation under the call Claude made. It answers the MCP call with the subagent's last words,
+ * and dies with it.
+ */
+class SubagentRun {
+  private readonly api: widecode.Api;
+  private readonly entry: Entry;
+  private readonly target: TaskTarget;
+  private readonly folder: string;
+  private readonly model: string;
+  private readonly callId: string;
+  private readonly description: string;
+  private readonly onDone: () => void;
+  private proc: widecode.ProcessHandle | null = null;
+  private seq = 0;
+  private waiting: Waiter[] = [];
+  private session = "";
+  private modelConfig = "";
+  private open = "";
+  private openKind = "";
+  private blocks = 0;
+  private calls = new Map<string, string>();
+  private out: unknown[] = [];
+  private reply = "";
+  private ended = false;
+  private done = false;
+  private resolve: (text: string) => void = () => {};
+  private reject: (error: Error) => void = () => {};
+  readonly promise: Promise<string>;
+
+  constructor(api: widecode.Api, entry: Entry, target: TaskTarget, folder: string, model: string, callId: string, description: string, onDone: () => void) {
+    this.api = api;
+    this.entry = entry;
+    this.target = target;
+    this.folder = folder;
+    this.model = model;
+    this.callId = callId;
+    this.description = description;
+    this.onDone = onDone;
+    this.promise = new Promise<string>((resolve, reject) => {
+      this.resolve = resolve;
+      this.reject = reject;
+    });
+  }
+
+  private flush(): void {
+    if (this.out.length === 0) return;
+    const batch = this.out;
+    this.out = [];
+    this.api.conversation.subagent(this.callId, batch as widecode.ConversationEvent[]);
+  }
+
+  private emit(e: Ev): void {
+    this.out.push(e);
+  }
+
+  /** A key or call id of this run, so a subagent's ids cannot collide with the main conversation's. */
+  private key(id: string): string {
+    return "task:" + this.callId + ":" + id;
+  }
+
+  start(prompt: string): Promise<string> {
+    this.emit({ type: "facts", id: this.callId, category: "agent", summary: this.target.name + ": " + this.description, agentType: this.target.name, agentTask: this.description, agentPrompt: prompt });
+    this.emit({ type: "task", id: this.callId, taskId: this.callId, description: this.description, agentType: this.target.name, background: false });
+    this.flush();
+    const words = resolved(this.api, this.entry.command);
+    const p = this.api.process.spawn(words, { cwd: this.folder }, {
+      lines: (lines) => {
+        for (const l of lines) this.line(l);
+      },
+      exit: (code) => this.exited(code),
+      error: (text) => this.api.note(this.entry.name + ": " + text.trimEnd()),
+    });
+    if (!p.started) {
+      this.finish("cannot start " + words.join(" "), true);
+      return this.promise;
+    }
+    this.proc = p;
+    this.rpc("initialize", { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: "widecode", version: String(widecode.version) } }, (_result, error) => {
+      if (error.length > 0) {
+        this.finish(error, true);
+        return;
+      }
+      this.newSession(prompt);
+    });
+    return this.promise;
+  }
+
+  /** The agent cancelled the call: its session stops, the call closes with what it had. */
+  cancel(): void {
+    if (this.done) return;
+    this.ended = true;
+    this.proc?.write(JSON.stringify({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: this.session } }));
+    this.proc?.stop(1000);
+    this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: "stopped", summary: "stopped" });
+    this.flush();
+    this.done = true;
+    this.onDone();
+    this.resolve(this.reply.length > 0 ? this.reply : "The subagent was stopped.");
+  }
+
+  timeout(): void {
+    if (this.done) return;
+    this.finish("The subagent took too long.", true);
+  }
+
+  private rpc(method: string, params: unknown, then: (result: Msg | null, error: string) => void): void {
+    if (this.proc === null) {
+      then(null, "the agent does not run");
+      return;
+    }
+    const id = ++this.seq;
+    this.waiting.push(new Waiter(id, then));
+    this.proc.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+  }
+
+  private newSession(prompt: string): void {
+    this.rpc("session/new", { cwd: this.folder, mcpServers: [] }, (result, error) => {
+      if (result === null) {
+        this.finish(error.length > 0 ? error : "no session", true);
+        return;
+      }
+      this.session = str(result.sessionId);
+      const options = list(result.configOptions).map(obj).filter((o): o is Msg => o !== null);
+      for (const o of options) if (str(o.category) === "model" || str(o.id) === "model") this.modelConfig = str(o.id);
+      this.setModel(prompt);
+    });
+  }
+
+  private setModel(prompt: string): void {
+    if (this.model.length === 0) {
+      this.prompt(prompt);
+      return;
+    }
+    const then = (_result: Msg | null, error: string): void => {
+      if (error.length > 0) this.finish(error, true);
+      else this.prompt(prompt);
+    };
+    if (this.modelConfig.length > 0) this.rpc("session/set_config_option", { sessionId: this.session, configId: this.modelConfig, value: this.model }, then);
+    else this.rpc("session/set_model", { sessionId: this.session, modelId: this.model }, then);
+  }
+
+  private prompt(text: string): void {
+    this.rpc("session/prompt", { sessionId: this.session, prompt: [{ type: "text", text }] }, (result, error) => {
+      if (error.length > 0) {
+        this.finish(error, true);
+        return;
+      }
+      const stop = str(obj(result)?.stopReason);
+      this.finish(this.reply.length > 0 ? this.reply : stop.length > 0 ? "The subagent stopped: " + stop : "The subagent said nothing.", stop === "refusal" || stop === "error");
+    });
+  }
+
+  private line(text: string): void {
+    const value = parse(text);
+    const m = obj(value);
+    if (m === null) return;
+    const id = typeof m.id === "number" ? m.id : -1;
+    if (id >= 0 && (m.result !== undefined || m.error !== undefined)) {
+      const at = this.waiting.findIndex((w) => w.id === id);
+      if (at < 0) return;
+      const waiter = this.waiting[at];
+      this.waiting.splice(at, 1);
+      const error = obj(m.error);
+      waiter.then(obj(m.result), error !== null ? str(error.message) : "");
+      return;
+    }
+    const method = str(m.method);
+    const params = obj(m.params);
+    if (params === null) return;
+    if (method === "session/update") this.update(obj(params.update));
+    else if (method === "session/request_permission") this.permission(m, params);
+  }
+
+  private update(u: Msg | null): void {
+    if (u === null) return;
+    const what = str(u.sessionUpdate);
+    if (what === "agent_message_chunk") this.chunk("text", u.content);
+    else if (what === "agent_thought_chunk") this.chunk("thinking", u.content);
+    else if (what === "tool_call") this.call(u);
+    else if (what === "tool_call_update") this.call(u);
+    else if (what === "plan") this.plan(u);
+  }
+
+  private chunk(kind: "text" | "thinking", content: unknown): void {
+    const c = obj(content);
+    const text = c !== null && c.type === "text" ? str(c.text) : "";
+    if (text.length === 0) return;
+    if (this.open.length > 0 && this.openKind === kind) {
+      this.emit({ type: "text", key: this.open, delta: text });
+    } else {
+      this.open = this.key(kind + String(++this.blocks));
+      this.openKind = kind;
+      this.emit({ type: "block", key: this.open, kind, text });
+    }
+    if (kind === "text") this.reply += text;
+  }
+
+  private call(u: Msg): void {
+    const id = str(u.toolCallId);
+    if (id.length === 0) return;
+    const known = this.calls.get(id);
+    const key = known !== undefined ? known : this.key("call:" + id);
+    if (known === undefined) this.calls.set(id, key);
+    const kind = str(u.kind);
+    const title = str(u.title);
+    const input = obj(u.rawInput);
+    const locations = list(u.locations).map((l) => str(obj(l)?.path)).filter((p) => p.length > 0);
+    const summary = input !== null && kind === "execute" && str(input.command).length > 0 ? str(input.command).split("\n")[0] : title;
+    const facts: widecode.CallFacts = { category: CATEGORY[kind] ?? "other", summary, ...(locations.length > 0 && kind !== "execute" ? { paths: locations } : {}), ...(input !== null && typeof input.command === "string" ? { command: input.command } : {}) };
+    if (input !== null && typeof input.subagent_type === "string") {
+      facts.category = "agent";
+      facts.agentType = str(input.subagent_type);
+      facts.agentTask = str(input.description);
+      facts.agentPrompt = str(input.prompt);
+      facts.summary = str(input.subagent_type) + ": " + str(input.description);
+    }
+    if (known === undefined) this.emit({ type: "block", key, kind: "tool", id: key, name: NAME[kind] ?? "Tool", text: "", ...facts });
+    else this.emit({ type: "facts", id: key, ...facts });
+    if (u.rawInput !== undefined) this.emit({ type: "input", key, input: u.rawInput });
+    const status = str(u.status);
+    if (status !== "completed" && status !== "failed") return;
+    this.emit({ type: "result", id: key, text: this.output(u), error: status === "failed" });
+    this.emit({ type: "finish", key });
+  }
+
+  /** A call's text from its content blocks, else from its raw output. */
+  private output(u: Msg): string {
+    const parts: string[] = [];
+    for (const v of list(u.content)) {
+      const c = obj(v);
+      const inner = obj(c?.content);
+      if (c !== null && c.type === "content" && inner !== null && inner.type === "text") parts.push(str(inner.text));
+    }
+    if (parts.length > 0) return parts.join("\n");
+    const raw = obj(u.rawOutput);
+    if (raw !== null) for (const k of ["output", "stdout", "result", "error"]) if (typeof raw[k] === "string") return raw[k] as string;
+    return "";
+  }
+
+  private plan(u: Msg): void {
+    const key = this.key("plan" + String(++this.blocks));
+    const todos: { text: string; state: "done" | "doing" | "todo" }[] = [];
+    for (const v of list(u.entries)) {
+      const e = obj(v);
+      const s = str(e?.status);
+      todos.push({ text: str(e?.content), state: s === "completed" ? "done" : s === "in_progress" ? "doing" : "todo" });
+    }
+    this.emit({ type: "block", key, kind: "tool", id: key, name: "Plan", text: "", category: "todo", summary: String(todos.length) + " todos", todos });
+    this.emit({ type: "result", id: key, text: "" });
+    this.emit({ type: "finish", key });
+  }
+
+  private permission(m: Msg, params: Msg): void {
+    const call = obj(params.toolCall);
+    const title = call !== null && str(call.title).length > 0 ? str(call.title) : "The subagent";
+    const options = list(params.options).map(obj).filter((o): o is Msg => o !== null).map((o) => ({ id: str(o.optionId), label: str(o.name).length > 0 ? str(o.name) : str(o.kind), detail: str(o.kind) }));
+    const question = title + " asks for permission";
+    this.api.conversation
+      .ask({ category: "question", name: "Task", questions: [{ question, header: "Permission", options: options.map((o) => ({ label: o.label, description: o.detail })) }] }, this.callId)
+      .then((reply) => {
+        const label = reply.state === "answered" && reply.answers.length > 0 && reply.answers[0].labels.length > 0 ? reply.answers[0].labels[0] : "";
+        const chosen = options.find((o) => o.label === label);
+        const answer: unknown = chosen !== undefined ? { outcome: { outcome: "selected", optionId: chosen.id } } : { outcome: { outcome: "cancelled" } };
+        if (this.proc !== null) this.proc.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, result: answer }));
+      });
+  }
+
+  private exited(code: number): void {
+    this.proc = null;
+    if (this.done) return;
+    if (!this.ended) this.finish(this.entry.name + " ended (exit code " + String(code) + ")", true);
+  }
+
+  private finish(text: string, error: boolean): void {
+    if (this.done) return;
+    this.done = true;
+    this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: error ? "failed" : "done", summary: error ? text.split("\n")[0] : this.description });
+    this.flush();
+    this.onDone();
+    if (this.proc !== null) this.proc.stop(500);
+    if (error) this.reject(new Error(text));
+    else this.resolve(text);
+  }
+}
+
 widecode.plugin({
   id: "acp",
   defaults: () => ({ agents: DEFAULT_AGENTS }),
   activate(api) {
-    const agents = agentsOf(api.settings.section());
+    const section = api.settings.section();
+    const agents = agentsOf(section);
+    const tasks = tasksOf(section);
     for (const id of Object.keys(agents)) api.agents.register(acpAgent(api, id, agents[id]));
     // Sessions made and left by widecode processes gone (one quit without writing to its session).
     sweep(api, agents, "");
+    if (tasks.targets.length === 0) return;
+    /** The runs under way, so the limit is kept. */
+    let running = 0;
+    const names = tasks.targets.map((t) => t.name);
+    api.tools.add({
+      name: "Task",
+      description: "Run a subagent in another agent and model, in this folder. Targets: " + tasks.targets.map((t) => t.name + " (" + t.agent + (t.model.length > 0 ? " " + t.model : "") + ")").join(", ") + ". The subagent is not Claude: it runs on the target's model, its steps show under the call, and its final answer is the result.",
+      category: "agent",
+      except: ["acp"],
+      input: { type: "object", properties: { description: { type: "string", description: "A short label for the call." }, prompt: { type: "string", description: "The whole task for the subagent." }, subagent_type: { type: "string", enum: names, description: "Which target to run." }, model: { type: "string", description: "A model for this call, overriding the target's." }, cwd: { type: "string", description: "The folder; the session's folder when left out." }, name: { type: "string", description: "A display name." } }, required: ["description", "prompt"] },
+      call: (args, ctx) => {
+        const wanted = str(args.subagent_type).length > 0 ? str(args.subagent_type) : names[0] ?? "";
+        const target = tasks.targets.find((t) => t.name === wanted);
+        if (target === undefined) throw new Error("no subagent type " + wanted + "; it has " + names.join(", "));
+        const entry = agents[target.agent];
+        if (entry === undefined) throw new Error("no agent " + target.agent + " for " + wanted);
+        const prompt = str(args.prompt);
+        if (prompt.length === 0) throw new Error("a subagent needs a prompt");
+        const folder = api.state.active().folder;
+        const cwd = str(args.cwd);
+        if (cwd.length > 0 && cwd !== folder) throw new Error("a subagent runs in " + folder + ", not " + cwd);
+        if (ctx.toolUseId.length === 0) throw new Error("the agent did not name this call");
+        if (running >= tasks.maxConcurrent) throw new Error("too many subagents run (" + String(tasks.maxConcurrent) + ")");
+        running++;
+        const run = new SubagentRun(api, entry, target, folder, str(args.model).length > 0 ? str(args.model) : target.model, ctx.toolUseId, str(args.description).length > 0 ? str(args.description) : str(args.name), () => {
+          running--;
+        });
+        ctx.onCancel(() => run.cancel());
+        api.after(tasks.timeoutMs, () => run.timeout());
+        return run.start(prompt);
+      },
+    });
   },
 });
 

@@ -36,9 +36,13 @@ const wait = (ms: number): Promise<void> =>
 const probe = `widecode.plugin({
   id: "probe",
   activate(api) {
+    let cancelled = 0;
     api.tools.add({ name: "echo", description: "Echo", input: { type: "object", properties: { x: { type: "number" } } }, call: (args) => ({ got: args.x }) });
     api.tools.add({ name: "boom", call: () => { throw new Error("it broke"); } });
     api.tools.add({ name: "hold", call: () => new Promise(() => {}) });
+    api.tools.add({ name: "ctx", call: (args, ctx) => ({ callId: ctx.callId, toolUseId: ctx.toolUseId }) });
+    api.tools.add({ name: "cancel", call: (args, ctx) => new Promise((resolve) => { ctx.onCancel(() => { cancelled++; resolve("cancelled"); }); }) });
+    api.tools.add({ name: "cancelled", call: () => cancelled });
   },
 });`;
 
@@ -96,7 +100,7 @@ const main = async (): Promise<void> => {
   eq("a notification", await post('{"jsonrpc":"2.0","method":"notifications/initialized"}'), "202  ");
   const listed = await post('{"jsonrpc":"2.0","id":2,"method":"tools/list"}');
   const tools = (JSON.parse(listed.slice(listed.indexOf("{"))) as { result: { tools: { name: string }[] } }).result.tools;
-  eq("the tools, the ask plugin's first, then the harness plugin's, then the test's", tools.map((t) => t.name).join(","), "AskUser,PresentPlan,screen,state,log,reload,api,check,config,echo,boom,hold");
+  eq("the tools, the ask plugin's first, then the harness plugin's, then the test's", tools.map((t) => t.name).join(","), "AskUser,PresentPlan,screen,state,log,reload,api,check,config,echo,boom,hold,ctx,cancel,cancelled");
   const claudeToken = mcp.tokenFor("claude");
   ok("each agent plugin has a token of its own, kept", claudeToken !== acpToken && mcp.tokenFor("claude") === claudeToken);
   const probeToken = mcp.tokenFor("probe");
@@ -107,7 +111,7 @@ const main = async (): Promise<void> => {
   ok("and its config file is gone", !existsSync(probeFile));
   ok("a new ask makes a new token", mcp.tokenFor("probe") !== probeToken);
   const forClaude = await send(url, "/mcp", claudeToken, "POST", '{"jsonrpc":"2.0","id":"c","method":"tools/list"}');
-  eq("the ask plugin's tools are kept from Claude Code, which has its own", (JSON.parse(forClaude.slice(forClaude.indexOf("{"))) as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name).join(","), "screen,state,log,reload,api,check,config,echo,boom,hold");
+  eq("the ask plugin's tools are kept from Claude Code, which has its own", (JSON.parse(forClaude.slice(forClaude.indexOf("{"))) as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name).join(","), "screen,state,log,reload,api,check,config,echo,boom,hold,ctx,cancel,cancelled");
   ok("and a call of one with its token finds no such tool", (await send(url, "/mcp", claudeToken, "POST", '{"jsonrpc":"2.0","id":"d","method":"tools/call","params":{"name":"AskUser","arguments":{}}}')).includes("widecode has no tool AskUser"));
   ok("with their input's schema", listed.includes('"required":["questions"]}') && listed.includes('"inputSchema":{"type":"object","properties":{"plan":{"type":"string","description":"The whole plan, in markdown."}},"required":["plan"]}'));
   eq("a call: an event stream", await post('{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{"x":1}}}'), '200 text/event-stream event: message|data: {"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"{\\"got\\":1}"}],"isError":false}}||');
@@ -124,6 +128,13 @@ const main = async (): Promise<void> => {
   await wait(100);
   w.js.reload();
   ok("with a progress token: a notification every few seconds while it waits", (await progressed).includes('"method":"notifications/progress","params":{"progressToken":"p1","progress":1}'));
+  const meta = await post('{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"ctx","arguments":{},"_meta":{"claudecode/toolUseId":"toolu_meta"}}}');
+  ok("the agent's own tool-use id reaches the tool", meta.includes("toolu_meta") && meta.includes("callId"));
+  const cancelling = post('{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"cancel","arguments":{}}}');
+  await wait(100);
+  await post('{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":10}}');
+  await cancelling;
+  ok("a cancelled call runs what the tool registered", (await post('{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"cancelled"}}')).includes('"text":"1"'));
 
   // Through an agent, as opencode calls them.
   const idle = (): boolean => !c.model.running && c.model.pending.length === 0;
@@ -155,7 +166,7 @@ const main = async (): Promise<void> => {
   await wait(100);
   panel.key(new KeyEvent("char", "1", false, false, false), true);
   ok("the turn ends once answered", await until(idle));
-  eq("the choice reached the agent, with progress meanwhile", said(last()), 'Tools: AskUser,PresentPlan,screen,state,log,reload,api,check,config,echo,boom,hold; progress: yes; widecode 2025-06-18 answered: The user answered:\n"Which color?": Red');
+  eq("the choice reached the agent, with progress meanwhile", said(last()), 'Tools: AskUser,PresentPlan,screen,state,log,reload,api,check,config,echo,boom,hold,ctx,cancel,cancelled; progress: yes; widecode 2025-06-18 answered: The user answered:\n"Which color?": Red');
   eq("and the call holds the answer; the request is answered", (c.model.tool("call_AskUser")?.result?.text ?? "") + " | " + (q !== null ? q.state : ""), 'The user answered:\n"Which color?": Red | answered');
 
   await asking("question");

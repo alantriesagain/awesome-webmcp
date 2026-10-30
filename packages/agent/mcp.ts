@@ -82,16 +82,19 @@ export class McpCall {
   readonly args: string;
   readonly rpcId: string;
   readonly token: string;
+  /** The agent's own id for the tool call (`_meta["claudecode/toolUseId"]` from Claude Code; "" when it gave none). */
+  readonly toolUseId: string;
   readonly res: ServerResponse;
   progress = 0;
   done = false;
 
-  constructor(id: number, tool: McpTool, args: string, rpcId: string, token: string, res: ServerResponse) {
+  constructor(id: number, tool: McpTool, args: string, rpcId: string, token: string, toolUseId: string, res: ServerResponse) {
     this.id = id;
     this.tool = tool;
     this.args = args;
     this.rpcId = rpcId;
     this.token = token;
+    this.toolUseId = toolUseId;
     this.res = res;
   }
 }
@@ -108,6 +111,8 @@ export class McpServer {
   progressMs = 10000;
   /** Called with each call to a tool it offers; `answer` ends it. */
   onToolCall: ((call: McpCall) => void) | null = null;
+  /** Called when the agent cancelled a call with `notifications/cancelled`, before the response closes. */
+  onToolCancel: ((call: McpCall) => void) | null = null;
   private server: Server | null = null;
   private listening: Promise<string> | null = null;
   private calls: McpCall[] = [];
@@ -297,13 +302,19 @@ export class McpServer {
     if (tool === null) return this.json(res, failure(rpcId, -32602, this.name + " has no tool " + name));
     const meta = params(p._meta) as Meta;
     const token = typeof meta.progressToken === "string" || typeof meta.progressToken === "number" ? JSON.stringify(meta.progressToken) : "";
+    const metaRecord = meta as Record<string, unknown>;
+    const toolUseId = typeof metaRecord["claudecode/toolUseId"] === "string" ? (metaRecord["claudecode/toolUseId"] as string) : "";
     const args = typeof p.arguments === "object" && p.arguments !== null ? JSON.stringify(p.arguments) : "{}";
     res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache" });
-    const c = new McpCall(++this.seq, tool, args, rpcId, token, res);
+    const c = new McpCall(++this.seq, tool, args, rpcId, token, toolUseId, res);
     this.calls.push(c);
-    // The agent went away (its process ended, the call was aborted): nothing to answer.
+    // The agent went away (its process ended, the call was aborted): nothing to answer, and the
+    // tool stops the work it started.
     res.on("close", () => {
-      if (!c.done) this.finish(c);
+      if (c.done) return;
+      const cancelled = this.onToolCancel;
+      if (cancelled !== null) cancelled(c);
+      this.finish(c);
     });
     if (token.length > 0) this.keepAlive(c);
     const fn = this.onToolCall;
@@ -325,6 +336,8 @@ export class McpServer {
   private cancelled(rpcId: string): void {
     for (const c of this.calls.slice()) {
       if (c.rpcId !== rpcId) continue;
+      const fn = this.onToolCancel;
+      if (fn !== null) fn(c);
       this.finish(c);
       c.res.end();
     }

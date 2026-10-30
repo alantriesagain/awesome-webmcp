@@ -948,7 +948,7 @@ const folderKeptLabel = (shown: string): string => "Allow " + shown + " from now
 const allowResponse = (requestId: string, input: unknown, folder = "", kept = false): string =>
   '{"type":"control_response","response":{"subtype":"success","request_id":' + JSON.stringify(requestId) + ',"response":{"behavior":"allow","updatedInput":' + inputJson(input) + (folder.length > 0 ? ',"updatedPermissions":[{"type":"addDirectories","directories":[' + JSON.stringify(folder) + '],"destination":' + (kept ? '"localSettings"' : '"session"') + "}]" : "") + "}}}";
 
-const claudeAgent = (api: widecode.Api, id: string, projects: string, config: string): widecode.AgentAdapter => {
+const claudeAgent = (api: widecode.Api, id: string, projects: string, config: string, keepSubagents: boolean): widecode.AgentAdapter => {
   let proc: widecode.ProcessHandle | null = null;
   let processes = 0;
   /** widecode's MCP server as this plugin's agent sees it, and whether the CLI restarts at the turn's end to pick up a change to the harness. */
@@ -1360,6 +1360,14 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     if (o.effort.length > 0) command.push("--effort", o.effort);
     const s = server;
     if (s !== null) command.push("--mcp-config", s.file.length > 0 ? s.file : JSON.stringify({ mcpServers: { widecode: { type: "http", url: s.url, headers: Object.fromEntries(s.headers.map((h) => [h.name, h.value])) } } }));
+    // The acp plugin offers widecode's Task: Claude's own subagent tools step aside when the
+    // configuration asks for the replacement.
+    const effective = api.harness.info().config.effective.plugins;
+    const plugins = rec(effective);
+    const acp = plugins !== null ? rec(plugins.acp) : null;
+    const tasks = acp !== null ? rec(acp.tasks) : null;
+    const replace = tasks !== null && tasks.replaceClaudeSubagents === true;
+    if (!keepSubagents && replace && s !== null && s.tools.some((t) => t.name === "Task")) command.push("--disallowedTools", "Task,Agent,TaskStop,SendMessage");
     // Recorded once per session by default, the prompt would stay as the first launch had it: off, a changed prompt.md reaches a resumed session.
     if (o.systemPrompt.length > 0) command.push("--append-system-prompt", o.systemPrompt, "--system-prompt-snapshot", "off");
     // Claude Code enforces them: a deny rule blocks in every mode, an ask rule prompts (here, over stdio) in every mode.
@@ -1726,7 +1734,7 @@ widecode.plugin({
   activate(api) {
     const section = rec(api.settings.section());
     const agentId = section !== null && str(section.id).length > 0 ? str(section.id) : "claude";
-    api.agents.register(claudeAgent(api, agentId, str(section?.projects), str(section?.configDir)));
+    api.agents.register(claudeAgent(api, agentId, str(section?.projects), str(section?.configDir), section?.keepSubagents === true));
   },
 });
 

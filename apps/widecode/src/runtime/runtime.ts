@@ -144,11 +144,14 @@ export class JsRuntime extends Bridge {
   readonly mcp = new McpServer("widecode");
   /** The core side of a plugin's calls. */
   readonly router: HostRouter;
+  /** What ends a tool call whose agent cancelled it, by the MCP call's id. */
+  private cancels = new Map<number, { owner: string; fn: number }>();
 
   constructor(host: Host) {
     super();
     this.host = host;
     this.mcp.onToolCall = (call: McpCall) => this.toolCall(call);
+    this.mcp.onToolCancel = (call: McpCall) => this.toolCancel(call);
     this.router = new HostRouter(this);
   }
 
@@ -167,15 +170,33 @@ export class JsRuntime extends Bridge {
     return this.table.loaded;
   }
 
-  /** An agent called a plugin's tool: the plugin gets the call's id and arguments, and answers with toolDone. */
+  /** An agent called a plugin's tool: the plugin gets the call's id, arguments and the agent's own tool-use id, and answers with toolDone. */
   private toolCall(call: McpCall): void {
     const owner = call.tool.owner;
     if (!this.host.kernel.has(owner)) {
       this.mcp.answer(call.id, "the plugin " + owner + " does not run", true);
       return;
     }
-    const r = this.invoke(owner, call.tool.fn, "[" + String(call.id) + "," + call.args + "]");
+    const r = this.invoke(owner, call.tool.fn, "[" + String(call.id) + "," + call.args + "," + JSON.stringify(call.toolUseId) + "]");
     if (r.status !== OK) this.mcp.answer(call.id, owner + " failed: " + r.message(), true);
+  }
+
+  /** A plugin's tool call registered what ends it when the agent cancels. */
+  setToolCancel(owner: string, callId: number, fn: number): void {
+    this.cancels.set(callId, { owner, fn });
+  }
+
+  /** The agent cancelled a tool call: run what the plugin registered for it, once. */
+  private toolCancel(call: McpCall): void {
+    const cancel = this.cancels.get(call.id);
+    if (cancel === undefined) return;
+    this.cancels.delete(call.id);
+    if (this.host.kernel.has(cancel.owner)) this.invoke(cancel.owner, cancel.fn, "[]");
+  }
+
+  /** A tool call answered: what could cancel it is dropped. */
+  forgetToolCancel(callId: number): void {
+    this.cancels.delete(callId);
   }
 
   /** Every source, in order: built-in, then each folder's files by name. */

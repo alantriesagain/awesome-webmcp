@@ -284,10 +284,10 @@ export class Conversation {
     this.changed();
   }
 
-  /** Put `request` (a request event's fields) to the user for one of widecode's own tools; `ask` hears the reply. */
-  ask(ask: Ask, request: unknown): void {
+  /** Put `request` (a request event's fields) to the user for one of widecode's own tools, under `parent` when it names a call; `ask` hears the reply. */
+  ask(ask: Ask, request: unknown, parent = ""): void {
     const id = "ask" + String(++this.askSeq);
-    if (openRequest(this.model, id, request) === null) {
+    if (openRequest(this.model, id, request, parent) === null) {
       const fn = ask.onReplied;
       if (fn !== null) fn(replyText(new Reply("cancelled")));
       return;

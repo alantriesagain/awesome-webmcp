@@ -225,18 +225,18 @@ const questionsOf = (v: unknown): Question[] => {
 };
 
 /** Open request `id` as `e` (a request event's fields) has it: its category, name, the call it is for, questions, plan. */
-const requestOf = (model: ChatModel, id: string, e: Ev): Item => {
-  const item = model.openRequest(id, str(e.name), str(e.callId), e.input !== undefined ? e.input : null);
+const requestOf = (model: ChatModel, id: string, e: Ev, parent: string): Item => {
+  const item = model.openRequest(id, str(e.name), str(e.callId), e.input !== undefined ? e.input : null, parent);
   item.category = str(e.category);
   item.questions = questionsOf(e.questions);
   item.text = str(e.plan);
   return item;
 };
 
-/** Open request `id` from `v`, a request event's fields without its type and id; null when `v` is not an object. */
-export const openRequest = (model: ChatModel, id: string, v: unknown): Item | null => {
+/** Open request `id` from `v`, a request event's fields without its type and id, under `parent` when it names a call; null when `v` is not an object. */
+export const openRequest = (model: ChatModel, id: string, v: unknown, parent = ""): Item | null => {
   const e = ev(v);
-  return e !== null ? requestOf(model, id, e) : null;
+  return e !== null ? requestOf(model, id, e, parent) : null;
 };
 
 /** Apply `events` (an array of event objects) to `model` and `info`; answers how many it applied. They happen now unless an `at` event says when. */
@@ -464,7 +464,7 @@ const applyEvent = (model: ChatModel, info: StatusInfo, e: Ev): boolean => {
     model.skillsKnown = true;
     model.skillsPartial = e.partial === true;
     model.bump();
-  } else if (type === "request") requestOf(model, str(e.id), e);
+  } else if (type === "request") requestOf(model, str(e.id), e, str(e.parent));
   // Answered without the panel (an answer the user gave before covers it), else withdrawn by the agent.
   else if (type === "cancelRequest") {
     if (str(e.state) === "answered") model.settle(str(e.id), "answered");
@@ -485,4 +485,27 @@ const applyEvent = (model: ChatModel, info: StatusInfo, e: Ev): boolean => {
     model.bump();
   }
   return true;
+};
+
+/** The events a subagent run may apply: the work under its call, never the turn's own life or the main status. */
+const SUBAGENT_TYPES = ["block", "text", "partial", "input", "facts", "finish", "result", "edited", "prompt", "notice", "task", "taskUpdate", "thinkingTokens", "usage", "request", "cancelRequest"];
+
+/**
+ * Apply `events` from a subagent run under call `callId` of the open turn, into a status of their own
+ * that is thrown away. Answers how many it applied. A call whose turn has closed takes nothing, and
+ * an event with no parent is the call's own.
+ */
+export const applySubagentEvents = (model: ChatModel, callId: string, events: unknown): number => {
+  const call = model.tool(callId);
+  if (call === null || call.turn === null || call.turn !== model.current) return 0;
+  const info = new StatusInfo();
+  model.now = Date.now();
+  let applied = 0;
+  for (const v of listOf(events)) {
+    const e = ev(v);
+    if (e === null || !SUBAGENT_TYPES.includes(str(e.type))) continue;
+    if (e.parent === undefined || str(e.parent).length === 0) e.parent = callId;
+    if (applyEvent(model, info, e)) applied++;
+  }
+  return applied;
 };

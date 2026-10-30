@@ -8,7 +8,7 @@ import { Option } from "@widecode/conversation/agent.ts";
 import { programCounts } from "@widecode/conversation/command.ts";
 import { agentDescription, agentStatus, agentType, agentsOf } from "@widecode/conversation/agents.ts";
 import { skillRuns } from "@widecode/conversation/skills.ts";
-import { applyEvents } from "@widecode/conversation/events.ts";
+import { applyEvents, applySubagentEvents } from "@widecode/conversation/events.ts";
 import { Ask } from "@widecode/conversation/requests.ts";
 import { attachImages } from "@widecode/conversation/attach.ts";
 import { FNS, JsAgent } from "../runtime/agent.ts";
@@ -52,16 +52,23 @@ export const answerAgent = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
       if (n > 0) c.changed();
       return answer(n);
     }
+    case "conversation.subagent": {
+      // A run under a call of the open turn: the conversation's model only, never its status.
+      const n = applySubagentEvents(h.conversation.model, str(a[1]), a[2]);
+      if (n > 0) h.conversation.changed();
+      return answer(n);
+    }
     case "conversation.ask": {
       // A request for the user from plugin `owner` (one of widecode's tools): the panel shows it, and the reply settles the plugin's promise.
       const owner = str(a[0]);
-      const fn = num(a[2]);
+      const parent = str(a[2]);
+      const fn = num(a[3]);
       const ask = new Ask();
       const reply = new Promise<string>((resolve) => {
         ask.onReplied = (text: string) => resolve(text);
       });
       rt.settle(owner, fn, reply);
-      h.conversation.ask(ask, a[1]);
+      h.conversation.ask(ask, a[1], parent);
       return answer(null);
     }
     case "agent.tools": {
@@ -229,7 +236,8 @@ export const NAMESPACE_AGENTS = new PreludePart("agents", `        register: (a)
 
 /** The `conversation` namespace of the plugin API, its JS side: the calls these answers take. */
 export const NAMESPACE_CONVERSATION = new PreludePart("conversation", `        apply: (events) => call("conversation.apply", id, Array.isArray(events) ? events : [events]),
-        ask: (request) => later("conversation.ask", id, request),
+        subagent: (callId, events) => call("conversation.subagent", id, String(callId), Array.isArray(events) ? events : [events]),
+        ask: (request, parent) => later("conversation.ask", id, request, String(parent ?? "")),
 `);
 
 /** The `agent` namespace of the plugin API, its JS side: the calls these answers take. */

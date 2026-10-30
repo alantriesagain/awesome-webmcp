@@ -107,6 +107,7 @@ export class HostRouter {
         return answer(null);
       case "toolDone":
         // A plugin's tool answered call `a[0]`: its text, an error or not.
+        this.rt.forgetToolCancel(num(a[0]));
         this.rt.mcp.answer(num(a[0]), str(a[1]), a[2] === true);
         return answer(null);
     }

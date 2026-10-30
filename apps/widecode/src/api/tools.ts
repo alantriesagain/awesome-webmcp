@@ -24,6 +24,11 @@ export const answerTools = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
       rt.toolsDirty = true;
       return answer(null);
     }
+    case "tools.onCancel": {
+      // A tool call registered what ends its work when the agent cancels it.
+      rt.setToolCancel(str(a[0]), num(a[1]), num(a[2]));
+      return answer(null);
+    }
     case "tools.server": {
       // Where the server listens, the header that lets plugin `owner`'s agent in, the tools it sees with their kind of call, and a config file naming the server, once it listens; null with no tools for it, or when it cannot listen.
       const owner = str(a[0]);
@@ -46,12 +51,13 @@ export const answerTools = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
 
 /** The `tools` namespace of the plugin API, its JS side: the calls these answers take. */
 export const NAMESPACE_TOOLS = new PreludePart("tools", `        add: (t) =>
-          call("tools.add", id, String(t.name), String(t.description ?? ""), t.input ?? null, String(t.category ?? ""), fn((callId, args) => {
+          call("tools.add", id, String(t.name), String(t.description ?? ""), t.input ?? null, String(t.category ?? ""), fn((callId, args, toolUseId) => {
             // Its answer, now or once its promise settles: text (a value that is not is JSON), or an error thrown.
             const done = (text, error) => call("toolDone", callId, String(text), error);
             const failed = (e) => done(e instanceof Error ? e.message : String(e), true);
+            const ctx = { callId: String(callId), toolUseId: String(toolUseId ?? ""), onCancel: (f) => call("tools.onCancel", id, callId, fn(f)) };
             try {
-              Promise.resolve(t.call(args)).then((r) => done(typeof r === "string" ? r : JSON.stringify(r ?? null), false), failed);
+              Promise.resolve(t.call(args, ctx)).then((r) => done(typeof r === "string" ? r : JSON.stringify(r ?? null), false), failed);
             } catch (e) {
               failed(e);
             }

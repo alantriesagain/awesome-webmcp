@@ -619,8 +619,12 @@ export class ChatModel {
    * onboarding's questions): it goes after the last turn, as a notice does, and opens no turn, which
    * nothing would close.
    */
-  openRequest(requestId: string, name: string, toolUseId: string, input: unknown): Item {
-    const container = this.current === null && this.pending.length === 0 ? this.idleTurn().after : this.turn().body;
+  openRequest(requestId: string, name: string, toolUseId: string, input: unknown, parent = ""): Item {
+    let container = this.current === null && this.pending.length === 0 ? this.idleTurn().after : this.turn().body;
+    if (parent.length > 0) {
+      const under = this.container(parent);
+      if (under !== null) container = under;
+    }
     const found = this.requests.get(requestId);
     if (found !== undefined && found.turn === container.turn) return found;
     const item = new Item(REQUEST, "r:" + requestId);

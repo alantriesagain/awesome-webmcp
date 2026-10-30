@@ -3,7 +3,7 @@
 // state serves the views.
 import { ChatModel, Item, TaskInfo, ToolResult, AGENT, TEXT, TOOL } from "../model.ts";
 import { RenderContext, itemLines } from "../render.ts";
-import { applyEvents } from "../events.ts";
+import { applyEvents, applySubagentEvents } from "../events.ts";
 import { StatusInfo } from "../status-info.ts";
 import { agentStatus } from "../agents.ts";
 import { callState, FAILED } from "../calls.ts";
@@ -95,6 +95,27 @@ const main = async (): Promise<void> => {
   const long = new ChatModel();
   for (let i = 0; i < 1001; i++) long.openTurn("turn " + String(i), 0, true);
   eq("a long session keeps the newest turns", String(long.turns.length) + " " + String(long.earlier), "1000 true");
+
+  // A subagent's events apply under its call, and stop when the turn closes.
+  const sub = new ChatModel();
+  sub.openTurn("main", 0, true);
+  const subTask = sub.block("", "tc", TOOL, "toolu-sub", "Task", "");
+  ok("the Task call is made", subTask !== null);
+  if (subTask !== null) {
+    subTask.category = AGENT;
+    eq("a subagent's block and text go under the call", String(applySubagentEvents(sub, subTask.id, [{ type: "block", key: "s1", kind: "text", text: "hello" }, { type: "text", parent: subTask.id, key: "s1", delta: " world" }])), "2");
+    ok("the words are the subagent's, in its call", subTask.children.length === 1 && subTask.children[0].text === "hello world");
+  }
+  sub.closeTurn(null);
+  eq("after the turn closes, nothing applies", String(applySubagentEvents(sub, "toolu-sub", [{ type: "notice", text: "later" }])), "0");
+  ok("and the main turn took no notice", sub.turns[0].body.children.filter((i) => i.kind === 4).length === 0);
+
+  const under = new ChatModel();
+  under.openTurn("main", 0, true);
+  const parent = under.block("", "tc2", TOOL, "toolu-under", "Task", "");
+  const request = parent !== null ? under.openRequest("r-under", "Ask", "", null, parent.id) : null;
+  ok("a request with a parent opens under that call", parent !== null && request !== null && parent.children.includes(request) && request.turn === parent.turn);
+  under.closeTurn(null);
 
   done();
 };
