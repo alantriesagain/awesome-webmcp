@@ -494,10 +494,12 @@ const SUBAGENT_TYPES = ["block", "text", "partial", "input", "facts", "finish", 
 
 /**
  * Apply `events` from a subagent run under call `callId` of the open turn, into a status of their own
- * that is thrown away. Answers how many it applied. A call whose turn has closed takes nothing, and
- * an event with no parent is the call's own.
+ * that is thrown away. The call's own facts go into `status` (the conversation's) instead, so the
+ * call counts as the subagent it is; a historical read-back does not count it again, since the
+ * history load already did. Answers how many it applied. A call whose turn has closed takes nothing,
+ * and an event with no parent is the call's own.
  */
-export const applySubagentEvents = (model: ChatModel, callId: string, events: unknown, historical = false): number => {
+export const applySubagentEvents = (model: ChatModel, callId: string, events: unknown, historical = false, status: StatusInfo | null = null): number => {
   const call = model.tool(callId);
   if (call === null || call.turn === null) return 0;
   // A foreground run ends with its turn; a background one goes on after it, under its card.
@@ -510,7 +512,9 @@ export const applySubagentEvents = (model: ChatModel, callId: string, events: un
     const e = ev(v);
     if (e === null || !SUBAGENT_TYPES.includes(str(e.type))) continue;
     if (e.parent === undefined || str(e.parent).length === 0) e.parent = callId;
-    if (applyEvent(model, info, e)) applied++;
+    let target = info;
+    if (!historical && status !== null && str(e.type) === "facts" && str(e.id) === callId) target = status;
+    if (applyEvent(model, target, e)) applied++;
   }
   return applied;
 };

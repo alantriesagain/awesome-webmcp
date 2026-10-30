@@ -110,6 +110,32 @@ const main = async (): Promise<void> => {
   eq("after the turn closes, nothing applies", String(applySubagentEvents(sub, "toolu-sub", [{ type: "notice", text: "later" }])), "0");
   ok("and the main turn took no notice", sub.turns[0].body.children.filter((i) => i.kind === 4).length === 0);
 
+  // A run's own facts make the Task call count as a subagent in the conversation's status; its
+  // inner read stays out of the main counts.
+  const run = new ChatModel();
+  run.openTurn("main", 0, true);
+  const runCard = run.block("", "tc-run", TOOL, "toolu-run", "Task", "");
+  ok("the run's Task call is made", runCard !== null);
+  const runInfo = new StatusInfo();
+  if (runCard !== null) {
+    eq("the call's facts and its inner read apply", String(applySubagentEvents(run, "toolu-run", [
+      { type: "facts", id: "toolu-run", category: "agent", summary: "agent: look", agentType: "agent", agentTask: "look" },
+      { type: "block", key: "r1", kind: "tool", id: "read-1", name: "Read", text: "", category: "read", summary: "a.ts" },
+    ], false, runInfo)), "2");
+  }
+  eq("the main status counts the call as a subagent", String(runInfo.agents), "1");
+  eq("and not the subagent's own read", String(runInfo.reads), "0");
+
+  // A historical read-back does not count the call again, since the history load already did.
+  const reread = new ChatModel();
+  reread.openTurn("main", 0, true);
+  const rereadCard = reread.block("", "tc-h", TOOL, "toolu-h", "Task", "");
+  const rereadInfo = new StatusInfo();
+  applyEvents(reread, rereadInfo, [{ type: "facts", id: "toolu-h", category: "agent", summary: "agent: look" }]);
+  eq("the history load counts the call as a subagent", String(rereadInfo.agents), "1");
+  if (rereadCard !== null) applySubagentEvents(reread, "toolu-h", [{ type: "facts", id: "toolu-h", category: "agent", summary: "agent: look" }], true, rereadInfo);
+  eq("a historical read does not count it again", String(rereadInfo.agents), "1");
+
   const hist = new ChatModel();
   hist.openTurn("main", 0, true);
   const past = hist.block("", "tc2", TOOL, "toolu-hist", "Task", "");

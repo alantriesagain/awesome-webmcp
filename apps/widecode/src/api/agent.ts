@@ -54,8 +54,8 @@ export const answerAgent = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
     }
     case "conversation.subagent": {
       // A run under a call of the open turn (or a transcript read back into a closed one): the
-      // conversation's model only, never its status.
-      const n = applySubagentEvents(h.conversation.model, str(a[1]), a[2], a[3] === true);
+      // conversation's model, and its status for the call's own change of kind.
+      const n = applySubagentEvents(h.conversation.model, str(a[1]), a[2], a[3] === true, h.conversation.info);
       if (n > 0) h.conversation.changed();
       return answer(n);
     }
