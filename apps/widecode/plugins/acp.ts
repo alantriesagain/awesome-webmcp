@@ -1537,7 +1537,8 @@ class SubagentRun {
   private blocks = 0;
   private calls = new Map<string, string>();
   private out: unknown[] = [];
-  private history: unknown[] = [];
+  /** The events applied so far, each as its JSON line: encoded once, as it streams, so keeping them is a join. */
+  private history: string[] = [];
   private reply = "";
   private busy = false;
   private closed = false;
@@ -1569,7 +1570,7 @@ class SubagentRun {
     if (this.out.length === 0) return;
     const batch = this.out;
     this.out = [];
-    for (const e of batch) this.history.push(e);
+    for (const e of batch) this.history.push(JSON.stringify(e));
     this.api.conversation.subagent(this.callId, batch as widecode.ConversationEvent[]);
   }
 
@@ -1577,9 +1578,12 @@ class SubagentRun {
   private persist(): void {
     const sid = this.api.agent.sessionId();
     if (sid.length === 0 || this.history.length === 0) return;
-    const lines: string[] = [];
-    for (const e of this.history) lines.push(JSON.stringify(e));
-    this.api.store.saveTaskTranscript(sid, this.callId, lines.join("\n") + "\n");
+    this.api.store.saveTaskTranscript(sid, this.callId, this.history.join("\n") + "\n");
+  }
+
+  /** Whether a prompt is running: what counts against the bound on subagents at once. */
+  working(): boolean {
+    return this.busy && !this.closed;
   }
 
   private emit(e: Ev): void {
@@ -1605,8 +1609,10 @@ class SubagentRun {
     this.flush();
     const words = resolved(this.api, this.entry.command);
     const p = this.api.process.spawn(words, { cwd: this.cwd }, {
+      // Each batch goes under the card as it comes, so the run streams and no one call carries all of it.
       lines: (lines) => {
         for (const l of lines) this.line(l);
+        this.flush();
       },
       exit: (code) => this.exited(code),
       error: (text) => this.api.note(this.entry.name + ": " + text.trimEnd()),
@@ -1909,7 +1915,14 @@ widecode.plugin({
     if (tasks.targets.length === 0) return;
     /** The live runs by id: a background run can be messaged or stopped after its call answered. */
     const runs = new Map<string, SubagentRun>();
-    let running = 0;
+    /** Worktrees being made for a run not started yet. */
+    let preparing = 0;
+    /** The runs working now: an idle background run waits for a message and holds no place. */
+    const working = (): number => {
+      let n = preparing;
+      for (const run of runs.values()) if (run.working()) n++;
+      return n;
+    };
     const names = tasks.targets.map((t) => t.name);
     api.tools.add({
       name: "Task",
@@ -1931,18 +1944,13 @@ widecode.plugin({
         if (isolation.length > 0 && isolation !== "worktree") throw new Error("isolation is \"worktree\" or none");
         const synthetic = ctx.toolUseId.length === 0;
         const id = synthetic ? "task-" + ctx.callId : ctx.toolUseId;
-        if (running >= tasks.maxConcurrent) throw new Error("too many subagents run (" + String(tasks.maxConcurrent) + ")");
+        if (working() >= tasks.maxConcurrent) throw new Error("too many subagents run (" + String(tasks.maxConcurrent) + ")");
         const description = str(args.description).length > 0 ? str(args.description) : str(args.name);
         const startRun = (cwd: string, worktree: string): Promise<string> => {
-          running++;
           const run = new SubagentRun(api, entry, target, cwd, worktree, str(args.model).length > 0 ? str(args.model) : target.model, id, description, synthetic, args.run_in_background === true, tasks.timeoutMs, () => {
-            running--;
             runs.delete(id);
           });
-          if (!run.createCard()) {
-            running--;
-            throw new Error("the main agent cannot take a subagent card");
-          }
+          if (!run.createCard()) throw new Error("the main agent cannot take a subagent card");
           runs.set(id, run);
           ctx.onCancel(() => run.cancel());
           return run.start(prompt);
@@ -1951,9 +1959,17 @@ widecode.plugin({
         const part = id.replace(/[^A-Za-z0-9_.-]/g, "_");
         const path = folder + "/.widecode/worktrees/" + part;
         const branch = "widecode/task-" + part;
+        preparing++;
+        const made = (): void => {
+          preparing--;
+        };
         return api.process.run("mkdir -p " + quote(folder + "/.widecode/worktrees") + " && git -C " + quote(folder) + " worktree add -b " + quote(branch) + " " + quote(path), "", 15000).then((r) => {
+          made();
           if (r.code !== 0) throw new Error("cannot make a worktree: " + (r.err.trim().length > 0 ? r.err.trim() : r.out.trim()));
           return startRun(path, path + " (branch " + branch + ")");
+        }, (e: unknown) => {
+          made();
+          throw e;
         });
       },
     });
@@ -1977,6 +1993,7 @@ widecode.plugin({
         const id = str(args.task_id);
         const run = runs.get(id);
         if (run === undefined) throw new Error("no subagent " + id);
+        if (!run.working() && working() >= tasks.maxConcurrent) throw new Error("too many subagents run (" + String(tasks.maxConcurrent) + ")");
         const why = run.send(str(args.message));
         if (why.length > 0) throw new Error(why);
         return "sent to " + id;

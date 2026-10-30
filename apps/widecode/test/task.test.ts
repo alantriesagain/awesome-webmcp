@@ -43,7 +43,7 @@ const main = async (): Promise<void> => {
   const config: unknown = {
     acp: {
       agents: { fake: { name: "Fake", command: ["node", fake, "--log", log] } },
-      tasks: { targets: { deepseek: { agent: "fake", model: "fake/large", description: "a test subagent" } } },
+      tasks: { targets: { deepseek: { agent: "fake", model: "fake/large", description: "a test subagent" } }, maxConcurrent: 1 },
     },
   };
   w.start(config, new NoStateFile(), []);
@@ -72,7 +72,7 @@ const main = async (): Promise<void> => {
   ok("the slow call is made", slow !== null);
   if (slow === null) return;
   const held = post('{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"Task","arguments":{"description":"wait","prompt":"slow","subagent_type":"deepseek"},"_meta":{"claudecode/toolUseId":"toolu-slow"}}}');
-  await until(() => slow.children.length > 0);
+  ok("a running subagent's words show before it ends", await until(() => slow.children.some((i) => i.kind === TEXT), 5000));
   await post('{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":2}}');
   await held;
   eq("cancelling stops the subagent", slow.task !== null ? slow.task.status : "none", "stopped");
@@ -108,6 +108,13 @@ const main = async (): Promise<void> => {
   ok("a background run starts at once", started.includes("subagent started: toolu-bg"));
   c.model.closeTurn(null);
   ok("and goes on after the turn", await until(() => bg.task !== null && bg.task.status === "done" && bg.children.some((i) => i.kind === TEXT && i.text.includes("Worked.")), 15000));
+  // An idle background run holds no place: with one at a time, another run starts beside it.
+  c.model.openTurn("main", 0, true);
+  const beside = c.model.block("", "tcnext", TOOL, "toolu-next", "Task", "");
+  ok("the next call is made", beside !== null);
+  const next = await post('{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"Task","arguments":{"description":"beside","prompt":"hello","subagent_type":"deepseek"},"_meta":{"claudecode/toolUseId":"toolu-next"}}}');
+  ok("a run starts beside an idle background one", next.includes("Hello, world."));
+  c.model.closeTurn(null);
   const sent = await post('{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"SendMessage","arguments":{"task_id":"toolu-bg","message":"hello"}}}');
   ok("a message reaches the idle run", sent.includes("sent to toolu-bg"));
   ok("and its answer lands in the same card", await until(() => bg.children.some((i) => i.kind === TEXT && i.text.includes("Hello, world.")), 15000));
