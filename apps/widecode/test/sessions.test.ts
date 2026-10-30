@@ -220,7 +220,8 @@ const call = c.model.tool("toolu_1");
 ok("resumed: its Agent call", call !== null && call.kind === TOOL && call.children.length === 0);
 const notices = c.model.turns.flatMap((t) => t.after.children.concat(t.body.children)).filter((i) => i.kind === NOTICE);
 eq("a file written a moment ago that no Claude runs: no warning", notices.map((i) => i.text).join("|"), "");
-ok("its subagent's steps read into the call, from the meta file naming it (a broken one skipped)", call !== null && c.loadSubagent(call) && call.children.length === 2);
+const loaded = call !== null && c.loadSubagent(call);
+ok("its subagent's steps read into the call, from the meta file naming it (a broken one skipped)", loaded && call !== null && call.children.length === 2);
 ok("an item no subagent ran for: nothing read", !c.loadSubagent(c.model.turns[0].body));
 
 const sessions = join(base, "sessions");

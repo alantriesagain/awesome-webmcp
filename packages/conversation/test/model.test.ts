@@ -110,6 +110,13 @@ const main = async (): Promise<void> => {
   eq("after the turn closes, nothing applies", String(applySubagentEvents(sub, "toolu-sub", [{ type: "notice", text: "later" }])), "0");
   ok("and the main turn took no notice", sub.turns[0].body.children.filter((i) => i.kind === 4).length === 0);
 
+  const hist = new ChatModel();
+  hist.openTurn("main", 0, true);
+  const past = hist.block("", "tc2", TOOL, "toolu-hist", "Task", "");
+  if (past !== null) past.category = AGENT;
+  hist.closeTurn(null);
+  eq("a historical transcript applies to a closed call", String(past !== null ? applySubagentEvents(hist, "toolu-hist", [{ type: "notice", text: "past" }], true) : 0), "1");
+
   const under = new ChatModel();
   under.openTurn("main", 0, true);
   const parent = under.block("", "tc2", TOOL, "toolu-under", "Task", "");

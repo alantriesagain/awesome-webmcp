@@ -1659,6 +1659,24 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     loadSubagent(callId) {
       const sid = resumed.length > 0 ? resumed : api.agent.sessionId();
       if (!safeId(sid)) return false;
+      // A Task run keeps its own transcript under the project; read it back under its call.
+      let taskRaw = "";
+      try {
+        taskRaw = api.store.taskTranscript(sid, callId);
+      } catch {
+        taskRaw = "";
+      }
+      if (taskRaw.length > 0) {
+        const events: unknown[] = [];
+        for (const line of taskRaw.split("\n")) if (line.length > 0) {
+          const v = parse(line);
+          if (v !== null) events.push(v);
+        }
+        if (events.length > 0) {
+          api.conversation.subagent(callId, events as widecode.ConversationEvent[], true);
+          return true;
+        }
+      }
       const dir = projectDir(folder || api.state.active().folder) + "/" + sid + "/subagents";
       for (const e of api.fs.list(dir)) {
         if (!e.name.endsWith(".meta.json")) continue;

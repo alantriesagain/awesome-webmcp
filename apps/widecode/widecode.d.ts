@@ -631,10 +631,10 @@ declare namespace widecode {
       apply(events: ConversationEvent | ConversationEvent[]): number;
       /**
        * Apply a subagent run's events (one, or a list) under call `callId` of the open turn: the
-       * conversation's model only, never its status. A call whose turn has closed takes nothing; an
-       * event with no parent is the call's own.
+       * conversation's model only, never its status. A call whose turn has closed takes nothing
+       * unless `historical` reads a transcript back into it; an event with no parent is the call's own.
        */
-      subagent(callId: string, events: ConversationEvent | ConversationEvent[]): number;
+      subagent(callId: string, events: ConversationEvent | ConversationEvent[], historical?: boolean): number;
       /**
        * Put a request to the user for one of widecode's own tools (a request event's fields, without
        * its type and id), under `parent` when it names a call: the panel shows it, and the reply comes
@@ -847,6 +847,10 @@ declare namespace widecode {
       saveSkillRun(run: { skill: string; callId: string; state: string; startedMs: number; endedMs: number; calls: number }): boolean;
       /** Each skill's runs kept in the folder across its sessions: how many, how many the user typed, how many failed, when the last started. */
       skillUsage(): { name: string; runs: number; typed: number; failed: number; lastMs: number }[];
+      /** A Task run's transcript kept under the project for session `session`, call `callId` ("" for none). */
+      taskTranscript(session: string, callId: string): string;
+      /** Keep a Task run's transcript under the project; false when there is no store. */
+      saveTaskTranscript(session: string, callId: string, text: string): boolean;
       /** Keep the chosen agent's rate limits as it reported them (percent used, -1 unknown; resets in epoch seconds). */
       saveLimits(limits: { fiveHourPct: number; fiveHourResets: number; weekPct: number; weekResets: number }): boolean;
     };

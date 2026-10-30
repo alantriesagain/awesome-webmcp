@@ -1,6 +1,6 @@
 # Task: Claude main with ACP subagents
 
-Status: v1 built, tests passing, installed (2026-10-30). This plan replaces Claude Code's built-in `Task` with widecode's own `Task`,
+Status: foreground, background, management, ACP-main, worktree and transcript persistence built and tested (2026-10-30). This plan replaces Claude Code's built-in `Task` with widecode's own `Task`,
 served over MCP as `mcp__widecode__Task`, which runs subagents on configured ACP agents and models
 (for example opencode with `opencode-go/deepseek-v4.1-flash`).
 
@@ -122,12 +122,20 @@ The result is the subagent's final text plus an agent id and usage.
 - [x] Concurrency limit and timeout.
 - [x] Tests: tool list, permissions, cancellation, no recursion; parallel calls and the full lifecycle remain.
 
-### Slice 6: parity (deferred)
+### Slice 6: management parity
 
-- [ ] Background runs, notifications, `TaskStop`, `SendMessage`.
-- [ ] Resume of a delegated run.
-- [ ] Worktree and remote isolation.
-- [ ] Persistence under `.widecode/sessions/<id>/tasks/<toolUseId>.jsonl` and resume replay.
+- [x] Background runs with `run_in_background`, completion notifications and the same card.
+- [x] `TaskStop` and `SendMessage` over the live run registry.
+- [x] ACP main agents: a synthetic card when the main agent names no tool-use id.
+- [x] `SendMessage` to an idle run is continuation, in the same frontend run.
+- [x] Resume after a widecode restart: the run's transcript is kept under
+  `.widecode/tasks/<session>/<callId>.jsonl` by `api.store.saveTaskTranscript`, and `loadSubagent`
+  reads it back with `historical`.
+- [x] Worktree isolation: `isolation: "worktree"` starts the run in a git worktree and answers with
+  its path and branch.
+- [ ] Remote isolation.
+- [ ] Turn-end/reset hook for stopping foreground runs without waiting for the MCP response to close.
+- [ ] Shared ACP session extraction.
 
 ## Event mapping
 
@@ -179,5 +187,12 @@ The result is the subagent's final text plus an agent id and usage.
   appeared with Wait, Change model and Retry. The fake end-to-end test covers Claude's tool-use id,
   the real `Task` tool path over MCP, nested steps, permissions, cancellation and the result.
 - `test/drive.py` looked for the binary three folders up; it now points at `../dist/widecode`.
-- Remaining for full parity: shared ACP session extraction, a turn-end hook for `/new`, background
-  runs, `TaskStop`/`SendMessage`, resume, isolation and persistence.
+- Live foreground: Claude called `mcp__widecode__Task`, opencode-go DeepSeek answered
+  `subagent-live-ok`; the Agents tab listed the run.
+- Live background: the run finished and logged its completion; the fake ACP main test covers the
+  notification reaching the main agent. The main Claude turn after the notification was not
+  captured before the test quit.
+- Background, `TaskStop`, `SendMessage`, ACP-main and worktree tests pass under node and natively.
+  The task transcript store round trip is covered in `store.test.ts`; the Claude plugin's
+  `loadSubagent` reads it with `historical` and the test suite passes.
+- Remaining: remote isolation, the turn-end/reset hook and the shared ACP session extraction.

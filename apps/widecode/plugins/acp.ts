@@ -1518,10 +1518,14 @@ class SubagentRun {
   private readonly api: widecode.Api;
   private readonly entry: Entry;
   private readonly target: TaskTarget;
-  private readonly folder: string;
+  private readonly cwd: string;
+  private readonly worktree: string;
   private readonly model: string;
   private readonly callId: string;
   private readonly description: string;
+  private readonly synthetic: boolean;
+  private readonly background: boolean;
+  private readonly timeoutMs: number;
   private readonly onDone: () => void;
   private proc: widecode.ProcessHandle | null = null;
   private seq = 0;
@@ -1533,21 +1537,27 @@ class SubagentRun {
   private blocks = 0;
   private calls = new Map<string, string>();
   private out: unknown[] = [];
+  private history: unknown[] = [];
   private reply = "";
-  private ended = false;
-  private done = false;
+  private busy = false;
+  private closed = false;
+  private timeoutGen = 0;
   private resolve: (text: string) => void = () => {};
   private reject: (error: Error) => void = () => {};
   readonly promise: Promise<string>;
 
-  constructor(api: widecode.Api, entry: Entry, target: TaskTarget, folder: string, model: string, callId: string, description: string, onDone: () => void) {
+  constructor(api: widecode.Api, entry: Entry, target: TaskTarget, cwd: string, worktree: string, model: string, callId: string, description: string, synthetic: boolean, background: boolean, timeoutMs: number, onDone: () => void) {
     this.api = api;
     this.entry = entry;
     this.target = target;
-    this.folder = folder;
+    this.cwd = cwd;
+    this.worktree = worktree;
     this.model = model;
     this.callId = callId;
     this.description = description;
+    this.synthetic = synthetic;
+    this.background = background;
+    this.timeoutMs = timeoutMs;
     this.onDone = onDone;
     this.promise = new Promise<string>((resolve, reject) => {
       this.resolve = resolve;
@@ -1559,7 +1569,17 @@ class SubagentRun {
     if (this.out.length === 0) return;
     const batch = this.out;
     this.out = [];
+    for (const e of batch) this.history.push(e);
     this.api.conversation.subagent(this.callId, batch as widecode.ConversationEvent[]);
+  }
+
+  /** Keep this run's events under the project, so a later run can read its steps back. */
+  private persist(): void {
+    const sid = this.api.agent.sessionId();
+    if (sid.length === 0 || this.history.length === 0) return;
+    const lines: string[] = [];
+    for (const e of this.history) lines.push(JSON.stringify(e));
+    this.api.store.saveTaskTranscript(sid, this.callId, lines.join("\n") + "\n");
   }
 
   private emit(e: Ev): void {
@@ -1571,12 +1591,20 @@ class SubagentRun {
     return "task:" + this.callId + ":" + id;
   }
 
+  /** A main agent that names no call (an ACP agent) gets the card made here, under its open turn. */
+  createCard(): boolean {
+    if (!this.synthetic) return true;
+    const n = this.api.conversation.apply([{ type: "block", key: this.callId, kind: "tool", id: this.callId, name: "Task", text: "" }]);
+    return n > 0;
+  }
+
   start(prompt: string): Promise<string> {
+    this.busy = true;
     this.emit({ type: "facts", id: this.callId, category: "agent", summary: this.target.name + ": " + this.description, agentType: this.target.name, agentTask: this.description, agentPrompt: prompt });
-    this.emit({ type: "task", id: this.callId, taskId: this.callId, description: this.description, agentType: this.target.name, background: false });
+    this.emit({ type: "task", id: this.callId, taskId: this.callId, description: this.description, agentType: this.target.name, background: this.background });
     this.flush();
     const words = resolved(this.api, this.entry.command);
-    const p = this.api.process.spawn(words, { cwd: this.folder }, {
+    const p = this.api.process.spawn(words, { cwd: this.cwd }, {
       lines: (lines) => {
         for (const l of lines) this.line(l);
       },
@@ -1584,36 +1612,72 @@ class SubagentRun {
       error: (text) => this.api.note(this.entry.name + ": " + text.trimEnd()),
     });
     if (!p.started) {
-      this.finish("cannot start " + words.join(" "), true);
+      const text = "cannot start " + words.join(" ");
+      this.closed = true;
+      this.onDone();
+      if (this.background) this.notify(text, true);
+      this.reject(new Error(text));
       return this.promise;
     }
     this.proc = p;
     this.rpc("initialize", { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: "widecode", version: String(widecode.version) } }, (_result, error) => {
       if (error.length > 0) {
-        this.finish(error, true);
+        this.fail(error);
         return;
       }
       this.newSession(prompt);
     });
+    if (this.background) return Promise.resolve("subagent started: " + this.callId + (this.worktree.length > 0 ? "\nworktree: " + this.worktree : ""));
     return this.promise;
   }
 
-  /** The agent cancelled the call: its session stops, the call closes with what it had. */
+  /** A message from the main agent to an idle run; "" or why not. */
+  send(text: string): string {
+    if (this.closed || this.proc === null) return "the subagent is not running";
+    if (this.busy) return "the subagent is busy";
+    this.reply = "";
+    this.open = "";
+    this.openKind = "";
+    this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: "running", summary: this.description });
+    this.flush();
+    this.prompt(text);
+    return "";
+  }
+
+  /** The agent cancelled the call, or the user stopped the run: its session stops and its card says so. */
   cancel(): void {
-    if (this.done) return;
-    this.ended = true;
+    if (this.closed) return;
+    this.closed = true;
+    this.busy = false;
+    this.timeoutGen++;
     this.proc?.write(JSON.stringify({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: this.session } }));
     this.proc?.stop(1000);
     this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: "stopped", summary: "stopped" });
     this.flush();
-    this.done = true;
+    this.persist();
     this.onDone();
     this.resolve(this.reply.length > 0 ? this.reply : "The subagent was stopped.");
   }
 
   timeout(): void {
-    if (this.done) return;
-    this.finish("The subagent took too long.", true);
+    if (this.closed || !this.busy) return;
+    this.fail("The subagent took too long.");
+  }
+
+  /** A prompt or the start failed: the card says so, and a background run tells the main agent. */
+  private fail(text: string): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.busy = false;
+    this.timeoutGen++;
+    this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: "failed", summary: text.split("\n")[0] });
+    this.flush();
+    this.persist();
+    this.proc?.stop(1000);
+    this.proc = null;
+    this.onDone();
+    if (this.background) this.notify(text, true);
+    else this.reject(new Error(text));
   }
 
   private rpc(method: string, params: unknown, then: (result: Msg | null, error: string) => void): void {
@@ -1627,9 +1691,9 @@ class SubagentRun {
   }
 
   private newSession(prompt: string): void {
-    this.rpc("session/new", { cwd: this.folder, mcpServers: [] }, (result, error) => {
+    this.rpc("session/new", { cwd: this.cwd, mcpServers: [] }, (result, error) => {
       if (result === null) {
-        this.finish(error.length > 0 ? error : "no session", true);
+        this.fail(error.length > 0 ? error : "no session");
         return;
       }
       this.session = str(result.sessionId);
@@ -1645,7 +1709,7 @@ class SubagentRun {
       return;
     }
     const then = (_result: Msg | null, error: string): void => {
-      if (error.length > 0) this.finish(error, true);
+      if (error.length > 0) this.fail(error);
       else this.prompt(prompt);
     };
     if (this.modelConfig.length > 0) this.rpc("session/set_config_option", { sessionId: this.session, configId: this.modelConfig, value: this.model }, then);
@@ -1653,14 +1717,50 @@ class SubagentRun {
   }
 
   private prompt(text: string): void {
+    this.busy = true;
+    const gen = ++this.timeoutGen;
+    this.api.after(this.timeoutMs, () => {
+      if (gen === this.timeoutGen && this.busy) this.timeout();
+    });
     this.rpc("session/prompt", { sessionId: this.session, prompt: [{ type: "text", text }] }, (result, error) => {
       if (error.length > 0) {
-        this.finish(error, true);
+        this.promptDone(error, true);
         return;
       }
       const stop = str(obj(result)?.stopReason);
-      this.finish(this.reply.length > 0 ? this.reply : stop.length > 0 ? "The subagent stopped: " + stop : "The subagent said nothing.", stop === "refusal" || stop === "error");
+      this.promptDone(this.reply.length > 0 ? this.reply : stop.length > 0 ? "The subagent stopped: " + stop : "The subagent said nothing.", stop === "refusal" || stop === "error");
     });
+  }
+
+  private promptDone(text: string, error: boolean): void {
+    if (this.closed) return;
+    this.busy = false;
+    this.timeoutGen++;
+    this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: error ? "failed" : "done", summary: error ? text.split("\n")[0] : this.description });
+    this.flush();
+    this.persist();
+    if (!this.background) {
+      this.closed = true;
+      this.proc?.stop(500);
+      this.proc = null;
+      this.onDone();
+      if (error) this.reject(new Error(text));
+      else this.resolve(this.worktree.length > 0 ? text + "\n\n[worktree: " + this.worktree + "]" : text);
+      return;
+    }
+    this.notify(this.worktree.length > 0 ? text + "\n\n[worktree: " + this.worktree + "]" : text, error);
+    this.reply = "";
+    this.open = "";
+    this.openKind = "";
+  }
+
+  /** Tell the main agent a background run finished or failed, when it is running to hear it. */
+  private notify(text: string, error: boolean): void {
+    this.api.note("background subagent " + this.callId + " " + (error ? "failed" : "finished"));
+    if (!this.api.agent.started()) return;
+    const line = "[background subagent " + this.callId + " " + (error ? "failed" : "finished") + "]\n" + text;
+    const r = this.api.agent.send(line);
+    if (r.error.length > 0) this.api.note("background subagent " + this.callId + ": " + r.error);
   }
 
   private line(text: string): void {
@@ -1780,19 +1880,19 @@ class SubagentRun {
 
   private exited(code: number): void {
     this.proc = null;
-    if (this.done) return;
-    if (!this.ended) this.finish(this.entry.name + " ended (exit code " + String(code) + ")", true);
-  }
-
-  private finish(text: string, error: boolean): void {
-    if (this.done) return;
-    this.done = true;
-    this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: error ? "failed" : "done", summary: error ? text.split("\n")[0] : this.description });
+    if (this.closed) return;
+    const text = this.entry.name + " ended (exit code " + String(code) + ")";
+    if (this.busy) {
+      this.promptDone(text, true);
+      return;
+    }
+    this.closed = true;
+    this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: "stopped", summary: text });
     this.flush();
+    this.persist();
     this.onDone();
-    if (this.proc !== null) this.proc.stop(500);
-    if (error) this.reject(new Error(text));
-    else this.resolve(text);
+    if (this.background) this.notify(text, true);
+    else this.reject(new Error(text));
   }
 }
 
@@ -1807,15 +1907,15 @@ widecode.plugin({
     // Sessions made and left by widecode processes gone (one quit without writing to its session).
     sweep(api, agents, "");
     if (tasks.targets.length === 0) return;
-    /** The runs under way, so the limit is kept. */
+    /** The live runs by id: a background run can be messaged or stopped after its call answered. */
+    const runs = new Map<string, SubagentRun>();
     let running = 0;
     const names = tasks.targets.map((t) => t.name);
     api.tools.add({
       name: "Task",
-      description: "Run a subagent in another agent and model, in this folder. Targets: " + tasks.targets.map((t) => t.name + " (" + t.agent + (t.model.length > 0 ? " " + t.model : "") + ")").join(", ") + ". The subagent is not Claude: it runs on the target's model, its steps show under the call, and its final answer is the result.",
+      description: "Run a subagent in another agent and model, in this folder. Targets: " + tasks.targets.map((t) => t.name + " (" + t.agent + (t.model.length > 0 ? " " + t.model : "") + ")").join(", ") + ". The subagent is not Claude: it runs on the target's model, its steps show under the call, and its final answer is the result. With run_in_background it starts and answers at once; the call id is its id for TaskStop and SendMessage, and its end comes back as a message.",
       category: "agent",
-      except: ["acp"],
-      input: { type: "object", properties: { description: { type: "string", description: "A short label for the call." }, prompt: { type: "string", description: "The whole task for the subagent." }, subagent_type: { type: "string", enum: names, description: "Which target to run." }, model: { type: "string", description: "A model for this call, overriding the target's." }, cwd: { type: "string", description: "The folder; the session's folder when left out." }, name: { type: "string", description: "A display name." } }, required: ["description", "prompt"] },
+      input: { type: "object", properties: { description: { type: "string", description: "A short label for the call." }, prompt: { type: "string", description: "The whole task for the subagent." }, subagent_type: { type: "string", enum: names, description: "Which target to run." }, model: { type: "string", description: "A model for this call, overriding the target's." }, cwd: { type: "string", description: "The folder; the session's folder when left out." }, name: { type: "string", description: "A display name." }, isolation: { type: "string", enum: ["worktree"], description: "Run it in a git worktree of this folder." }, run_in_background: { type: "boolean", description: "Start it and answer at once; it goes on after this turn." } }, required: ["description", "prompt"] },
       call: (args, ctx) => {
         const wanted = str(args.subagent_type).length > 0 ? str(args.subagent_type) : names[0] ?? "";
         const target = tasks.targets.find((t) => t.name === wanted);
@@ -1827,15 +1927,59 @@ widecode.plugin({
         const folder = api.state.active().folder;
         const cwd = str(args.cwd);
         if (cwd.length > 0 && cwd !== folder) throw new Error("a subagent runs in " + folder + ", not " + cwd);
-        if (ctx.toolUseId.length === 0) throw new Error("the agent did not name this call");
+        const isolation = str(args.isolation);
+        if (isolation.length > 0 && isolation !== "worktree") throw new Error("isolation is \"worktree\" or none");
+        const synthetic = ctx.toolUseId.length === 0;
+        const id = synthetic ? "task-" + ctx.callId : ctx.toolUseId;
         if (running >= tasks.maxConcurrent) throw new Error("too many subagents run (" + String(tasks.maxConcurrent) + ")");
-        running++;
-        const run = new SubagentRun(api, entry, target, folder, str(args.model).length > 0 ? str(args.model) : target.model, ctx.toolUseId, str(args.description).length > 0 ? str(args.description) : str(args.name), () => {
-          running--;
+        const description = str(args.description).length > 0 ? str(args.description) : str(args.name);
+        const startRun = (cwd: string, worktree: string): Promise<string> => {
+          running++;
+          const run = new SubagentRun(api, entry, target, cwd, worktree, str(args.model).length > 0 ? str(args.model) : target.model, id, description, synthetic, args.run_in_background === true, tasks.timeoutMs, () => {
+            running--;
+            runs.delete(id);
+          });
+          if (!run.createCard()) {
+            running--;
+            throw new Error("the main agent cannot take a subagent card");
+          }
+          runs.set(id, run);
+          ctx.onCancel(() => run.cancel());
+          return run.start(prompt);
+        };
+        if (isolation !== "worktree") return startRun(folder, "");
+        const part = id.replace(/[^A-Za-z0-9_.-]/g, "_");
+        const path = folder + "/.widecode/worktrees/" + part;
+        const branch = "widecode/task-" + part;
+        return api.process.run("mkdir -p " + quote(folder + "/.widecode/worktrees") + " && git -C " + quote(folder) + " worktree add -b " + quote(branch) + " " + quote(path), "", 15000).then((r) => {
+          if (r.code !== 0) throw new Error("cannot make a worktree: " + (r.err.trim().length > 0 ? r.err.trim() : r.out.trim()));
+          return startRun(path, path + " (branch " + branch + ")");
         });
-        ctx.onCancel(() => run.cancel());
-        api.after(tasks.timeoutMs, () => run.timeout());
-        return run.start(prompt);
+      },
+    });
+    api.tools.add({
+      name: "TaskStop",
+      description: "Stop a subagent started with Task, by its task_id.",
+      input: { type: "object", properties: { task_id: { type: "string", description: "The id Task answered, or the call id." } }, required: ["task_id"] },
+      call: (args) => {
+        const id = str(args.task_id);
+        const run = runs.get(id);
+        if (run === undefined) throw new Error("no subagent " + id);
+        run.cancel();
+        return "stopped " + id;
+      },
+    });
+    api.tools.add({
+      name: "SendMessage",
+      description: "Send a message to an idle background subagent started with Task, by its task_id.",
+      input: { type: "object", properties: { task_id: { type: "string", description: "The id Task answered, or the call id." }, message: { type: "string", description: "What to tell the subagent." } }, required: ["task_id", "message"] },
+      call: (args) => {
+        const id = str(args.task_id);
+        const run = runs.get(id);
+        if (run === undefined) throw new Error("no subagent " + id);
+        const why = run.send(str(args.message));
+        if (why.length > 0) throw new Error(why);
+        return "sent to " + id;
       },
     });
   },

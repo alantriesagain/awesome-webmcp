@@ -410,6 +410,31 @@ export class Store {
     }
   }
 
+  /** A Task run's transcript as kept under `folder`'s `.widecode/tasks/<session>/<call>.jsonl` ("" for none). */
+  taskTranscript(folder: string, session: string, call: string): string {
+    return readTextOr(this.taskPath(folder, session, call), "");
+  }
+
+  /** Keep a Task run's transcript under the project; false when it cannot be written. */
+  saveTaskTranscript(folder: string, session: string, call: string, text: string): boolean {
+    const path = this.taskPath(folder, session, call);
+    try {
+      mkdirSync(join(folder, ".widecode", "tasks", this.taskPart(session)), { recursive: true });
+      writeAtomic(path, text);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private taskPart(id: string): string {
+    return id.replace(/[^A-Za-z0-9_.-]/g, "_");
+  }
+
+  private taskPath(folder: string, session: string, call: string): string {
+    return join(folder, ".widecode", "tasks", this.taskPart(session), this.taskPart(call) + ".jsonl");
+  }
+
   limits(agent = "claude"): Limits {
     return this.limitsStore.limits(agent);
   }

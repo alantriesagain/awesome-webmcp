@@ -53,8 +53,9 @@ export const answerAgent = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
       return answer(n);
     }
     case "conversation.subagent": {
-      // A run under a call of the open turn: the conversation's model only, never its status.
-      const n = applySubagentEvents(h.conversation.model, str(a[1]), a[2]);
+      // A run under a call of the open turn (or a transcript read back into a closed one): the
+      // conversation's model only, never its status.
+      const n = applySubagentEvents(h.conversation.model, str(a[1]), a[2], a[3] === true);
       if (n > 0) h.conversation.changed();
       return answer(n);
     }
@@ -236,7 +237,7 @@ export const NAMESPACE_AGENTS = new PreludePart("agents", `        register: (a)
 
 /** The `conversation` namespace of the plugin API, its JS side: the calls these answers take. */
 export const NAMESPACE_CONVERSATION = new PreludePart("conversation", `        apply: (events) => call("conversation.apply", id, Array.isArray(events) ? events : [events]),
-        subagent: (callId, events) => call("conversation.subagent", id, String(callId), Array.isArray(events) ? events : [events]),
+        subagent: (callId, events, historical) => call("conversation.subagent", id, String(callId), Array.isArray(events) ? events : [events], historical === true),
         ask: (request, parent) => later("conversation.ask", id, request, String(parent ?? "")),
 `);
 

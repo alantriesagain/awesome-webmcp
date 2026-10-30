@@ -123,6 +123,15 @@ export const answerSessions = (rt: JsRuntime, name: string, a: unknown[]): HostA
           out.push(objectText(["name", "runs", "typed", "failed", "lastMs"], [json(u.name), String(u.runs), String(u.typed), String(u.failed), String(u.lastMs)]));
       return answerText("[" + out.join(",") + "]");
     }
+    case "store.taskTranscript": {
+      // A Task run's steps kept under the project, for a session reading them back.
+      const store = h.session.store;
+      return answer(store !== null ? store.taskTranscript(h.workspace.folder, str(a[0]), str(a[1])) : "");
+    }
+    case "store.saveTaskTranscript": {
+      const store = h.session.store;
+      return answer(store !== null && store.saveTaskTranscript(h.workspace.folder, str(a[0]), str(a[1]), str(a[2])));
+    }
     case "store.saveLimits": {
       // The account's rate limits as the agent last reported them, read by the next run's status.
       const store = h.session.store;
@@ -169,6 +178,8 @@ export const NAMESPACE_STORE = new PreludePart("store", `        session: (sid) 
         updateSession: (sid, fields) => call("store.updateSession", String(sid), fields),
         saveSkillRun: (r) => call("store.saveSkillRun", { skill: String(r.skill ?? ""), callId: String(r.callId ?? ""), state: String(r.state ?? ""), startedMs: Number(r.startedMs ?? 0), endedMs: Number(r.endedMs ?? 0), calls: Number(r.calls ?? 0) }),
         skillUsage: () => call("store.skillUsage"),
+        taskTranscript: (session, callId) => call("store.taskTranscript", String(session), String(callId)),
+        saveTaskTranscript: (session, callId, text) => call("store.saveTaskTranscript", String(session), String(callId), String(text)),
         saveLimits: (l) => call("store.saveLimits", Number(l.fiveHourPct ?? -1), Number(l.fiveHourResets ?? 0), Number(l.weekPct ?? -1), Number(l.weekResets ?? 0)),
 `);
 

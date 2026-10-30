@@ -293,11 +293,17 @@ targets:
 A target names an entry in `agents`, its model and what it is for. The run starts that entry in
 the session's folder, streams its thought, words, calls, plans and diffs under the Task call, puts
 its permission asks in the request panel under the call, marks the call in the Agents tab, and
-answers Claude with its last words. `replaceClaudeSubagents` adds
+answers the main agent with its last words. `run_in_background` starts the run and answers at once;
+its call id is the `task_id` for `TaskStop` and `SendMessage`, and its end comes back as a message
+to the main agent. `replaceClaudeSubagents` adds
 `--disallowedTools Task,Agent,TaskStop,SendMessage` to Claude's start, so its own subagent tools
-step aside; `plugins.claude.keepSubagents` keeps them. The Task tool is kept from ACP agents, so a
-subagent cannot call it again. It starts no widecode MCP server inside the subagent, and background
-runs, resume, worktree isolation and a persisted transcript are not implemented yet.
+step aside; `plugins.claude.keepSubagents` keeps them. A main agent that names no tool-use id (an
+ACP agent) gets a card the tool makes itself, beside the call card. Subagents are not given
+widecode's MCP server, so they cannot call Task again. With `isolation: "worktree"` the run starts
+in a git worktree under `.widecode/worktrees/<id>` and answers with its path and branch; widecode
+leaves it there to inspect or remove. Each run's events are kept under
+`.widecode/tasks/<session>/<call>.jsonl`; opening the call in a resumed session reads them back.
+Remote isolation is not offered.
 
 An image is attached by an `@path` typed in the message, or by pasting a path a file manager copied
 (a `file://` URI, an absolute path, or one under `~`, quoted or not, one file per line and spaces in
@@ -502,7 +508,7 @@ phase, the agent's events) and the screen as it was.
 | `status` | the session table under the chat and the calls' under the tools column, their segments and command cells | `separator`, `lines`, `toolsLines` | |
 | `models` | F5, `/model`, `/effort`, the `model` segment | `list` (Claude Code's), `agents` (another agent's, by id), `effort` (`default`, by `providers`, by `models`) | the model chosen, by agent; the effort chosen, by model, provider and overall |
 | `claude` | Claude Code as the agent: its CLI over stream-json, its records read into the conversation, its transcripts resumed and listed, its status line data, its skills (from disk before it starts) | `id`, `projects`, `configDir` | |
-| `acp` | the agents spoken to over ACP, opencode and the DeepSeek Harness by default: their session, started with widecode, their turns, calls, diffs, todo lists, subagents, permissions, model, effort and mode (config options), and sessions; widecode's MCP server offered to them; `Task`, Claude's subagent tool over configured ACP targets | `agents`, `tasks` | sessions made and not written to, deleted when left |
+| `acp` | the agents spoken to over ACP, opencode and the DeepSeek Harness by default: their session, started with widecode, their turns, calls, diffs, todo lists, subagents, permissions, model, effort and mode (config options), and sessions; widecode's MCP server offered to them; `Task`, `TaskStop` and `SendMessage`, subagents over configured ACP targets, in the foreground or background | `agents`, `tasks` | sessions made and not written to, deleted when left |
 | `ask` | widecode's tools for an agent without its own: `AskUser` (questions in the request panel), `PresentPlan` (a plan to approve, leaving plan mode) | `names` | |
 | `harness` | widecode's tools for the agent to probe and reshape widecode itself, over the MCP server: `screen`, `state`, `log`, `api`, `check`, `reload`, `config` (The harness, above) | | |
 | `languages` | JavaScript, TypeScript, JSON, CSS, HTML, Markdown | | |

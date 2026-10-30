@@ -113,6 +113,8 @@ const main = async (): Promise<void> => {
   eq("a flat file's windows stay Claude's as another agent's are added", String(reread.limits().fiveHour.usedPercent) + " " + String(reread.limits("opencode").fiveHour.usedPercent), "12 7");
   rmSync(fresh, { recursive: true, force: true });
 
+  ok("a task transcript round trips under the project", store.saveTaskTranscript(project, "s-1", "task-2", "{\"type\":\"text\"}\n") && store.taskTranscript(project, "s-1", "task-2") === "{\"type\":\"text\"}\n");
+
   const l = new Limits();
   l.fiveHour.usedPercent = 4;
   l.fiveHour.resetsAt = 1791939600;

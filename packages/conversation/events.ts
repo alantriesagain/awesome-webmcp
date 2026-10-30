@@ -165,8 +165,10 @@ const kindOf = (kind: string): number => (kind === "tool" ? TOOL : kind === "thi
 
 /** Count a call the status shows by kind (reads, writes, runs, subagents), once. */
 const counted = (info: StatusInfo, item: Item, before: string): void => {
-  if (before.length > 0 || item.category.length === 0) return;
-  info.calls++;
+  if (item.category.length === 0 || before === item.category) return;
+  // A call counted as another kind (Claude knows the tool, not what it does) moves to what its
+  // facts say: the call count stays one, the kind's count moves with it.
+  if (before.length === 0) info.calls++;
   if (item.category === READ || item.category === SEARCH) info.reads++;
   else if (item.category === EDIT) info.writes++;
   else if (item.category === RUN) info.execs++;
@@ -495,9 +497,12 @@ const SUBAGENT_TYPES = ["block", "text", "partial", "input", "facts", "finish", 
  * that is thrown away. Answers how many it applied. A call whose turn has closed takes nothing, and
  * an event with no parent is the call's own.
  */
-export const applySubagentEvents = (model: ChatModel, callId: string, events: unknown): number => {
+export const applySubagentEvents = (model: ChatModel, callId: string, events: unknown, historical = false): number => {
   const call = model.tool(callId);
-  if (call === null || call.turn === null || call.turn !== model.current) return 0;
+  if (call === null || call.turn === null) return 0;
+  // A foreground run ends with its turn; a background one goes on after it, under its card.
+  // `historical` is a transcript read back into a call whose turn has long closed.
+  if (!historical && call.turn !== model.current && !(call.task !== null && call.task.background)) return 0;
   const info = new StatusInfo();
   model.now = Date.now();
   let applied = 0;

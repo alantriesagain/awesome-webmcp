@@ -198,9 +198,14 @@ these.
 
 Claude's subagents can run on an ACP target instead: the acp section's `tasks.targets` gives a
 `Task` tool (Claude sees `mcp__widecode__Task`) whose `subagent_type` picks an entry, a model and
-what it is for, streams the run under the call and answers with its last words.
-`replaceClaudeSubagents` adds `--disallowedTools Task,Agent,TaskStop,SendMessage` to Claude's start,
-so its own subagent tools step aside; `plugins.claude.keepSubagents` keeps them.
+what it is for, streams the run under the call and answers with its last words. With
+`run_in_background` it starts and answers at once; `TaskStop` and `SendMessage` manage it by the id
+it returns, and its end comes back as a message to the main agent. A main agent that gives no
+tool-use id, such as an ACP agent, gets a card the tool makes itself. `isolation: "worktree"` runs
+it in a git worktree under `.widecode/worktrees/<id>` and answers with its path; the run's steps are
+kept under `.widecode/tasks/<session>/<call>.jsonl` and read back when a resumed session opens the
+call. `replaceClaudeSubagents` adds `--disallowedTools Task,Agent,TaskStop,SendMessage` to Claude's
+start, so its own subagent tools step aside; `plugins.claude.keepSubagents` keeps them.
 
 widecode keeps a project's sessions in the project, in `.widecode/sessions/<id>.json` (each
 session's title, model, cost across CLI processes, thinking tokens, the commit it started on), so
