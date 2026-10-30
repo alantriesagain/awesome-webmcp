@@ -153,12 +153,18 @@ export const answerAgent = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
       h.conversation.interrupt();
       return answer(null);
     case "agent.send": {
-      // A message from the user: the images it names attached; "" or why it was not sent (the folder not trusted, the agent not starting).
+      // A message from the user, or one `options.from` names another sender of (a finished task): the images it names attached; "" or why it was not sent (the folder not trusted, the agent not starting).
       if (!h.session.trusted.peek()) return answerText(objectText(["error", "images"], [json(h.session.untrusted()), "0"]));
-      h.messageSending.fire();
+      let from = "";
+      const options = a[1];
+      if (typeof options === "object" && options !== null && !Array.isArray(options)) {
+        const named = (options as { from?: unknown }).from;
+        if (typeof named === "string") from = named;
+      }
+      if (from.length === 0) h.messageSending.fire();
       const attached = attachImages(str(a[0]), h.workspace.folder);
       if (attached.error.length > 0) return answerText(objectText(["error", "images"], [json(attached.error), "0"]));
-      const error = h.conversation.send(attached.text, attached.images);
+      const error = h.conversation.send(attached.text, attached.images, from);
       return answerText(objectText(["error", "images"], [json(error.length > 0 ? "cannot start " + h.conversation.agent.name() + ": " + error : ""), String(attached.images.length)]));
     }
     case "agent.reset":
@@ -215,7 +221,7 @@ export const answerAgent = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
 export const NAMESPACE_AGENTS = new PreludePart("agents", `        register: (a) => {
           call("agents.register", id, String(a.id), String(a.name ?? a.id), a.choices ?? null, [
             fn((o) => a.start(o) ?? ""),
-            fn((text, images) => a.send(text, images) ?? ""),
+            fn((text, images, from) => a.send(text, images, from) ?? ""),
             opt(a.interrupt, () => { a.interrupt(); }),
             opt(a.setMode, (mode) => a.setMode(mode) ?? ""),
             opt(a.setModel, (name) => { a.setModel(name); }),
@@ -256,7 +262,7 @@ export const NAMESPACE_AGENT = new PreludePart("agent", `        info: () => cal
         mode: () => call("agent.mode"),
         setMode: (mode) => call("agent.setMode", String(mode)),
         interrupt: () => call("agent.interrupt"),
-        send: (text) => call("agent.send", String(text)),
+        send: (text, options) => call("agent.send", String(text), options ?? null),
         reset: () => call("agent.reset"),
         resume: (id, title) => call("agent.resume", String(id), String(title ?? "")),
         sessionId: () => call("agent.sessionId"),

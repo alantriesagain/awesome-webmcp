@@ -205,8 +205,8 @@ export class Conversation {
   }
 
   /** Send a message (queued by the agent while a turn runs). Answers "" or why it could not. */
-  send(text: string, images: ImageBlock[]): string {
-    return this.agent.send(text, images);
+  send(text: string, images: ImageBlock[], from: string = ""): string {
+    return this.agent.send(text, images, from);
   }
 
   /** Switch the agent's mode (plan mode and back); starts the agent when it is not running. Answers "" or why not. */

@@ -101,7 +101,7 @@ export class Agent {
   receive(_line: string): void {}
 
   /** Send a message; "" or why it could not. */
-  send(_text: string, _images: ImageBlock[]): string {
+  send(_text: string, _images: ImageBlock[], _from: string = ""): string {
     return "no agent";
   }
 

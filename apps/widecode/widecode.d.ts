@@ -285,7 +285,8 @@ declare namespace widecode {
     /** Start at launch, after /new and in a folder opened, not on the first message: an agent whose models and efforts come with its session. */
     eager?: boolean;
     start(options: AgentStart): string | void;
-    send(text: string, images: { mediaType: string; data: string; path?: string }[]): string | void;
+    /** `from` is "" for a message the user sent, else what sent it (a finished task's "task"). */
+    send(text: string, images: { mediaType: string; data: string; path?: string }[], from?: string): string | void;
     interrupt?(): void;
     setMode?(mode: string): string | void;
     setModel?(name: string): void;
@@ -888,8 +889,12 @@ declare namespace widecode {
       /** Switch modes, starting the agent if needed; "" or why not. */
       setMode(mode: string): string;
       interrupt(): void;
-      /** Send a message (images it names by path attached); `error` is "" when sent. */
-      send(text: string): { error: string; images: number };
+      /**
+       * Send a message (images it names by path attached); `error` is "" when sent. `from` is ""
+       * or absent for a message the user sent, else what sent it (a finished task's "task"): the
+       * core does not fire `messageSending` for it.
+       */
+      send(text: string, options?: { from?: string }): { error: string; images: number };
       /** Start over with a new session. */
       reset(): void;
       resume(id: string, title?: string): void;

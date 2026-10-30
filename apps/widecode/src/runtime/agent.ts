@@ -221,7 +221,7 @@ export class JsAgent extends Agent {
     this.call(RECEIVE, "[" + json(line) + "]");
   }
 
-  override send(text: string, images: ImageBlock[]): string {
+  override send(text: string, images: ImageBlock[], from: string = ""): string {
     const c = this.conversation;
     if (c === null) return "no conversation";
     const error = this.ensureStarted();
@@ -229,7 +229,7 @@ export class JsAgent extends Agent {
     c.model.send(text, images.length);
     const imgs: string[] = [];
     for (const i of images) imgs.push('{"mediaType":' + json(i.mediaType) + ',"data":' + json(i.data) + ',"path":' + json(i.path) + "}");
-    const sent = this.text(this.call(SEND, "[" + json(text) + ",[" + imgs.join(",") + "]]"));
+    const sent = this.text(this.call(SEND, "[" + json(text) + ",[" + imgs.join(",") + "]," + json(from) + "]"));
     c.changed();
     return sent;
   }

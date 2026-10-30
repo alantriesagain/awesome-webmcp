@@ -3,7 +3,7 @@
 // and the request panel offers waiting, changing model (/model in the composer) or sending the
 // message again when the limit resets. Limits are kept per agent (services/store.ts), so another
 // agent's status does not show Claude Code's windows.
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "@widecode/conversation/conversation.ts";
@@ -65,6 +65,45 @@ const main = async (): Promise<void> => {
   const third = c.model.openRequests()[0];
   choose(c, third !== undefined ? third.questions[0].options[2].label : "");
   ok("retrying is scheduled for the reset", await until(() => app.host.screen.message.peek().startsWith("retrying in ")));
+
+  // A send from a finished task arrives while a retry waits: it does not fire messageSending, and
+  // the retry still sends the user's message (not the task's report).
+  const folder2 = mkdtempSync(join(tmpdir(), "widecode-limits-task-"));
+  const fixture = join(folder2, "hold.ndjson");
+  writeFileSync(fixture, '{"dir":"out","raw":"{\\"type\\":\\"system\\",\\"subtype\\":\\"status\\",\\"status\\":\\"requesting\\"}"}\n');
+  const ws2 = await openWorkspace(folder2, 100);
+  const c2 = new Conversation(ws2.folder);
+  c2.executable = join(process.cwd(), "test", "fake-claude.mjs");
+  c2.extraArgs.push("--fixture", fixture);
+  const app2 = createWidecode(ws2, c2, null);
+  const written: string[] = [];
+  c2.onWrite = (line: string) => written.push(line);
+  let sending = 0;
+  app2.host.messageSending.add("test", () => {
+    sending++;
+  });
+  const promptOf = (line: string): string => {
+    const v = JSON.parse(line) as { message?: { content?: { type?: string; text?: string }[] } };
+    for (const b of v.message?.content ?? []) if (b.type === "text" && typeof b.text === "string") return b.text;
+    return "";
+  };
+  eq("the user's message is sent", c2.send("the user's message", []), "");
+  c2.model.openTurn("go", 0, true);
+  c2.receive('{"type":"result","subtype":"success","is_error":true,"result":"You\'ve hit your session limit · resets in 1 second"}');
+  ok("a short limit is put to the user", await until(() => c2.model.openRequests().length > 0));
+  const short = c2.model.openRequests()[0];
+  choose(c2, short !== undefined ? short.questions[0].options[2].label : "");
+  ok("the retry is scheduled", await until(() => app2.host.screen.message.peek().startsWith("retrying in ")));
+  const answer = app2.js.answer("agent.send", JSON.stringify(["the task finished", { from: "task" }]));
+  const sent = JSON.parse(answer.text) as { error: string };
+  eq("a send from a task is accepted", sent.error, "");
+  eq("and does not fire messageSending", String(sending), "0");
+  ok("and the retry stays scheduled", app2.host.screen.message.peek().startsWith("retrying in "));
+  ok("the retry fires and resends the user's message", await until(() => written.length > 0 && promptOf(written[written.length - 1]) === "the user's message", 12000));
+  app2.host.kernel.stop();
+  app2.js.killProcesses();
+  ws2.close();
+  rmSync(folder2, { recursive: true, force: true });
 
   // The windows are the agent's: Claude Code's are not another agent's.
   const home = mkdtempSync(join(tmpdir(), "widecode-limits-home-"));

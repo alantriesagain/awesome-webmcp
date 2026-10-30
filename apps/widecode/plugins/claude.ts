@@ -1436,9 +1436,11 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     retryAt = 0;
   };
 
-  const sendMessage = (text: string, images: { mediaType: string; data: string; path?: string }[]): string => {
-    if (!retrying) cancelRetry();
-    lastPrompt = { text, images };
+  const sendMessage = (text: string, images: { mediaType: string; data: string; path?: string }[], from: string = ""): string => {
+    if (from.length === 0) {
+      if (!retrying) cancelRetry();
+      lastPrompt = { text, images };
+    }
     const content: unknown[] = images.map((i) => ({ type: "image", source: { type: "base64", media_type: i.mediaType, data: i.data } }));
     content.push({ type: "text", text });
     // Its uuid lets it be taken back while it waits in the CLI's queue (cancel_async_message).
@@ -1529,8 +1531,8 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     start(o) {
       return start(o);
     },
-    send(text, images) {
-      return sendMessage(text, images);
+    send(text, images, from) {
+      return sendMessage(text, images, from);
     },
     withdraw() {
       if (withdrawing) return "";

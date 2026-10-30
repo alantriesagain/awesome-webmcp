@@ -1765,7 +1765,7 @@ class SubagentRun {
     this.api.note("background subagent " + this.callId + " " + (error ? "failed" : "finished"));
     if (!this.api.agent.started()) return;
     const line = "[background subagent " + this.callId + " " + (error ? "failed" : "finished") + "]\n" + text;
-    const r = this.api.agent.send(line);
+    const r = this.api.agent.send(line, { from: "task" });
     if (r.error.length > 0) this.api.note("background subagent " + this.callId + ": " + r.error);
   }
 
