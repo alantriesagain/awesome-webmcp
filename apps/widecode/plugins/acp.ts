@@ -448,7 +448,54 @@ const sweep = (api: widecode.Api, agents: Record<string, Entry>, except: string)
   }
 };
 
-const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAdapter => {
+/** A call of widecode's Task tool that the ACP main announced and has not completed: which call, and what it asked. */
+class PendingTask {
+  readonly id: string;
+  prompt: string;
+  description: string;
+  claimed = false;
+
+  constructor(id: string, prompt: string, description: string) {
+    this.id = id;
+    this.prompt = prompt;
+    this.description = description;
+  }
+}
+
+/**
+ * The ACP main's calls of widecode's Task tool that are in flight: it announces each with a
+ * toolCallId of its own and the call's input, so the Task tool runs under that card instead of
+ * making one. A call is dropped once it completes or fails.
+ */
+class TaskCalls {
+  private calls: PendingTask[] = [];
+
+  /** Keep call `id`, or update what it asks, while it is in flight. */
+  record(id: string, prompt: string, description: string): void {
+    const found = this.calls.find((c) => c.id === id);
+    if (found !== undefined) {
+      found.prompt = prompt;
+      found.description = description;
+      return;
+    }
+    this.calls.push(new PendingTask(id, prompt, description));
+  }
+
+  /** The call is over: drop it. */
+  done(id: string): void {
+    this.calls = this.calls.filter((c) => c.id !== id);
+  }
+
+  /** Claim the oldest unclaimed call that asked for `prompt` with `description`; "" when none does. */
+  claim(prompt: string, description: string): string {
+    const found = this.calls.find((c) => !c.claimed && c.prompt === prompt && c.description === description);
+    if (found === undefined) return "";
+    found.claimed = true;
+    return found.id;
+  }
+}
+
+const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCalls): widecode.AgentAdapter => {
   const entries: Record<string, Entry> = {};
   entries[id] = entry;
   let proc: widecode.ProcessHandle | null = null;
@@ -684,6 +731,11 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
     else emit({ type: "facts", id: callId, ...facts });
     if (u.rawInput !== undefined) emit({ type: "input", key: callId, input: u.rawInput, ...(subagent ? { name: "Agent" } : todos.length > 0 ? { name: "Todo" } : {}) });
     const status = str(u.status);
+    // A call of widecode's Task tool is in flight until it completes or fails: the Task tool runs
+    // under this card when its input is the one asked for here. Any call that ends is dropped, since
+    // the agent may retitle it on the way.
+    if (status === "completed" || status === "failed") taskCalls.done(callId);
+    else if (tool !== null && tool.name === "Task" && input !== null) taskCalls.record(callId, str(input.prompt), str(input.description));
     if (status !== "completed" && status !== "failed") return;
     // The diff with the file's line numbers when the agent gives one (opencode 1.19's unified diff,
     // 1.2's whole file before and after), else from the diff content's texts (opencode's are the
@@ -1485,6 +1537,27 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAd
       if (folder !== listedFolder || Date.now() - listedAt > LISTING_MS) readSessions(folder);
       return folder === listedFolder ? listed : [];
     },
+    loadSubagent(callId) {
+      // A Task run keeps its own transcript under the session it started in; read it back under
+      // the call, as Claude's adapter does.
+      const sid = session.length > 0 ? session : api.agent.sessionId();
+      if (sid.length === 0) return false;
+      let raw = "";
+      try {
+        raw = api.store.taskTranscript(sid, callId);
+      } catch {
+        raw = "";
+      }
+      if (raw.length === 0) return false;
+      const events: unknown[] = [];
+      for (const line of raw.split("\n")) if (line.length > 0) {
+        const v = parse(line);
+        if (v !== null) events.push(v);
+      }
+      if (events.length === 0) return false;
+      api.conversation.subagent(callId, events as widecode.ConversationEvent[], true);
+      return true;
+    },
     stop() {
       if (proc !== null) proc.stop(2000);
     },
@@ -1925,7 +1998,9 @@ widecode.plugin({
     const section = api.settings.section();
     const agents = agentsOf(section);
     const tasks = tasksOf(section);
-    for (const id of Object.keys(agents)) api.agents.register(acpAgent(api, id, agents[id]));
+    /** The ACP main's calls of widecode's Task tool that are in flight, which the Task tool runs under. */
+    const taskCalls = new TaskCalls();
+    for (const id of Object.keys(agents)) api.agents.register(acpAgent(api, id, agents[id], taskCalls));
     // Sessions made and left by widecode processes gone (one quit without writing to its session).
     sweep(api, agents, "");
     if (tasks.targets.length === 0) return;
@@ -1959,10 +2034,13 @@ widecode.plugin({
         if (cwd.length > 0 && bare(cwd) !== bare(folder)) throw new Error("a subagent runs in " + folder + ", not " + cwd);
         const isolation = str(args.isolation);
         if (isolation.length > 0 && isolation !== "worktree") throw new Error("isolation is \"worktree\" or none");
-        const synthetic = ctx.toolUseId.length === 0;
-        const id = synthetic ? "task-" + ctx.callId : ctx.toolUseId;
         if (working() >= tasks.maxConcurrent) throw new Error("too many subagents run (" + String(tasks.maxConcurrent) + ")");
         const description = str(args.description).length > 0 ? str(args.description) : str(args.name);
+        // An ACP main names no tool-use id, but it announces the call itself: the run goes under that
+        // card when its input is this one. A card made here needs an id no earlier run took.
+        const claimed = ctx.toolUseId.length === 0 ? taskCalls.claim(prompt, description) : "";
+        const synthetic = ctx.toolUseId.length === 0 && claimed.length === 0;
+        const id = ctx.toolUseId.length > 0 ? ctx.toolUseId : claimed.length > 0 ? claimed : "task-" + Date.now().toString(36) + "-" + ctx.callId;
         const startRun = (cwd: string, worktree: string): Promise<string> => {
           const run = new SubagentRun(api, entry, target, cwd, worktree, str(args.model).length > 0 ? str(args.model) : target.model, id, description, synthetic, args.run_in_background === true, tasks.timeoutMs, () => {
             runs.delete(id);

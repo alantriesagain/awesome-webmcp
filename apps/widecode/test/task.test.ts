@@ -15,6 +15,7 @@ import { Answer, Reply } from "@widecode/conversation/requests.ts";
 import { NoStateFile } from "@light/kernel/settings.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
+import { Store } from "../src/services/store.ts";
 import { done, eq, ok } from "@light/test/assert.ts";
 import { until } from "@light/test/headless.ts";
 
@@ -137,12 +138,17 @@ const main = async (): Promise<void> => {
   const stopped = await post('{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"TaskStop","arguments":{"task_id":"toolu-bg"}}}');
   ok("a background run can be stopped", stopped.includes("stopped toolu-bg") && bg.task !== null && bg.task.status === "stopped");
 
-  // An ACP main agent names no tool-use id: the Task tool makes the card itself.
+  // An ACP main agent names no tool-use id: the Task tool makes the card itself, or runs under the
+  // card the main announced. A store keeps the runs' transcripts.
   const folder3 = mkdtempSync(join(tmpdir(), "widecode-task-acp-"));
+  const home3 = mkdtempSync(join(tmpdir(), "widecode-task-acp-home-"));
   execFileSync("git", ["init", "-q"], { cwd: folder3 });
   const ws3 = await openWorkspace(folder3, 100);
   const c3 = new Conversation(ws3.folder);
   const w3 = composeWidecode(ws3, c3);
+  const store3 = new Store(home3);
+  store3.trust(folder3);
+  await w3.host.useStore(store3);
   w3.start({ acp: { agents: { fake: { name: "Fake", command: ["node", fake] } }, tasks: { targets: { deepseek: { agent: "fake" } } } } }, new NoStateFile(), []);
   await w3.host.load();
   w3.host.session.useAgent("fake");
@@ -151,28 +157,49 @@ const main = async (): Promise<void> => {
   c3.model.openTurn("main", 0, true);
   const acpReply = await send(url3, acp, '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"Task","arguments":{"description":"acp main","prompt":"hello","subagent_type":"deepseek"}}}');
   ok("an ACP main gets the subagent's answer", acpReply.includes("Hello, world."));
-  const acpCard = c3.model.tool("task-1");
-  ok("and a subagent card it named itself", acpCard !== null && acpCard.category === "agent" && acpCard.children.some((i) => i.kind === TEXT && i.text.includes("Hello, world.")));
+  const acpCard = agentsOf(c3.model).find((i) => i.agentTask === "acp main") ?? null;
+  ok("and a subagent card it made itself", acpCard !== null && acpCard.category === "agent" && acpCard.children.some((i) => i.kind === TEXT && i.text.includes("Hello, world.")));
   c3.model.closeTurn(null);
   w3.host.roles.chat.submit("go");
   ok("the ACP main runs", await until(() => !c3.model.running && c3.model.turns.length > 0, 10000));
   c3.model.openTurn("main", 0, true);
   const bgAcp = await send(url3, acp, '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"Task","arguments":{"description":"acp background","prompt":"hello","subagent_type":"deepseek","run_in_background":true}}}');
-  ok("an ACP main starts a background run", bgAcp.includes("subagent started: task-2"));
+  const bgId = (/subagent started: ([^\s"]+)/.exec(bgAcp) ?? [])[1] ?? "";
+  ok("an ACP main starts a background run", bgId.length > 0);
   c3.model.closeTurn(null);
   ok("its card finishes", await until(() => {
-    const card = c3.model.tool("task-2");
+    const card = c3.model.tool(bgId);
     return card !== null && card.task !== null && card.task.status === "done" && card.children.some((i) => i.kind === TEXT && i.text.includes("Hello, world."));
   }, 15000));
-  ok("and the main agent hears about it", await until(() => c3.model.turns.some((t) => t.prompt !== null && t.prompt.text.includes("background subagent task-2 finished")), 15000));
+  ok("and the main agent hears about it", await until(() => c3.model.turns.some((t) => t.prompt !== null && t.prompt.text.includes("background subagent " + bgId + " finished")), 15000));
   c3.model.openTurn("main", 0, true);
   const worktree = await send(url3, acp, '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"Task","arguments":{"description":"in a worktree","prompt":"hello","subagent_type":"deepseek","isolation":"worktree"}}}');
-  ok("a worktree run answers with its path", worktree.includes("Hello, world.") && worktree.includes("worktree:") && existsSync(join(folder3, ".widecode", "worktrees", "task-3")));
+  const workPath = (/\[worktree: (.+?) \(branch /.exec(worktree) ?? [])[1] ?? "";
+  ok("a worktree run answers with its path", worktree.includes("Hello, world.") && worktree.includes("worktree:") && workPath.length > 0 && existsSync(workPath));
   c3.model.closeTurn(null);
+
+  // An ACP main announces widecode's Task call: the run goes under that call's card, not a new one.
+  w3.host.roles.chat.submit("taskcall");
+  ok("the ACP main announces a Task call", await until(() => c3.model.tool("call_widecode_task") !== null, 10000));
+  const announced = c3.model.tool("call_widecode_task");
+  const announcedReply = await send(url3, acp, '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"Task","arguments":{"description":"announced run","prompt":"hello","subagent_type":"deepseek"}}}');
+  ok("the announced run answers", announcedReply.includes("Hello, world."));
+  ok("its steps go under the announced card", announced !== null && announced.children.some((i) => i.kind === TEXT && i.text.includes("Hello, world.")));
+  ok("no synthetic card is made", agentsOf(c3.model).filter((i) => i.agentTask === "announced run").length === 1);
+  const taskFile = join(folder3, ".widecode", "tasks", c3.model.sessionId.replace(/[^A-Za-z0-9_.-]/g, "_"), "call_widecode_task.jsonl");
+  ok("the transcript is kept under the announced id", existsSync(taskFile));
+  if (announced !== null) {
+    announced.children = [];
+    announced.blocks.clear();
+    ok("the adapter reads the kept transcript back", c3.loadSubagent(announced) && announced.children.length > 0);
+  }
+  c3.interrupt();
+  ok("the announced turn ends", await until(() => !c3.model.running, 10000));
   w3.host.kernel.stop();
   w3.js.killProcesses();
   ws3.close();
   rmSync(folder3, { recursive: true, force: true });
+  rmSync(home3, { recursive: true, force: true });
 
   // Claude's own subagent tools step aside when widecode offers Task.
   const folder2 = mkdtempSync(join(tmpdir(), "widecode-task-claude-"));

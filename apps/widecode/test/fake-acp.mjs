@@ -21,6 +21,9 @@
  * - `plan`: a todo list of three entries, as a `todowrite` call's input (a plan update with
  *   `--legacy`);
  * - `task`: a subagent's call (`subagent_type`, `description`, `prompt` in its input);
+ * - `taskcall`: a call of widecode's Task tool announced as opencode announces it (`widecode_Task`,
+ *   its `description`, `prompt` and `subagent_type` in the input), left in flight until the turn is
+ *   cancelled;
  * - `skill`: a `skill` tool call loading the skill "alpha" (its `name` in the input), then a command
  *   and a message, as a skill's run goes on;
  * - `unknown`: a request of a method widecode does not offer, then a message with the error it
@@ -300,6 +303,11 @@ const prompt = (id, sessionId, params) => {
     update(sessionId, { sessionUpdate: "tool_call", toolCallId: "call_task", title: "task", kind: "think", status: "pending", rawInput: input });
     update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: "call_task", status: "completed", title: "find the tests", content: [{ type: "content", content: text("test/a.test.ts") }], rawOutput: { output: "test/a.test.ts" } });
     end("end_turn");
+  } else if (first === "taskcall") {
+    const input = { description: "announced run", prompt: "hello", subagent_type: "explore" };
+    update(sessionId, { sessionUpdate: "tool_call", toolCallId: "call_widecode_task", title: "widecode_Task", kind: "other", status: "in_progress", rawInput: input });
+    // The turn stays open, as opencode's does while the call runs.
+    slow = { id, session: sessionId };
   } else if (first === "skill") {
     // As opencode 1.19 sends it (recorded October 2026): announced with an empty input, the skill's name in the next update, retitled when done.
     update(sessionId, { sessionUpdate: "tool_call", toolCallId: "call_skill", title: "skill", kind: "other", status: "pending", locations: [], rawInput: {} });

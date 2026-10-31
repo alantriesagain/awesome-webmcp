@@ -298,7 +298,8 @@ its call id is the `task_id` for `TaskStop` and `SendMessage`, and its end comes
 to the main agent. `replaceClaudeSubagents` adds
 `--disallowedTools Task,Agent,TaskStop,SendMessage` to Claude's start, so its own subagent tools
 step aside; `plugins.claude.keepSubagents` keeps them. A main agent that names no tool-use id (an
-ACP agent) gets a card the tool makes itself, beside the call card. Subagents are not given
+ACP agent) announces the Task call itself, and the run goes under that call's card; when no
+announced call matches, the tool makes a card itself. Subagents are not given
 widecode's MCP server, so they cannot call Task again. With `isolation: "worktree"` the run starts
 in a git worktree under `.widecode/worktrees/<id>` and answers with its path and branch; widecode
 leaves it there to inspect or remove. Each run's events are kept under
