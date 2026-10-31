@@ -1512,9 +1512,12 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     if (o.systemPrompt.length > 0) command.push("--append-system-prompt", o.systemPrompt, "--system-prompt-snapshot", "off");
     // Claude Code enforces them: a deny rule blocks in every mode, an ask rule prompts (here, over stdio) in every mode.
     // Its own subagents run on the model chosen with `env`, the rest of the settings carrying the permissions.
+    // Claude Code takes an agent's own model (its definition, a model the Agent call names) over
+    // CLAUDE_CODE_SUBAGENT_MODEL, and an agent defined as "inherit" never reads it; _FORCE puts the
+    // chosen model over both, so every subagent runs on it.
     const settings: Rec = {};
     if (o.permissions.allow.length + o.permissions.ask.length + o.permissions.deny.length > 0) settings.permissions = o.permissions;
-    if (subagents.mode === "claude" && subagents.model.length > 0) settings.env = { CLAUDE_CODE_SUBAGENT_MODEL: subagents.model };
+    if (subagents.mode === "claude" && subagents.model.length > 0) settings.env = { CLAUDE_CODE_SUBAGENT_MODEL: subagents.model, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1" };
     if (Object.keys(settings).length > 0) command.push("--settings", JSON.stringify(settings));
     command.push("--permission-prompt-tool", "stdio", "--forward-subagent-text", "--replay-user-messages", ...o.args);
     const mine = ++processes;

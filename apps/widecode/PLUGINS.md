@@ -301,7 +301,7 @@ the session run on widecode's Task, starting Claude with
 `/subagents` picks what the session's subagents run on and keeps the choice in state.json:
 `claude` is Claude Code's own, with widecode's Task hidden from Claude
 (`--disallowedTools mcp__widecode__Task,...`), and `claude <model>` also sets
-`CLAUDE_CODE_SUBAGENT_MODEL` in the settings it starts with (any model alias or id); `widecode` is
+`CLAUDE_CODE_SUBAGENT_MODEL` with `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` in the settings it starts with (any model alias or id), so the model holds over an agent's own and over a model the Agent call names; `widecode` is
 widecode's Task, with Claude's own subagent tools disallowed; `both` disallows neither. With no
 choice made, the config decides as above. `/subagents` with no argument says the choice in
 use, and typing it lists the choices, the current one marked "now". A change applies at the turn's

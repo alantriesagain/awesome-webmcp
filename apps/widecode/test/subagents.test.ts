@@ -132,6 +132,7 @@ const main = async (): Promise<void> => {
   const sonnetSettings = settingsOf(sonnetArgs);
   const sonnetEnv = rec(sonnetSettings !== null ? sonnetSettings.env : null);
   eq("the subagent model reaches Claude Code", typeof sonnetEnv?.CLAUDE_CODE_SUBAGENT_MODEL === "string" ? sonnetEnv.CLAUDE_CODE_SUBAGENT_MODEL : "", "sonnet");
+  eq("and holds over an agent's own model", typeof sonnetEnv?.CLAUDE_CODE_SUBAGENT_MODEL_FORCE === "string" ? sonnetEnv.CLAUDE_CODE_SUBAGENT_MODEL_FORCE : "", "1");
   ok("and Claude's own tools are not disallowed", !sonnetArgs.includes("Task,Agent"));
   quit(sonnetApp);
 
