@@ -231,7 +231,7 @@ declare namespace widecode {
     effort: string;
     resume: string;
     executable: string;
-    /** What the agent's system prompt gets appended: the harness's fixed paragraph and the project's prompt.md ("" for nothing). */
+    /** What the agent's system prompt gets appended: the harness's fixed paragraph, the user's prompt.md and the trusted project's prompt.md ("" for nothing). */
     systemPrompt: string;
     /** Tool permission rules in Claude Code's syntax: the user's, with the trusted project's ask and deny rules added (every list empty for none). */
     permissions: { allow: string[]; ask: string[]; deny: string[] };
@@ -972,7 +972,7 @@ declare namespace widecode {
     warnings: string[];
   }
 
-  /** The project's harness folder as it stands: present or not, trusted or not, its plugin files, its prompt, its config beside the user's with the result of one over the other, and the tools the agent sees. */
+  /** The project's harness folder as it stands: present or not, trusted or not, its plugin files, its prompt, the user's prompt and its config beside the user's with the result of one over the other, and the tools the agent sees. */
   interface HarnessInfo {
     folder: string;
     dir: string;
@@ -980,6 +980,8 @@ declare namespace widecode {
     trusted: boolean;
     plugins: string[];
     prompt: { path: string; length: number };
+    /** The user-wide prompt, `prompt.md` in widecode's store (an empty path without a store). */
+    userPrompt: { path: string; length: number };
     config: {
       path: string;
       present: boolean;

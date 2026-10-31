@@ -65,6 +65,7 @@ const flag = (argv: string, name: string): string => {
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-harness-"));
   const home = mkdtempSync(join(tmpdir(), "widecode-harness-home-"));
+  writeFileSync(join(home, "prompt.md"), "Be kind.\n");
   const dir = join(folder, ".widecode");
   mkdirSync(join(dir, "plugins"), { recursive: true });
   writeFileSync(join(dir, "prompt.md"), "Be terse.\n");
@@ -101,7 +102,7 @@ const main = async (): Promise<void> => {
   ok("a turn runs and asks, so it stays open", await until(() => c.model.openRequests().length > 0, 10000));
   const argv = argvOf(args);
   const prompt = flag(argv, "--append-system-prompt");
-  ok("the CLI gets the fixed paragraph and the project's prompt appended", prompt.startsWith("You are running inside widecode") && prompt.includes(".widecode/") && prompt.endsWith("Be terse.") && !prompt.includes("not trusted"));
+  ok("the CLI gets the fixed paragraph, the user's prompt and then the project's", prompt.startsWith("You are running inside widecode") && prompt.includes(".widecode/") && prompt.includes("\n\nBe kind.\n\nBe terse.") && prompt.endsWith("Be terse.") && !prompt.includes("not trusted"));
   eq("and the snapshot of the prompt off, so an edit reaches a resumed session", flag(argv, "--system-prompt-snapshot"), "off");
   eq("the permission rules go to the CLI as settings: the user's, the project's ask and deny added, its allow left out", flag(argv, "--settings"), '{"permissions":{"allow":["Bash(npm test *)"],"ask":["Bash(git push *)"],"deny":["Read(./.env)","Bash(rm -rf *)"]}}');
   const sid = c.sessionId;
@@ -126,6 +127,11 @@ const main = async (): Promise<void> => {
   rmSync(args, { force: true });
   c.send("third", []);
   ok("the next message starts it on the same session with them", await until(() => c.started && existsSync(args) && flag(argvOf(args), "--resume") === sid, 10000) && flag(argvOf(args), "--settings") === '{"permissions":{"allow":["Bash(npm test *)"],"ask":["Bash(git push *)"],"deny":["Read(./.env)","Bash(rm -rf *)","WebFetch"]}}');
+
+  writeFileSync(join(home, "prompt.md"), "Be kind. Be brief.\n");
+  ok("the user's prompt edited during a turn: the harness says so", await until(() => c.model.openRequests().length > 0 && tell("/hc") === "3", 10000));
+  w.chat.pane.panel.key(new KeyEvent("char", "1", false, false, false), true);
+  ok("at the turn's end the CLI stops to take the new user prompt", await until(() => !c.started, 10000) && logs.some((l) => l.includes("claude stopped to pick up the harness")));
 
   eq("the project's sections over the user's, per id", JSON.stringify(mergePlugins({ a: { x: 1 }, b: false, d: true }, { b: { y: 2 }, c: true })), '{"a":{"x":1},"b":{"y":2},"d":true,"c":true}');
   eq("one side alone is the other", JSON.stringify([mergePlugins(null, { a: 1 }), mergePlugins({ a: 1 }, null), mergePlugins(null, null)]), "[{\"a\":1},{\"a\":1},null]");
@@ -193,6 +199,7 @@ const main = async (): Promise<void> => {
 
   // The same folder without trust: nothing of the harness is in use, and the agent is told.
   const other = new Store(mkdtempSync(join(tmpdir(), "widecode-harness-home2-")));
+  writeFileSync(join(other.root, "prompt.md"), "Be kind.\n");
   const ws2 = await openWorkspace(folder, 100);
   const c2 = new Conversation(ws2.folder);
   c2.executable = fake;
@@ -207,7 +214,7 @@ const main = async (): Promise<void> => {
   c2.send("go", []);
   ok("a turn ran", await until(() => !c2.model.running && c2.model.turns.length === 1, 10000));
   const prompt2 = flag(argvOf(args2), "--append-system-prompt");
-  ok("the agent gets the fixed paragraph alone, saying the folder is not trusted", prompt2.startsWith("You are running inside widecode") && prompt2.includes("not trusted yet") && !prompt2.includes("Be terse."));
+  ok("the agent gets the fixed paragraph and the user's prompt alone, the folder's out and the folder said not trusted", prompt2.startsWith("You are running inside widecode") && prompt2.includes("not trusted yet") && prompt2.includes("Be kind.") && !prompt2.includes("Be terse.") && prompt2.endsWith("Be kind."));
   const chatOf = (x: Widecode): string => {
     const s = x.chat.pane.source;
     s.prepare(160);
@@ -217,6 +224,15 @@ const main = async (): Promise<void> => {
   };
   w2.host.kernel.commands.run("/harness");
   ok("/harness untrusted: the chat says so, the plugin files not loaded, the config not in use", chatOf(w2).includes("not trusted (/trust runs it)") && chatOf(w2).includes("greeter.js (not loaded)") && chatOf(w2).includes("zed.js (not loaded)") && chatOf(w2).includes("config.json: present, not in use"));
+
+  // Without a store (--ephemeral): no user-wide prompt, the folder's alone.
+  const ws4 = await openWorkspace(folder, 100);
+  const c4 = new Conversation(ws4.folder);
+  const w4: Widecode = composeWidecode(ws4, c4);
+  await w4.host.useStore(null);
+  w4.start(null, new NoStateFile(), []);
+  await w4.host.load();
+  ok("no store: no user prompt, only the trusted folder's", w4.host.harness.userPromptPath === "" && !w4.host.harness.systemPrompt([]).includes("Be kind.") && w4.host.harness.systemPrompt([]).endsWith("Be terse. Prefer lists."));
 
   // /harness and /harness init on a folder of its own, trusted from the start.
   const folder3 = mkdtempSync(join(tmpdir(), "widecode-harness-init-"));
@@ -253,8 +269,13 @@ const main = async (): Promise<void> => {
 
   c.kill();
   c2.kill();
+  c4.kill();
   w.host.harness.stopWatching();
   w.js.stopWatching();
+  w4.host.harness.stopWatching();
+  w4.host.kernel.stop();
+  w4.js.killProcesses();
+  ws4.close();
   ws.close();
   ws2.close();
   rmSync(folder, { recursive: true, force: true });

@@ -57,7 +57,13 @@ export class SessionController extends Controller {
     super("session");
     this.conversation = conversation;
     this.harness = new Harness(folder);
+    this.harness.userPromptPath = this.userPromptPath();
     this.wire(conversation);
+  }
+
+  /** The user-wide prompt, `prompt.md` in the store's root ("" without a store). */
+  private userPromptPath(): string {
+    return this.store !== null ? join(this.store.root, "prompt.md") : "";
   }
 
   private wire(c: Conversation): void {
@@ -69,6 +75,7 @@ export class SessionController extends Controller {
   /** Give the session its store (the entry does, before the first conversation starts); `folder` is the one open. */
   async useStore(store: Store | null, folder: string): Promise<void> {
     this.store = store;
+    this.harness.userPromptPath = this.userPromptPath();
     this.setTrusted(store === null || store.trusted(folder));
     if (store !== null) {
       const records = new SessionRecords(store, this.sessionsChanged);
@@ -107,6 +114,7 @@ export class SessionController extends Controller {
     previous.agent.attach(next);
     this.harness.stopWatching();
     this.harness = new Harness(folder);
+    this.harness.userPromptPath = this.userPromptPath();
     this.setTrusted(this.store === null || this.store.trusted(folder));
     const records = this.records;
     if (records !== null) await records.open(folder);

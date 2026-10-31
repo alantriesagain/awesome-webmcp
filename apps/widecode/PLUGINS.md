@@ -398,7 +398,8 @@ A project's `.widecode/` is its harness: what shapes widecode and the agent for 
 with the code, trusted as one with `/trust` (`src/services/harness.ts`). Its parts:
 
 - `plugins/*.js`: the project's plugins, loaded after the user's and reloaded on save as above.
-- `prompt.md`: appended to the agent's system prompt. Before it the core always puts one fixed
+- `prompt.md`: appended to the agent's system prompt. The user's own `~/.widecode/prompt.md` comes
+  first, whether or not the folder is trusted. Before it the core always puts one fixed
   paragraph: that the agent runs inside widecode, what `.widecode/` holds, the tools the server
   `widecode` offers it (by their names for that agent, `mcp__widecode__<name>` for Claude Code) and,
   while the folder is not trusted, that its parts wait for `/trust`. An agent plugin gets the text

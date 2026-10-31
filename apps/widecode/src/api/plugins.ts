@@ -109,10 +109,11 @@ export const answerPlugins = (rt: JsRuntime, name: string, a: unknown[]): HostAn
       const effective = objectText(["plugins", "columns", "permissions", "notice"], [json(mergePlugins(h.session.userPlugins, cfg.plugins)), json(mergeColumns(h.session.userColumns, cfg.columns)), permissions.rulesJson(), json(permissions.notice)]);
       const config = objectText(["path", "present", "notice", "project", "user", "effective"], [json(hz.configPath()), json(summary.config), json(cfg.notice), project, user, effective]);
       const prompt = objectText(["path", "length"], [json(hz.promptPath()), String(hz.rawPrompt().length)]);
+      const userPrompt = objectText(["path", "length"], [json(hz.userPromptPath), String(hz.userPrompt().length)]);
       return answerText(
         objectText(
-          ["folder", "dir", "present", "trusted", "plugins", "prompt", "config", "tools"],
-          [json(h.workspace.folder), json(hz.dir()), json(hz.hasFolder()), json(hz.trusted), json(hz.pluginFiles()), prompt, config, json(rt.mcp.visibleNames(h.conversation.agent.owner))],
+          ["folder", "dir", "present", "trusted", "plugins", "prompt", "userPrompt", "config", "tools"],
+          [json(h.workspace.folder), json(hz.dir()), json(hz.hasFolder()), json(hz.trusted), json(hz.pluginFiles()), prompt, userPrompt, config, json(rt.mcp.visibleNames(h.conversation.agent.owner))],
         ),
       );
     }

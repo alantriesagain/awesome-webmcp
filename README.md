@@ -220,7 +220,8 @@ the keymap /keymap chose),
 which; the newest 30 kept) with the build, the flags, the sessions and turns, every five minutes
 that it is alive, how it ended, and an uncaught error with the trail of what ran last and the screen
 as it was, so a crash can be read afterwards (`"log": false` turns it off, `{"dir": "~/x",
-"keep": 10}` moves it, `--log <path>` names one file, `--no-log` none); the first run moves an
+"keep": 10}` moves it, `--log <path>` names one file, `--no-log` none); `prompt.md` there is the
+user-wide prompt, appended to the agent's before a trusted folder's. The first run moves an
 earlier `~/.ctui` over, and a config.json from before plugins has its keys moved under `"plugins"`
 once. A session
 gets a short title written by Claude after its first turn (a separate call: haiku, no tools, nothing

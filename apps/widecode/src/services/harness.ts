@@ -108,12 +108,14 @@ export class HarnessConfig {
  * has (as Claude Code names them), and that the folder waits for /trust when it does.
  */
 export const fixedPrompt = (tools: string[], trusted: boolean): string =>
-  "You are running inside widecode, a terminal frontend. This folder's `.widecode/` is widecode's harness: `plugins/*.js` (JavaScript plugins, reloaded on save; a file calls `widecode.plugin({ id, activate(api) })`), `prompt.md` (appended to this prompt) and `config.json` (plugin sections, column widths, tool permissions)." +
+  "You are running inside widecode, a terminal frontend. This folder's `.widecode/` is widecode's harness: `plugins/*.js` (JavaScript plugins, reloaded on save; a file calls `widecode.plugin({ id, activate(api) })`), `prompt.md` (appended to this prompt) and `config.json` (plugin sections, column widths, tool permissions). The user's own `prompt.md` in widecode's store (`~/.widecode/prompt.md`) comes before this folder's." +
   (tools.length > 0 ? " The MCP server `widecode` offers: " + tools.map((t) => "mcp__widecode__" + t).join(", ") + ". Read mcp__widecode__api before writing a plugin." : "") +
   (trusted ? "" : " The folder is not trusted yet: its plugins, prompt and config are not in use until the user trusts it (/trust).");
 
 export class Harness {
   readonly folder: string;
+  /** The user-wide prompt, `prompt.md` in widecode's store ("" without a store). */
+  userPromptPath = "";
   /** Whether the user trusts the folder (/trust): its parts are in use. */
   trusted = false;
   /** Called with "plugins", "prompt" or "config" when that part changed on disk. */
@@ -212,6 +214,16 @@ export class Harness {
     return this.trusted ? this.rawPrompt() : "";
   }
 
+  /** The user's `prompt.md` in widecode's store as text, "" when there is no store or no file. */
+  userPrompt(): string {
+    if (this.userPromptPath.length === 0) return "";
+    try {
+      return readFileSync(this.userPromptPath, "utf8").trim();
+    } catch {
+      return "";
+    }
+  }
+
   /** `config.json` read, empty when there is none or the folder is not trusted. */
   config(): HarnessConfig {
     const c = new HarnessConfig();
@@ -234,17 +246,18 @@ export class Harness {
     return c;
   }
 
-  /** What the agent's system prompt gets appended: the fixed paragraph, then `prompt.md` when trusted. */
+  /** What the agent's system prompt gets appended: the fixed paragraph, then the user's `prompt.md`, then the folder's when trusted. */
   systemPrompt(tools: string[]): string {
+    const mine = this.userPrompt();
     const own = this.prompt();
-    return fixedPrompt(tools, this.trusted) + (own.length > 0 ? "\n\n" + own : "");
+    return fixedPrompt(tools, this.trusted) + (mine.length > 0 ? "\n\n" + mine : "") + (own.length > 0 ? "\n\n" + own : "");
   }
 
   private stamp(): string {
-    return stampOf(this.promptPath()) + "|" + stampOf(this.configPath()) + "|" + (existsSync(this.pluginsDir()) ? "p" : "-") + "|" + (existsSync(this.dir()) ? "d" : "-");
+    return stampOf(this.promptPath()) + "|" + stampOf(this.configPath()) + "|" + (existsSync(this.pluginsDir()) ? "p" : "-") + "|" + (existsSync(this.dir()) ? "d" : "-") + "|" + stampOf(this.userPromptPath);
   }
 
-  /** Watch the folder for its parts changing (the project folder itself until `.widecode/` appears); `onChange` hears which part. */
+  /** Watch the folder for its parts changing (the project folder itself until `.widecode/` appears) and the user prompt's folder; `onChange` hears which part. */
   watch(): void {
     this.stopWatching();
     this.stamps = this.stamp();
@@ -254,6 +267,12 @@ export class Harness {
       this.closers.push(new Closer(() => w.close()));
     } catch {
       return;
+    }
+    if (this.userPromptPath.length === 0) return;
+    try {
+      const w = watch(dirname(this.userPromptPath), () => this.changed());
+      this.closers.push(new Closer(() => w.close()));
+    } catch {
     }
   }
 
@@ -274,7 +293,7 @@ export class Harness {
       if (before[3] !== after[3]) this.watch();
       if (fn === null) return;
       if (before[2] !== after[2]) fn("plugins");
-      if (before[0] !== after[0]) fn("prompt");
+      if (before[0] !== after[0] || before[4] !== after[4]) fn("prompt");
       if (before[1] !== after[1]) fn("config");
     }, WATCH_MS).unref();
   }
