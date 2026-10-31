@@ -121,6 +121,41 @@ base, and a qcow2 overlay per box, so a reset is a new overlay and nothing drift
   `deploySite` deploys into it (`VPS_HOST=127.0.0.1` and the forwarded port, the box's key), from
   the host.
 
+### The normal way to work
+
+Once it runs well, the box is the default, not a mode to turn on: a project in the box's list runs
+its agents in the box. The way out stays visible: a status segment says `boxed` (or `unboxed` in
+the warning color), `/box off` runs one session on the host and says so in the chat, and a project
+not in the list is asked about once.
+
+What only the host can do (installing a build into `~/.local/bin`, a deploy with production
+credentials) goes through host actions: commands a project names in `.widecode/config.json`
+(read-only inside the box, so an agent cannot add one), each run on the host when an agent asks and
+the user approves it in the request panel, its output going back to the agent. widecode's:
+
+```json
+"box": { "hostActions": { "install": { "run": "node_modules/.bin/light-native install widecode" } } }
+```
+
+The limit: the box keeps the user's keys, tokens and machine from what an agent runs and from
+instructions injected into what it reads. Code an agent writes still reaches the host when the host
+runs it (an installed build, a test or a package.json script run there); reviewing the change is the
+guard for that, as for any contributor, and a host action makes that moment one the user approves.
+
+Costs, and what the box needs for it:
+
+- Files over virtiofs (`/usr/libexec/virtiofsd` 1.10, installed): 9p is slower, which scriptc
+  builds and pnpm installs feel. 9p stays as the fallback where virtiofsd is missing.
+- 4 GB is tight for four native test jobs beside the agents: the box can take 6 GB while it
+  builds, or run the suite with fewer jobs.
+- The box keeps its own scriptc cache (about 14 GB for a full run, cold the first time): a cache
+  the host shares would let the box plant a build the host then runs. The disk grows to about
+  40 GB.
+- bootstrapp's dev server ports (2100, 3400, 3500, ...) are forwarded to the host, so the browser
+  works as before.
+- The image needs node 24 and pnpm for the builds, with the scriptc fork and light listed beside
+  the projects that build on them.
+
 Steps:
 
 - V1, a spike in `apps/widecode/box/` (node scripts, development tooling): build the base image,
