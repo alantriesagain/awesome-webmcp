@@ -34,10 +34,23 @@ patches light needs).
 - A commit message is `<area>: <what changed>` (the area is the app or package: `widecode`,
   `desktop`, `packages`, `probes`, `docs`), then a body of plain paragraphs saying what
   changed and why. The prose rules below apply.
-- Commit green: `light-native check --all`, `light-native typecheck --all`, `light-native test` (every member's tests under
-  node and natively, outputs equal) and `light-native coverage --apps` (the app entries compiling
-  statically; `pnpm verify` covers every test too, before a series of commits ends). A change to
-  an app also runs its selftests (`light-native selftest widecode shell`, `fake` and `fake-acp`).
+- Checks come in three sizes, so a change is tried in seconds and the whole native run happens once
+  a series ends:
+  - While working: the tests the change touches, under node
+    (`light-native test <member> --node-only -- <name>.test.ts`, seconds).
+  - Commit green (a few minutes): `light-native check --all`, `light-native typecheck --all`,
+    `light-native test --node-only` (every member's tests under node, about two minutes), the
+    tests the change touches natively as well (`light-native test <member> -- <name>.test.ts`:
+    under node and natively, outputs equal) and `light-native coverage --apps` (the app entries
+    compiling statically). A change to an app also runs the selftests that drive what it changed:
+    `light-native selftest widecode shell` for the core, `fake` for Claude Code's plugin,
+    `fake-acp` for the acp plugin, `harness` for the harness.
+  - A series of commits ends with `pnpm verify` (every member's tests natively too), run in the
+    background while the next work goes on. With scriptc's cache warm it takes about six minutes
+    after a change to plugins, docs or tests (a test run reads the plugins' code when it starts,
+    so none of that recompiles it); a change to the compiled core recompiles the tests that
+    include it, every app test for `src/` (about twenty minutes). What it finds is fixed in a
+    commit of its own.
 
 ## Prose style (docs, READMEs, commit messages, UI copy)
 
@@ -152,7 +165,9 @@ the agent and the other plugins untouched.
 `light-native` compiles with `$SCRIPTC`, else the fork's `scriptc-dev` on PATH, else the scriptc
 installed at the root (upstream lacks the fork's patches and fails on light). The wrapper keys scriptc's
 cache (`SCRIPTC_CACHE_DIR`) by the fork's commit and build time, so unchanged programs and
-coverage verdicts come back from it (the fork's `FORK.md` has the wrapper). A compiler bug found here gets a
+coverage verdicts come back from it (the fork's `FORK.md` has the wrapper). It sets
+`SCRIPTC_CACHE_MAX_MB=20480`: every test is an executable of its own, a full run's builds take
+about 14 GB, and under scriptc's default 4 GB cap each run evicts what the next one asks for. A compiler bug found here gets a
 probe in light's `native/probes/`, a one-file program that prints the same lines under node and
 natively, and a row in its `README.md`; prefer fixing scriptc over working around it when the fix is in reach. The
 rules the code follows today:

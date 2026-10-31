@@ -114,8 +114,12 @@ const main = async (): Promise<void> => {
   m.edited.add(m.lastEdit);
   m.editSeq++;
   app.host.conversationChanged.fire();
-  // The code column follows the edit first.
-  await wait(150);
+  // The code column follows the edit first: until the strip names it, or it would land after the
+  // file opened next and take its place.
+  for (let i = 0; i < 300; i++) {
+    if (bar(160).map(textOf)[1].includes("▸ catalog.js")) break;
+    await wait(50);
+  }
   await open("views/account.js");
   const wide = bar(160).map(textOf);
   ok("summary: files and lines, the open file and where, the branch and keys", wide[0].startsWith("│ 6 files  +7 −8 ") && wide[1].startsWith("│ ▸ account.js · " + app.host.roles.code.position()) && wide[2].startsWith("│ ⎇ main  [ ] files · n/p changes"));
