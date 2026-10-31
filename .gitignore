@@ -9,5 +9,6 @@ __pycache__/
 apps/widecode/src/runtime/builtin.ts
 apps/widecode/src/runtime/docs.ts
 apps/widecode/src/runtime/build-info.ts
+apps/widecode/src/runtime/generated/
 probes/out/
 packages/harness/bench/results/
