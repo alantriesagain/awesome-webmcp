@@ -1082,8 +1082,11 @@ const sshCommand = (/** @type {string[]} */ args) => {
     if (!Number(proxyPort) || proxyPort < 1 || proxyPort > 65535) {
       throw new Error(`bad --forward-proxy port "${proxyPort}"`);
     }
-    extra.push("-R", `${Number(proxyPort)}:127.0.0.1:${Number(proxyPort)}`);
-    const url = `http://127.0.0.1:${Number(proxyPort)}`;
+    // Each session takes a remote port of its own: an idle subagent's session still holds the one
+    // it took, and a second -R on the same port fails the new session (ssh exits 255).
+    const remotePort = 20000 + Math.floor(Math.random() * 40000);
+    extra.push("-R", `${remotePort}:127.0.0.1:${Number(proxyPort)}`);
+    const url = `http://127.0.0.1:${remotePort}`;
     const env = `export HTTPS_PROXY=${url} HTTP_PROXY=${url} NO_PROXY=localhost,127.0.0.1`;
     command = `${pathEnv} ${credsEnv} ${env}; ${command || "bash -l"}`;
   } else {
