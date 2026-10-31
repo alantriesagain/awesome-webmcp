@@ -19,3 +19,10 @@ Open issues found along the way, each with what is known. The plans (`PLAN.md`, 
   `SCRIPTC_CACHE_MAX_MB=20480` line the installed wrapper now has (dbd309c explains why).
 - The full native run (`pnpm verify`) has not run since the `/subagents` commits (4c020af, ccdbd27)
   and the permission and alerts fixes (a8078e5, 6b908a1).
+- The request panel takes every Enter in the composer while it is open (`ChatWidget.submit` in
+  `apps/widecode/src/views/chat-widget.ts` hands the text to `panel.submitText`). A message the
+  user typed and sent as a background subagent's question opened became its answer "in the
+  user's own words"; the acp plugin finds no option in it and answers opencode `cancelled`, a
+  reject. The bell rang and the question was gone at once. Text typed before a request opened
+  should stay a message; a permission should offer no free-text row, and free text that reaches
+  one should not turn into a silent reject.
