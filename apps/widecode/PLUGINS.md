@@ -383,6 +383,15 @@ approved while the agent is in plan mode, the agent is switched to its first oth
 message asks it to carry the plan out once its turn ends, since an ACP agent's mode holds from its
 next prompt). Its section names them: `{ "names": { "question": "AskUser", "plan": "PresentPlan" } }`.
 
+`plugins/box.ts` brings `HostAction`: an agent asks the host to run one of the commands a project
+configures, the request panel shows the command and the agent's reason under the call, and the user
+approves each run. Only the user's or a trusted project's `config.json` defines them, so an agent
+cannot add one, and the agent's reason is shown, never run. Its section is
+`{ "hostActions": { "install": { "run": "node_modules/.bin/light-native install widecode", "description": "build widecode and install it into ~/.local/bin", "timeoutMs": 900000 } } }`,
+with `timeoutMs` ten minutes by default. The command runs in the session's folder, and its exit code
+and last 60 lines of output go back to the agent. `Run it` and `Don't run` are the choices; without
+approval the call answers that the user did not approve it. `/box` lists the actions configured.
+
 ## The harness
 
 A project's `.widecode/` is its harness: what shapes widecode and the agent for that folder, kept
@@ -535,6 +544,7 @@ phase, the agent's events) and the screen as it was.
 | `claude` | Claude Code as the agent: its CLI over stream-json, its records read into the conversation, its transcripts resumed and listed, its status line data, its skills (from disk before it starts); `/subagents` (Claude Code's own, widecode's Task, or both) | `id`, `projects`, `configDir`, `keepSubagents` | the subagents in use: the mode and its model |
 | `acp` | the agents spoken to over ACP, opencode and the DeepSeek Harness by default: their session, started with widecode, their turns, calls, diffs, todo lists, subagents, permissions, model, effort and mode (config options), and sessions; widecode's MCP server offered to them; `Task`, `TaskStop` and `SendMessage`, subagents over configured ACP targets, in the foreground or background | `agents`, `tasks` | sessions made and not written to, deleted when left |
 | `ask` | widecode's tools for an agent without its own: `AskUser` (questions in the request panel), `PresentPlan` (a plan to approve, leaving plan mode) | `names` | |
+| `box` | host actions: `HostAction` asks the user to run a command only the host can run (an install, a deploy), and runs it in the session's folder when approved; `/box` lists the configured actions | `hostActions` (`run`, `description`, `timeoutMs` for each) | |
 | `harness` | widecode's tools for the agent to probe and reshape widecode itself, over the MCP server: `screen`, `state`, `log`, `api`, `check`, `reload`, `config` (The harness, above) | | |
 | `languages` | JavaScript, TypeScript, JSON, CSS, HTML, Markdown | | |
 | `emacs` | the emacs keymap, in use unless config.json or /keymap says otherwise: Ctrl+F/B, Ctrl+P/N, Alt+D, Alt+< and Alt+>; the composer has readline's other keys already | | |
