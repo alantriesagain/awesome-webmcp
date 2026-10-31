@@ -11,7 +11,9 @@
 // the user's under ~/.claude/skills and its synced folder, a plugin's under the plugin's path; a
 // bundled skill has no file), each called by typing its name with a slash; before it starts, the
 // project's (once the folder is trusted), the user's and the synced ones are read from disk as a
-// partial list; a Skill call is a skill call for the Skills tab. Its section of config.json: { "id":
+// partial list; a Skill call is a skill call for the Skills tab. `/subagents` picks the session's
+// subagents: Claude Code's own, widecode's Task over the acp plugin's targets, or both, and keeps
+// the choice in state.json. Its section of config.json: { "id":
 // "claude", "projects": "", "configDir": "" } (the id it is chosen by; where Claude Code keeps
 // sessions, "" for $CLAUDE_CONFIG_DIR/projects, else ~/.claude/projects; where it keeps its config,
 // with its skills folder, "" for $CLAUDE_CONFIG_DIR, else ~/.claude).
@@ -908,6 +910,26 @@ class Reader {
 /** Tools whose permission prompts are their own request (a question, a plan); any other prompt is a permission to grant or refuse. */
 const INTERACTIVE = ["AskUserQuestion", "ExitPlanMode"];
 
+/** One of the acp plugin's Task targets, as the subagent choice reads it. */
+interface SubagentTarget {
+  name: string;
+  agent: string;
+  model: string;
+}
+
+/** What the acp plugin's tasks say: whether it offers widecode's Task, whether the config replaces Claude's own subagents, and the targets. */
+interface SubagentTasks {
+  offered: boolean;
+  replace: boolean;
+  targets: SubagentTarget[];
+}
+
+/** The subagents the session runs, Claude Code's own, widecode's Task, or both, on `model` for Claude's (`""`: inherited). */
+interface SubagentChoice {
+  mode: string;
+  model: string;
+}
+
 const ALLOW_ALL = "Allow all for this session";
 
 const PERMISSION_OPTIONS = [
@@ -1347,6 +1369,126 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     return api.fs.stat(local) !== null ? local : "claude";
   };
 
+  /** The acp plugin's tasks from the effective config, and whether widecode's Task is offered to this plugin's agent. */
+  const subagentTasks = (): SubagentTasks => {
+    const plugins = rec(api.harness.info().config.effective.plugins);
+    const acp = plugins !== null ? rec(plugins.acp) : null;
+    const tasks = acp !== null ? rec(acp.tasks) : null;
+    const replace = tasks !== null && tasks.replaceClaudeSubagents === true;
+    const targets: SubagentTarget[] = [];
+    const configured = tasks !== null ? rec(tasks.targets) : null;
+    if (configured !== null)
+      for (const name of Object.keys(configured)) {
+        const t = rec(configured[name]);
+        if (t !== null) targets.push({ name, agent: str(t.agent), model: str(t.model) });
+      }
+    const offered = targets.length > 0 && server !== null && server.tools.some((t) => t.name === "Task");
+    return { offered, replace, targets };
+  };
+
+  /** The models plugin's list for Claude Code, from the effective config. */
+  const subagentModels = (): string[] => {
+    const plugins = rec(api.harness.info().config.effective.plugins);
+    const models = plugins !== null ? rec(plugins.models) : null;
+    const out: string[] = [];
+    for (const m of list(models !== null ? models.list : null)) if (typeof m === "string" && m.trim().length > 0) out.push(m.trim());
+    return out;
+  };
+
+  /** The subagents chosen (state.json), else the config's default, clamped to Claude Code's own when widecode's Task is not offered. */
+  const chosenSubagents = (): SubagentChoice => {
+    const t = subagentTasks();
+    const kept = rec(api.settings.state());
+    const saved = kept !== null ? rec(kept.subagents) : null;
+    const mode = saved !== null ? str(saved.mode) : "";
+    const model = saved !== null ? str(saved.model) : "";
+    if (!t.offered) return { mode: "claude", model };
+    if (mode === "claude" || mode === "widecode" || mode === "both") return { mode, model };
+    return { mode: t.replace && !keepSubagents ? "widecode" : "both", model: "" };
+  };
+
+  /** Keep the choice in state.json beside what the plugin kept before. */
+  const rememberSubagents = (choice: SubagentChoice): void => {
+    const kept = rec(api.settings.state());
+    const next: Rec = {};
+    if (kept !== null) for (const key of Object.keys(kept)) next[key] = kept[key];
+    next.subagents = { mode: choice.mode, model: choice.model };
+    api.settings.setState(next);
+  };
+
+  /** The choice in one short phrase, for /subagents: the status line shows about forty characters. */
+  const describeSubagents = (choice: SubagentChoice, t: SubagentTasks): string => {
+    const names = t.targets.map((x) => x.name).join(", ");
+    if (choice.mode === "claude") return "Claude's own" + (choice.model.length > 0 ? " on " + choice.model : "");
+    if (choice.mode === "widecode") return names + " via Task";
+    return "Claude's own and " + names;
+  };
+
+  /** Every choice /subagents takes, in the order it lists them. */
+  const subagentChoices = (t: SubagentTasks): string[] => {
+    const out = ["claude", "claude opus", "claude sonnet", "claude haiku"];
+    for (const m of subagentModels()) {
+      const value = "claude " + m;
+      if (!out.includes(value)) out.push(value);
+    }
+    if (t.offered) {
+      out.push("widecode");
+      out.push("both");
+    }
+    return out;
+  };
+
+  /** The choice a value names, null for none. Claude Code takes any model alias or id, as /model does. */
+  const subagentChoiceOf = (typed: string, t: SubagentTasks): SubagentChoice | null => {
+    if (typed === "claude") return { mode: "claude", model: "" };
+    if (typed === "widecode" || typed === "both") return t.offered ? { mode: typed, model: "" } : null;
+    if (!typed.startsWith("claude ")) return null;
+    const model = typed.slice("claude ".length).trim();
+    return model.length > 0 && !/\s/.test(model) ? { mode: "claude", model } : null;
+  };
+
+  api.commands.add({
+    name: "/subagents",
+    usage: "[claude [model] | widecode | both]",
+    help: "the session's subagents: Claude Code's own, widecode's Task, or both",
+    complete: (typed) => {
+      const t = subagentTasks();
+      const now = chosenSubagents();
+      const current = now.mode === "claude" ? (now.model.length > 0 ? "claude " + now.model : "claude") : now.mode;
+      return subagentChoices(t)
+        .filter((value) => value.startsWith(typed.trim()))
+        .map((value) => ({ value, label: value, detail: value === current ? "now" : value === "claude" ? "Claude Code's own, inheriting its model" : value.startsWith("claude ") ? "Claude Code's own, on " + value.slice("claude ".length) : value === "widecode" ? "widecode's Task on the targets" : "Claude Code's own and widecode's Task" }));
+    },
+    run: (arg) => {
+      const t = subagentTasks();
+      const main = api.agent.info();
+      if (main.id !== id) {
+        const names = t.targets.map((x) => x.name).join(", ");
+        api.tell("subagents: " + (names.length > 0 ? names + " via Task" : "none") + " (main: " + main.name + ")");
+        return;
+      }
+      const typed = arg.trim();
+      const now = chosenSubagents();
+      if (typed.length === 0) {
+        api.tell("subagents: " + describeSubagents(now, t));
+        return;
+      }
+      const choice = subagentChoiceOf(typed, t);
+      if (choice === null) {
+        api.tell("subagents: choose " + subagentChoices(t).join(", "));
+        return;
+      }
+      rememberSubagents(choice);
+      // Between turns the CLI stops now and the next message has the choice; a turn's end is worth saying.
+      const when = turnOpen ? ", after this turn" : "";
+      if (proc !== null) {
+        if (turnOpen) restartWanted = true;
+        else restart();
+      }
+      api.tell("subagents: " + describeSubagents(choice, t) + when);
+    },
+  });
+
   const start = (o: widecode.AgentStart): string => {
     if (proc !== null) return "";
     folder = o.cwd;
@@ -1360,18 +1502,20 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     if (o.effort.length > 0) command.push("--effort", o.effort);
     const s = server;
     if (s !== null) command.push("--mcp-config", s.file.length > 0 ? s.file : JSON.stringify({ mcpServers: { widecode: { type: "http", url: s.url, headers: Object.fromEntries(s.headers.map((h) => [h.name, h.value])) } } }));
-    // The acp plugin offers widecode's Task: Claude's own subagent tools step aside when the
-    // configuration asks for the replacement.
-    const effective = api.harness.info().config.effective.plugins;
-    const plugins = rec(effective);
-    const acp = plugins !== null ? rec(plugins.acp) : null;
-    const tasks = acp !== null ? rec(acp.tasks) : null;
-    const replace = tasks !== null && tasks.replaceClaudeSubagents === true;
-    if (!keepSubagents && replace && s !== null && s.tools.some((t) => t.name === "Task")) command.push("--disallowedTools", "Task,Agent,TaskStop,SendMessage");
+    // The acp plugin offers widecode's Task: /subagents says which subagents run, Claude Code's own,
+    // widecode's Task, or both, and the other's tools step aside.
+    const subagents = chosenSubagents();
+    const offered = subagentTasks().offered;
+    if (offered && subagents.mode === "widecode") command.push("--disallowedTools", "Task,Agent,TaskStop,SendMessage");
+    else if (offered && subagents.mode === "claude") command.push("--disallowedTools", "mcp__widecode__Task,mcp__widecode__TaskStop,mcp__widecode__SendMessage");
     // Recorded once per session by default, the prompt would stay as the first launch had it: off, a changed prompt.md reaches a resumed session.
     if (o.systemPrompt.length > 0) command.push("--append-system-prompt", o.systemPrompt, "--system-prompt-snapshot", "off");
     // Claude Code enforces them: a deny rule blocks in every mode, an ask rule prompts (here, over stdio) in every mode.
-    if (o.permissions.allow.length + o.permissions.ask.length + o.permissions.deny.length > 0) command.push("--settings", JSON.stringify({ permissions: o.permissions }));
+    // Its own subagents run on the model chosen with `env`, the rest of the settings carrying the permissions.
+    const settings: Rec = {};
+    if (o.permissions.allow.length + o.permissions.ask.length + o.permissions.deny.length > 0) settings.permissions = o.permissions;
+    if (subagents.mode === "claude" && subagents.model.length > 0) settings.env = { CLAUDE_CODE_SUBAGENT_MODEL: subagents.model };
+    if (Object.keys(settings).length > 0) command.push("--settings", JSON.stringify(settings));
     command.push("--permission-prompt-tool", "stdio", "--forward-subagent-text", "--replay-user-messages", ...o.args);
     const mine = ++processes;
     const p = api.process.spawn(command, { cwd: folder }, {

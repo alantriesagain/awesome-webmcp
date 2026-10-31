@@ -295,9 +295,20 @@ the session's folder, streams its thought, words, calls, plans and diffs under t
 its permission asks in the request panel under the call, marks the call in the Agents tab, and
 answers the main agent with its last words. `run_in_background` starts the run and answers at once;
 its call id is the `task_id` for `TaskStop` and `SendMessage`, and its end comes back as a message
-to the main agent. `replaceClaudeSubagents` adds
-`--disallowedTools Task,Agent,TaskStop,SendMessage` to Claude's start, so its own subagent tools
-step aside; `plugins.claude.keepSubagents` keeps them. A main agent that names no tool-use id (an
+to the main agent. `replaceClaudeSubagents` (when `plugins.claude.keepSubagents` is not true) makes
+the session run on widecode's Task, starting Claude with
+`--disallowedTools Task,Agent,TaskStop,SendMessage` so its own subagent tools step aside.
+`/subagents` picks what the session's subagents run on and keeps the choice in state.json:
+`claude` is Claude Code's own, with widecode's Task hidden from Claude
+(`--disallowedTools mcp__widecode__Task,...`), and `claude <model>` also sets
+`CLAUDE_CODE_SUBAGENT_MODEL` in the settings it starts with (any model alias or id); `widecode` is
+widecode's Task, with Claude's own subagent tools disallowed; `both` disallows neither. With no
+choice made, the config decides as above. `/subagents` with no argument says the choice in
+use, and typing it lists the choices, the current one marked "now". A change applies at the turn's
+end when one is open, else from the next message. The modes `widecode` and `both` need a `tasks`
+section with targets; without one only Claude Code's own subagents are offered. When the main agent
+is another agent, `/subagents` says its subagents run through widecode's Task on the targets and
+changes nothing. A main agent that names no tool-use id (an
 ACP agent) announces the Task call itself, and the run goes under that call's card; when no
 announced call matches, the tool makes a card itself. Subagents are not given
 widecode's MCP server, so they cannot call Task again. With `isolation: "worktree"` the run starts
@@ -514,7 +525,7 @@ phase, the agent's events) and the screen as it was.
 | `changes` | the changes strip of the band, under the code column; `[ ]`, Alt+↑↓ | | |
 | `status` | the session table under the chat and the calls' under the tools column, their segments and command cells | `separator`, `lines`, `toolsLines` | |
 | `models` | F5, `/model`, `/effort`, the `model` segment | `list` (Claude Code's), `agents` (another agent's, by id), `effort` (`default`, by `providers`, by `models`) | the model chosen, by agent; the effort chosen, by model, provider and overall |
-| `claude` | Claude Code as the agent: its CLI over stream-json, its records read into the conversation, its transcripts resumed and listed, its status line data, its skills (from disk before it starts) | `id`, `projects`, `configDir` | |
+| `claude` | Claude Code as the agent: its CLI over stream-json, its records read into the conversation, its transcripts resumed and listed, its status line data, its skills (from disk before it starts); `/subagents` (Claude Code's own, widecode's Task, or both) | `id`, `projects`, `configDir`, `keepSubagents` | the subagents in use: the mode and its model |
 | `acp` | the agents spoken to over ACP, opencode and the DeepSeek Harness by default: their session, started with widecode, their turns, calls, diffs, todo lists, subagents, permissions, model, effort and mode (config options), and sessions; widecode's MCP server offered to them; `Task`, `TaskStop` and `SendMessage`, subagents over configured ACP targets, in the foreground or background | `agents`, `tasks` | sessions made and not written to, deleted when left |
 | `ask` | widecode's tools for an agent without its own: `AskUser` (questions in the request panel), `PresentPlan` (a plan to approve, leaving plan mode) | `names` | |
 | `harness` | widecode's tools for the agent to probe and reshape widecode itself, over the MCP server: `screen`, `state`, `log`, `api`, `check`, `reload`, `config` (The harness, above) | | |
