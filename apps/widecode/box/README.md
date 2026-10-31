@@ -18,7 +18,7 @@ SSH key under `~/.cache/widecode/box/id_ed25519` and its own `known_hosts`.
 
 ```
 node apps/widecode/box/box.mjs provision
-node apps/widecode/box/box.mjs up <folder> [<folder>...]
+node apps/widecode/box/box.mjs up [--memory <MB>] [--cpus <n>] [--port <host>[:<guest>]]... <folder> [<folder>...]
 node apps/widecode/box/box.mjs ssh [--forward-proxy <port>] [--forward <remotePort>:<hostPort>]... [--] [cmd...]
 node apps/widecode/box/box.mjs proxy [--port N] [--allow domain,...]
 node apps/widecode/box/box.mjs creds
@@ -27,22 +27,62 @@ node apps/widecode/box/box.mjs status
 node apps/widecode/box/box.mjs reset
 ```
 
-`provision` builds `base.qcow2`, an overlay on the cached Debian image resized to 20 GB, and boots it
+`provision` builds `base.qcow2`, an overlay on the cached Debian image resized to 40 GB, and boots it
 once with the network open. Cloud-init creates the `agent` user (shell, the box's public key, no
-sudo), installs git, ripgrep, curl, ca-certificates and `linux-image-amd64`, and runs Claude Code's
-and opencode's own installers as `agent`. It then reports the paths and versions over SSH and powers
-the guest down through the QEMU monitor, leaving `base.qcow2` provisioned.
+sudo), installs git, ripgrep, curl, ca-certificates, `linux-image-amd64`, `build-essential`,
+`clang`, `xz-utils` and `cloud-guest-utils`, installs node 24 from the official tarball
+(`https://nodejs.org/dist/latest-v24.x`, extracted into `/usr/local`), installs pnpm 10.11.0 from
+npm, writes scriptc's wrapper at `/home/agent/.local/bin/scriptc-dev`, and runs Claude Code's and
+opencode's own installers as `agent`. Node scripts in the guest therefore run under the same node 24
+the host's scriptc fork is built for, and clang is the linker scriptc's executable builds drive. It
+then reports the paths and versions over SSH and powers the guest down through the QEMU monitor,
+leaving `base.qcow2` provisioned. Cloud-init's growpart grows the guest's root to the 40 GB disk on
+boot; `df -h /` in the guest reported 40 GB.
 
 `up` creates a fresh `box.qcow2` overlay on `base.qcow2` and boots it with
-`-netdev user,id=n0,restrict=on,hostfwd=tcp:127.0.0.1:2223-:22`, 4096 MB, 4 CPUs and KVM. Each folder
-is shared by 9p with its own tag (`project0`, `project1`, ...) at its own absolute host path, using
-`security_model=none`. `security_model=none` lets QEMU do the guest's file operations as the host
-user, so files the guest creates keep the host user's ownership and need no xattr mapping. A per-boot
-cloud-init seed, rather than a unit baked into the image, mounts each share and bind-mounts
-`.widecode/`, `.claude/` and `.git/hooks` read-only over it when they exist, because the project paths
-change per boot. `up` waits for SSH and for the `/run/widecode-box-ready` marker the seed writes, and
-saves the project list in `box.json`. A second `up` with the same list returns at once; with a
-different list it refuses and says to run `down`, then `up`.
+`-netdev user,id=n0,restrict=on,hostfwd=tcp:127.0.0.1:2223-:22`, 4096 MB and 4 CPUs by default
+(`--memory`, `--cpus`, or `WIDECODE_BOX_MEMORY` / `WIDECODE_BOX_CPUS`) and KVM. `--port` adds a
+`hostfwd` on `127.0.0.1` for each pair, guest port equal to host port when only one is given; it is
+repeatable. bootstrapp's dev ports are the usual set, for example:
+
+```
+node apps/widecode/box/box.mjs up --port 2100 --port 3400 --port 3500 --port 3530 --port 3600 \
+  --port 3700 --port 3900 --port 4000 --port 4100 --port 4200 <folder>...
+```
+
+Each folder is shared with its own tag (`project0`, `project1`, ...) at its own absolute host path.
+When `/usr/libexec/virtiofsd` (1.10 here) exists, `up` runs one virtiofsd per project as the user,
+unprivileged, with a socket in the state directory and mounts `-t virtiofs <tag> <same path>` in the
+guest. QEMU gets a shared memfd backend (`-object
+memory-backend-memfd,id=mem,size=<memory>M,share=on -numa node,memdev=mem`) and one
+`vhost-user-fs-pci` device per project. virtiofsd maps the guest's file operations onto the host user
+when it runs unprivileged, so files the guest creates keep the host user's ownership. `down` stops
+every virtiofsd it recorded in `virtiofsd.json`. When virtiofsd is missing, `up` falls back to 9p
+(`-virtfs local,path=<project>,mount_tag=<tag>,security_model=none`) and says so. `up` also says
+which one it used; `WIDECODE_BOX_SHARES=9p` (or `virtiofs`) forces one for a comparison.
+
+The virtiofsd sandbox is `namespace` when `newuidmap` is on the host, else `none`. This host has no
+`newuidmap` (the `uidmap` package), so the namespace sandbox failed with
+`sandbox: couldn't setup id mappings ... newuidmap: No such file or directory` and the spike ran with
+`--sandbox none`; seccomp still runs with `--seccomp kill`. Install `uidmap` to get the namespace
+sandbox.
+
+A per-boot cloud-init seed, rather than a unit baked into the image, mounts each share and
+bind-mounts `.widecode/`, `.claude/` and `.git/hooks` read-only over it when they exist, because the
+project paths change per boot. `up` waits for SSH and for the `/run/widecode-box-ready` marker the
+seed writes, and saves the project list, the share kind, memory, CPUs and ports in `box.json`. A
+second `up` with the same list returns at once; with a different list it refuses and says to run
+`down`, then `up`.
+
+### scriptc and the build cache
+
+`/home/agent/.local/bin/scriptc-dev` is the host wrapper's script (`git -C
+/home/alanleal/Projects/scriptc rev-parse --short HEAD`, `stat` on
+`packages/compiler/dist/index.js`, `SCRIPTC_CACHE_MAX_MB=20480`) running the shared checkout's node
+CLI. Its cache is on the guest's own disk, `~/.cache/scriptc-fork/<id>` (mode 700), never a host
+folder: a host-shared cache would let the box plant a build the host then runs. The shared projects
+are `/home/alanleal/Projects/{widecode,light,scriptc}`, so `widecode/light` (a symlink to `../light`)
+resolves inside the guest when light is shared at its own path.
 
 `proxy` is a host-side HTTP proxy on `127.0.0.1` (default port 8888, override with `--port` or
 `WIDECODE_BOX_PROXY_PORT`). It handles plain HTTP and `CONNECT`, allows a host that equals an entry
@@ -181,6 +221,41 @@ Tested with a throwaway credentials file under `/tmp` holding fake values, never
    `env` file as well (`env-absent`) and left the box with no credentials.
 5. `down` stopped the proxy and the guest; no QEMU or proxy process of the test was left.
 
+### virtiofs, sizing, dev ports and a build in the box
+
+`base.qcow2` was re-provisioned for this (40 GB, node 24, pnpm, clang, the scriptc wrapper), so the
+tests below started from a cold image and a cold build cache.
+
+1. `up /tmp/wc-box-scratch` used virtiofs (sandbox `none`), with `project0 on /tmp/wc-box-scratch
+   type virtiofs (rw,relatime)` and `(ro,relatime)` bind mounts of `.widecode`, `.claude` and
+   `.git/hooks`. `guest.txt` written in the guest appeared on the host as `1000:1000` (the user),
+   and writes to the three protected paths failed with `Read-only file system`. Boot to SSH was 9
+   seconds; the whole `up` took 9.5 seconds.
+2. The same `/home/alanleal/Projects/widecode` share, timed in the guest (two runs, second shown):
+
+   | probe | virtiofs | 9p |
+   |---|---|---|
+   | `time git status` | 0.02 s | 0.65 s |
+   | `time sh -c 'find . -type f \| wc -l'` | 0.05 s | 0.27 s |
+
+   Both found the same 2760 files. The first virtiofs run was 0.08 s and 0.10 s; the gap is larger
+   on many small file operations, which is what a build does.
+3. `up --memory 6144 --cpus 4 --port 3500 /home/alanleal/Projects/widecode
+   /home/alanleal/Projects/light /home/alanleal/Projects/scriptc` used three virtiofs shares (the
+   `light` symlink inside widecode resolved through the separately shared light path) and was up in
+   9.9 seconds. A `python3 -m http.server 3500` in the guest answered `HTTP/1.0 200 OK` from
+   `curl http://127.0.0.1:3500/` on the host. The throwaway server was stopped afterwards.
+4. The host's `git -C /home/alanleal/Projects/widecode status --short` was `M
+   apps/widecode/box/box.mjs` before and after; the guest's build left only gitignored outputs.
+   `scriptc-dev --version` in the guest printed `0.4.5` from the shared checkout.
+5. `light-native test widecode -- api.test.ts` is node-only by its first line (`// node-only: the
+   test walks the repository ...`), so it does not compile with scriptc: cold 0.6 s, warm 1.0 s, and
+   light-native reports `(node only)`. To exercise the box's scriptc toolchain, `keymap.test.ts` (an
+   ffi test that runs under node and natively) took 65 s cold and 21 s warm; both runs passed with
+   equal output, and the guest cache grew to 254 MB. Root stayed at 40 GB with 35 GB free.
+6. `down` powered the guest down in 5 seconds. No `qemu-system-x86_64`, `virtiofsd` or proxy of the
+   test was left, and the widecode checkout's `git status --short` matched the recorded one.
+
 ## What did not work, and why
 
 - The first seed ISO put `user-data` and `meta-data` in the image under other names. Cloud-init
@@ -208,3 +283,15 @@ Tested with a throwaway credentials file under `/tmp` holding fake values, never
   terminal; without it `down` had no way to know a proxy was running.
 - `python3 -m http.server 0` printed its port only with `-u` in the capture used for the forward
   test; this is a test-harness detail, not a box issue.
+- virtiofsd's default `--sandbox namespace` failed on this host with `sandbox: couldn't setup id
+  mappings: ... newuidmap: No such file or directory`; `newuidmap` is in the `uidmap` package, which
+  is not installed. `up` uses `namespace` when it finds `newuidmap` and `none` otherwise. Installing
+  `uidmap` on the host restores the sandbox without a code change.
+- A cloud-init `write_files` entry under `/home/agent/.local/bin` created the parent folders as
+  root, so the agent could not install into `~/.local` (`EACCES ... mkdir
+  '/home/agent/.local/share'`, and no agent was installed). The provision script now creates
+  `~/.local/bin`, runs `chown -R agent:agent /home/agent/.local`, and writes the scriptc wrapper
+  there itself instead of through `write_files`.
+- QEMU connected to the virtiofsd socket before virtiofsd had finished exiting on the failed
+  namespace sandbox, which read as `Connection refused`; `up` now waits for the socket and checks
+  the daemon is still alive before it starts QEMU.

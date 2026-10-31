@@ -7,17 +7,22 @@
  * per box, a cloud-init seed ISO built with genisoimage, user-mode networking
  * with one hostfwd for SSH, a pid file and a console log.
  *
- * There is one box. `up` takes every project the box shares, each by its own
- * 9p tag at its own host path, and keeps the list in the state dir. A second
- * `up` with the same list is a no-op; with a different list it says to restart
- * the box. A lock and the QEMU pid file keep a second VM from starting.
+ * There is one box. `up` takes every project the box shares, each at its own
+ * host path, and keeps the list in the state dir. A second `up` with the same
+ * list is a no-op; with a different list it says to restart the box. A lock and
+ * the QEMU pid file keep a second VM from starting.
+ *
+ * Shares use virtiofs when /usr/libexec/virtiofsd exists (one daemon per
+ * project, unprivileged, a shared memfd backend for QEMU) and fall back to 9p
+ * otherwise. `up` says which it used.
  *
  * `provision` boots once with the network open and builds base.qcow2: the
- * `agent` user (no sudo), git, ripgrep, curl, ca-certificates, Claude Code and
- * opencode from their own installers. `up` boots a fresh overlay on base with
- * restrict=on. A per-boot cloud-init seed mounts the shares and bind-mounts
- * .widecode, .claude and .git/hooks read-only, because the project paths change
- * per boot.
+ * `agent` user (no sudo), git, ripgrep, curl, ca-certificates, the native build
+ * toolchain (build-essential, clang), node 24 (the official tarball), pnpm,
+ * Claude Code and opencode from their own installers, and scriptc's wrapper at
+ * ~/.local/bin/scriptc-dev. `up` boots a fresh overlay on base with restrict=on.
+ * A per-boot cloud-init seed mounts the shares and bind-mounts .widecode,
+ * .claude and .git/hooks read-only, because the project paths change per boot.
  *
  * `proxy` is a host-side HTTP(S) proxy on loopback with a domain allow list.
  * `ssh` can forward it (`--forward-proxy`) and other host ports (`--forward`)
@@ -25,7 +30,7 @@
  *
  * Usage:
  *   node box.mjs provision
- *   node box.mjs up <folder> [<folder>...]
+ *   node box.mjs up [--memory <MB>] [--cpus <n>] [--port <host>[:<guest>]]... <folder> [<folder>...]
  *   node box.mjs ssh [--forward-proxy <port>] [--forward <remotePort>:<hostPort>]... [--] [cmd...]
  *   node box.mjs proxy [--port N] [--allow domain,...]
  *   node box.mjs creds
@@ -55,6 +60,8 @@ const RECORD = path.join(STATE, "box.json");
 const LOCK = path.join(STATE, "box.lock");
 const PROXY_PID = path.join(STATE, "proxy.pid");
 const PROXY_LOG = path.join(STATE, "proxy.log");
+const VIRTIOFS = path.join(STATE, "virtiofsd.json");
+const VIRTIOFS_DIR = path.join(STATE, "virtiofs");
 
 const ENV_DIR = "/home/agent/.config/widecode-box";
 const ENV_FILE = `${ENV_DIR}/env`;
@@ -66,8 +73,9 @@ const credentialsPath = () =>
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.WIDECODE_BOX_PORT || 2223);
-const MEMORY = process.env.WIDECODE_BOX_MEMORY || "4096";
-const CPUS = process.env.WIDECODE_BOX_CPUS || "4";
+const DEFAULT_MEMORY = Number(process.env.WIDECODE_BOX_MEMORY || 4096);
+const DEFAULT_CPUS = Number(process.env.WIDECODE_BOX_CPUS || 4);
+const DISK_SIZE = "40G";
 const READY = "/run/widecode-box-ready";
 
 const DEFAULT_ALLOW = [
@@ -86,6 +94,10 @@ const DEFAULT_ALLOW = [
 
 const QEMU = existsSync("/usr/bin/qemu-system-x86_64") ? "/usr/bin/qemu-system-x86_64" : "qemu-system-x86_64";
 const QEMU_IMG = existsSync("/usr/bin/qemu-img") ? "/usr/bin/qemu-img" : "qemu-img";
+const VIRTIOFSD = ["/usr/libexec/virtiofsd", "/usr/bin/virtiofsd"].find((file) => existsSync(file)) ?? null;
+const VIRTIOFSD_SANDBOX = ["/usr/bin/newuidmap", "/usr/local/bin/newuidmap"].some((file) => existsSync(file))
+  ? "namespace"
+  : "none";
 
 const say = (/** @type {string} */ msg) => process.stderr.write(`${msg}\n`);
 const sleep = (/** @type {number} */ ms) => new Promise((r) => setTimeout(r, ms));
@@ -210,25 +222,54 @@ const buildSeed = (/** @type {string} */ file, /** @type {string} */ userData) =
   ]);
 };
 
-/** @param {string} disk @param {string} seed @param {{ restrict: boolean, projects?: string[] }} opts */
-const boot = async (disk, seed, { restrict, projects = [] }) => {
+/**
+ * @param {string} disk
+ * @param {string} seed
+ * @param {{
+ *   restrict: boolean,
+ *   projects?: string[],
+ *   shares?: "virtiofs" | "9p",
+ *   sockets?: string[],
+ *   memory?: number,
+ *   cpus?: number,
+ *   ports?: { host: number, guest: number }[],
+ * }} opts
+ */
+const boot = async (
+  disk,
+  seed,
+  { restrict, projects = [], shares = "9p", sockets = [], memory = DEFAULT_MEMORY, cpus = DEFAULT_CPUS, ports = [] },
+) => {
   rmSync(CONSOLE, { force: true });
   rmSync(MONITOR, { force: true });
-  const netdev = restrict
-    ? `user,id=n0,restrict=on,hostfwd=tcp:${HOST}:${PORT}-:22`
-    : `user,id=n0,hostfwd=tcp:${HOST}:${PORT}-:22`;
+  const forwards = [`hostfwd=tcp:${HOST}:${PORT}-:22`]
+    .concat(ports.map((port) => `hostfwd=tcp:${HOST}:${port.host}-:${port.guest}`))
+    .join(",");
+  const netdev = `user,id=n0${restrict ? ",restrict=on" : ""},${forwards}`;
+  const virtiofsd = shares === "virtiofs";
   const qemu = spawn(QEMU, [
     "-enable-kvm",
     "-cpu", "host",
-    "-m", MEMORY,
-    "-smp", CPUS,
+    "-m", String(memory),
+    "-smp", String(cpus),
+    ...(virtiofsd
+      ? [
+        "-object", `memory-backend-memfd,id=mem,size=${memory}M,share=on`,
+        "-numa", "node,memdev=mem",
+      ]
+      : []),
     "-drive", `file=${disk},if=virtio,format=qcow2`,
     "-drive", `file=${seed},if=virtio,format=raw,readonly=on`,
     "-netdev", netdev,
     "-device", "virtio-net-pci,netdev=n0",
-    ...projects.flatMap((project, index) => [
-      "-virtfs", `local,path=${project},mount_tag=project${index},security_model=none`,
-    ]),
+    ...projects.flatMap((project, index) => virtiofsd
+      ? [
+        "-chardev", `socket,id=char${index},path=${sockets[index]}`,
+        "-device", `vhost-user-fs-pci,chardev=char${index},tag=project${index}`,
+      ]
+      : [
+        "-virtfs", `local,path=${project},mount_tag=project${index},security_model=none`,
+      ]),
     "-display", "none",
     "-serial", `file:${CONSOLE}`,
     "-monitor", `unix:${MONITOR},server,nowait`,
@@ -239,6 +280,82 @@ const boot = async (disk, seed, { restrict, projects = [] }) => {
     qemu.on("exit", (code) => (code === 0 ? resolve(undefined) : reject(new Error(`qemu exited ${code}`))));
     qemu.on("error", reject);
   });
+};
+
+const readVirtiofs = () => {
+  if (!existsSync(VIRTIOFS)) return [];
+  try {
+    const value = JSON.parse(readFileSync(VIRTIOFS, "utf8"));
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+};
+
+const startVirtiofs = async (/** @type {string[]} */ projects) => {
+  if (!VIRTIOFSD) throw new Error("virtiofsd is missing");
+  rmSync(VIRTIOFS_DIR, { recursive: true, force: true });
+  mkdirSync(VIRTIOFS_DIR, { recursive: true });
+  /** @type {{ pid: number, socket: string, project: string }[]} */
+  const entries = [];
+  writeFileSync(VIRTIOFS, "[]\n");
+  for (const [index, project] of projects.entries()) {
+    const socket = path.join(VIRTIOFS_DIR, `project${index}.sock`);
+    rmSync(socket, { force: true });
+    const child = spawn(
+      VIRTIOFSD,
+      [
+        "--shared-dir", project,
+        "--socket-path", socket,
+        "--sandbox", VIRTIOFSD_SANDBOX,
+        "--seccomp", "kill",
+        "--cache", "auto",
+        "--xattr",
+      ],
+      { stdio: "ignore", detached: true },
+    );
+    child.unref();
+    if (!child.pid) throw new Error(`could not start virtiofsd for ${project}`);
+    entries.push({ pid: child.pid, socket, project });
+    writeFileSync(VIRTIOFS, `${JSON.stringify(entries, null, 2)}\n`);
+    const deadline = Date.now() + 15000;
+    while (!existsSync(socket)) {
+      if (child.exitCode !== null) {
+        throw new Error(`virtiofsd exited ${child.exitCode} for ${project}; run virtiofsd by hand to see why`);
+      }
+      if (Date.now() > deadline) throw new Error(`virtiofsd made no socket for ${project} after 15s`);
+      await sleep(100);
+    }
+    await sleep(200);
+    if (child.exitCode !== null) {
+      throw new Error(`virtiofsd exited ${child.exitCode} for ${project} right after making its socket`);
+    }
+  }
+  return entries.map((entry) => entry.socket);
+};
+
+const stopVirtiofs = async () => {
+  const entries = readVirtiofs();
+  let stopped = false;
+  for (const entry of entries) {
+    const value = Number(entry.pid);
+    if (!value || !alive(value)) continue;
+    stopped = true;
+    try { process.kill(value, "SIGTERM"); } catch {}
+  }
+  if (stopped) {
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline && entries.some((entry) => alive(Number(entry.pid)))) await sleep(100);
+    for (const entry of entries) {
+      const value = Number(entry.pid);
+      if (value && alive(value)) {
+        try { process.kill(value, "SIGKILL"); } catch {}
+      }
+    }
+    say("• stopped virtiofsd");
+  }
+  rmSync(VIRTIOFS, { force: true });
+  rmSync(VIRTIOFS_DIR, { recursive: true, force: true });
 };
 
 const sendMonitor = (/** @type {string} */ command) => new Promise((resolve, reject) => {
@@ -425,6 +542,10 @@ packages:
   - curl
   - ca-certificates
   - linux-image-amd64
+  - build-essential
+  - clang
+  - xz-utils
+  - cloud-guest-utils
 
 write_files:
   - path: /usr/local/bin/widecode-box-agents
@@ -436,21 +557,50 @@ write_files:
       CLOUD=$(dpkg -l 'linux-image-*cloud-amd64' | awk '/^ii/ {print $2}')
       if [ -n "$CLOUD" ]; then apt-get purge -y $CLOUD; fi
       update-grub
+
+      # Node 24 from the official tarball; pnpm from npm.
+      NODE_BASE=https://nodejs.org/dist/latest-v24.x
+      NODE_FILE=$(curl -fsSL "$NODE_BASE/SHASUMS256.txt" | awk '/linux-x64\\.tar\\.xz$/ {print $2; exit}')
+      curl -fsSL -o /tmp/node.tar.xz "$NODE_BASE/$NODE_FILE"
+      tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1
+      rm -f /tmp/node.tar.xz
+      npm install -g pnpm@10.11.0
+
+      install -d -o agent -g agent /home/agent/.local/bin
+      chown -R agent:agent /home/agent/.local
+      cat > /home/agent/.local/bin/scriptc-dev <<'WRAPPER'
+      #!/usr/bin/env bash
+      fork=/home/alanleal/Projects/scriptc
+      id="$(git -C "$fork" rev-parse --short HEAD 2>/dev/null || echo nogit)-$(stat -c %Y "$fork/packages/compiler/dist/index.js" 2>/dev/null || echo 0)"
+      export SCRIPTC_CACHE_DIR="\${SCRIPTC_CACHE_DIR:-$HOME/.cache/scriptc-fork/$id}"
+      mkdir -p -m 700 "$SCRIPTC_CACHE_DIR" && chmod 700 "$SCRIPTC_CACHE_DIR"
+      unset SCRIPTC_NO_CACHE
+      export SCRIPTC_CACHE_MAX_MB="\${SCRIPTC_CACHE_MAX_MB:-20480}"
+      exec node "$fork/packages/cli/dist/main.js" "$@"
+      WRAPPER
+      chown agent:agent /home/agent/.local/bin/scriptc-dev
+      chmod 755 /home/agent/.local/bin/scriptc-dev
+
       runuser -l agent -c 'curl -fsSL https://claude.ai/install.sh | bash'
       runuser -l agent -c 'curl -fsSL https://opencode.ai/install | bash'
+      echo 'export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"' > /etc/profile.d/widecode-box-path.sh
 
 runcmd:
   - [ /usr/local/bin/widecode-box-agents ]
 instance-id: widecode-box-provision
 `;
 
-const upUserData = (/** @type {string[]} */ projects) => {
+const upUserData = (/** @type {string[]} */ projects, /** @type {"virtiofs" | "9p"} */ shares) => {
+  const mount = shares === "virtiofs"
+    ? (/** @type {number} */ index, /** @type {string} */ project) => `mount -t virtiofs project${index} ${shq(project)}`
+    : (/** @type {number} */ index, /** @type {string} */ project) =>
+      `mount -t 9p -o trans=virtio,version=9p2000.L project${index} ${shq(project)}`;
   const script = `#!/bin/bash
 set -e
 ${projects
   .map(
     (project, index) => `mkdir -p ${shq(project)}
-mount -t 9p -o trans=virtio,version=9p2000.L project${index} ${shq(project)}
+${mount(index, project)}
 for rel in .widecode .claude .git/hooks; do
   src=${shq(project)}/"$rel"
   if [ -e "$src" ]; then
@@ -486,6 +636,10 @@ const agentProbe = [
   '  echo "$c: $p"',
   '  "$c" --version 2>&1 | head -1',
   'done',
+  'echo "node: $(node --version)"',
+  'echo "pnpm: $(pnpm --version)"',
+  'echo "clang: $(clang --version 2>&1 | head -1)"',
+  'if [ -x "$HOME/.local/bin/scriptc-dev" ]; then echo "scriptc-dev: wrapper"; else echo "scriptc-dev: not found"; fi',
 ].join("\n");
 
 const provision = async () => {
@@ -506,10 +660,10 @@ const provision = async () => {
     rmSync(KNOWN, { force: true });
     rmSync(BASE, { force: true });
     say(`• creating base.qcow2 on ${source}`);
-    must(QEMU_IMG, ["create", "-q", "-f", "qcow2", "-F", "qcow2", "-b", source, BASE, "20G"]);
+    must(QEMU_IMG, ["create", "-q", "-f", "qcow2", "-F", "qcow2", "-b", source, BASE, DISK_SIZE]);
     const seed = path.join(STATE, "seed-provision.iso");
     buildSeed(seed, provisionUserData(pub));
-    say(`• provisioning (${MEMORY}MB, ${CPUS} vcpu), network open`);
+    say(`• provisioning (${DEFAULT_MEMORY}MB, ${DEFAULT_CPUS} vcpu), network open`);
     const started = Date.now();
     await boot(BASE, seed, { restrict: false });
     if (!(await waitForSsh(300))) throw new Error(`no ssh after 300s; see ${CONSOLE}`);
@@ -534,7 +688,49 @@ const provision = async () => {
 const sameList = (/** @type {string[]} */ a, /** @type {string[]} */ b) =>
   a.length === b.length && [...a].sort().every((value, index) => value === [...b].sort()[index]);
 
-const up = async (/** @type {string[]} */ folders) => {
+const parsePort = (/** @type {string} */ value) => {
+  const [rawHost, rawGuest] = String(value).split(":");
+  const host = Number(rawHost);
+  const guest = rawGuest === undefined || rawGuest === "" ? host : Number(rawGuest);
+  if (!Number.isInteger(host) || host < 1 || host > 65535) throw new Error(`bad --port "${value}"; expected <hostPort>[:<guestPort>]`);
+  if (!Number.isInteger(guest) || guest < 1 || guest > 65535) throw new Error(`bad --port "${value}"; expected <hostPort>[:<guestPort>]`);
+  return { host, guest };
+};
+
+const parseUpArgs = (/** @type {string[]} */ args) => {
+  let memory = DEFAULT_MEMORY;
+  let cpus = DEFAULT_CPUS;
+  /** @type {{ host: number, guest: number }[]} */
+  const ports = [];
+  /** @type {string[]} */
+  const folders = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--memory") {
+      memory = Number(args[++index]);
+    } else if (arg.startsWith("--memory=")) {
+      memory = Number(arg.slice("--memory=".length));
+    } else if (arg === "--cpus") {
+      cpus = Number(args[++index]);
+    } else if (arg.startsWith("--cpus=")) {
+      cpus = Number(arg.slice("--cpus=".length));
+    } else if (arg === "--port") {
+      ports.push(parsePort(String(args[++index])));
+    } else if (arg.startsWith("--port=")) {
+      ports.push(parsePort(arg.slice("--port=".length)));
+    } else if (arg.startsWith("-")) {
+      throw new Error(`unknown up option "${arg}"`);
+    } else {
+      folders.push(arg);
+    }
+  }
+  if (!Number.isInteger(memory) || memory < 512) throw new Error(`bad --memory "${memory}"; expected MB, at least 512`);
+  if (!Number.isInteger(cpus) || cpus < 1) throw new Error(`bad --cpus "${cpus}"; expected a count of 1 or more`);
+  return { folders, memory, cpus, ports };
+};
+
+const up = async (/** @type {string[]} */ args) => {
+  const { folders, memory, cpus, ports } = parseUpArgs(args);
   if (!folders.length) throw new Error("up needs at least one project folder");
   if (!existsSync(BASE)) throw new Error("no base.qcow2; run provision first");
   const projects = folders.map((folder) => path.resolve(folder));
@@ -543,6 +739,9 @@ const up = async (/** @type {string[]} */ folders) => {
   }
   if (new Set(projects).size !== projects.length) throw new Error("a folder is listed twice");
   const creds = loadCredentials();
+  const forcedShares = process.env.WIDECODE_BOX_SHARES === "9p" ? "9p" : process.env.WIDECODE_BOX_SHARES === "virtiofs" ? "virtiofs" : null;
+  if (forcedShares === "virtiofs" && !VIRTIOFSD) throw new Error("WIDECODE_BOX_SHARES=virtiofs but virtiofsd is missing");
+  const shares = forcedShares ?? (VIRTIOFSD ? "virtiofs" : "9p");
   acquireLock();
   try {
     const running = pid();
@@ -565,27 +764,45 @@ const up = async (/** @type {string[]} */ folders) => {
     mkdirSync(STATE, { recursive: true });
     rmSync(BOX, { force: true });
     say("• creating box.qcow2 on base.qcow2");
-    must(QEMU_IMG, ["create", "-q", "-f", "qcow2", "-F", "qcow2", "-b", BASE, BOX, "20G"]);
+    must(QEMU_IMG, ["create", "-q", "-f", "qcow2", "-F", "qcow2", "-b", BASE, BOX, DISK_SIZE]);
     const seed = path.join(STATE, "seed-up.iso");
-    buildSeed(seed, upUserData(projects));
-    say(`• booting restricted, ${projects.length} project(s) on 9p, ssh on ${HOST}:${PORT}`);
+    buildSeed(seed, upUserData(projects, shares));
+    say(
+      `• booting restricted, ${projects.length} project(s) on ${shares}, ` +
+        `${memory}MB, ${cpus} vcpu, ssh on ${HOST}:${PORT}`,
+    );
     for (const [index, project] of projects.entries()) say(`• project${index}: ${project}`);
+    for (const port of ports) say(`• port: ${HOST}:${port.host} -> guest ${port.guest}`);
+    if (shares === "virtiofs") say(`• virtiofsd: ${VIRTIOFSD} (unprivileged, sandbox ${VIRTIOFSD_SANDBOX})`);
+    else if (forcedShares === "9p") say("• 9p forced by WIDECODE_BOX_SHARES=9p");
+    else say("• virtiofsd not found; using 9p (slower)");
     const started = Date.now();
-    await boot(BOX, seed, { restrict: true, projects });
-    if (!(await waitForSsh(180))) throw new Error(`no ssh after 180s; see ${CONSOLE}`);
-    const sshSeconds = Math.round((Date.now() - started) / 1000);
-    say(`• ssh answered after ${sshSeconds}s, waiting for the shares`);
-    if (!(await waitForReady(120))) throw new Error(`the share did not mount; see ${CONSOLE} and cloud-init-output.log`);
-    if (creds.present) {
-      installCredentials(creds);
-      say(`• credentials installed: ${credentialSummary(creds)}`);
-    } else {
-      say(`• no credentials file at ${creds.file}; the agents start without credentials`);
+    let sockets = [];
+    try {
+      if (shares === "virtiofs") sockets = await startVirtiofs(projects);
+      await boot(BOX, seed, { restrict: true, projects, shares, sockets, memory, cpus, ports });
+      if (!(await waitForSsh(180))) throw new Error(`no ssh after 180s; see ${CONSOLE}`);
+      const sshSeconds = Math.round((Date.now() - started) / 1000);
+      say(`• ssh answered after ${sshSeconds}s, waiting for the shares`);
+      if (!(await waitForReady(120))) throw new Error(`the share did not mount; see ${CONSOLE} and cloud-init-output.log`);
+      if (creds.present) {
+        installCredentials(creds);
+        say(`• credentials installed: ${credentialSummary(creds)}`);
+      } else {
+        say(`• no credentials file at ${creds.file}; the agents start without credentials`);
+      }
+      const next = {
+        ...record(), projects, shares, memory, cpus, ports,
+        upAt: new Date().toISOString(), sshSeconds,
+      };
+      delete next.project;
+      saveRecord(next);
+      say(`• up; ssh -i ${KEY} -p ${PORT} ${SSH_TARGET}`);
+    } catch (error) {
+      await stopVirtiofs();
+      if (pid()) await powerdown();
+      throw error;
     }
-    const next = { ...record(), projects, upAt: new Date().toISOString(), sshSeconds };
-    delete next.project;
-    saveRecord(next);
-    say(`• up; ssh -i ${KEY} -p ${PORT} ${SSH_TARGET}`);
   } finally {
     releaseLock();
   }
@@ -595,11 +812,10 @@ const down = async () => {
   acquireLock();
   try {
     await stopProxy();
-    if (!pid()) {
-      say("• not running");
-      return;
-    }
-    await powerdown();
+    const running = pid();
+    if (!running) say("• the VM is not running");
+    else await powerdown();
+    await stopVirtiofs();
   } finally {
     releaseLock();
   }
@@ -610,6 +826,7 @@ const reset = async () => {
   try {
     await stopProxy();
     if (pid()) await powerdown();
+    await stopVirtiofs();
     rmSync(BOX, { force: true });
     rmSync(PID, { force: true });
     const next = { ...record() };
@@ -637,6 +854,12 @@ const status = () => {
   say(`ssh:       ${running && reachable() ? `${HOST}:${PORT}` : "unreachable"}`);
   say(`proxy:     ${proxy ? `running (pid ${proxy}, log ${PROXY_LOG})` : "not running"}`);
   say(`projects:  ${running && projects.length ? projects.join(", ") : projects.length ? `${projects.join(", ")} (last)` : "none"}`);
+  if (typeof saved.shares === "string") say(`shares:    ${saved.shares}`);
+  if (typeof saved.memory === "number") say(`memory:    ${saved.memory} MB, ${saved.cpus} vcpu`);
+  if (Array.isArray(saved.ports) && saved.ports.length) {
+    say(`ports:     ${saved.ports.map((port) => `${port.host}->${port.guest}`).join(", ")}`);
+  }
+  if (readVirtiofs().length && readVirtiofs().every((entry) => alive(Number(entry.pid)))) say("virtiofsd: running");
   say(`base:      ${existsSync(BASE) ? BASE : "missing (run provision)"}`);
   say(`overlay:   ${existsSync(BOX) ? BOX : "missing (run up)"}`);
   say(`key:       ${KEY}`);
