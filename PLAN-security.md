@@ -92,7 +92,14 @@ commands, such as git for the tree, stay on the host).
 ## The VM box, step by step
 
 The VM comes first, ahead of the bubblewrap box: it is the stronger boundary and it doubles as
-staging. It follows bootstrapp's test VM (`packages/vps/testvm/vm.mjs`): plain QEMU as the user,
+staging.
+
+There is one VM, never one per agent or per project: 4 GB and 4 vCPUs in all (2 GB will do), shared
+by every agent (each a process in its own SSH session), every project in the box's list (each
+shared at its own path; changing the list restarts the VM) and the staging services. The first
+widecode that needs it starts it, the others use the running one, and it stops with the last of
+them (or stays up, as configured). Inside it, an agent can read the other listed projects; a user
+per project inside the same VM can separate them later if that matters. It follows bootstrapp's test VM (`packages/vps/testvm/vm.mjs`): plain QEMU as the user,
 no root, a Debian 13 cloud image (cached under `~/.cache/bootstrapp/vps-test/`) as the read-only
 base, and a qcow2 overlay per box, so a reset is a new overlay and nothing drifts.
 
