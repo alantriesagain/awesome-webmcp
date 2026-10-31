@@ -3,8 +3,8 @@
 // on a target's agent and model, its thought and words stream under the call, the call shows as a
 // subagent and the Agents tab follows it, and the MCP result is its last words. Cancelling the MCP
 // call stops the subagent and marks it stopped.
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
 import { request, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -143,13 +143,18 @@ const main = async (): Promise<void> => {
   const folder3 = mkdtempSync(join(tmpdir(), "widecode-task-acp-"));
   const home3 = mkdtempSync(join(tmpdir(), "widecode-task-acp-home-"));
   execFileSync("git", ["init", "-q"], { cwd: folder3 });
+  execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-q", "--allow-empty", "-m", "start"], { cwd: folder3 });
   const ws3 = await openWorkspace(folder3, 100);
   const c3 = new Conversation(ws3.folder);
   const w3 = composeWidecode(ws3, c3);
   const store3 = new Store(home3);
   store3.trust(folder3);
   await w3.host.useStore(store3);
-  w3.start({ acp: { agents: { fake: { name: "Fake", command: ["node", fake] } }, tasks: { targets: { deepseek: { agent: "fake" } } } } }, new NoStateFile(), []);
+  const setupLines = [
+    'if [ -f "$WIDECODE_FOLDER/setup" ]; then printf "%s" "$WIDECODE_FOLDER" > setup.txt; fi',
+    'if [ -f "$WIDECODE_FOLDER/fail-setup" ]; then echo "setup broke" >&2; exit 1; fi',
+  ];
+  w3.start({ acp: { agents: { fake: { name: "Fake", command: ["node", fake] } }, tasks: { targets: { deepseek: { agent: "fake" } }, worktreeSetup: setupLines } } }, new NoStateFile(), []);
   await w3.host.load();
   w3.host.session.useAgent("fake");
   const url3 = await w3.js.mcp.start();
@@ -173,9 +178,36 @@ const main = async (): Promise<void> => {
   }, 15000));
   ok("and the main agent hears about it", await until(() => c3.model.turns.some((t) => t.prompt !== null && t.prompt.text.includes("background subagent " + bgId + " finished")), 15000));
   c3.model.openTurn("main", 0, true);
-  const worktree = await send(url3, acp, '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"Task","arguments":{"description":"in a worktree","prompt":"hello","subagent_type":"deepseek","isolation":"worktree"}}}');
-  const workPath = (/\[worktree: (.+?) \(branch /.exec(worktree) ?? [])[1] ?? "";
-  ok("a worktree run answers with its path", worktree.includes("Hello, world.") && worktree.includes("worktree:") && workPath.length > 0 && existsSync(workPath));
+  const unchanged = await send(url3, acp, '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"Task","arguments":{"description":"in a worktree","prompt":"hello","subagent_type":"deepseek","isolation":"worktree"}}}');
+  ok("a worktree run with no change removes its worktree", unchanged.includes("Hello, world.") && unchanged.includes("worktree removed: no changes") && !unchanged.includes("[worktree:"));
+  const worktrees = join(folder3, ".widecode", "worktrees");
+  const branches = (pattern: string): string => spawnSync("git", ["-C", folder3, "branch", "--list", pattern], { encoding: "utf8" }).stdout;
+  eq("its worktree folder is gone", existsSync(worktrees) ? String(readdirSync(worktrees).length) : "0", "0");
+  eq("its branch is gone", branches("widecode/*").trim(), "");
+  c3.model.closeTurn(null);
+
+  c3.model.openTurn("main", 0, true);
+  writeFileSync(join(folder3, "fail-setup"), "");
+  const failed = await send(url3, acp, '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"Task","arguments":{"description":"setup fails","prompt":"hello","subagent_type":"deepseek","isolation":"worktree"}}}');
+  ok("a failing setup line fails the call", failed.includes("worktree setup failed") && failed.includes("setup broke"));
+  eq("and leaves no worktree", existsSync(worktrees) ? String(readdirSync(worktrees).length) : "0", "0");
+  eq("nor its branch", branches("widecode/*").trim(), "");
+  rmSync(join(folder3, "fail-setup"));
+  c3.model.closeTurn(null);
+
+  c3.model.openTurn("main", 0, true);
+  const changed = await send(url3, acp, '{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"Task","arguments":{"description":"with a change","prompt":"change","subagent_type":"deepseek","isolation":"worktree"}}}');
+  const changedPath = (/\[worktree: (.+?) \(branch /.exec(changed) ?? [])[1] ?? "";
+  const changedBranch = (/\(branch (.+?)\)/.exec(changed) ?? [])[1] ?? "";
+  ok("a worktree run with a change keeps it", changed.includes("Changed.") && changedPath.length > 0 && changedBranch.length > 0 && existsSync(join(changedPath, "changed.txt")) && branches(changedBranch).trim().length > 0);
+  c3.model.closeTurn(null);
+
+  c3.model.openTurn("main", 0, true);
+  writeFileSync(join(folder3, "setup"), "");
+  const withSetup = await send(url3, acp, '{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"Task","arguments":{"description":"with setup","prompt":"change","subagent_type":"deepseek","isolation":"worktree"}}}');
+  const setupPath = (/\[worktree: (.+?) \(branch /.exec(withSetup) ?? [])[1] ?? "";
+  ok("setup runs in the new worktree with both folders", setupPath.length > 0 && readFileSync(join(setupPath, "setup.txt"), "utf8") === folder3);
+  rmSync(join(folder3, "setup"));
   c3.model.closeTurn(null);
 
   // An ACP main announces widecode's Task call: the run goes under that call's card, not a new one.

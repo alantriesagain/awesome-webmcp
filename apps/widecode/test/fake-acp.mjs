@@ -32,6 +32,7 @@
  * - `work`: a call that runs 800 ms, then "Worked."; a prompt sent while it runs is taken into the
  *   turn, as opencode takes one (the reply adds "Also: <its text>"), and every prompt of the turn is
  *   answered when it ends;
+ * - `change`: writes `changed.txt` in the folder it runs in, then "Changed.";
  * - `question` and `present`: a call of widecode's tool for questions or plans (the first listed
  *   whose name has "ask" or "plan") over the MCP server session/new or session/load named
  *   (initialize, the initialized notification, tools/list, then tools/call with a progress token,
@@ -71,7 +72,7 @@
  * recorded lines up to the next of widecode's are written, a response with the id widecode used and
  * /tmp/PROJECT as the folder widecode named.
  */
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 
 const PAST = { title: "An earlier session", updated: Date.parse("2026-10-14T10:00:00Z") };
 if (process.argv.includes("--sessions")) {
@@ -337,6 +338,10 @@ const prompt = (id, sessionId, params) => {
         for (const pid of w.ids) write({ id: pid, result: { stopReason: "end_turn", usage: { inputTokens: 10, outputTokens: 2 } } });
       }, 200);
     }, 800);
+  } else if (first === "change") {
+    writeFileSync(cwd + "/changed.txt", "changed\n");
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Changed.") });
+    end("end_turn");
   } else if (first === "unknown") {
     ask("session/unknown_thing", { sessionId }, (_result, error) => {
       const e = error ?? {};

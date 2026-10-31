@@ -301,8 +301,14 @@ step aside; `plugins.claude.keepSubagents` keeps them. A main agent that names n
 ACP agent) announces the Task call itself, and the run goes under that call's card; when no
 announced call matches, the tool makes a card itself. Subagents are not given
 widecode's MCP server, so they cannot call Task again. With `isolation: "worktree"` the run starts
-in a git worktree under `.widecode/worktrees/<id>` and answers with its path and branch; widecode
-leaves it there to inspect or remove. Each run's events are kept under
+in a git worktree under `.widecode/worktrees/<id>` and answers with its path and branch.
+`worktreeSetup` is a list of shell lines run in the new worktree before the subagent starts, each
+with `WIDECODE_FOLDER` (the folder the worktree was made from) and `WIDECODE_WORKTREE` (its path)
+set; `worktreeSetupTimeoutMs` bounds each line (300000 by default). A line that fails removes the
+worktree and its branch and fails the call. When the run is over, widecode removes the worktree and
+its branch if its `git status --porcelain` and `git rev-list <head>..HEAD` match what the worktree
+had after setup, so setup's own changes do not keep it; otherwise it stays to inspect or remove.
+Each run's events are kept under
 `.widecode/tasks/<session>/<call>.jsonl`; opening the call in a resumed session reads them back.
 Remote isolation is not offered.
 

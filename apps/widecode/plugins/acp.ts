@@ -188,11 +188,13 @@ interface TasksConfig {
   targets: TaskTarget[];
   maxConcurrent: number;
   timeoutMs: number;
+  worktreeSetup: string[];
+  worktreeSetupTimeoutMs: number;
 }
 
 const tasksOf = (section: unknown): TasksConfig => {
   const t = obj(obj(section)?.tasks);
-  const out: TasksConfig = { replace: t?.replaceClaudeSubagents === true, targets: [], maxConcurrent: 4, timeoutMs: 1800000 };
+  const out: TasksConfig = { replace: t?.replaceClaudeSubagents === true, targets: [], maxConcurrent: 4, timeoutMs: 1800000, worktreeSetup: [], worktreeSetupTimeoutMs: 300000 };
   const targets = obj(t?.targets);
   if (targets !== null)
     for (const name of Object.keys(targets)) {
@@ -204,6 +206,8 @@ const tasksOf = (section: unknown): TasksConfig => {
     }
   if (typeof t?.maxConcurrent === "number" && t.maxConcurrent > 0) out.maxConcurrent = Math.floor(t.maxConcurrent);
   if (typeof t?.timeoutMs === "number" && t.timeoutMs >= 1000) out.timeoutMs = Math.floor(t.timeoutMs);
+  out.worktreeSetup = list(t?.worktreeSetup).filter((w): w is string => typeof w === "string" && w.length > 0);
+  if (typeof t?.worktreeSetupTimeoutMs === "number" && t.worktreeSetupTimeoutMs >= 1000) out.worktreeSetupTimeoutMs = Math.floor(t.worktreeSetupTimeoutMs);
   return out;
 };
 
@@ -2041,9 +2045,10 @@ widecode.plugin({
         const claimed = ctx.toolUseId.length === 0 ? taskCalls.claim(prompt, description) : "";
         const synthetic = ctx.toolUseId.length === 0 && claimed.length === 0;
         const id = ctx.toolUseId.length > 0 ? ctx.toolUseId : claimed.length > 0 ? claimed : "task-" + Date.now().toString(36) + "-" + ctx.callId;
-        const startRun = (cwd: string, worktree: string): Promise<string> => {
+        const startRun = (cwd: string, worktree: string, onClose?: () => void): Promise<string> => {
           const run = new SubagentRun(api, entry, target, cwd, worktree, str(args.model).length > 0 ? str(args.model) : target.model, id, description, synthetic, args.run_in_background === true, tasks.timeoutMs, () => {
             runs.delete(id);
+            if (onClose !== undefined) onClose();
           });
           if (!run.createCard()) throw new Error("the main agent cannot take a subagent card");
           runs.set(id, run);
@@ -2062,15 +2067,64 @@ widecode.plugin({
         ctx.onCancel(() => {
           cancelled = true;
         });
-        return api.process.run("mkdir -p " + quote(folder + "/.widecode/worktrees") + " && git -C " + quote(folder) + " worktree add -b " + quote(branch) + " " + quote(path), "", 15000).then((r) => {
-          made();
-          if (cancelled) return "The subagent was stopped before it started.";
-          if (r.code !== 0) throw new Error("cannot make a worktree: " + (r.err.trim().length > 0 ? r.err.trim() : r.out.trim()));
-          return startRun(path, path + " (branch " + branch + ")");
-        }, (e: unknown) => {
-          made();
-          throw e;
-        });
+        let baselineStatus = "";
+        let baselineHead = "";
+        let cleaned = false;
+        const removeWorktree = (): Promise<void> => {
+          if (cleaned) return Promise.resolve();
+          cleaned = true;
+          return api.process.run("git -C " + quote(folder) + " worktree remove --force " + quote(path), "", 15000).then(() => api.process.run("git -C " + quote(folder) + " branch -D " + quote(branch), "", 15000).then(() => {}));
+        };
+        const worktreeOver = (): Promise<boolean> =>
+          api.process.run("git -C " + quote(path) + " status --porcelain", "", 15000).then((s) =>
+            api.process.run("git -C " + quote(path) + " rev-list --count " + quote(baselineHead) + "..HEAD", "", 15000).then((h) => {
+              if (s.code !== 0 || h.code !== 0 || s.out !== baselineStatus || h.out.trim() !== "0") return false;
+              return removeWorktree().then(() => true);
+            }),
+          );
+        const keptLine = "\n\n[worktree: " + path + " (branch " + branch + ")]";
+        const goneLine = "\n\n[worktree removed: no changes]";
+        const withLine = (text: string, removed: boolean): string => {
+          if (text.endsWith(goneLine)) return removed ? text : text.slice(0, text.length - goneLine.length) + keptLine;
+          if (text.endsWith(keptLine)) return removed ? text.slice(0, text.length - keptLine.length) + goneLine : text;
+          return text + (removed ? goneLine : keptLine);
+        };
+        const background = args.run_in_background === true;
+        const prepared = async (): Promise<string> => {
+          try {
+            const added = await api.process.run("mkdir -p " + quote(folder + "/.widecode/worktrees") + " && git -C " + quote(folder) + " worktree add -b " + quote(branch) + " " + quote(path), "", 15000);
+            if (cancelled) return "The subagent was stopped before it started.";
+            if (added.code !== 0) throw new Error("cannot make a worktree: " + (added.err.trim().length > 0 ? added.err.trim() : added.out.trim()));
+            for (const setupLine of tasks.worktreeSetup) {
+              // In the worktree: process.run runs where widecode was started.
+              const command = "cd " + quote(path) + " && env WIDECODE_FOLDER=" + quote(folder) + " WIDECODE_WORKTREE=" + quote(path) + " sh -c " + quote(setupLine);
+              const done = await api.process.run(command, "", tasks.worktreeSetupTimeoutMs);
+              if (cancelled) return "The subagent was stopped before it started.";
+              if (done.code !== 0) {
+                await removeWorktree();
+                throw new Error("worktree setup failed: " + setupLine + ": " + (done.err.trim().length > 0 ? done.err.trim() : done.out.trim()));
+              }
+            }
+            const status = await api.process.run("git -C " + quote(path) + " status --porcelain", "", 15000);
+            const head = await api.process.run("git -C " + quote(path) + " rev-parse HEAD", "", 15000);
+            baselineStatus = status.out;
+            baselineHead = head.out.trim();
+            if (cancelled) return "The subagent was stopped before it started.";
+            const started = startRun(path, path + " (branch " + branch + ")", background ? () => {
+              void worktreeOver().then((removed) => api.note(removed ? "worktree removed: no changes" : "worktree kept: " + path + " (branch " + branch + ")"));
+            } : undefined);
+            if (background) return started;
+            return started.then(
+              (text) => worktreeOver().then((removed) => withLine(text, removed)),
+              (e: unknown) => worktreeOver().then((removed) => {
+                throw new Error(withLine(e instanceof Error ? e.message : String(e), removed));
+              }),
+            );
+          } finally {
+            made();
+          }
+        };
+        return prepared();
       },
     });
     api.tools.add({
