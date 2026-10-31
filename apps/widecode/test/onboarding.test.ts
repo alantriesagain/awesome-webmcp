@@ -52,7 +52,7 @@ const main = async (): Promise<void> => {
   const open = (): string => w.host.conversation.model.openRequests().map((r) => r.name).join(",");
   const question = (): { question: string; header: string; options: { label: string; description: string }[] } => w.host.conversation.model.openRequests()[0].questions[0];
   const tell = (text: string): string => {
-    w.host.roles.chat.submit(text);
+    w.host.roles.chat.typed(text);
     return w.host.screen.message.peek();
   };
 
@@ -126,7 +126,7 @@ const main = async (): Promise<void> => {
   panel.key(new KeyEvent("char", "3", false, false, false), true);
   eq("Exit", did.join(","), "look,look,exit");
   runOnboarding(w.host, later());
-  w.host.roles.chat.submit("sure, go ahead");
+  w.host.roles.chat.typed("sure, go ahead");
   eq("an answer in words is Look only, and the words do not reach the agent", did.join(","), "look,look,exit,look");
   const t = later();
   t.trusted = true;

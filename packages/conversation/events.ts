@@ -35,6 +35,7 @@ interface Ev {
   input?: unknown;
   category?: unknown;
   summary?: unknown;
+  permission?: unknown;
   paths?: unknown;
   command?: unknown;
   written?: unknown;
@@ -231,6 +232,7 @@ const requestOf = (model: ChatModel, id: string, e: Ev, parent: string): Item =>
   const item = model.openRequest(id, str(e.name), str(e.callId), e.input !== undefined ? e.input : null, parent);
   item.category = str(e.category);
   item.questions = questionsOf(e.questions);
+  item.permission = e.permission === true;
   item.text = str(e.plan);
   return item;
 };

@@ -61,8 +61,10 @@ export const startWidecode = async (term: Terminal, folder: string, selftest: st
   await host.useStore(store);
   host.session.userPermissions = config !== null ? config.permissions : null;
   host.session.titler.executable = conversation.executable;
-  // The peers daemon is this binary run again; a selftest runs none.
+  // The peers daemon is this binary run again; a selftest runs none. Desktop alerts are the real
+  // app's alone: a test or a selftest must not reach the user's screen.
   host.peersLauncher = selftest.length > 0 ? "" : process.execPath;
+  host.real = selftest.length === 0;
   host.onLog = (text: string) => log(text);
   // JS plugins: the user's folder, and the project's own once the user trusts it.
   const projectPlugins = host.harness.pluginsDir();

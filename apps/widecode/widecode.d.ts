@@ -408,7 +408,7 @@ declare namespace widecode {
     | { type: "task"; id: string; taskId?: string; description?: string; agentType?: string; background?: boolean }
     | { type: "taskUpdate"; id: string; taskId?: string; status?: string; lastTool?: string; description?: string; summary?: string; done?: boolean }
     | { type: "thinkingTokens"; parent?: string; key: string; tokens: number }
-    | { type: "request"; id: string; name?: string; callId?: string; input?: unknown; category: "question" | "plan" | "permission"; questions?: { question: string; header?: string; multi?: boolean; options: { label: string; description?: string }[] }[]; plan?: string }
+    | { type: "request"; id: string; name?: string; callId?: string; input?: unknown; category: "question" | "plan" | "permission"; permission?: boolean; questions?: { question: string; header?: string; multi?: boolean; options: { label: string; description?: string }[] }[]; plan?: string }
     /** Request `id` is no longer open: withdrawn by the agent, or `answered` without the panel (an answer the user gave before covers it). */
     | { type: "cancelRequest"; id: string; state?: "answered" }
     | { type: "usage"; model?: string; version?: string; contextUsed?: number; contextSize?: number; costUsd?: number; inputTokens?: number; outputTokens?: number };
@@ -654,7 +654,7 @@ declare namespace widecode {
        * here, not to the agent. Its state is "cancelled" when the request went away first (its turn
        * ended, the chat was cleared).
        */
-      ask(request: { category: "question" | "plan"; name?: string; questions?: { question: string; header?: string; multi?: boolean; options: { label: string; description?: string }[] }[]; plan?: string }, parent?: string): Promise<AgentReply>;
+      ask(request: { category: "question" | "plan"; name?: string; permission?: boolean; questions?: { question: string; header?: string; multi?: boolean; options: { label: string; description?: string }[] }[]; plan?: string }, parent?: string): Promise<AgentReply>;
     };
     /**
      * widecode's own tools, which agents call over MCP (widecode's server listens on 127.0.0.1; each
@@ -687,6 +687,8 @@ declare namespace widecode {
       active(): { column: string; panel: string; folder: string; folderName: string };
       /** Claude Code's status line input for the session. */
       info(): StatusInfo;
+      /** Whether this is the real app, not a test or a selftest: desktop alerts run only here. */
+      real(): boolean;
       /** The status bar's message, or the key hints when there is none. */
       note(): string;
       /** The keymap in use: "default", or the id a plugin's brought. */
@@ -780,10 +782,12 @@ declare namespace widecode {
       tools(tab: { title?: string; order?: number }): void;
     };
     chat: {
-      /** Send as the user would from the composer (commands included). */
+      /** Send a message to the agent as the composer does (commands included), never as an answer to an open request. */
       submit(text: string): void;
       /** Show the conversation from its end. */
       showChat(): void;
+      /** Show request `id` in the request panel, the chat column focused (a desktop notification's click). */
+      showRequest(id: string): void;
       /** Load the conversation's earlier part (it is read from its end). */
       loadEarlier(): void;
       toTop(): void;

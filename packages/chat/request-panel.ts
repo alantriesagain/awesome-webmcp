@@ -44,6 +44,20 @@ export class RequestPanel extends View {
     return item !== null && item.category === PLAN;
   }
 
+  /** The request is a permission's: its options answer it, and the composer cannot. */
+  private isPermission(): boolean {
+    const item = this.item;
+    return item !== null && (item.permission || item.category === "permission");
+  }
+
+  /** How many other open requests wait while this one is shown. */
+  private waiting(): number {
+    const shown = this.item;
+    let open = 0;
+    for (const item of this.host.current().model.openRequests()) if (item !== shown) open++;
+    return open;
+  }
+
   open(item: Item): void {
     this.item = item;
     this.questions = item.questions;
@@ -96,7 +110,7 @@ export class RequestPanel extends View {
   private rowCount(): number {
     if (this.isPlan()) return 2;
     const q = this.questions[this.index];
-    return q === undefined ? 0 : q.options.length + 1;
+    return q === undefined ? 0 : q.options.length + (this.isPermission() ? 0 : 1);
   }
 
   private finish(reply: Reply): void {
@@ -161,10 +175,14 @@ export class RequestPanel extends View {
     this.answer(a);
   }
 
-  /** The composer's text while the panel is open: a free answer, or feedback on the plan. */
+  /** The composer's text while the panel is open: a free answer, or feedback on the plan; a permission takes only its options. */
   submitText(text: string): void {
     if (this.isPlan()) {
       this.finish(this.declined(text));
+      return;
+    }
+    if (this.isPermission()) {
+      this.hint("Choose one of the options: a permission has no answer in your own words.");
       return;
     }
     const q = this.questions[this.index];
@@ -253,8 +271,9 @@ export class RequestPanel extends View {
   override render(): unknown {
     const item = this.item;
     if (item === null) return html``;
+    const more = this.waiting();
     if (this.isPlan())
-      return html`<div border title="Plan ready" fg=${palette.warn}><div fg=${palette.paneText}>
+      return html`<div border title=${"Plan ready" + (more > 0 ? " · " + String(more) + " more waiting" : "")} fg=${palette.warn}><div fg=${palette.paneText}>
         <p>${item.text.length > 0 ? "The plan is above. Start working on it?" : this.agentName + " finished planning. Start working on it?"}</p>
         ${this.row(0, "Yes, start", "leaves plan mode", "")}
         ${this.row(1, "No, keep planning", "write what to change below, Enter sends it", "")}
@@ -267,8 +286,8 @@ export class RequestPanel extends View {
     const chosenLabel = a !== null && a.text.length === 0 && !q.multi && a.labels.length > 0 ? a.labels[0] : "";
     const rows: TemplateResult[] = [];
     for (let i = 0; i < q.options.length; i++) rows.push(this.row(i, q.options[i].label, q.options[i].description, q.multi ? (this.chosen.has(i) ? "[x] " : "[ ] ") : q.options[i].label === chosenLabel ? "✓ " : ""));
-    rows.push(this.row(q.options.length, "Something else", a !== null && a.text.length > 0 ? "answered: " + a.text : "type it below, Enter sends it", ""));
-    const title = this.agentName + " asks" + (several ? " (" + String(this.index + 1) + "/" + String(this.questions.length) + ")" : "") + (q.header.length > 0 ? " · " + q.header : "");
+    if (!this.isPermission()) rows.push(this.row(q.options.length, "Something else", a !== null && a.text.length > 0 ? "answered: " + a.text : "type it below, Enter sends it", ""));
+    const title = this.agentName + " asks" + (several ? " (" + String(this.index + 1) + "/" + String(this.questions.length) + ")" : "") + (q.header.length > 0 ? " · " + q.header : "") + (more > 0 ? " · " + String(more) + " more waiting" : "");
     const keys = (q.multi ? "↑↓ move · Space marks · Enter answers" : "↑↓ or a number chooses · Enter answers") + (several ? " · ←→ other questions" : "") + " · Esc declines";
     return html`<div border title=${title} fg=${palette.warn}><div fg=${palette.paneText}>
       ${several ? this.strip() : html``}

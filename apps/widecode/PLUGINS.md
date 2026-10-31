@@ -549,7 +549,7 @@ phase, the agent's events) and the screen as it was.
 | `languages` | JavaScript, TypeScript, JSON, CSS, HTML, Markdown | | |
 | `emacs` | the emacs keymap, in use unless config.json or /keymap says otherwise: Ctrl+F/B, Ctrl+P/N, Alt+D, Alt+< and Alt+>; the composer has readline's other keys already | | |
 | `vi` | the vi keymap (`/keymap vi`): insert and normal modes in the composer (Esc between them, the border saying which), motions, operators with counts, a register, undo; j k gg G in the code column | | |
-| `alerts` | the terminal bell and a `notify-send` desktop notification when a request opens in the request panel, once for each | `bell`, `notify`, `on` (the categories that alert: `permission`, `question`, `plan`), `notifyCommand` | |
+| `alerts` | the terminal bell and a `notify-send` desktop notification when a request opens in the request panel, once for each, and in the real app only | `bell`, `notify`, `on` (the categories that alert: `permission`, `question`, `plan`), `notifyCommand`, `onClick` (a shell line run when the notification is clicked, such as `guake --show`; none when absent) | |
 
 ## A worked example
 

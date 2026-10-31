@@ -167,6 +167,9 @@ export const answerWidgets = (rt: JsRuntime, name: string, a: unknown[]): HostAn
     case "chat.showChat":
       h.roles.chat.showChat();
       return answer(null);
+    case "chat.showRequest":
+      h.roles.chat.showRequest(str(a[0]));
+      return answer(null);
   }
   return null;
 };
@@ -205,6 +208,7 @@ export const NAMESPACE_COMPOSER = new PreludePart("composer", `        get: () =
 /** The `chat` namespace of the plugin API, its JS side: the calls these answers take. */
 export const NAMESPACE_CHAT = new PreludePart("chat", `        submit: (text) => call("chat.submit", String(text)),
         showChat: () => call("chat.showChat"),
+        showRequest: (id) => call("chat.showRequest", String(id)),
         loadEarlier: () => call("chat.loadEarlier"),
         toTop: () => call("chat.toTop"),
         toEnd: () => call("chat.toEnd"),

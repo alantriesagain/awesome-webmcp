@@ -62,6 +62,11 @@ export class Host extends ConversationHolder {
    * run itself again. The daemon it would start ran the app, whose plugin started another, once.
    */
   peersLauncher = "";
+  /**
+   * Whether this is the real app the user runs (startup.ts), not a test or a selftest: a plugin
+   * that reaches the user's desktop alerts only here. The real entry sets it; composeWidecode does not.
+   */
+  real = false;
   private editSeq = 0;
   /** The requests already announced, and the model they belong to (a new conversation or a reset clears them). */
   private readonly seenRequests = new Set<string>();
@@ -145,9 +150,9 @@ export class Host extends ConversationHolder {
 
 
   /**
-   * Announce each request that has opened since the last change, from the model's own list: a
-   * request under a background subagent's card in an earlier turn counts, and one answered at once
-   * is still one.
+   * Announce each request that is open since the last change, from the model's own list: a request
+   * under a background subagent's card in an earlier turn counts, one answered or cancelled before
+   * the change does not.
    */
   private noteRequests(): void {
     const model = this.conversation.model;
@@ -161,7 +166,7 @@ export class Host extends ConversationHolder {
       const id = item.requestId;
       if (id.length === 0 || this.seenRequests.has(id)) continue;
       this.seenRequests.add(id);
-      if (loading) continue;
+      if (loading || item.state !== "open") continue;
       this.session.requestOpened.fire(this.requestNotice(item));
     }
   }

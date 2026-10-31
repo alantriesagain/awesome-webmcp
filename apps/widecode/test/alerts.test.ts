@@ -2,7 +2,9 @@
 // Alerts when a request opens in the request panel: the terminal bell (the BEL the clipboard's
 // write carries in tests) and the notify-send command, recorded in a script of the test's; a
 // category left out of "on"; bell and notify each turned off; the plugin switched off; two
-// requests alert twice, one never twice, and a request answered at once still alerts once.
+// requests alert twice, one never twice, and a request answered at once does not alert. Alerts
+// run only in the real app (the host's flag, as startup.ts sets it), and a notification click
+// runs the section's onClick line and shows its request.
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,11 +35,13 @@ const main = async (): Promise<void> => {
   chmodSync(recorder, 0o755);
   let run = 0;
 
-  const make = (plugins: unknown): App => {
+  const make = (plugins: unknown, real = true): App => {
     const log = join(folder, "notify-" + String(++run) + ".log");
     process.env["WIDECODE_ALERTS_LOG"] = log;
     const c = new Conversation(ws.folder);
     const w = createWidecode(ws, c, plugins);
+    // What startup.ts sets in the real entry alone; a test never reaches the user's desktop otherwise.
+    w.host.real = real;
     const rings: string[] = [];
     w.host.screen.clipboard.onWrite = (text: string) => rings.push(text);
     return { w, c, rings, log };
@@ -55,7 +59,12 @@ const main = async (): Promise<void> => {
     return existsSync(app.log) ? readFileSync(app.log, "utf8") : "";
   };
 
-  let app = make({ alerts: { notifyCommand: [recorder] } });
+  let app = make({ alerts: { notifyCommand: [recorder] } }, false);
+  open(app, "req-1", "permission", "Bash", "Bash git push origin main: allow it?");
+  eq("a test never alerts: no bell, no notify-send", (await quiet(app)) + " " + String(app.rings.length), " 0");
+  app.w.host.kernel.stop();
+
+  app = make({ alerts: { notifyCommand: [recorder] } });
   open(app, "req-1", "permission", "Bash", "Bash git push origin main: allow it?");
   ok("a permission alerts: the bell rings once", await until(() => app.rings.length > 0, 3000) && app.rings.join("") === "\x07");
   eq("notify-send gets the kind and the one-line summary", await until(() => existsSync(app.log) && readFileSync(app.log, "utf8") === "widecode: permission\nBash git push origin main: allow it?\n", 3000) ? readFileSync(app.log, "utf8") : "", "widecode: permission\nBash git push origin main: allow it?\n");
@@ -94,7 +103,7 @@ const main = async (): Promise<void> => {
   item.summary = "Bash rm: allow it?";
   app.c.model.settle("req-3", "answered");
   app.c.changed();
-  ok("a request answered at once still alerts once", await until(() => app.rings.length === 3, 3000) && app.rings.join("") === "\x07\x07\x07");
+  eq("a request answered at once does not alert", String(app.rings.length), "2");
 
   // A background subagent's question opens under its card in a turn many turns back.
   const m = app.c.model;
@@ -112,7 +121,19 @@ const main = async (): Promise<void> => {
   late.category = "question";
   late.summary = "rm a.txt asks for permission";
   app.c.changed();
-  ok("a question under an earlier turn's card alerts too", await until(() => app.rings.length === 4, 3000));
+  ok("a question under an earlier turn's card alerts too", await until(() => app.rings.length === 3, 3000));
+  app.w.host.kernel.stop();
+
+  // notify-send's action: when it prints `open`, the section's onClick line runs and the request shows.
+  const clicker = join(folder, "click.sh");
+  const clicked = join(folder, "clicked.txt");
+  writeFileSync(clicker, "#!/bin/sh\nprintf '%s\\n' \"$@\" >> \"$WIDECODE_ALERTS_LOG\"\nprintf 'open\\n'\n");
+  chmodSync(clicker, 0o755);
+  app = make({ alerts: { notifyCommand: [clicker], onClick: "touch " + clicked } });
+  open(app, "req-1", "permission", "Bash", "Bash ls: allow it?");
+  eq("the notification asks for the open action", await until(() => existsSync(app.log) && readFileSync(app.log, "utf8") === "-A\nopen=Open\nwidecode: permission\nBash ls: allow it?\n", 3000) ? readFileSync(app.log, "utf8") : "", "-A\nopen=Open\nwidecode: permission\nBash ls: allow it?\n");
+  ok("a click runs onClick", await until(() => existsSync(clicked), 3000));
+  ok("and shows its request in the chat", await until(() => app.w.chat.pane.panel.item?.requestId === "req-1", 3000) && app.w.host.screen.active.peek() === "chat");
   app.w.host.kernel.stop();
 
   ws.close();

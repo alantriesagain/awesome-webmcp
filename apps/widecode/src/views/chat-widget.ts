@@ -17,6 +17,8 @@ export class ChatWidget extends ChatTarget {
   readonly pane: ChatPane;
   /** What a line from the composer does when no question or plan takes it (null: nothing). */
   onLine: ((text: string) => void) | null = null;
+  /** The composer's text when the panel opened: text from before that is a message, never an answer. */
+  private panelOpenedWith = "";
 
   constructor(host: Host) {
     super();
@@ -64,23 +66,39 @@ export class ChatWidget extends ChatTarget {
     this.pane.showChat();
   }
 
-  /** A line from the composer: the open question or plan's answer, else the owner's. */
+  /** Send a line as a message to the agent (a plugin's submit too): never an answer to the panel. */
   override submit(text: string): void {
-    const pane = this.pane;
-    pane.strip.hide();
-    if (pane.panel.active) {
-      pane.panel.submitText(text);
-      return;
-    }
+    this.pane.strip.hide();
     const fn = this.onLine;
     if (fn !== null) fn(text);
   }
 
-  /** A line the user typed: kept for ↑ unless it answers a question or plan, the walk ended, then submitted. */
+  /**
+   * A line the user typed in the composer: kept for ↑, the walk ended, then the open question or
+   * plan's answer, unless the composer already held it when the panel opened: that line is a
+   * message to the agent, not an answer.
+   */
   override typed(text: string): void {
-    if (!this.pane.panel.active) this.host.remember(text);
-    this.pane.leaveHistory();
+    const pane = this.pane;
+    const before = pane.panel.active && text === this.panelOpenedWith;
+    if (!pane.panel.active || before) this.host.remember(text);
+    pane.leaveHistory();
+    if (pane.panel.active && !before) {
+      pane.panel.submitText(text);
+      return;
+    }
     this.submit(text);
+  }
+
+  /** Show request `id` in the panel (a desktop notification's click): the chat column, its question open. */
+  override showRequest(id: string): void {
+    const item = this.host.conversation.model.openRequests().find((r) => r.requestId === id) ?? null;
+    if (item === null) return;
+    const panel = this.pane.panel;
+    this.panelOpenedWith = this.pane.input.value();
+    panel.agentName = this.host.conversation.agent.name();
+    panel.open(item);
+    this.host.screen.focus("chat");
   }
 
   private conversationChanged(): void {
@@ -92,9 +110,13 @@ export class ChatWidget extends ChatTarget {
     const shown = panel.item;
     if (shown !== null && shown.state !== "open") panel.close();
     if (open.length > 0 && panel.item === null) {
+      this.panelOpenedWith = pane.input.value();
       panel.agentName = this.host.conversation.agent.name();
       panel.open(open[0]);
       this.host.screen.focus("chat");
+    } else if (panel.item !== null) {
+      // The shown request's title says how many others wait.
+      panel.$requestUpdate();
     }
   }
 }

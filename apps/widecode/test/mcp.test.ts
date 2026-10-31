@@ -150,7 +150,7 @@ const main = async (): Promise<void> => {
   const panel = w.chat.pane.panel;
   const asking = async (text: string): Promise<Item | null> => {
     const before = c.model.turns.length;
-    w.host.roles.chat.submit(text);
+    w.host.roles.chat.typed(text);
     await until(() => c.model.turns.length > before && c.model.openRequests().length > 0 && panel.active);
     const open = c.model.openRequests();
     return open.length > 0 ? open[0] : null;
@@ -170,17 +170,17 @@ const main = async (): Promise<void> => {
   eq("and the call holds the answer; the request is answered", (c.model.tool("call_AskUser")?.result?.text ?? "") + " | " + (q !== null ? q.state : ""), 'The user answered:\n"Which color?": Red | answered');
 
   await asking("question");
-  w.host.roles.chat.submit("Green, with stripes");
+  w.host.roles.chat.typed("Green, with stripes");
   ok("the user's own words", (await until(idle)) && said(last()).endsWith('"Which color?": Green, with stripes'));
 
-  w.host.roles.chat.submit("call state {}");
+  w.host.roles.chat.typed("call state {}");
   ok("a harness plugin tool called by the agent: widecode's state, the plugins with their states among it", (await until(idle)) && said(last()).includes("answered: {") && said(last()).includes('"id":"harness"') && said(last()).includes('"state":"running"'));
 
   const withdrawn = await asking("question");
   c.interrupt();
   ok("Esc: the turn ends and the question is withdrawn", (await until(idle)) && withdrawn !== null && withdrawn.state === "cancelled" && !panel.active && chat().some((l: string) => l.includes("◆ Fake asks  withdrawn")));
 
-  w.host.roles.chat.submit("/plan");
+  w.host.roles.chat.typed("/plan");
   ok("in plan mode", await until(() => c.model.permissionMode === "plan"));
   const p = await asking("present");
   eq("PresentPlan: the plan to approve", p === null ? "none" : p.category + " | " + p.name + " | " + p.text, "plan | PresentPlan | 1. Write the test\n2. Make it pass");
@@ -194,10 +194,10 @@ const main = async (): Promise<void> => {
   ok("approved: the agent leaves plan mode, and is asked to carry the plan out after its turn", await until(() => c.model.turns.length === turns + 1 && idle()));
   eq("its mode, what it was told, what it was asked", c.model.permissionMode + " | " + said(c.model.turns[turns - 1]).slice(said(c.model.turns[turns - 1]).indexOf("answered: ") + 10) + " | " + said(last()), "build | The user approved the plan. Plan mode ends with this turn, and the next message asks you to carry the plan out: end this turn now, without making changes. | You said: The plan is approved: carry it out.");
 
-  w.host.roles.chat.submit("/plan");
+  w.host.roles.chat.typed("/plan");
   await until(() => c.model.permissionMode === "plan");
   await asking("present");
-  w.host.roles.chat.submit("Add a step for the docs");
+  w.host.roles.chat.typed("Add a step for the docs");
   ok("declined: the user's words go back, the mode stays", (await until(idle)) && said(last()).endsWith("answered: The user did not approve the plan.\n\nAdd a step for the docs") && c.model.permissionMode === "plan");
 
   // A reload starts the plugins and the agent's process again.
@@ -208,7 +208,7 @@ const main = async (): Promise<void> => {
   // An agent that takes no MCP server over HTTP.
   eq("another agent", w.host.session.useAgent("old"), "");
   c.reset();
-  w.host.roles.chat.submit("question");
+  w.host.roles.chat.typed("question");
   ok("one without MCP over HTTP is given none", (await until(() => c.model.turns.length > 0 && said(last()) === "No widecode server.")) && readFileSync(oldLog, "utf8").includes('"mcpServers":[]'));
 
   w.host.kernel.stop();

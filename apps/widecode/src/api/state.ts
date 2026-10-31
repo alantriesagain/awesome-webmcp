@@ -17,6 +17,8 @@ export const answerState = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
     case "settings.setState":
       k.settings.setState(str(a[0]), a[1]);
       return answer(null);
+    case "state.real":
+      return answer(h.real);
     case "state.note":
       return answer(h.screen.noteText());
     case "state.keymap":
@@ -97,6 +99,7 @@ export const NAMESPACE_STATE = new PreludePart("state", `        folder: () => c
         base: () => call("state.base"),
         active: () => call("state.active"),
         info: () => call("state.info"),
+        real: () => call("state.real"),
         note: () => call("state.note"),
         keymap: () => call("state.keymap"),
         screen: (columns) => call("state.screen", Array.from(columns ?? [], String)),

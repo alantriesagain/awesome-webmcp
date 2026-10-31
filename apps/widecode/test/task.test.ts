@@ -104,6 +104,12 @@ const main = async (): Promise<void> => {
   ok("the subagent's permission is asked", await until(() => c.model.openRequests().length > 0, 10000));
   const request = c.model.openRequests()[0];
   eq("under the Task call", String(request !== undefined && request.turn === askCall.turn && askCall.children.includes(request)), "true");
+  // A subagent's permission is a permission's request: no answer in the user's own words.
+  ok("it is marked as a permission", request.permission);
+  w.chat.pane.panel.open(request);
+  w.chat.typed("let it run");
+  eq("free words are refused, the request still open", request.state + " " + String(w.chat.pane.panel.active) + " " + w.host.screen.message.peek(), "open true Choose one of the options: a permission has no answer in your own words.");
+  w.chat.pane.panel.close();
   if (request !== undefined) {
     const reply = new Reply("answered");
     const a = new Answer(request.questions[0].question, false);

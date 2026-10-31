@@ -1277,7 +1277,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
           const shown = shownPath(folder);
           const options = folder.length === 0 ? PERMISSION_OPTIONS : [PERMISSION_OPTIONS[0], PERMISSION_OPTIONS[1], { label: folderSessionLabel(shown), description: "the folder joins this session's: reading there stops asking" }, { label: folderKeptLabel(shown), description: "the same, kept in this folder's .claude/settings.local.json for later sessions" }, PERMISSION_OPTIONS[2], PERMISSION_OPTIONS[3]];
           permissions.set(id, { tool, input: q.input, key, folder, shown });
-          emit({ type: "request", id, name: tool, callId: str(q.tool_use_id), input: q.input, category: "permission", questions: [{ question: tool + " " + argument + ": allow it?", header: "Permission", options }] });
+          emit({ type: "request", id, name: tool, callId: str(q.tool_use_id), input: q.input, category: "permission", permission: true, questions: [{ question: tool + " " + argument + ": allow it?", header: "Permission", options }] });
         }
       }
     }

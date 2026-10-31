@@ -22,9 +22,12 @@ export class ChatTarget {
   /** Show the conversation from its end (it was resumed or replaced). */
   showChat(): void {}
 
-  /** Send `text` as the user would from the composer (commands included). */
+  /** Send `text` as a message to the agent (commands included), never as an answer to an open request. */
   submit(_text: string): void {}
 
   /** A line the user typed in the composer: kept for ↑ (unless it answers a question or plan), then submitted. */
   typed(_text: string): void {}
+
+  /** Show request `id` in the request panel, the chat column focused. */
+  showRequest(_id: string): void {}
 }

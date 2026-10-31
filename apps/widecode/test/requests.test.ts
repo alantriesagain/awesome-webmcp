@@ -9,6 +9,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createWidecode, Widecode } from "../src/compose.ts";
 import { Conversation } from "@widecode/conversation/conversation.ts";
+import { TOOL } from "@widecode/conversation/model.ts";
+import { Choice, Question } from "@widecode/conversation/requests.ts";
 import { Caret, Clip, DEFAULT_STYLE, KeyEvent, Screen, TRoot, frames, layout, mount, paint, unmount } from "@lightstart/light/native/tui";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { done, eq, ok } from "@light/test/assert.ts";
@@ -126,7 +128,7 @@ const main = async (): Promise<void> => {
     ok("→ past the last question wraps to the first", screen().includes("Claude asks (1/2) · Fruits"));
     app.shell.handleKey(key("right", ""));
     ok("and → again returns to the open one", screen().includes("Claude asks (2/2) · Color"));
-    app.chat.submit("my own words: purple");
+    app.chat.typed("my own words: purple");
   });
   eq("a multi-select and an answer in the user's words: the exact response", multi, recorded("ask-multi"));
 
@@ -138,7 +140,7 @@ const main = async (): Promise<void> => {
 
   const rejected = await run("plan", (app: Widecode) => {
     app.shell.handleKey(key("down", ""));
-    app.chat.submit("Use a heredoc instead.");
+    app.chat.typed("Use a heredoc instead.");
   });
   ok("keep planning sends the feedback as a denial", rejected.includes('"behavior":"deny","message":"Use a heredoc instead."'));
 
@@ -150,6 +152,112 @@ const main = async (): Promise<void> => {
     const text = screen();
     ok("the turn's end withdraws the question and closes the panel", !text.includes("Claude asks · Color") && text.includes("◆ Claude asks  withdrawn"));
   });
+  // A line the user typed or queued before a request opened is a message, never its answer.
+  const c3 = new Conversation(ws.folder);
+  const app3 = createWidecode(ws, c3, null);
+  const root3 = new TRoot();
+  app3.shell.resize(W);
+  mount(app3.shell, root3);
+  const sent3: string[] = [];
+  app3.chat.onLine = (text: string) => sent3.push(text);
+  const input3 = app3.chat.pane.input;
+  input3.lines = ["typed before it opened"];
+  c3.receive('{"type":"control_request","request_id":"q-1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Which?","header":"Q","options":[{"label":"A"},{"label":"B"}]}]}}}');
+  c3.changed();
+  eq("the question's panel opened", app3.chat.pane.panel.item?.requestId ?? "none", "q-1");
+  app3.chat.typed("typed before it opened");
+  eq("text typed before the panel opened is a message to the agent", sent3.join(",") + " " + String(c3.model.openRequests().length), "typed before it opened 1");
+  app3.chat.submit("a queued message");
+  eq("a queued message stays a message too", sent3.join(",") + " " + String(c3.model.openRequests().length), "typed before it opened,a queued message 1");
+  app3.chat.typed("A");
+  eq("text typed while the panel is shown answers it", String(sent3.length) + " " + String(c3.model.openRequests().length), "2 0");
+  unmount(app3.shell);
+  c3.kill();
+  app3.host.kernel.stop();
+  app3.js.killProcesses();
+
+  // A permission's panel offers its options alone; free words are refused, the request still open.
+  const c4 = new Conversation(ws.folder);
+  const app4 = createWidecode(ws, c4, null);
+  const root4 = new TRoot();
+  app4.shell.resize(W);
+  mount(app4.shell, root4);
+  const paint4 = (): string => {
+    for (let i = 0; i < 3; i++) {
+      frames.flush();
+      layout(root4, W, H, DEFAULT_STYLE);
+    }
+    const s = new Screen(W, H);
+    paint(root4, s, new Clip(0, 0, W, H), DEFAULT_STYLE, new Caret(), null);
+    return s.text();
+  };
+  const requested = c4.model.openRequest("p-1", "Bash", "", null);
+  requested.category = "permission";
+  requested.permission = true;
+  const permissionQuestion = new Question();
+  permissionQuestion.question = "Bash ls: allow it?";
+  permissionQuestion.header = "Permission";
+  permissionQuestion.options.push(new Choice("Allow once", ""));
+  permissionQuestion.options.push(new Choice("Deny", ""));
+  requested.questions.push(permissionQuestion);
+  c4.changed();
+  ok("a permission panel has no row of the user's own words", !paint4().includes("Something else") && requested.permission && requested.category === "permission");
+  app4.chat.typed("let it run");
+  ok("free words are refused with a line, the permission still open", requested.state === "open" && app4.chat.pane.panel.active && paint4().includes("Choose one of the options"));
+  unmount(app4.shell);
+  c4.kill();
+  app4.host.kernel.stop();
+  app4.js.killProcesses();
+
+  // A background subagent's question opens its panel though its card is in an earlier turn; a
+  // second request says how many more wait in the title.
+  const c5 = new Conversation(ws.folder);
+  const app5 = createWidecode(ws, c5, null);
+  const root5 = new TRoot();
+  app5.shell.resize(W);
+  mount(app5.shell, root5);
+  const paint5 = (): string => {
+    for (let i = 0; i < 3; i++) {
+      frames.flush();
+      layout(root5, W, H, DEFAULT_STYLE);
+    }
+    const s = new Screen(W, H);
+    paint(root5, s, new Clip(0, 0, W, H), DEFAULT_STYLE, new Caret(), null);
+    return s.text();
+  };
+  const m5 = c5.model;
+  m5.openTurn("delegate", 0, true);
+  const card = m5.block("", "tc-bg", TOOL, "toolu-bg", "Task", "");
+  m5.closeTurn(null);
+  for (const text of ["one", "two"]) {
+    m5.openTurn(text, 0, true);
+    m5.closeTurn(null);
+  }
+  m5.openTurn("now", 0, true);
+  c5.changed();
+  const late = m5.openRequest("req-bg", "Task", "", null, card !== null ? "toolu-bg" : "");
+  const lateQuestion = new Question();
+  lateQuestion.question = "rm a.txt: allow it?";
+  lateQuestion.header = "Permission";
+  lateQuestion.options.push(new Choice("Allow once", ""));
+  lateQuestion.options.push(new Choice("Reject", ""));
+  late.questions.push(lateQuestion);
+  late.category = "question";
+  c5.changed();
+  ok("a question under an earlier turn's card opens the panel", app5.chat.pane.panel.item === late && paint5().includes("rm a.txt: allow it?"));
+  const other = m5.openRequest("req-2", "Bash", "", null);
+  const otherQuestion = new Question();
+  otherQuestion.question = "Bash rm: allow it?";
+  otherQuestion.options.push(new Choice("Allow once", ""));
+  other.questions.push(otherQuestion);
+  other.category = "question";
+  c5.changed();
+  ok("another request waits, the title says so", paint5().includes("1 more waiting"));
+  unmount(app5.shell);
+  c5.kill();
+  app5.host.kernel.stop();
+  app5.js.killProcesses();
+
   ws.close();
   done();
 };

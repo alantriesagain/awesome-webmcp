@@ -1286,6 +1286,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
       category: "permission",
       name: title,
       callId,
+      permission: true,
       ...(tool?.rawInput !== undefined ? { input: tool.rawInput } : {}),
       questions: [{ question: (NAME[kind] ?? "Tool") + " " + (what.length > 0 ? what : title) + ": allow it?", header: "Permission", options: options.map((o) => ({ label: o.name, description: o.kind.replace(/_/g, " ") })) }],
     });
@@ -2093,7 +2094,7 @@ class SubagentRun {
     const question = title + " asks for permission";
     this.api.note("subagent " + this.callId + " asks: " + title);
     this.api.conversation
-      .ask({ category: "question", name: "Task", questions: [{ question, header: "Permission", options: options.map((o) => ({ label: o.label, description: o.detail })) }] }, this.callId)
+      .ask({ category: "question", name: "Task", permission: true, questions: [{ question, header: "Permission", options: options.map((o) => ({ label: o.label, description: o.detail })) }] }, this.callId)
       .then((reply) => {
         const label = reply.state === "answered" && reply.answers.length > 0 && reply.answers[0].labels.length > 0 ? reply.answers[0].labels[0] : "";
         const chosen = options.find((o) => o.label === label);

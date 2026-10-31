@@ -175,6 +175,8 @@ export class Item {
   agentPrompt = "";
   /** A request's questions. */
   questions: Question[] = [];
+  /** The request is a permission's: its options are the answers, with no words of the user's own. */
+  permission = false;
   /** When a tool or thinking started and ended (ms since the epoch; 0 for not yet): the time the
    * adapter gives (a transcript's record time), else the moment it arrived. */
   startedAt = 0;
