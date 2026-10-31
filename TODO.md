@@ -26,3 +26,11 @@ Open issues found along the way, each with what is known. The plans (`PLAN.md`, 
   reject. The bell rang and the question was gone at once. Text typed before a request opened
   should stay a message; a permission should offer no free-text row, and free text that reaches
   one should not turn into a silent reject.
+- Reloading every plugin from the harness's `reload` tool fails the call that asked for it:
+  `JsRuntime`'s full reload runs `mcp.failAll("widecode's plugins reloaded; call the tool again")`
+  (`apps/widecode/src/runtime/runtime.ts`), and the reload is one of the calls in flight. The
+  agent sees its own reload interrupted. The calling `reload` should be answered once the plugins
+  are back.
+- A malformed key in the box's credentials file refuses the whole box (`box.mjs`), so a bad Claude
+  token also stops opencode subagents. A bad key could be left out with a warning naming it, the
+  box starting with the keys that are valid.
