@@ -416,11 +416,14 @@ const applyEvent = (model: ChatModel, info: StatusInfo, e: Ev): boolean => {
     const tool = model.taskCall(str(e.id), str(e.taskId));
     if (tool === null || tool.task === null) return true;
     const task = tool.task;
-    if (str(e.status).length > 0) task.status = str(e.status);
+    const status = str(e.status);
+    if (status.length > 0) task.status = status;
     if (str(e.lastTool).length > 0) task.lastTool = str(e.lastTool);
     if (str(e.description).length > 0) task.description = str(e.description);
     if (typeof e.summary === "string") task.summary = e.summary;
     if (e.done === true) model.closeItems(tool.children);
+    // The run itself ended or was stopped: a question it left open is answered cancelled.
+    if (status === "done" || status === "stopped" || status === "failed") model.cancelRequestsUnder(tool);
     model.touch(tool);
   } else if (type === "thinkingTokens") {
     const item = model.findBlock(parent, key);

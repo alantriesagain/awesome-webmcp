@@ -366,9 +366,10 @@ export class ChatModel {
     if (turn === null) return;
     this.closeItems(turn.body.children);
     // A question or plan still waiting when its turn ends was withdrawn (an interrupt ends the
-    // turn without a cancel request for it).
+    // turn without a cancel request for it), unless its card runs a background subagent that is
+    // still going: that run's question is the user's to answer whichever turn the card is in.
     for (const req of this.requests.values())
-      if (req.state === "open" && req.turn === turn) {
+      if (req.state === "open" && req.turn === turn && !this.liveSubagentRequest(req)) {
         req.state = "cancelled";
         this.touch(req);
       }
@@ -660,6 +661,26 @@ export class ChatModel {
     const out: Item[] = [];
     for (const item of this.requests.values()) if (item.state === "open") out.push(item);
     return out;
+  }
+
+  /** Whether `req` waits under a background subagent that is still running, so its turn closing does not withdraw it. */
+  private liveSubagentRequest(req: Item): boolean {
+    let parent = req.parent;
+    while (parent !== null) {
+      if (parent.task !== null && parent.task.background) return parent.task.status === "running";
+      parent = parent.parent;
+    }
+    return false;
+  }
+
+  /** Withdraw the open requests under `call`: the background run they belong to ended or was stopped. */
+  cancelRequestsUnder(call: Item): void {
+    for (const req of Array.from(this.requests.values())) {
+      if (req.state !== "open") continue;
+      let parent = req.parent;
+      while (parent !== null && parent !== call) parent = parent.parent;
+      if (parent === call) this.cancelRequest(req.requestId);
+    }
   }
 
   /** The agent took up a queued message: the one with text `whole`, or those it took together (`parts`); else the oldest. */

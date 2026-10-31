@@ -138,6 +138,74 @@ const main = async (): Promise<void> => {
   const stopped = await post('{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"TaskStop","arguments":{"task_id":"toolu-bg"}}}');
   ok("a background run can be stopped", stopped.includes("stopped toolu-bg") && bg.task !== null && bg.task.status === "stopped");
 
+  // A background run asks permission after the turn its card is in has closed and another opened,
+  // as a message sent mid-turn does: the question is still put to the user, under its card.
+  c.model.closeTurn(null);
+  c.model.openTurn("main", 0, true);
+  const late = c.model.block("", "tclate", TOOL, "toolu-late", "Task", "");
+  ok("the late call is made", late !== null);
+  if (late === null) return;
+  const lateStarted = await post('{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"Task","arguments":{"description":"late permission","prompt":"ask","subagent_type":"deepseek","run_in_background":true},"_meta":{"claudecode/toolUseId":"toolu-late"}}}');
+  ok("the late background run starts at once", lateStarted.includes("subagent started: toolu-late"));
+  c.model.closeTurn(null);
+  c.model.openTurn("main", 0, true);
+  ok("its permission is still open after its turn closed", await until(() => c.model.openRequests().length > 0, 10000));
+  const lateRequest = c.model.openRequests()[0];
+  eq("under the late Task call", String(lateRequest !== undefined && lateRequest.turn === late.turn && late.children.includes(lateRequest)), "true");
+  if (lateRequest !== undefined) {
+    const reply = new Reply("answered");
+    const a = new Answer(lateRequest.questions[0].question, false);
+    a.labels.push("Allow once");
+    reply.answers.push(a);
+    c.respond(lateRequest, reply);
+  }
+  ok("the allowed call ran", await until(() => late.children.some((i) => i.kind === TOOL && i.result !== null && i.result.text === "removed"), 10000));
+  ok("and its run is done", await until(() => late.task !== null && late.task.status === "done", 10000));
+
+  // A question asked while the card's turn is open survives that turn closing for a message.
+  c.model.closeTurn(null);
+  c.model.openTurn("main", 0, true);
+  const across = c.model.block("", "tcacross", TOOL, "toolu-across", "Task", "");
+  ok("the across-turn call is made", across !== null);
+  if (across === null) return;
+  const acrossStarted = await post('{"jsonrpc":"2.0","id":15,"method":"tools/call","params":{"name":"Task","arguments":{"description":"across turns","prompt":"ask","subagent_type":"deepseek","run_in_background":true},"_meta":{"claudecode/toolUseId":"toolu-across"}}}');
+  ok("the across-turn background run starts", acrossStarted.includes("subagent started: toolu-across"));
+  ok("its permission is asked", await until(() => c.model.openRequests().length > 0, 10000));
+  const acrossRequest = c.model.openRequests()[0];
+  c.model.closeTurn(null);
+  c.model.openTurn("main", 0, true);
+  eq("the question is still open after its turn closed", acrossRequest !== undefined ? acrossRequest.state : "none", "open");
+  ok("and it is under the call", acrossRequest !== undefined && across.children.includes(acrossRequest));
+  if (acrossRequest !== undefined) {
+    const reply = new Reply("answered");
+    const a = new Answer(acrossRequest.questions[0].question, false);
+    a.labels.push("Allow once");
+    reply.answers.push(a);
+    c.respond(acrossRequest, reply);
+  }
+  ok("the answer reaches the run", await until(() => across.children.some((i) => i.kind === TOOL && i.result !== null && i.result.text === "removed"), 10000));
+  ok("and the run is done", await until(() => across.task !== null && across.task.status === "done", 10000));
+
+  // A refused permission, then the run's own end, is in its answer and its card.
+  c.model.closeTurn(null);
+  c.model.openTurn("main", 0, true);
+  const refusedCall = c.model.block("", "tcrefused", TOOL, "toolu-refused", "Task", "");
+  ok("the refused call is made", refusedCall !== null);
+  if (refusedCall === null) return;
+  const refusedReply = post('{"jsonrpc":"2.0","id":16,"method":"tools/call","params":{"name":"Task","arguments":{"description":"refused","prompt":"ask","subagent_type":"deepseek"},"_meta":{"claudecode/toolUseId":"toolu-refused"}}}');
+  ok("its permission is asked", await until(() => c.model.openRequests().length > 0, 10000));
+  const refusedRequest = c.model.openRequests()[0];
+  if (refusedRequest !== undefined) {
+    const reply = new Reply("answered");
+    const a = new Answer(refusedRequest.questions[0].question, false);
+    a.labels.push("Reject");
+    reply.answers.push(a);
+    c.respond(refusedRequest, reply);
+  }
+  const refusedAnswer = await refusedReply;
+  ok("the answer says the permission was refused", refusedAnswer.includes("[a permission was refused: rm a.txt]"));
+  eq("and its card says so", refusedCall.task !== null ? refusedCall.task.summary : "none", "a permission was refused: rm a.txt");
+
   // An ACP main agent names no tool-use id: the Task tool makes the card itself, or runs under the
   // card the main announced. A store keeps the runs' transcripts.
   const folder3 = mkdtempSync(join(tmpdir(), "widecode-task-acp-"));

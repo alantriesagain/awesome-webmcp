@@ -1618,6 +1618,8 @@ class SubagentRun {
   /** The events applied so far, each as its JSON line: encoded once, as it streams, so keeping them is a join. */
   private history: string[] = [];
   private reply = "";
+  /** The title of a permission this prompt's run refused, while it has not reported its end. */
+  private refused = "";
   private busy = false;
   private closed = false;
   private timeoutGen = 0;
@@ -1804,6 +1806,7 @@ class SubagentRun {
 
   private prompt(text: string): void {
     this.busy = true;
+    this.refused = "";
     const gen = ++this.timeoutGen;
     this.api.after(this.timeoutMs, () => {
       if (gen === this.timeoutGen && this.busy) this.timeout();
@@ -1822,7 +1825,11 @@ class SubagentRun {
     if (this.closed) return;
     this.busy = false;
     this.timeoutGen++;
-    this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: error ? "failed" : "done", summary: error ? text.split("\n")[0] : this.description });
+    const refused = this.refused;
+    this.refused = "";
+    const said = refused.length > 0 ? text + "\n\n[a permission was refused: " + refused + "]" : text;
+    const summary = error ? said.split("\n")[0] : refused.length > 0 ? "a permission was refused: " + refused : this.description;
+    this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: error ? "failed" : "done", summary });
     this.flush();
     this.persist();
     if (!this.background) {
@@ -1830,11 +1837,11 @@ class SubagentRun {
       this.proc?.stop(500);
       this.proc = null;
       this.onDone();
-      if (error) this.reject(new Error(text));
-      else this.resolve(this.worktree.length > 0 ? text + "\n\n[worktree: " + this.worktree + "]" : text);
+      if (error) this.reject(new Error(said));
+      else this.resolve(this.worktree.length > 0 ? said + "\n\n[worktree: " + this.worktree + "]" : said);
       return;
     }
-    this.notify(this.worktree.length > 0 ? text + "\n\n[worktree: " + this.worktree + "]" : text, error);
+    this.notify(this.worktree.length > 0 ? said + "\n\n[worktree: " + this.worktree + "]" : said, error);
     this.reply = "";
     this.open = "";
     this.openKind = "";
@@ -1967,11 +1974,15 @@ class SubagentRun {
     const title = call !== null && str(call.title).length > 0 ? str(call.title) : "The subagent";
     const options = list(params.options).map(obj).filter((o): o is Msg => o !== null).map((o) => ({ id: str(o.optionId), label: str(o.name).length > 0 ? str(o.name) : str(o.kind), detail: str(o.kind) }));
     const question = title + " asks for permission";
+    this.api.note("subagent " + this.callId + " asks: " + title);
     this.api.conversation
       .ask({ category: "question", name: "Task", questions: [{ question, header: "Permission", options: options.map((o) => ({ label: o.label, description: o.detail })) }] }, this.callId)
       .then((reply) => {
         const label = reply.state === "answered" && reply.answers.length > 0 && reply.answers[0].labels.length > 0 ? reply.answers[0].labels[0] : "";
         const chosen = options.find((o) => o.label === label);
+        // The run's answer says a permission was refused, whether or not it went on after it.
+        if (!this.closed && (chosen === undefined || chosen.detail.startsWith("reject"))) this.refused = title;
+        this.api.note("subagent " + this.callId + " permission: " + (chosen !== undefined ? chosen.label : "cancelled"));
         const answer: unknown = chosen !== undefined ? { outcome: { outcome: "selected", optionId: chosen.id } } : { outcome: { outcome: "cancelled" } };
         if (this.proc !== null) this.proc.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, result: answer }));
       });

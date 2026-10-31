@@ -150,6 +150,31 @@ const main = async (): Promise<void> => {
   ok("a request with a parent opens under that call", parent !== null && request !== null && parent.children.includes(request) && request.turn === parent.turn);
   under.closeTurn(null);
 
+  // A background run's question survives its card's turn closing; the run's own end withdraws it.
+  const bgm = new ChatModel();
+  bgm.openTurn("main", 0, true);
+  const bgCard = bgm.block("", "tc-bg", TOOL, "toolu-bg", "Task", "");
+  ok("the background Task call is made", bgCard !== null);
+  if (bgCard !== null) {
+    const bgInfo = new TaskInfo();
+    bgInfo.taskId = "toolu-bg";
+    bgInfo.background = true;
+    bgm.startTask("toolu-bg", bgInfo);
+    const bgAsk = bgm.openRequest("r-bg", "Ask", "", null, bgCard.id);
+    bgm.closeTurn(null);
+    ok("a background run's question stays open as its turn closes", bgAsk.state === "open" && bgm.openRequests().includes(bgAsk));
+    bgm.openTurn("again", 0, true);
+    applyEvents(bgm, new StatusInfo(), [{ type: "taskUpdate", id: "toolu-bg", taskId: "toolu-bg", status: "stopped" }]);
+    ok("and its end withdraws the question", bgAsk.state === "cancelled" && bgm.openRequests().length === 0);
+  }
+
+  // A foreground request still goes with its turn.
+  const fgm = new ChatModel();
+  fgm.openTurn("main", 0, true);
+  const fgAsk = fgm.openRequest("r-fg", "Ask", "", null);
+  fgm.closeTurn(null);
+  eq("a foreground request closes with its turn", fgAsk.state, "cancelled");
+
   done();
 };
 
