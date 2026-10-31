@@ -1,6 +1,6 @@
 # Security: agents in a box
 
-Status: planned (2026-10-31). Phases 0 and 1 come next, after the permission and alerts fixes.
+Status: planned (2026-10-31). The VM box comes first, Task subagents in it (V1 to V3 below).
 
 widecode starts every agent (Claude Code, opencode, Task subagents) as the user, with the user's
 whole environment and file system. This plan puts what widecode starts for an agent inside a box
@@ -80,13 +80,52 @@ commands, such as git for the tree, stay on the host).
    E2B do: https://docs.docker.com/ai/sandboxes/security/, https://docs.e2b.dev/secrets.md), and
    the release step built into widecode.
 
-## Open decisions
+## Decisions
 
-1. A VM box's project files: a shared mount (virtiofs, live, but the agent writes files the host
-   later runs: package.json scripts, hooks) or a clone the VM owns, reviewed and synced back (as
-   Lima's `--sync`: https://lima-vm.io/docs/examples/ai/). Proposed: the clone for untrusted work,
-   the mount for the user's own projects.
-2. Whether an agent ever pushes or deploys. Proposed: never; the host's release step does.
+1. A VM box's project files: a shared mount, so widecode's tree and code column follow the agent's
+   edits live; `.widecode/`, `.claude/` and `.git/hooks` read-only inside the VM. (A clone the VM
+   owns, reviewed and synced back as Lima's `--sync` does, stays possible for untrusted repositories
+   later: https://lima-vm.io/docs/examples/ai/.)
+2. Task subagents go into the VM first; the main agent stays on the host until they run well there.
+3. Whether an agent ever pushes or deploys. Proposed: never; the host's release step does.
+
+## The VM box, step by step
+
+The VM comes first, ahead of the bubblewrap box: it is the stronger boundary and it doubles as
+staging. It follows bootstrapp's test VM (`packages/vps/testvm/vm.mjs`): plain QEMU as the user,
+no root, a Debian 13 cloud image (cached under `~/.cache/bootstrapp/vps-test/`) as the read-only
+base, and a qcow2 overlay per box, so a reset is a new overlay and nothing drifts.
+
+- Network: QEMU user-mode networking with `restrict=on`, so the guest reaches nothing outside; one
+  `hostfwd` brings SSH in on 127.0.0.1. Provisioning (apt, the agents' installers) runs once with
+  the network open and makes the box's base image; every run after it is restricted.
+- Egress and widecode's tools: each agent runs in its own SSH session, and that session carries
+  `-R` forwards to a proxy on the host that allows a list of domains, and to widecode's MCP server
+  (its port changes each run, which `-R` follows). Inside, `HTTPS_PROXY` points at the forward.
+- Files: the project shared by 9p (`-virtfs`, no extra install; virtiofs needs `virtiofsd`) at the
+  same path as on the host, so a cwd and a transcript's paths mean the same on both sides. At boot,
+  root bind-mounts `.widecode/`, `.claude/` and `.git/hooks` read-only over the share; the agent's
+  user has no sudo.
+- Agents: Claude Code and opencode installed in the image by their own installers (the user's
+  CLIs, as widecode runs today), run as `ssh box -- opencode acp` and `ssh box -- claude -p ...`:
+  the same stdio protocols, so the adapters do not change. The VM's credentials are its own: a
+  `claude setup-token` token and an opencode key made for the box, never the host's files.
+- Staging: the same image runs Docker and Caddy as bootstrapp's VPS does, and bootstrapp's
+  `deploySite` deploys into it (`VPS_HOST=127.0.0.1` and the forwarded port, the box's key), from
+  the host.
+
+Steps:
+
+- V1, a spike in `apps/widecode/box/` (node scripts, development tooling): build the base image,
+  boot a box restricted, share a project, mount the read-only paths, reach it over SSH, and check
+  that an `-R` proxy forward lets an allowed domain through and refuses another, and that
+  `opencode acp` answers `initialize` over the SSH session.
+- V2, the agents through it: the box's credentials (the user makes them), a model call from both
+  agents, widecode's MCP tools over `-R`.
+- V3, widecode: a box in a project's config; the runtime runs a Task subagent's command through
+  `ssh box`; the box started and stopped with widecode; the proxy kept by widecode.
+- V4, the main agent in the box (its transcripts read from a folder the box writes to), then
+  staging deploys.
 
 ## Sources
 
