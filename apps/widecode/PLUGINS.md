@@ -280,8 +280,9 @@ targets:
       "tasks": {
         "replaceClaudeSubagents": true,
         "targets": {
-          "deepseek": { "agent": "opencode", "model": "opencode-go/deepseek-v4.1-flash", "description": "A cheap subagent" }
+          "deepseek": { "agent": "opencode", "model": "opencode-go/deepseek-v4.1-flash", "description": "A cheap subagent", "box": true }
         },
+        "box": { "script": "apps/widecode/box/box.mjs", "proxyPort": 8888, "memory": 4096, "projects": [] },
         "maxConcurrent": 4,
         "timeoutMs": 1800000
       }
@@ -290,8 +291,13 @@ targets:
 }
 ```
 
-A target names an entry in `agents`, its model and what it is for. The run starts that entry in
-the session's folder, streams its thought, words, calls, plans and diffs under the Task call, puts
+A target names an entry in `agents`, its model and what it is for. With `box: true` its run goes
+through the box script (`<script> ssh --forward-proxy <proxyPort> -- <entry command>`), and before
+the first such run widecode reads the box's `status --json`, starts its proxy when needed and starts
+the box with the session's folder and `projects`; a box running with another project list fails the
+run with the box's message. The `box` status segment says `boxed` when every target is boxed and
+`unboxed` (in the warning color) otherwise. The run starts that entry in the session's folder,
+streams its thought, words, calls, plans and diffs under the Task call, puts
 its permission asks in the request panel under the call, marks the call in the Agents tab, and
 answers the main agent with its last words. `run_in_background` starts the run and answers at once;
 its call id is the `task_id` for `TaskStop` and `SendMessage`, and its end comes back as a message
@@ -312,7 +318,8 @@ changes nothing. A main agent that names no tool-use id (an
 ACP agent) announces the Task call itself, and the run goes under that call's card; when no
 announced call matches, the tool makes a card itself. Subagents are not given
 widecode's MCP server, so they cannot call Task again. With `isolation: "worktree"` the run starts
-in a git worktree under `.widecode/worktrees/<id>` and answers with its path and branch.
+in a git worktree under `.worktrees/<id>` and answers with its path and branch; widecode adds
+`.worktrees/` to the repository's `.git/info/exclude` when it makes the first one.
 `worktreeSetup` is a list of shell lines run in the new worktree before the subagent starts, each
 with `WIDECODE_FOLDER` (the folder the worktree was made from) and `WIDECODE_WORKTREE` (its path)
 set; `worktreeSetupTimeoutMs` bounds each line (300000 by default). A line that fails removes the

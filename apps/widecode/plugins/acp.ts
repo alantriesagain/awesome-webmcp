@@ -174,18 +174,28 @@ const agentsOf = (section: unknown): Record<string, Entry> => {
   return out;
 };
 
-/** A subagent target: the `subagent_type` Claude names, the agent entry it runs on, its model ("" for the entry's default) and what it is for. */
+/** A subagent target: the `subagent_type` Claude names, the agent entry it runs on, its model ("" for the entry's default), what it is for, and whether it runs in the box. */
 interface TaskTarget {
   name: string;
   agent: string;
   model: string;
   description: string;
+  box: boolean;
 }
 
-/** The `tasks` section: whether Claude's own subagent tools are replaced, the targets, and the bounds. */
+/** The box a boxed target runs in: the box script, the host proxy's port, the memory the box gets, and the folders it shares beside the session's. */
+interface BoxConfig {
+  script: string;
+  proxyPort: number;
+  memory: number;
+  projects: string[];
+}
+
+/** The `tasks` section: whether Claude's own subagent tools are replaced, the targets, the bounds, and the box a boxed target needs. */
 interface TasksConfig {
   replace: boolean;
   targets: TaskTarget[];
+  box: BoxConfig | null;
   maxConcurrent: number;
   timeoutMs: number;
   worktreeSetup: string[];
@@ -194,7 +204,7 @@ interface TasksConfig {
 
 const tasksOf = (section: unknown): TasksConfig => {
   const t = obj(obj(section)?.tasks);
-  const out: TasksConfig = { replace: t?.replaceClaudeSubagents === true, targets: [], maxConcurrent: 4, timeoutMs: 1800000, worktreeSetup: [], worktreeSetupTimeoutMs: 300000 };
+  const out: TasksConfig = { replace: t?.replaceClaudeSubagents === true, targets: [], box: null, maxConcurrent: 4, timeoutMs: 1800000, worktreeSetup: [], worktreeSetupTimeoutMs: 300000 };
   const targets = obj(t?.targets);
   if (targets !== null)
     for (const name of Object.keys(targets)) {
@@ -202,14 +212,95 @@ const tasksOf = (section: unknown): TasksConfig => {
       if (e === null) continue;
       const agent = str(e.agent).length > 0 ? str(e.agent) : name;
       const model = str(e.model);
-      out.targets.push({ name, agent, model, description: str(e.description).length > 0 ? str(e.description) : "Runs on " + (model.length > 0 ? model : agent) });
+      out.targets.push({ name, agent, model, description: str(e.description).length > 0 ? str(e.description) : "Runs on " + (model.length > 0 ? model : agent), box: e.box === true });
     }
+  const b = obj(t?.box);
+  if (b !== null && str(b.script).length > 0) {
+    const proxyPort = typeof b.proxyPort === "number" && b.proxyPort >= 1 && b.proxyPort <= 65535 ? Math.floor(b.proxyPort) : 8888;
+    const memory = typeof b.memory === "number" && b.memory >= 512 ? Math.floor(b.memory) : 4096;
+    out.box = { script: str(b.script), proxyPort, memory, projects: list(b.projects).filter((w): w is string => typeof w === "string" && w.length > 0) };
+  }
   if (typeof t?.maxConcurrent === "number" && t.maxConcurrent > 0) out.maxConcurrent = Math.floor(t.maxConcurrent);
   if (typeof t?.timeoutMs === "number" && t.timeoutMs >= 1000) out.timeoutMs = Math.floor(t.timeoutMs);
   out.worktreeSetup = list(t?.worktreeSetup).filter((w): w is string => typeof w === "string" && w.length > 0);
   if (typeof t?.worktreeSetupTimeoutMs === "number" && t.worktreeSetupTimeoutMs >= 1000) out.worktreeSetupTimeoutMs = Math.floor(t.worktreeSetupTimeoutMs);
   return out;
 };
+
+/**
+ * The box a boxed run starts in: it reads the box's status, keeps its host proxy running and
+ * starts the box with the session's folder and the configured projects. Calls are serialized, so
+ * two runs at once never start a second box.
+ */
+class BoxRunner {
+  private readonly api: widecode.Api;
+  readonly config: BoxConfig;
+  private proxy: widecode.ProcessHandle | null = null;
+  private chain: Promise<void> = Promise.resolve();
+
+  constructor(api: widecode.Api, config: BoxConfig) {
+    this.api = api;
+    this.config = config;
+  }
+
+  /** The box's own state: whether it runs, its projects and whether its proxy runs. */
+  private status(): Promise<{ running: boolean; projects: string[]; proxy: boolean }> {
+    const command = ["node", this.config.script, "status", "--json"].map(quote).join(" ");
+    return this.api.process.run(command, "", 30000).then((r) => {
+      if (r.code !== 0) throw new Error((r.err.trim().length > 0 ? r.err.trim() : r.out.trim()) || "the box's status failed");
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(r.out);
+      } catch {
+        throw new Error("the box's status printed no JSON: " + r.out.trim());
+      }
+      const s = obj(parsed);
+      return { running: s?.running === true, projects: list(s?.projects).filter((p): p is string => typeof p === "string"), proxy: s?.proxy === true };
+    });
+  }
+
+  private startProxy(): Promise<void> {
+    if (this.proxy !== null && this.proxy.started) return Promise.resolve();
+    const command = ["node", this.config.script, "proxy", "--port", String(this.config.proxyPort)];
+    const p = this.api.process.spawn(command, {}, {
+      lines: (lines) => {
+        for (const l of lines) this.api.note("box proxy: " + l);
+      },
+      error: (text) => this.api.note("box proxy: " + text.trimEnd()),
+    });
+    if (!p.started) return Promise.reject(new Error("cannot start the box's proxy"));
+    this.proxy = p;
+    return Promise.resolve();
+  }
+
+  private async ready(folder: string): Promise<string> {
+    const desired = [folder, ...this.config.projects];
+    const s = await this.status();
+    const same = s.running && s.projects.length === desired.length && s.projects.every((p, i) => p === desired[i]);
+    if (!s.proxy) await this.startProxy();
+    if (same) return "";
+    const up = await this.api.process.run(["node", this.config.script, "up", "--memory", String(this.config.memory), ...desired].map(quote).join(" "), "", 120000);
+    if (up.code !== 0) return (up.err.trim().length > 0 ? up.err.trim() : up.out.trim()) || "the box did not start";
+    return "";
+  }
+
+  /** "" when the box runs with `folder` and the configured projects, else why not. */
+  ensure(folder: string): Promise<string> {
+    const next = this.chain.then(() =>
+      this.ready(folder).then(
+        (why) => why,
+        (e: unknown) => (e instanceof Error ? e.message : String(e)),
+      ),
+    );
+    this.chain = next.then(() => {});
+    return next;
+  }
+
+  stop(): void {
+    if (this.proxy !== null) this.proxy.stop(1000);
+    this.proxy = null;
+  }
+}
 
 /** A call's kind as ACP names it, as the views know it, and its name on the call's line. */
 const CATEGORY: Record<string, string> = { read: "read", edit: "edit", delete: "edit", move: "edit", search: "search", execute: "run", fetch: "fetch", switch_mode: "plan", think: "other", other: "other" };
@@ -1595,6 +1686,8 @@ class SubagentRun {
   private readonly api: widecode.Api;
   private readonly entry: Entry;
   private readonly target: TaskTarget;
+  private readonly box: BoxRunner | null;
+  private readonly boxFolder: string;
   private readonly cwd: string;
   private readonly worktree: string;
   private readonly model: string;
@@ -1627,10 +1720,12 @@ class SubagentRun {
   private reject: (error: Error) => void = () => {};
   readonly promise: Promise<string>;
 
-  constructor(api: widecode.Api, entry: Entry, target: TaskTarget, cwd: string, worktree: string, model: string, callId: string, description: string, synthetic: boolean, background: boolean, timeoutMs: number, onDone: () => void) {
+  constructor(api: widecode.Api, entry: Entry, target: TaskTarget, box: BoxRunner | null, boxFolder: string, cwd: string, worktree: string, model: string, callId: string, description: string, synthetic: boolean, background: boolean, timeoutMs: number, onDone: () => void) {
     this.api = api;
     this.entry = entry;
     this.target = target;
+    this.box = box;
+    this.boxFolder = boxFolder;
     this.cwd = cwd;
     this.worktree = worktree;
     this.model = model;
@@ -1689,7 +1784,29 @@ class SubagentRun {
     this.emit({ type: "facts", id: this.callId, category: "agent", summary: this.target.name + ": " + this.description, agentType: this.target.name, agentTask: this.description, agentPrompt: prompt });
     this.emit({ type: "task", id: this.callId, taskId: this.callId, description: this.description, agentType: this.target.name, background: this.background });
     this.flush();
-    const words = resolved(this.api, this.entry.command);
+    if (this.target.box) {
+      if (this.box === null) {
+        this.fail("no box is configured for " + this.target.name);
+        return this.promise;
+      }
+      this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: "running", summary: "starting the box" });
+      this.flush();
+      return this.box.ensure(this.boxFolder).then((why) => {
+        if (why.length > 0) {
+          this.fail(why);
+          return this.promise;
+        }
+        return this.launch(prompt, true);
+      });
+    }
+    return this.launch(prompt, false);
+  }
+
+  private launch(prompt: string, boxed: boolean): Promise<string> {
+    const command = resolved(this.api, this.entry.command);
+    const words = boxed && this.box !== null
+      ? ["node", this.box.config.script, "ssh", "--forward-proxy", String(this.box.config.proxyPort), "--", ...command]
+      : command;
     const p = this.api.process.spawn(words, { cwd: this.cwd }, {
       // Each batch goes under the card as it comes, so the run streams and no one call carries all of it.
       lines: (lines) => {
@@ -2006,6 +2123,9 @@ class SubagentRun {
   }
 }
 
+/** The box this plugin started, stopped when the plugin deactivates. */
+let boxRunner: BoxRunner | null = null;
+
 widecode.plugin({
   id: "acp",
   defaults: () => ({ agents: DEFAULT_AGENTS }),
@@ -2013,6 +2133,16 @@ widecode.plugin({
     const section = api.settings.section();
     const agents = agentsOf(section);
     const tasks = tasksOf(section);
+    boxRunner = tasks.box !== null ? new BoxRunner(api, tasks.box) : null;
+    const box = boxRunner;
+    api.ui.segment({
+      name: "box",
+      draw: () => {
+        if (tasks.targets.length === 0) return [];
+        const boxed = tasks.box !== null && tasks.targets.every((t) => t.box);
+        return boxed ? [{ text: "boxed", fg: widecode.theme.ok }] : [{ text: "unboxed", fg: widecode.theme.warn }];
+      },
+    });
     /** The ACP main's calls of widecode's Task tool that are in flight, which the Task tool runs under. */
     const taskCalls = new TaskCalls();
     for (const id of Object.keys(agents)) api.agents.register(acpAgent(api, id, agents[id], taskCalls));
@@ -2056,8 +2186,8 @@ widecode.plugin({
         const claimed = ctx.toolUseId.length === 0 ? taskCalls.claim(prompt, description) : "";
         const synthetic = ctx.toolUseId.length === 0 && claimed.length === 0;
         const id = ctx.toolUseId.length > 0 ? ctx.toolUseId : claimed.length > 0 ? claimed : "task-" + Date.now().toString(36) + "-" + ctx.callId;
-        const startRun = (cwd: string, worktree: string, onClose?: () => void): Promise<string> => {
-          const run = new SubagentRun(api, entry, target, cwd, worktree, str(args.model).length > 0 ? str(args.model) : target.model, id, description, synthetic, args.run_in_background === true, tasks.timeoutMs, () => {
+        const startRun = (cwd: string, worktree: string, boxFolder: string, onClose?: () => void): Promise<string> => {
+          const run = new SubagentRun(api, entry, target, box, boxFolder, cwd, worktree, str(args.model).length > 0 ? str(args.model) : target.model, id, description, synthetic, args.run_in_background === true, tasks.timeoutMs, () => {
             runs.delete(id);
             if (onClose !== undefined) onClose();
           });
@@ -2066,9 +2196,9 @@ widecode.plugin({
           ctx.onCancel(() => run.cancel());
           return run.start(prompt);
         };
-        if (isolation !== "worktree") return startRun(folder, "");
+        if (isolation !== "worktree") return startRun(folder, "", folder);
         const part = id.replace(/[^A-Za-z0-9_.-]/g, "_");
-        const path = folder + "/.widecode/worktrees/" + part;
+        const path = folder + "/.worktrees/" + part;
         const branch = "widecode/task-" + part;
         preparing++;
         const made = (): void => {
@@ -2103,7 +2233,12 @@ widecode.plugin({
         const background = args.run_in_background === true;
         const prepared = async (): Promise<string> => {
           try {
-            const added = await api.process.run("mkdir -p " + quote(folder + "/.widecode/worktrees") + " && git -C " + quote(folder) + " worktree add -b " + quote(branch) + " " + quote(path), "", 15000);
+            const gitDir = await api.process.run("git -C " + quote(folder) + " rev-parse --absolute-git-dir", "", 15000);
+            if (gitDir.code !== 0) throw new Error("cannot make a worktree: " + (gitDir.err.trim().length > 0 ? gitDir.err.trim() : gitDir.out.trim()));
+            const exclude = quote(gitDir.out.trim() + "/info/exclude");
+            const ignoring = await api.process.run("mkdir -p " + quote(folder + "/.worktrees") + " && mkdir -p " + quote(gitDir.out.trim() + "/info") + " && (grep -qxF .worktrees/ " + exclude + " || printf '%s\\n' .worktrees/ >> " + exclude + ")", "", 15000);
+            if (ignoring.code !== 0) throw new Error("cannot ignore .worktrees/: " + (ignoring.err.trim().length > 0 ? ignoring.err.trim() : ignoring.out.trim()));
+            const added = await api.process.run("git -C " + quote(folder) + " worktree add -b " + quote(branch) + " " + quote(path), "", 15000);
             if (cancelled) return "The subagent was stopped before it started.";
             if (added.code !== 0) throw new Error("cannot make a worktree: " + (added.err.trim().length > 0 ? added.err.trim() : added.out.trim()));
             for (const setupLine of tasks.worktreeSetup) {
@@ -2121,7 +2256,7 @@ widecode.plugin({
             baselineStatus = status.out;
             baselineHead = head.out.trim();
             if (cancelled) return "The subagent was stopped before it started.";
-            const started = startRun(path, path + " (branch " + branch + ")", background ? () => {
+            const started = startRun(path, path + " (branch " + branch + ")", folder, background ? () => {
               void worktreeOver().then((removed) => api.note(removed ? "worktree removed: no changes" : "worktree kept: " + path + " (branch " + branch + ")"));
             } : undefined);
             if (background) return started;
@@ -2164,6 +2299,10 @@ widecode.plugin({
         return "sent to " + id;
       },
     });
+  },
+  deactivate() {
+    if (boxRunner !== null) boxRunner.stop();
+    boxRunner = null;
   },
 });
 

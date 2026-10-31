@@ -450,6 +450,20 @@ const unquote = (/** @type {string} */ value) => {
   return value;
 };
 
+/** Refuse a value of the wrong shape, naming the key and what is wrong, never the value. */
+const validateCredentials = (/** @type {string} */ file, /** @type {Record<string, string>} */ values) => {
+  const claude = values.CLAUDE_CODE_OAUTH_TOKEN || "";
+  if (claude.length > 0) {
+    if (!claude.startsWith("sk-ant-oat01-")) throw new Error(`${file}: CLAUDE_CODE_OAUTH_TOKEN must start with sk-ant-oat01-`);
+    if (!/^[A-Za-z0-9_-]+$/.test(claude)) throw new Error(`${file}: CLAUDE_CODE_OAUTH_TOKEN may contain only letters, digits, "_" and "-"`);
+  }
+  const opencode = values.OPENCODE_API_KEY || "";
+  if (opencode.length > 0) {
+    if (/\s/.test(opencode)) throw new Error(`${file}: OPENCODE_API_KEY must contain no whitespace`);
+    if (opencode.includes("#")) throw new Error(`${file}: OPENCODE_API_KEY must contain no "#"`);
+  }
+};
+
 const loadCredentials = () => {
   const file = credentialsPath();
   if (!existsSync(file)) return { file, present: false, values: /** @type {Record<string, string>} */ ({}) };
@@ -475,6 +489,7 @@ const loadCredentials = () => {
     if (!CREDENTIAL_KEYS.includes(key)) continue;
     values[key] = unquote(line.slice(eq + 1).trim());
   }
+  validateCredentials(file, values);
   return { file, present: true, values };
 };
 
@@ -841,7 +856,7 @@ const reset = async () => {
   }
 };
 
-const status = () => {
+const status = (/** @type {string[]} */ args) => {
   const running = pid();
   const saved = record();
   const projects = Array.isArray(saved.projects)
@@ -850,6 +865,10 @@ const status = () => {
       ? [saved.project]
       : [];
   const proxy = proxyPid();
+  if (args.includes("--json")) {
+    process.stdout.write(JSON.stringify({ running: running !== null, projects, proxy: proxy !== null }) + "\n");
+    return;
+  }
   say(`pid:       ${running ?? "not running"}`);
   say(`ssh:       ${running && reachable() ? `${HOST}:${PORT}` : "unreachable"}`);
   say(`proxy:     ${proxy ? `running (pid ${proxy}, log ${PROXY_LOG})` : "not running"}`);
@@ -1080,7 +1099,7 @@ const commands = {
   up: () => up(rest),
   down,
   reset,
-  status,
+  status: () => status(rest),
   creds: credsCommand,
   proxy: () => proxy(rest),
   ssh: () => {

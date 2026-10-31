@@ -23,7 +23,7 @@ node apps/widecode/box/box.mjs ssh [--forward-proxy <port>] [--forward <remotePo
 node apps/widecode/box/box.mjs proxy [--port N] [--allow domain,...]
 node apps/widecode/box/box.mjs creds
 node apps/widecode/box/box.mjs down
-node apps/widecode/box/box.mjs status
+node apps/widecode/box/box.mjs status [--json]
 node apps/widecode/box/box.mjs reset
 ```
 
@@ -128,6 +128,13 @@ What `up` installs after SSH answers:
 The `creds` command prints whether each key is set or empty in the file and, when the box runs,
 whether Claude has the token and whether opencode has the `opencode-go` entry. It never prints a
 value.
+
+Each value is checked for its shape when the file is read: `CLAUDE_CODE_OAUTH_TOKEN` must start
+with `sk-ant-oat01-` and hold only `[A-Za-z0-9_-]`, and `OPENCODE_API_KEY` must hold no whitespace
+and no `#`. A value that does not is refused with its key and what is wrong, never the value.
+
+`status --json` prints one line with whether the box runs, its projects and whether its proxy runs,
+so widecode can decide what to start before a task runs in it.
 
 The hosts each agent needs are already in the proxy's default allow list, so this spike added none.
 The proxy log from a model call showed Claude reaching only `api.anthropic.com`. opencode reached

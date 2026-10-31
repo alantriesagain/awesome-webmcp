@@ -248,7 +248,7 @@ const main = async (): Promise<void> => {
   c3.model.openTurn("main", 0, true);
   const unchanged = await send(url3, acp, '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"Task","arguments":{"description":"in a worktree","prompt":"hello","subagent_type":"deepseek","isolation":"worktree"}}}');
   ok("a worktree run with no change removes its worktree", unchanged.includes("Hello, world.") && unchanged.includes("worktree removed: no changes") && !unchanged.includes("[worktree:"));
-  const worktrees = join(folder3, ".widecode", "worktrees");
+  const worktrees = join(folder3, ".worktrees");
   const branches = (pattern: string): string => spawnSync("git", ["-C", folder3, "branch", "--list", pattern], { encoding: "utf8" }).stdout;
   eq("its worktree folder is gone", existsSync(worktrees) ? String(readdirSync(worktrees).length) : "0", "0");
   eq("its branch is gone", branches("widecode/*").trim(), "");
