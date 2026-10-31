@@ -4,7 +4,7 @@ import { HostAnswer } from "@light/plugins/engine.ts";
 import { errorMessage } from "@light/lib/json.ts";
 import type { JsRuntime } from "./runtime.ts";
 import { API_ANSWERS } from "./namespaces.ts";
-import { answer, num, refuse, str, strs } from "../api/values.ts";
+import { answer, json, num, refuse, str, strs } from "../api/values.ts";
 
 /** Calls whose first argument names the plugin that owns what they add. */
 const OWNER_FIRST = [
@@ -57,8 +57,8 @@ export class HostRouter {
         const hook = h.hook(str(a[1]));
         const fn = num(a[2]);
         if (hook === null) return refuse("no hook named " + str(a[1]));
-        hook.add(owner, () => {
-          this.rt.invoke(owner, fn, "[]");
+        hook.add(owner, (value?: unknown) => {
+          this.rt.invoke(owner, fn, value === undefined ? "[]" : "[" + json(value) + "]");
         });
         return answer(null);
       }

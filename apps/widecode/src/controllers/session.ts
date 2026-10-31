@@ -42,6 +42,8 @@ export class SessionController extends Controller {
   userColumns: unknown = null;
   userPermissions: unknown = null;
   readonly conversationChanged = new Hook();
+  /** A request became open in the request panel: its id, category, name and a one-line summary. */
+  readonly requestOpened = new Hook();
   /** A message is about to be sent to the agent (`conversation` not started yet for a new session). */
   readonly messageSending = new Hook();
   /** The tools plugins offer the agents changed: one added, or its plugin gone. */

@@ -663,6 +663,11 @@ export class ChatModel {
     return out;
   }
 
+  /** Every request the model holds, in the order they opened, open or settled: whatever turn its card is in. */
+  allRequests(): Item[] {
+    return Array.from(this.requests.values());
+  }
+
   /** Whether `req` waits under a background subagent that is still running, so its turn closing does not withdraw it. */
   private liveSubagentRequest(req: Item): boolean {
     let parent = req.parent;

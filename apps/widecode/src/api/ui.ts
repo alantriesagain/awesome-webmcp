@@ -201,6 +201,12 @@ export const answerUi = (rt: JsRuntime, name: string, a: unknown[]): HostAnswer 
       press();
       return answer(true);
     }
+    case "ui.bell": {
+      // The terminal's bell: the same write the clipboard uses, so a terminal beeps, flashes or hints.
+      const write = rt.host.screen.clipboard.onWrite;
+      if (write !== null) write("\x07");
+      return answer(null);
+    }
     case "ui.notice":
       // A notice in the chat, as /help answers: idle, after the last turn.
       h.conversation.model.notice(str(a[0]), "info", str(a[1]), "");
@@ -280,6 +286,7 @@ export const NAMESPACE_UI = new PreludePart("ui", `        panel: (p) => {
           call("ui.segment", id, String(s.name), fn((ctx) => s.draw(ctx)), typeof s.press === "function" ? fn(() => { s.press(); }) : -1);
         },
         notice: (text, detail) => call("ui.notice", String(text), String(detail ?? "")),
+        bell: () => call("ui.bell"),
         drawSegment: (name, ctx) => call("ui.drawSegment", String(name), ctx),
         pressSegment: (name) => call("ui.pressSegment", String(name)),
 `);

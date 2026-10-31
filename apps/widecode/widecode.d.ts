@@ -48,8 +48,16 @@ declare namespace widecode {
     complete?(arg: string): (string | { value: string; label?: string; detail?: string })[];
   }
 
-  /** The hooks a plugin can listen to; a listener gets nothing and reads what changed. */
-  type Hook = "conversationChanged" | "sessionsChanged" | "filesLoaded" | "statusLoaded" | "folderChanged" | "folderOpened" | "baseChanged" | "fileShown" | "messageSending" | "keymapChanged" | "messageChanged" | "toolsChanged" | "harnessChanged";
+  /** A request that just opened in the request panel: its id, its category ("permission", "question", "plan"), its name, and one line of what it asks. */
+  interface RequestOpened {
+    id: string;
+    category: string;
+    name: string;
+    summary: string;
+  }
+
+  /** The hooks a plugin can listen to; most listeners get nothing and read what changed (requestOpened's gets the request). */
+  type Hook = "conversationChanged" | "sessionsChanged" | "filesLoaded" | "statusLoaded" | "folderChanged" | "folderOpened" | "baseChanged" | "fileShown" | "requestOpened" | "messageSending" | "keymapChanged" | "messageChanged" | "toolsChanged" | "harnessChanged";
 
   /** A piece of a row in one style; colors are "#rrggbb", "0"…"255" or a name ("gray", "cyan"). */
   interface Run {
@@ -574,6 +582,8 @@ declare namespace widecode {
       /** The composer's border title ("You"): a mode indicator. */
       setLabel(text: string): void;
     };
+    /** A request opened in the request panel: each one once, with what to describe it. */
+    on(hook: "requestOpened", listener: (request: RequestOpened) => void): void;
     on(hook: Hook, listener: () => void): void;
     /** A message in the status bar for a while (and the log). */
     tell(text: string): void;
@@ -585,6 +595,8 @@ declare namespace widecode {
       segment(segment: Segment): void;
       /** A notice in the chat, as /help answers: `text` shown, `detail` when it is opened. */
       notice(text: string, detail?: string): void;
+      /** Ring the terminal's bell (BEL), which terminals turn into a sound, a flash or an urgent hint. */
+      bell(): void;
       /** Draw a segment any plugin added (null when none has the name). */
       drawSegment(name: string, ctx: SegmentContext): Run[] | null;
       /** Press a segment any plugin added; false when it has no press. */

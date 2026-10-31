@@ -7,6 +7,7 @@
 // keymaps; the log; and what crosses the three: loading, the changes with the agent's edits marked,
 // opening another folder, a plugin's removal.
 import { ConversationHolder } from "@widecode/conversation/model-source.ts";
+import { ChatModel, Item } from "@widecode/conversation/model.ts";
 import { existsSync, statSync } from "node:fs";
 import { expandHome } from "@light/lib/paths.ts";
 import { resolve } from "node:path";
@@ -25,7 +26,7 @@ import { ScreenController } from "@widecode/screen/screen.ts";
 import { SessionController } from "./session.ts";
 
 /** The hooks' names, as plugins listen to them. */
-export const HOOKS = ["conversationChanged", "sessionsChanged", "filesLoaded", "statusLoaded", "folderChanged", "folderOpened", "baseChanged", "fileShown", "messageSending", "keymapChanged", "messageChanged", "toolsChanged", "harnessChanged"];
+export const HOOKS = ["conversationChanged", "sessionsChanged", "filesLoaded", "statusLoaded", "folderChanged", "folderOpened", "baseChanged", "fileShown", "requestOpened", "messageSending", "keymapChanged", "messageChanged", "toolsChanged", "harnessChanged"];
 
 /** How many log lines the host keeps for plugins to read. */
 const NOTES_KEPT = 300;
@@ -62,6 +63,9 @@ export class Host extends ConversationHolder {
    */
   peersLauncher = "";
   private editSeq = 0;
+  /** The requests already announced, and the model they belong to (a new conversation or a reset clears them). */
+  private readonly seenRequests = new Set<string>();
+  private requestModel: ChatModel | null = null;
   private pendingOpen = "";
   private pendingOpenAt = 0;
   private opening = false;
@@ -79,6 +83,7 @@ export class Host extends ConversationHolder {
     this.session.conversationChanged.add("host", () => {
       this.session.syncInfo(this.folder.branch());
       this.sawEdit();
+      this.noteRequests();
     });
   }
 
@@ -122,6 +127,10 @@ export class Host extends ConversationHolder {
     return this.folderHooks.baseChanged;
   }
 
+  get requestOpened(): Hook {
+    return this.session.requestOpened;
+  }
+
   get messageSending(): Hook {
     return this.session.messageSending;
   }
@@ -132,6 +141,36 @@ export class Host extends ConversationHolder {
 
   get harnessChanged(): Hook {
     return this.session.harnessChanged;
+  }
+
+
+  /**
+   * Announce each request that has opened since the last change, from the model's own list: a
+   * request under a background subagent's card in an earlier turn counts, and one answered at once
+   * is still one.
+   */
+  private noteRequests(): void {
+    const model = this.conversation.model;
+    if (model !== this.requestModel) {
+      this.requestModel = model;
+      this.seenRequests.clear();
+    }
+    // A resumed session's history brings its old requests back; they are not new to the user.
+    const loading = this.conversation.starting;
+    for (const item of model.allRequests()) {
+      const id = item.requestId;
+      if (id.length === 0 || this.seenRequests.has(id)) continue;
+      this.seenRequests.add(id);
+      if (loading) continue;
+      this.session.requestOpened.fire(this.requestNotice(item));
+    }
+  }
+
+  /** What a plugin needs to describe request `item`: its id, category, name and one line of what it asks. */
+  private requestNotice(item: Item): unknown {
+    const asked = item.questions.length > 0 ? item.questions[0].question : item.text;
+    const summary = (item.summary.length > 0 ? item.summary : asked.length > 0 ? asked : item.name).split("\n")[0].trim();
+    return { id: item.requestId, category: item.category, name: item.name, summary: summary };
   }
 
   /** The agent's latest edit, as a change to its file now. */
@@ -177,6 +216,8 @@ export class Host extends ConversationHolder {
         return this.folderHooks.baseChanged;
       case "fileShown":
         return this.fileShown;
+      case "requestOpened":
+        return this.session.requestOpened;
       case "messageSending":
         return this.session.messageSending;
       case "keymapChanged":

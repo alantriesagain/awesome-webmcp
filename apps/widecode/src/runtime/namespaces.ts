@@ -43,7 +43,7 @@ export const NAMESPACE_ACTIONS = new PreludePart("actions", `        focus: (col
 export const PARTS: PreludePart[] = [
   NAMESPACE_COMMANDS,
   NAMESPACE_KEYS,
-  new PreludePart("", `      on: (hook, f) => call("on", id, String(hook), fn(() => { f(); })),
+  new PreludePart("", `      on: (hook, f) => call("on", id, String(hook), fn((...args) => { f(...args); })),
       tell: (text) => call("tell", String(text)),
       note: (text) => call("note", String(text)),
 `),
