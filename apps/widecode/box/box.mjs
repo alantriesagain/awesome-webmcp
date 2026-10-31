@@ -28,11 +28,12 @@
  *   node box.mjs up <folder> [<folder>...]
  *   node box.mjs ssh [--forward-proxy <port>] [--forward <remotePort>:<hostPort>]... [--] [cmd...]
  *   node box.mjs proxy [--port N] [--allow domain,...]
+ *   node box.mjs creds
  *   node box.mjs down | status | reset
  */
 
 import { spawn, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import os from "node:os";
@@ -54,6 +55,14 @@ const RECORD = path.join(STATE, "box.json");
 const LOCK = path.join(STATE, "box.lock");
 const PROXY_PID = path.join(STATE, "proxy.pid");
 const PROXY_LOG = path.join(STATE, "proxy.log");
+
+const ENV_DIR = "/home/agent/.config/widecode-box";
+const ENV_FILE = `${ENV_DIR}/env`;
+const OPENCODE_AUTH = "/home/agent/.local/share/opencode/auth.json";
+const CREDENTIAL_KEYS = ["CLAUDE_CODE_OAUTH_TOKEN", "OPENCODE_API_KEY"];
+
+const credentialsPath = () =>
+  process.env.WIDECODE_BOX_CREDENTIALS || path.join(os.homedir(), ".widecode", "box", "credentials.env");
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.WIDECODE_BOX_PORT || 2223);
@@ -81,9 +90,17 @@ const QEMU_IMG = existsSync("/usr/bin/qemu-img") ? "/usr/bin/qemu-img" : "qemu-i
 const say = (/** @type {string} */ msg) => process.stderr.write(`${msg}\n`);
 const sleep = (/** @type {number} */ ms) => new Promise((r) => setTimeout(r, ms));
 
-/** @param {string} cmd @param {string[]} args @param {{ quiet?: boolean, timeout?: number }} [opts] */
-const run = (cmd, args, { quiet = false, timeout = 0 } = {}) => {
-  const result = spawnSync(cmd, args, { stdio: quiet ? "pipe" : "inherit", encoding: "utf8", timeout });
+/** @param {string} cmd @param {string[]} args @param {{ quiet?: boolean, timeout?: number, input?: string }} [opts] */
+const run = (cmd, args, { quiet = false, timeout = 0, input } = {}) => {
+  const stdio = input !== undefined
+    ? ["pipe", quiet ? "pipe" : "inherit", quiet ? "pipe" : "inherit"]
+    : quiet ? "pipe" : "inherit";
+  const result = spawnSync(cmd, args, {
+    stdio,
+    encoding: "utf8",
+    timeout,
+    ...(input !== undefined ? { input } : {}),
+  });
   if (result.error) throw result.error;
   return result;
 };
@@ -306,6 +323,88 @@ const yamlBlock = (/** @type {string} */ text) =>
 
 const shq = (/** @type {string} */ value) => `'${value.replace(/'/g, "'\\''")}'`;
 
+const unquote = (/** @type {string} */ value) => {
+  if (value.length >= 2) {
+    const first = value[0];
+    if ((first === '"' || first === "'") && value[value.length - 1] === first) {
+      return value.slice(1, -1);
+    }
+  }
+  return value;
+};
+
+const loadCredentials = () => {
+  const file = credentialsPath();
+  if (!existsSync(file)) return { file, present: false, values: /** @type {Record<string, string>} */ ({}) };
+  const info = lstatSync(file);
+  if (!info.isFile()) throw new Error(`${file} is not a regular file`);
+  const uid = typeof process.getuid === "function" ? process.getuid() : 0;
+  if (info.uid !== uid) throw new Error(`${file} is not owned by you; chown it to your user`);
+  const mode = info.mode & 0o777;
+  if (mode !== 0o600) throw new Error(`${file} has mode ${mode.toString(8)}; run chmod 600 ${file}`);
+  const folder = path.dirname(file);
+  const dir = statSync(folder);
+  if (dir.uid !== uid) throw new Error(`${folder} is not owned by you; chown it to your user`);
+  const dirMode = dir.mode & 0o777;
+  if (dirMode !== 0o700) throw new Error(`${folder} has mode ${dirMode.toString(8)}; run chmod 700 ${folder}`);
+  const values = /** @type {Record<string, string>} */ ({});
+  const lines = readFileSync(file, "utf8").split(/\r?\n/);
+  for (const [index, raw] of lines.entries()) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    if (eq < 1) throw new Error(`${file} line ${index + 1} is not KEY=value`);
+    const key = line.slice(0, eq).trim();
+    if (!CREDENTIAL_KEYS.includes(key)) continue;
+    values[key] = unquote(line.slice(eq + 1).trim());
+  }
+  return { file, present: true, values };
+};
+
+const credentialSummary = (/** @type {{ values: Record<string, string> }} */ creds) =>
+  `claude ${creds.values.CLAUDE_CODE_OAUTH_TOKEN ? "set" : "empty"}, ` +
+  `opencode-go ${creds.values.OPENCODE_API_KEY ? "set" : "empty"}`;
+
+const installCredentials = (/** @type {{ values: Record<string, string> }} */ creds) => {
+  const claude = creds.values.CLAUDE_CODE_OAUTH_TOKEN || "";
+  const opencode = creds.values.OPENCODE_API_KEY || "";
+  const script = `#!/bin/bash
+set -e
+umask 077
+mkdir -p ${ENV_DIR}
+chmod 700 ${ENV_DIR}
+${claude
+    ? `printf 'export CLAUDE_CODE_OAUTH_TOKEN=%s\\n' ${shq(claude)} > ${ENV_FILE}
+chmod 600 ${ENV_FILE}`
+    : `rm -f ${ENV_FILE}`}
+mkdir -p /home/agent/.local/share/opencode
+WIDECODE_BOX_OPENCODE_KEY=${shq(opencode)} python3 - <<'PY'
+import json
+import os
+path = ${JSON.stringify(OPENCODE_AUTH)}
+try:
+    with open(path) as handle:
+        data = json.load(handle)
+except (FileNotFoundError, ValueError):
+    data = {}
+key = os.environ.get("WIDECODE_BOX_OPENCODE_KEY", "")
+if key:
+    data["opencode-go"] = {"type": "api", "key": key}
+else:
+    data.pop("opencode-go", None)
+with open(path, "w") as handle:
+    json.dump(data, handle, indent=2)
+    handle.write("\\n")
+os.chmod(path, 0o600)
+PY
+`;
+  const result = ssh("bash -s", { quiet: true, input: script, timeout: 30000 });
+  if (result.status !== 0) {
+    const detail = (result.stderr || "").trim() || `ssh exited ${result.status}`;
+    throw new Error(`installing credentials failed: ${detail}`);
+  }
+};
+
 const provisionUserData = (/** @type {string} */ pub) => `#cloud-config
 hostname: widecode-box
 disable_root: true
@@ -443,6 +542,7 @@ const up = async (/** @type {string[]} */ folders) => {
     if (!existsSync(project)) throw new Error(`no such folder: ${project}`);
   }
   if (new Set(projects).size !== projects.length) throw new Error("a folder is listed twice");
+  const creds = loadCredentials();
   acquireLock();
   try {
     const running = pid();
@@ -476,6 +576,12 @@ const up = async (/** @type {string[]} */ folders) => {
     const sshSeconds = Math.round((Date.now() - started) / 1000);
     say(`• ssh answered after ${sshSeconds}s, waiting for the shares`);
     if (!(await waitForReady(120))) throw new Error(`the share did not mount; see ${CONSOLE} and cloud-init-output.log`);
+    if (creds.present) {
+      installCredentials(creds);
+      say(`• credentials installed: ${credentialSummary(creds)}`);
+    } else {
+      say(`• no credentials file at ${creds.file}; the agents start without credentials`);
+    }
     const next = { ...record(), projects, upAt: new Date().toISOString(), sshSeconds };
     delete next.project;
     saveRecord(next);
@@ -537,6 +643,37 @@ const status = () => {
   say(`state:     ${STATE}`);
   say(`console:   ${CONSOLE}`);
   if (typeof saved.versions === "string") say(`agents:    ${saved.versions.replace(/\n/g, ", ")}`);
+};
+
+const credsCommand = () => {
+  const creds = loadCredentials();
+  say(`file:       ${creds.file}${creds.present ? "" : " (missing)"}`);
+  for (const key of CREDENTIAL_KEYS) say(`  ${key}: ${creds.values[key] ? "set" : "empty"}`);
+  const running = pid();
+  if (!running) {
+    say("box:        not running");
+    return;
+  }
+  const claudeProbe = ssh(
+    `if [ -f ${ENV_FILE} ]; then . ${ENV_FILE}; fi; ` +
+      'if [ -n "$CLAUDE_CODE_OAUTH_TOKEN" ]; then echo set; else echo empty; fi',
+    { quiet: true, timeout: 10000 },
+  );
+  const claude = (claudeProbe.stdout || "").trim() === "set" ? "set" : "empty";
+  const authProbe = `python3 - <<'PY'
+import json
+try:
+    with open(${JSON.stringify(OPENCODE_AUTH)}) as handle:
+        data = json.load(handle)
+except (FileNotFoundError, ValueError):
+    data = {}
+entry = data.get("opencode-go")
+print("present" if isinstance(entry, dict) and entry.get("key") else "absent")
+PY
+`;
+  const authResult = ssh("bash -s", { quiet: true, timeout: 10000, input: authProbe });
+  const opencode = (authResult.stdout || "").trim() === "present" ? "present" : "absent";
+  say(`box:        claude ${claude}, opencode-go ${opencode}`);
 };
 
 const hostAllowed = (/** @type {string} */ host, /** @type {string[]} */ allow) => {
@@ -661,6 +798,7 @@ const sshCommand = (/** @type {string[]} */ args) => {
   let proxyPort = null;
   let index = 0;
   const pathEnv = 'export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH";';
+  const credsEnv = `if [ -f ${ENV_FILE} ]; then . ${ENV_FILE}; fi;`;
   while (index < args.length) {
     const arg = args[index];
     if (arg === "--") {
@@ -705,9 +843,9 @@ const sshCommand = (/** @type {string[]} */ args) => {
     extra.push("-R", `${Number(proxyPort)}:127.0.0.1:${Number(proxyPort)}`);
     const url = `http://127.0.0.1:${Number(proxyPort)}`;
     const env = `export HTTPS_PROXY=${url} HTTP_PROXY=${url} NO_PROXY=localhost,127.0.0.1`;
-    command = `${pathEnv} ${env}; ${command || "bash -l"}`;
+    command = `${pathEnv} ${credsEnv} ${env}; ${command || "bash -l"}`;
   } else {
-    command = `${pathEnv} ${command || "bash -l"}`;
+    command = `${pathEnv} ${credsEnv} ${command || "bash -l"}`;
   }
   if (extra.length) extra.push("-o", "ExitOnForwardFailure=yes");
   return run("ssh", [...sshOptions(), ...extra, SSH_TARGET, command]);
@@ -720,6 +858,7 @@ const commands = {
   down,
   reset,
   status,
+  creds: credsCommand,
   proxy: () => proxy(rest),
   ssh: () => {
     const result = sshCommand(rest);

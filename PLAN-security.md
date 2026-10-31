@@ -129,7 +129,14 @@ Steps:
   `opencode acp` answers `initialize` over the SSH session.
 - V2, the agents through it: the box's credentials (the user makes them), a model call from both
   agents, widecode's MCP tools over `-R`.
-- V3, widecode: a box in a project's config; the runtime runs a Task subagent's command through
+  The credentials live in `~/.widecode/box/credentials.env` (folder 700, file 600, refused
+  otherwise), which the user edits: `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` and
+  `OPENCODE_API_KEY` for the Task targets' provider. `up` installs what is set for the VM's agent
+  user over SSH stdin, never on a command line.
+- V3, widecode: `/box key claude` and `/box key opencode` ask for the key in the request panel with
+  the input hidden and write it to the credentials file. A key is never a command's argument: what
+  the composer takes is kept in the project's history.jsonl. A system keyring (`secret-tool`) can
+  replace the file later. Then a box in a project's config; the runtime runs a Task subagent's command through
   `ssh box`; the box started and stopped with widecode; the proxy kept by widecode.
 - V4, the main agent in the box (its transcripts read from a folder the box writes to), then
   staging deploys.

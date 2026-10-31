@@ -21,6 +21,7 @@ node apps/widecode/box/box.mjs provision
 node apps/widecode/box/box.mjs up <folder> [<folder>...]
 node apps/widecode/box/box.mjs ssh [--forward-proxy <port>] [--forward <remotePort>:<hostPort>]... [--] [cmd...]
 node apps/widecode/box/box.mjs proxy [--port N] [--allow domain,...]
+node apps/widecode/box/box.mjs creds
 node apps/widecode/box/box.mjs down
 node apps/widecode/box/box.mjs status
 node apps/widecode/box/box.mjs reset
@@ -53,12 +54,45 @@ directory, writes its pid to `proxy.pid`, and runs until `down` or a signal stop
 
 `ssh` runs as `agent` with the box key, `BatchMode=yes` and the box's own `known_hosts`. It puts
 `~/.local/bin` and `~/.opencode/bin` first on the remote `PATH`, so `claude` and `opencode` resolve
-without a login shell. `--forward-proxy <port>` adds `-R <port>:127.0.0.1:<port>` and exports
+without a login shell, and sources `/home/agent/.config/widecode-box/env` when it exists, so the
+Claude token is set for every session. `--forward-proxy <port>` adds `-R <port>:127.0.0.1:<port>` and exports
 `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY=localhost,127.0.0.1` in the remote command; `--forward
 <remotePort>:<hostPort>` adds `-R <remotePort>:127.0.0.1:<hostPort>` and may be repeated. Forwards use
 `ExitOnForwardFailure=yes`. `down` stops the proxy, asks for an ACPI powerdown through the QEMU
 monitor and terminates the process after 45 seconds if the guest does not leave. `reset` drops
 `box.qcow2`; `base.qcow2` is kept.
+
+## Credentials
+
+The box's credentials are a file on the host, `~/.widecode/box/credentials.env` (override with
+`WIDECODE_BOX_CREDENTIALS`). It has one `KEY=value` per line, `#` comments and blank lines. The keys
+are `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) and `OPENCODE_API_KEY` (a key for the
+`opencode-go` provider). An empty value means that agent gets no credential. The file must be mode
+600, its folder mode 700, and both owned by the user; `up` and `creds` refuse anything else with a
+message naming the path and the fix. Values are never printed or put on a command line: `up` sends
+an install script to the guest over SSH stdin.
+
+What `up` installs after SSH answers:
+
+- Claude: `/home/agent/.config/widecode-box/env` (folder mode 700, file mode 600) with
+  `export CLAUDE_CODE_OAUTH_TOKEN=...`. Every `box.mjs ssh` session sources that file before the
+  remote command, beside the proxy variables. An empty value removes the file.
+- opencode: an entry in `/home/agent/.local/share/opencode/auth.json` (mode 600):
+  `{"opencode-go":{"type":"api","key":"..."}}`, merged with any other provider entries already
+  there. An empty value removes that entry. This is opencode's own credential store, the file its
+  `/connect` command writes (https://opencode.ai/docs/providers/), so the CLI needs no extra
+  environment. The provider also reads `OPENCODE_API_KEY` from the environment, but that would make
+  every agent session export it; the store is the mechanism the CLI itself uses. `opencode auth
+  login` prompts on a TTY and does not take a piped key, so the file is written directly.
+
+The `creds` command prints whether each key is set or empty in the file and, when the box runs,
+whether Claude has the token and whether opencode has the `opencode-go` entry. It never prints a
+value.
+
+The hosts each agent needs are already in the proxy's default allow list, so this spike added none.
+The proxy log from a model call showed Claude reaching only `api.anthropic.com`. opencode reached
+`opencode.ai` (its inference API), `models.opencode.ai` (the model catalog, covered by
+`*.opencode.ai`) and `registry.npmjs.org` (its provider package). No request was refused.
 
 ## What the checks found
 
@@ -122,6 +156,31 @@ Tested with two scratch git repositories, `/tmp/a` and `/tmp/b`, each with `file
    or throwaway HTTP server of the test was left, and `box.lock` and `proxy.pid` were gone. `status`
    showed `not running`, the proxy `not running`, and the last project list.
 
+### Credentials and a model call
+
+Tested with a throwaway credentials file under `/tmp` holding fake values, never the user's file.
+`base.qcow2` was reused; nothing was re-provisioned.
+
+1. A file with mode 644 was refused before any boot with
+   `has mode 644; run chmod 600 ...`, and a file in a folder with mode 755 with
+   `has mode 755; run chmod 700 ...`. In a 700 folder with mode 600 it was accepted.
+2. `up /tmp/wc-box-creds` installed the credentials after SSH answered. Inside,
+   `/home/agent/.config/widecode-box` was mode 700 and its `env` file mode 600;
+   `test -n "$CLAUDE_CODE_OAUTH_TOKEN"` in a `box.mjs ssh` session printed `set`. The opencode
+   `auth.json` was mode 600 and held an `opencode-go` entry with `type` and `key` keys (reported as
+   present, value not shown). `creds` printed `set` for both in the file and
+   `claude set, opencode-go present` in the box.
+3. With `proxy --port 8899` and `ssh --forward-proxy 8899`,
+   `claude -p "say ok"` failed with `Failed to authenticate. API Error: 401 OAuth access token is
+   invalid` (exit 1), and the proxy log showed only `api.anthropic.com`. `opencode run -m
+   opencode-go/deepseek-v4.1-flash "say ok"` failed with `Upstream request failed: Invalid
+   credential` (exit 1), after reaching `opencode.ai`, `models.opencode.ai` and
+   `registry.npmjs.org`, all allowed. Neither was a network or proxy error and no host was refused.
+4. After `down`, emptying `OPENCODE_API_KEY` and running `up` again removed the `opencode-go` entry
+   (`opencode-absent`, Claude still `set`). A second cycle with both keys empty removed the Claude
+   `env` file as well (`env-absent`) and left the box with no credentials.
+5. `down` stopped the proxy and the guest; no QEMU or proxy process of the test was left.
+
 ## What did not work, and why
 
 - The first seed ISO put `user-data` and `meta-data` in the image under other names. Cloud-init
@@ -139,6 +198,9 @@ Tested with two scratch git repositories, `/tmp/a` and `/tmp/b`, each with `file
   (`HTTPS_PROXY=... curl ...`). In a shell that applies only to the first command, so the `env`
   check saw them but a later curl in the same remote command did not. The remote command now exports
   them.
+- `opencode auth login -p opencode-go` prompts for the key on a TTY (a Bun prompt), so a key piped
+  to its stdin was ignored and no `auth.json` was written. The box writes the documented
+  `auth.json` entry itself instead.
 - A non-login SSH command got the system `PATH` only, so `claude` and `opencode` were not found even
   though provisioning reported them. `ssh` now prepends `~/.local/bin` and `~/.opencode/bin` to the
   remote `PATH`.
