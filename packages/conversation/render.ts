@@ -69,6 +69,17 @@ const pushAll = (out: Line[], lines: Line[]): void => {
   for (const l of lines) out.push(l);
 };
 
+/** How large a call's result was and who cut it, for the card's line: "" when neither says much. */
+const resultTag = (item: Item): string => {
+  const result = item.result;
+  if (result === null) return "";
+  const parts: string[] = [];
+  if (result.size >= 10000) parts.push(String(Math.round(result.size / 1000)) + "k chars");
+  if (result.truncated === "agent") parts.push("cut by the agent");
+  else if (result.truncated.length > 0) parts.push("cut by " + result.truncated);
+  return parts.join(" · ");
+};
+
 const outputLines = (text: string, indent: Run[], width: number, fg: string, out: Line[], max: number): void => {
   const all = text.split("\n");
   const shown = all.length > max ? all.slice(0, max) : all;
@@ -137,6 +148,8 @@ export const callPage = (item: Item, ctx: RenderContext, width: number, state: s
   head.add(item.name, "").bold = true;
   const summary = toolSummary(item, ctx);
   if (summary.length > 0) head.add(" " + clipText(summary, Math.max(8, width - item.name.length - 4)), palette.dim);
+  const pageTag = resultTag(item);
+  if (pageTag.length > 0) head.add("  · " + pageTag, palette.dim);
   out.push(head);
   out.push(line([new Run("  ", "")], state, palette.dim));
   out.push(new Line());
@@ -172,6 +185,8 @@ export const itemLines = (item: Item, ctx: RenderContext, indent: Run[], width: 
     if (summary.length > 0) head.add(" " + clipText(summary, Math.max(8, Math.min(SUMMARY_CELLS, width - item.name.length - 6))), palette.dim);
     const task = item.task;
     if (task !== null && task.status === "running" && task.lastTool.length > 0) head.add("  · " + task.lastTool, palette.warn);
+    const tag = resultTag(item);
+    if (tag.length > 0) head.add("  · " + tag, palette.dim);
     if (item.children.length > 0 || item.result !== null || item.input !== null) head.add(item.expanded ? "  ▾" : "  ▸", palette.dim);
     head.tag = item;
     out.push(head);

@@ -175,6 +175,39 @@ const main = async (): Promise<void> => {
   fgm.closeTurn(null);
   eq("a foreground request closes with its turn", fgAsk.state, "cancelled");
 
+  // A result's size and who cut it are kept, from the event or from widecode's note in the text,
+  // and a large cut result says both on its card's line while a small one adds nothing.
+  const sized = new ChatModel();
+  sized.openTurn("go", 0, true);
+  const sizedCall = sized.block("", "tc-size", TOOL, "toolu-size", "Bash", "");
+  ok("the sized call is made", sizedCall !== null);
+  if (sizedCall !== null) {
+    applyEvents(sized, new StatusInfo(), [{ type: "result", id: "toolu-size", text: "x", size: 48000, truncated: "agent" }]);
+    ok("a result keeps its event's size and cut", sizedCall.result !== null && sizedCall.result.size === 48000 && sizedCall.result.truncated === "agent");
+    const card = textOf(itemLines(sizedCall, new RenderContext(), [], 80));
+    ok("a large cut result shows its size and who cut it", card.includes("48k chars") && card.includes("cut by the agent"));
+  }
+  const noted = new ChatModel();
+  noted.openTurn("go", 0, true);
+  const notedCall = noted.block("", "tc-note", TOOL, "toolu-note", "Bash", "");
+  ok("the noted call is made", notedCall !== null);
+  if (notedCall !== null) {
+    const note = "[widecode cut this result: it was 50000 characters, over the 40000 it returns to an agent.]";
+    applyEvents(noted, new StatusInfo(), [{ type: "result", id: "toolu-note", text: "H".repeat(30000) + "\n\n" + note + "\n\nT".repeat(8000) }]);
+    ok("widecode's note is read back as its cut and the full size", notedCall.result !== null && notedCall.result.truncated === "widecode" && notedCall.result.size === 50000);
+    const card = textOf(itemLines(notedCall, new RenderContext(), [], 80));
+    ok("the card shows both parts", card.includes("50k chars") && card.includes("cut by widecode"));
+  }
+  const small = new ChatModel();
+  small.openTurn("go", 0, true);
+  const smallCall = small.block("", "tc-small", TOOL, "toolu-small", "Bash", "");
+  ok("the small call is made", smallCall !== null);
+  if (smallCall !== null) {
+    applyEvents(small, new StatusInfo(), [{ type: "result", id: "toolu-small", text: "a.txt" }]);
+    const card = textOf(itemLines(smallCall, new RenderContext(), [], 80));
+    ok("a small result adds nothing to its card", smallCall.result !== null && smallCall.result.size === 5 && !card.includes("chars") && !card.includes("cut by"));
+  }
+
   done();
 };
 

@@ -79,6 +79,8 @@ interface Ev {
   plan?: unknown;
   durationMs?: unknown;
   costUsd?: unknown;
+  size?: unknown;
+  truncated?: unknown;
   reason?: unknown;
   version?: unknown;
   contextUsed?: unknown;
@@ -392,6 +394,18 @@ const applyEvent = (model: ChatModel, info: StatusInfo, e: Ev): boolean => {
     result.text = str(e.text);
     result.images = num(e.images, 0);
     result.isError = e.error === true;
+    result.size = num(e.size, result.text.length);
+    result.truncated = str(e.truncated);
+    // A result widecode's MCP server cut says so in its text, with the full size: read it back when
+    // the agent's event does not.
+    if (result.truncated.length === 0) {
+      const note = result.text.indexOf("[widecode cut this result:");
+      if (note >= 0) {
+        result.truncated = "widecode";
+        const found = /it was (\d+) characters/.exec(result.text);
+        if (found !== null && e.size === undefined) result.size = Number(found[1]);
+      }
+    }
     if (e.patch !== undefined) {
       result.patch = patchOf(e.patch);
       result.hasPatch = result.patch.length > 0;

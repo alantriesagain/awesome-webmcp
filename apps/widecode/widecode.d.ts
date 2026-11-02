@@ -401,7 +401,7 @@ declare namespace widecode {
     | { type: "input"; parent?: string; key: string; input: unknown; name?: string }
     | ({ type: "facts"; id: string } & CallFacts)
     | { type: "finish"; parent?: string; key: string }
-    | { type: "result"; id: string; text?: string; images?: number; error?: boolean; patch?: { oldStart: number; newStart: number; lines: string[] }[] }
+    | { type: "result"; id: string; text?: string; images?: number; error?: boolean; size?: number; truncated?: "agent" | "widecode"; patch?: { oldStart: number; newStart: number; lines: string[] }[] }
     | { type: "edited"; path: string }
     | { type: "prompt"; parent?: string; text: string; images?: number; imagePaths?: string[]; notice?: boolean }
     | { type: "notice"; text: string; tone?: "info" | "error" | "command"; detail?: string; parent?: string; once?: boolean; ifOpen?: boolean }

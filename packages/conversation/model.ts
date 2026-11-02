@@ -35,6 +35,10 @@ export class ToolResult {
   text = "";
   isError = false;
   images = 0;
+  /** The full result's length in characters, the note's count when the agent only saw a cut one. */
+  size = 0;
+  /** Who cut the result: "agent", "widecode", or "" for none. */
+  truncated = "";
   /** The change the call made (an edit's hunks); empty for other calls. */
   patch: PatchHunk[] = [];
   hasPatch = false;
