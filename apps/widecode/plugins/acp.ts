@@ -184,6 +184,31 @@ interface Msg {
 
 const { obj, str, list, parse } = widecode.util;
 
+/** A tool result past this many characters is kept as its first CUT_HEAD, a line saying how many
+ * characters were cut, and its last CUT_TAIL. */
+const CUT_AT = 64000;
+const CUT_HEAD = 48000;
+const CUT_TAIL = 16000;
+
+/** `text` bounded to a preview: its first CUT_HEAD characters, the number cut, its last CUT_TAIL. */
+const cutText = (text: string): { text: string; size: number; truncated: boolean } => {
+  if (text.length <= CUT_AT) return { text, size: text.length, truncated: false };
+  const cut = text.length - CUT_HEAD - CUT_TAIL;
+  return { text: text.slice(0, CUT_HEAD) + "\n[… " + String(cut) + " characters cut by widecode …]\n" + text.slice(text.length - CUT_TAIL), size: text.length, truncated: true };
+};
+
+/**
+ * A tool result's fields from its text and raw output: bounded when long, with the full size and
+ * who cut it (the agent, when its raw output's metadata says it truncated the output itself, else
+ * widecode).
+ */
+const resultOf = (text: string, raw: unknown): { text: string; size?: number; truncated?: "agent" | "widecode" } => {
+  const cut = cutText(text);
+  const meta = obj(obj(raw)?.metadata);
+  if (meta !== null && meta.truncated === true) return cut.truncated ? { text: cut.text, size: cut.size, truncated: "agent" } : { text: cut.text, truncated: "agent" };
+  return cut.truncated ? { text: cut.text, size: cut.size, truncated: "widecode" } : { text: cut.text };
+};
+
 /** The section's agents over the defaults: an entry needs a command (a list of words). */
 const agentsOf = (section: unknown): Record<string, Entry> => {
   const out: Record<string, Entry> = { ...DEFAULT_AGENTS };
@@ -687,6 +712,8 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
   /** The calls the agent announced: their kind (a later update may leave it out) and whether their input made them a todo list or a subagent (an update of one it did not announce makes it). */
   /** The calls seen: each one's kind, whether its facts are its input's (a todo list, a subagent, a skill, one of widecode's tools), and the tool it was announced as. */
   const calls = new Map<string, { kind: string; named: boolean; tool: string }>();
+  /** The last input JSON emitted for each open call, so a repeated raw input sends no event again. */
+  const inputs = new Map<string, string>();
   /** Requests out (id: what answers them) and the permissions asked (request id: its JSON-RPC id and options). */
   let seq = 0;
   const waiting = new Map<number, (result: unknown, error: string) => void>();
@@ -844,18 +871,26 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
       facts.category = "skill";
       facts.summary = skill;
     }
-    if (diffs.length === 1 && (diffs[0].oldText === null || diffs[0].oldText === undefined)) facts.written = str(diffs[0].newText);
-    else if (kind === "edit" && input !== null && typeof input.content === "string") facts.written = input.content;
+    if (diffs.length === 1 && (diffs[0].oldText === null || diffs[0].oldText === undefined)) facts.written = cutText(str(diffs[0].newText)).text;
+    else if (kind === "edit" && input !== null && typeof input.content === "string") facts.written = cutText(input.content).text;
     const name = tool !== null ? (OWN_NAME[tool.category] ?? tool.name) : skill.length > 0 ? "Skill" : (NAME[kind] ?? "Tool");
     if (isNew) emit({ type: "block", key: callId, kind: "tool", id: callId, name, text: "", ...facts });
     else emit({ type: "facts", id: callId, ...facts });
-    if (u.rawInput !== undefined) emit({ type: "input", key: callId, input: u.rawInput, ...(subagent ? { name: "Agent" } : todos.length > 0 ? { name: "Todo" } : {}) });
+    if (u.rawInput !== undefined) {
+      const json = JSON.stringify(u.rawInput);
+      if (inputs.get(callId) !== json) {
+        inputs.set(callId, json);
+        emit({ type: "input", key: callId, input: u.rawInput, ...(subagent ? { name: "Agent" } : todos.length > 0 ? { name: "Todo" } : {}) });
+      }
+    }
     const status = str(u.status);
     // A call of widecode's Task tool is in flight until it completes or fails: the Task tool runs
     // under this card when its input is the one asked for here. Any call that ends is dropped, since
     // the agent may retitle it on the way.
-    if (status === "completed" || status === "failed") taskCalls.done(callId);
-    else if (tool !== null && tool.name === "Task" && input !== null) taskCalls.record(callId, str(input.prompt), str(input.description));
+    if (status === "completed" || status === "failed") {
+      taskCalls.done(callId);
+      inputs.delete(callId);
+    } else if (tool !== null && tool.name === "Task" && input !== null) taskCalls.record(callId, str(input.prompt), str(input.description));
     if (status !== "completed" && status !== "failed") return;
     // The diff with the file's line numbers when the agent gives one (opencode 1.19's unified diff,
     // 1.2's whole file before and after), else from the diff content's texts (opencode's are the
@@ -867,7 +902,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
     if (unified.length > 0) patch.push(...unifiedHunks(unified));
     else if (whole !== null && typeof whole.before === "string" && typeof whole.after === "string" && whole.before.length + whole.after.length <= MAX_WHOLE) patch.push(...hunksOf(whole.before, whole.after));
     if (patch.length === 0) for (const d of diffs) patch.push(...hunksOf(str(d.oldText), str(d.newText)));
-    emit({ type: "result", id: callId, text: outputOf(content, u.rawOutput), error: status === "failed", ...(patch.length > 0 ? { patch } : {}) });
+    emit({ type: "result", id: callId, ...resultOf(outputOf(content, u.rawOutput), u.rawOutput), error: status === "failed", ...(patch.length > 0 ? { patch } : {}) });
     emit({ type: "finish", key: callId });
     if (status === "completed") for (const d of diffs) emit({ type: "edited", path: str(d.path) });
     midTurn();
@@ -1733,6 +1768,8 @@ class SubagentRun {
   private openKind = "";
   private blocks = 0;
   private calls = new Map<string, string>();
+  /** The last input JSON emitted for each open call, dropped when the call finishes. */
+  private inputs = new Map<string, string>();
   private out: unknown[] = [];
   /** The events applied so far, each as its JSON line: encoded once, as it streams, so keeping them is a join. */
   private history: string[] = [];
@@ -1772,20 +1809,23 @@ class SubagentRun {
     });
   }
 
+  /** Keep `e` in the run's history, as the line a later read applies. */
+  private keep(e: Ev): void {
+    const line = JSON.stringify(e);
+    if (line.length > EVENT_LOG_CHARS) this.api.note("acp: task " + this.callId + " event " + str(obj(e)?.type) + " " + String(line.length) + " characters");
+    this.history.push(line);
+    this.historyChars += line.length;
+    while (this.historyChars >= this.historyLoggedAt) {
+      this.api.note("acp: task " + this.callId + " history " + String(this.historyChars) + " characters");
+      this.historyLoggedAt += HISTORY_LOG_CHARS;
+    }
+  }
+
   private flush(): void {
     if (this.out.length === 0) return;
     const batch = this.out;
     this.out = [];
-    for (const e of batch) {
-      const line = JSON.stringify(e);
-      if (line.length > EVENT_LOG_CHARS) this.api.note("acp: task " + this.callId + " event " + str(obj(e)?.type) + " " + String(line.length) + " characters");
-      this.history.push(line);
-      this.historyChars += line.length;
-      while (this.historyChars >= this.historyLoggedAt) {
-        this.api.note("acp: task " + this.callId + " history " + String(this.historyChars) + " characters");
-        this.historyLoggedAt += HISTORY_LOG_CHARS;
-      }
-    }
+    for (const e of batch) this.keep(e as Ev);
     this.api.conversation.subagent(this.callId, batch as widecode.ConversationEvent[]);
   }
 
@@ -1935,11 +1975,19 @@ class SubagentRun {
     this.resolve(this.reply.length > 0 ? this.reply : "The subagent was stopped.");
   }
 
-  /** End its process without reporting: the plugin, or the session it ran in, is going away. */
-  stopQuietly(): void {
+  /** End its process without reporting: the plugin, or the session it ran in, is going away (`why`, for its transcript). */
+  stopQuietly(why: string): void {
+    const unsettled = !this.reported && !this.closed;
     this.closed = true;
     this.busy = false;
     this.timeoutGen++;
+    // A run that never reported keeps a stopped end in its transcript, so a later read does not say
+    // it is still running. It is not sent to the conversation now, nor told to the parent.
+    if (unsettled) {
+      this.reported = true;
+      this.keep({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: "stopped", summary: "stopped: " + why });
+      attempt(() => this.persist());
+    }
     const proc = this.proc;
     this.proc = null;
     if (proc === null) return;
@@ -2148,11 +2196,18 @@ class SubagentRun {
     }
     if (known === undefined) this.emit({ type: "block", key, kind: "tool", id: key, name: NAME[kind] ?? "Tool", text: "", ...facts });
     else this.emit({ type: "facts", id: key, ...facts });
-    if (u.rawInput !== undefined) this.emit({ type: "input", key, input: u.rawInput });
+    if (u.rawInput !== undefined) {
+      const json = JSON.stringify(u.rawInput);
+      if (this.inputs.get(id) !== json) {
+        this.inputs.set(id, json);
+        this.emit({ type: "input", key, input: u.rawInput });
+      }
+    }
     const status = str(u.status);
     if (status !== "completed" && status !== "failed") return;
-    this.emit({ type: "result", id: key, text: this.output(u), error: status === "failed" });
+    this.emit({ type: "result", id: key, ...resultOf(this.output(u), u.rawOutput), error: status === "failed" });
     this.emit({ type: "finish", key });
+    this.inputs.delete(id);
   }
 
   /** A call's text from its content blocks, else from its raw output. */
@@ -2245,7 +2300,7 @@ widecode.plugin({
     const section = api.settings.section();
     const agents = agentsOf(section);
     const tasks = tasksOf(section);
-    for (const run of liveRuns.values()) run.stopQuietly();
+    for (const run of liveRuns.values()) run.stopQuietly("the acp plugin stopped");
     liveRuns = new Map();
     boxRunner = tasks.box !== null ? new BoxRunner(api, tasks.box) : null;
     const box = boxRunner;
@@ -2273,7 +2328,7 @@ widecode.plugin({
       parentSession = now;
       for (const [id, run] of runs) {
         if (!run.elsewhere(now)) continue;
-        run.stopQuietly();
+        run.stopQuietly("its session was left");
         runs.delete(id);
       }
     });
@@ -2427,7 +2482,7 @@ widecode.plugin({
     });
   },
   deactivate() {
-    for (const run of liveRuns.values()) run.stopQuietly();
+    for (const run of liveRuns.values()) run.stopQuietly("the acp plugin stopped");
     liveRuns.clear();
     if (boxRunner !== null) boxRunner.stop();
     boxRunner = null;

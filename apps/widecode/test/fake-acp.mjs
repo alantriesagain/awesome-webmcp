@@ -14,6 +14,9 @@
  * - `two`: two messages, "First." and "Second.";
  * - `run`: an execute call titled with its command, in the folder (pending, in progress, completed
  *   with its output and title, the kind left out);
+ * - `big`: an execute call whose output is 200,000 characters, as a tool that prints a lot does;
+ * - `bigagent`: an execute call whose raw output says the agent truncated it itself;
+ * - `repeatinput`: a call updated several times with the same raw input;
  * - `edit`: an edit of `a.txt`, its diff the snippet changed and the whole file before and after
  *   in its raw output's metadata, as opencode gives them (the file is not written);
  * - `ask`: a call that asks permission first; it completes when allowed, fails when rejected
@@ -266,6 +269,23 @@ const prompt = (id, sessionId, params) => {
     update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: "call_run", status: "in_progress", kind: "execute", title: "ls -1", locations: [{ path: cwd }], rawInput: input });
     update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: "call_run", status: "completed", title: "List files", content: [{ type: "content", content: text("a.txt\nb.txt") }], rawOutput: { output: "a.txt\nb.txt\n" } });
     update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Two files.") });
+    end("end_turn");
+  } else if (first === "big" || first === "bigagent") {
+    const input = { command: "print a lot" };
+    const output = first === "big" ? "x".repeat(200000) : "the agent cut this\n";
+    const rawOutput = first === "big" ? { output } : { output, metadata: { truncated: true } };
+    update(sessionId, { sessionUpdate: "tool_call", toolCallId: "call_big", title: "print a lot", kind: "execute", status: "pending", rawInput: input });
+    update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: "call_big", status: "in_progress", kind: "execute", title: "print a lot", rawInput: input });
+    update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: "call_big", status: "completed", title: "print a lot", rawOutput });
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Printed a lot.") });
+    end("end_turn");
+  } else if (first === "repeatinput") {
+    const input = { command: "echo same" };
+    update(sessionId, { sessionUpdate: "tool_call", toolCallId: "call_repeat", title: "echo same", kind: "execute", status: "pending", rawInput: input });
+    update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: "call_repeat", status: "in_progress", kind: "execute", title: "echo same", rawInput: input });
+    update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: "call_repeat", status: "in_progress", kind: "execute", title: "echo same", rawInput: input });
+    update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: "call_repeat", status: "completed", title: "echo same", rawInput: input, content: [{ type: "content", content: text("same") }], rawOutput: { output: "same" } });
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Same again.") });
     end("end_turn");
   } else if (first === "edit") {
     const path = cwd + "/a.txt";

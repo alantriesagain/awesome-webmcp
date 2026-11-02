@@ -11,6 +11,7 @@ import { TOOL } from "@widecode/conversation/model.ts";
 import { NoStateFile } from "@light/kernel/settings.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
+import { Store } from "../src/services/store.ts";
 import { done, eq, ok } from "@light/test/assert.ts";
 import { until } from "@light/test/headless.ts";
 
@@ -40,11 +41,16 @@ const alive = (pid: number): boolean => {
 
 const startedId = (text: string): string => (/subagent started: ([^\s"]+)/.exec(text) ?? [])[1] ?? "";
 
-/** An app whose main agent and subagents are the fake ACP agent; `agentArgs` reach the subagent's process. */
-const open = async (folder: string, log: string, agentArgs: string[]) => {
+/** An app whose main agent and subagents are the fake ACP agent; `agentArgs` reach the subagent's process, and `home` gives it a store. */
+const open = async (folder: string, log: string, agentArgs: string[], home = "") => {
   const ws = await openWorkspace(folder, 100);
   const c = new Conversation(ws.folder);
   const w = composeWidecode(ws, c);
+  if (home.length > 0) {
+    const store = new Store(home);
+    store.trust(folder);
+    await w.host.useStore(store);
+  }
   w.start({ acp: { agents: { main: { name: "Main", command: ["node", fake, "--log", log] }, fake: { name: "Fake", command: ["node", fake, "--log", log, ...agentArgs] } }, tasks: { targets: { deepseek: { agent: "fake" } }, maxConcurrent: 2 } } }, new NoStateFile(), []);
   await w.host.load();
   w.host.session.useAgent("main");
@@ -108,10 +114,11 @@ const main = async (): Promise<void> => {
 
   // A run of a session left since it started stops its process.
   const folderC = mkdtempSync(join(tmpdir(), "widecode-task-settle-c-"));
+  const homeC = mkdtempSync(join(tmpdir(), "widecode-task-settle-c-home-"));
   const logC = join(folderC, "fake.log");
   const pidFile = join(folderC, "fake.pid");
   writeFileSync(pidFile, "");
-  const c3 = await open(folderC, logC, ["--pid-file", pidFile]);
+  const c3 = await open(folderC, logC, ["--pid-file", pidFile], homeC);
   await c3.w.host.roles.chat.submit("go");
   ok("the main agent runs before the slow run", await until(() => !c3.c.model.running && c3.c.model.turns.length > 0, 10000));
   c3.c.model.openTurn("main", 0, true);
@@ -124,12 +131,15 @@ const main = async (): Promise<void> => {
   ok("its process is recorded", await until(() => readFileSync(pidFile, "utf8").trim().length > 0, 10000));
   const pid = Number(readFileSync(pidFile, "utf8").trim());
   ok("the slow run's process is alive", alive(pid));
+  const taskFile = join(folderC, ".widecode", "tasks", c3.c.model.sessionId.replace(/[^A-Za-z0-9_.-]/g, "_"), "toolu-slow.jsonl");
   c3.c.reset();
   ok("leaving the session stops its run's process", await until(() => !alive(pid), 10000));
+  ok("its kept transcript says it stopped because its session was left", existsSync(taskFile) && readFileSync(taskFile, "utf8").includes('"status":"stopped"') && readFileSync(taskFile, "utf8").includes('"summary":"stopped: its session was left"'));
   c3.w.host.kernel.stop();
   c3.w.js.killProcesses();
   c3.ws.close();
   rmSync(folderC, { recursive: true, force: true });
+  rmSync(homeC, { recursive: true, force: true });
 
   done();
 };
