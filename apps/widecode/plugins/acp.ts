@@ -152,6 +152,31 @@ const SIDE_PROMPT = "Answer briefly, from what you know of this session so far a
 /** How long a listing of sessions is used before it is read again. */
 const LISTING_MS = 3000;
 
+/** Sizes a run logs while it keeps its events, to diagnose memory growth. */
+const EVENT_LOG_CHARS = 1024 * 1024;
+const HISTORY_LOG_CHARS = 8 * 1024 * 1024;
+
+/** A test seam: an update handler failure injected to exercise the run's failure path. */
+let crashOnUpdate = false;
+
+/** Run one step of settling a call, going on when it throws: a host call failing must not stop the next step. */
+function attempt(work: () => void): void {
+  try {
+    work();
+  } catch {
+    // The next step still runs.
+  }
+}
+
+/** End a process, killing it when stopping it throws. */
+function end(proc: widecode.ProcessHandle, ms: number): void {
+  try {
+    proc.stop(ms);
+  } catch {
+    attempt(() => proc.kill());
+  }
+}
+
 /** A JSON-RPC message, or any object in one, every field unknown. */
 interface Msg {
   [key: string]: unknown;
@@ -1711,11 +1736,16 @@ class SubagentRun {
   private out: unknown[] = [];
   /** The events applied so far, each as its JSON line: encoded once, as it streams, so keeping them is a join. */
   private history: string[] = [];
+  /** The characters kept in `history`, and the size at which the next line is logged. */
+  private historyChars = 0;
+  private historyLoggedAt = HISTORY_LOG_CHARS;
   private reply = "";
   /** The title of a permission this prompt's run refused, while it has not reported its end. */
   private refused = "";
   private busy = false;
   private closed = false;
+  /** Whether this call has a result reported to the parent, so a later process exit does not report it again. */
+  private reported = false;
   private timeoutGen = 0;
   private resolve: (text: string) => void = () => {};
   private reject: (error: Error) => void = () => {};
@@ -1746,7 +1776,16 @@ class SubagentRun {
     if (this.out.length === 0) return;
     const batch = this.out;
     this.out = [];
-    for (const e of batch) this.history.push(JSON.stringify(e));
+    for (const e of batch) {
+      const line = JSON.stringify(e);
+      if (line.length > EVENT_LOG_CHARS) this.api.note("acp: task " + this.callId + " event " + str(obj(e)?.type) + " " + String(line.length) + " characters");
+      this.history.push(line);
+      this.historyChars += line.length;
+      while (this.historyChars >= this.historyLoggedAt) {
+        this.api.note("acp: task " + this.callId + " history " + String(this.historyChars) + " characters");
+        this.historyLoggedAt += HISTORY_LOG_CHARS;
+      }
+    }
     this.api.conversation.subagent(this.callId, batch as widecode.ConversationEvent[]);
   }
 
@@ -1756,6 +1795,27 @@ class SubagentRun {
     const sid = this.runSession;
     if (sid.length === 0 || this.history.length === 0) return;
     this.api.store.saveTaskTranscript(sid, this.callId, this.history.join("\n") + "\n");
+  }
+
+  /** Run `work`, reporting a failure through the run's own failure path rather than the process's handler. */
+  private guard(where: string, work: () => void): void {
+    try {
+      work();
+    } catch (e) {
+      this.crashed(where, e);
+    }
+  }
+
+  /** An exception while handling what the process said: settle the call, or just note it once it has a result. */
+  private crashed(where: string, e: unknown): void {
+    const why = e instanceof Error ? e.message : String(e);
+    const text = "the subagent run failed in " + where + ": " + why;
+    try {
+      if (!this.closed && !this.reported) this.fail(text);
+      else this.api.note("acp: task " + this.callId + ": " + text);
+    } catch {
+      // A host call is failing; nothing more can be done from here.
+    }
   }
 
   /** Whether a prompt is running: what counts against the bound on subagents at once. */
@@ -1782,6 +1842,7 @@ class SubagentRun {
   start(prompt: string): Promise<string> {
     this.runSession = this.api.agent.sessionId();
     this.busy = true;
+    this.reported = false;
     this.emit({ type: "facts", id: this.callId, category: "agent", summary: this.target.name + ": " + this.description, agentType: this.target.name, agentTask: this.description, agentPrompt: prompt });
     this.emit({ type: "task", id: this.callId, taskId: this.callId, description: this.description, agentType: this.target.name, background: this.background });
     this.flush();
@@ -1793,11 +1854,12 @@ class SubagentRun {
       this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: "running", summary: "starting the box" });
       this.flush();
       return this.box.ensure(this.boxFolder).then((why) => {
-        if (why.length > 0) {
-          this.fail(why);
-          return this.promise;
-        }
-        return this.launch(prompt, true);
+        let out: Promise<string> = this.promise;
+        this.guard("its box", () => {
+          if (why.length > 0) this.fail(why);
+          else out = this.launch(prompt, true);
+        });
+        return out;
       });
     }
     return this.launch(prompt, false);
@@ -1810,12 +1872,14 @@ class SubagentRun {
       : command;
     const p = this.api.process.spawn(words, { cwd: this.cwd }, {
       // Each batch goes under the card as it comes, so the run streams and no one call carries all of it.
-      lines: (lines) => {
-        for (const l of lines) this.line(l);
-        this.flush();
-      },
-      exit: (code) => this.exited(code),
-      error: (text) => this.api.note(this.entry.name + ": " + text.trimEnd()),
+      lines: (lines) =>
+        this.guard("its output", () => {
+          for (const l of lines) this.line(l);
+          this.flush();
+        }),
+      exit: (code) => this.guard("its exit", () => this.exited(code)),
+      error: (text) =>
+        this.guard("its error output", () => this.api.note(this.entry.name + ": " + text.trimEnd())),
     });
     if (!p.started) {
       const text = "cannot start " + words.join(" ");
@@ -1841,6 +1905,7 @@ class SubagentRun {
   send(text: string): string {
     if (this.closed || this.proc === null) return "the subagent is not running";
     if (this.busy) return "the subagent is busy";
+    this.reported = false;
     this.reply = "";
     this.open = "";
     this.openKind = "";
@@ -1856,13 +1921,34 @@ class SubagentRun {
     this.closed = true;
     this.busy = false;
     this.timeoutGen++;
-    this.proc?.write(JSON.stringify({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: this.session } }));
-    this.proc?.stop(1000);
+    this.reported = true;
+    const proc = this.proc;
+    this.proc = null;
+    if (proc !== null) {
+      attempt(() => proc.write(JSON.stringify({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: this.session } })));
+      end(proc, 1000);
+    }
     this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: "stopped", summary: "stopped" });
-    this.flush();
-    this.persist();
-    this.onDone();
+    attempt(() => this.flush());
+    attempt(() => this.persist());
+    attempt(() => this.onDone());
     this.resolve(this.reply.length > 0 ? this.reply : "The subagent was stopped.");
+  }
+
+  /** End its process without reporting: the plugin, or the session it ran in, is going away. */
+  stopQuietly(): void {
+    this.closed = true;
+    this.busy = false;
+    this.timeoutGen++;
+    const proc = this.proc;
+    this.proc = null;
+    if (proc === null) return;
+    end(proc, 1000);
+  }
+
+  /** Whether it ran in another session than `session`, so it should stop with that session. */
+  elsewhere(session: string): boolean {
+    return this.runSession.length > 0 && this.runSession !== session;
   }
 
   timeout(): void {
@@ -1872,18 +1958,21 @@ class SubagentRun {
 
   /** A prompt or the start failed: the card says so, and a background run tells the main agent. */
   private fail(text: string): void {
-    if (this.closed) return;
+    if (this.closed || this.reported) return;
     this.closed = true;
     this.busy = false;
     this.timeoutGen++;
+    this.reported = true;
     this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: "failed", summary: text.split("\n")[0] });
-    this.flush();
-    this.persist();
-    this.proc?.stop(1000);
+    attempt(() => this.flush());
+    attempt(() => this.persist());
+    const proc = this.proc;
     this.proc = null;
-    this.onDone();
-    if (this.background) this.notify(text, true);
-    else this.reject(new Error(text));
+    if (proc !== null) end(proc, 1000);
+    attempt(() => this.onDone());
+    if (this.background) {
+      attempt(() => this.notify(text, true));
+    } else this.reject(new Error(text));
   }
 
   private rpc(method: string, params: unknown, then: (result: Msg | null, error: string) => void): void {
@@ -1924,11 +2013,14 @@ class SubagentRun {
 
   private prompt(text: string): void {
     this.busy = true;
+    this.reported = false;
     this.refused = "";
     const gen = ++this.timeoutGen;
-    this.api.after(this.timeoutMs, () => {
-      if (gen === this.timeoutGen && this.busy) this.timeout();
-    });
+    this.api.after(this.timeoutMs, () =>
+      this.guard("its timer", () => {
+        if (gen === this.timeoutGen && this.busy) this.timeout();
+      }),
+    );
     this.rpc("session/prompt", { sessionId: this.session, prompt: [{ type: "text", text }] }, (result, error) => {
       if (error.length > 0) {
         this.promptDone(error, true);
@@ -1943,23 +2035,25 @@ class SubagentRun {
     if (this.closed) return;
     this.busy = false;
     this.timeoutGen++;
+    this.reported = true;
     const refused = this.refused;
     this.refused = "";
     const said = refused.length > 0 ? text + "\n\n[a permission was refused: " + refused + "]" : text;
     const summary = error ? said.split("\n")[0] : refused.length > 0 ? "a permission was refused: " + refused : this.description;
     this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: error ? "failed" : "done", summary });
-    this.flush();
-    this.persist();
+    attempt(() => this.flush());
+    attempt(() => this.persist());
     if (!this.background) {
       this.closed = true;
-      this.proc?.stop(500);
+      const proc = this.proc;
       this.proc = null;
-      this.onDone();
+      if (proc !== null) end(proc, 500);
+      attempt(() => this.onDone());
       if (error) this.reject(new Error(said));
       else this.resolve(this.worktree.length > 0 ? said + "\n\n[worktree: " + this.worktree + "]" : said);
       return;
     }
-    this.notify(this.worktree.length > 0 ? said + "\n\n[worktree: " + this.worktree + "]" : said, error);
+    attempt(() => this.notify(this.worktree.length > 0 ? said + "\n\n[worktree: " + this.worktree + "]" : said, error));
     this.reply = "";
     this.open = "";
     this.openKind = "";
@@ -2010,6 +2104,7 @@ class SubagentRun {
 
   private update(u: Msg | null): void {
     if (u === null) return;
+    if (crashOnUpdate) throw new Error("injected update failure");
     const what = str(u.sessionUpdate);
     if (what === "agent_message_chunk") this.chunk("text", u.content);
     else if (what === "agent_thought_chunk") this.chunk("thinking", u.content);
@@ -2095,45 +2190,63 @@ class SubagentRun {
     this.api.note("subagent " + this.callId + " asks: " + title);
     this.api.conversation
       .ask({ category: "question", name: "Task", permission: true, questions: [{ question, header: "Permission", options: options.map((o) => ({ label: o.label, description: o.detail })) }] }, this.callId)
-      .then((reply) => {
-        const label = reply.state === "answered" && reply.answers.length > 0 && reply.answers[0].labels.length > 0 ? reply.answers[0].labels[0] : "";
-        const chosen = options.find((o) => o.label === label);
-        // The run's answer says a permission was refused, whether or not it went on after it.
-        if (!this.closed && (chosen === undefined || chosen.detail.startsWith("reject"))) this.refused = title;
-        this.api.note("subagent " + this.callId + " permission: " + (chosen !== undefined ? chosen.label : "cancelled"));
-        const answer: unknown = chosen !== undefined ? { outcome: { outcome: "selected", optionId: chosen.id } } : { outcome: { outcome: "cancelled" } };
-        if (this.proc !== null) this.proc.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, result: answer }));
-      });
+      .then((reply) =>
+        this.guard("its permission", () => {
+          const label = reply.state === "answered" && reply.answers.length > 0 && reply.answers[0].labels.length > 0 ? reply.answers[0].labels[0] : "";
+          const chosen = options.find((o) => o.label === label);
+          // The run's answer says a permission was refused, whether or not it went on after it.
+          if (!this.closed && (chosen === undefined || chosen.detail.startsWith("reject"))) this.refused = title;
+          this.api.note("subagent " + this.callId + " permission: " + (chosen !== undefined ? chosen.label : "cancelled"));
+          const answer: unknown = chosen !== undefined ? { outcome: { outcome: "selected", optionId: chosen.id } } : { outcome: { outcome: "cancelled" } };
+          if (this.proc !== null) this.proc.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, result: answer }));
+        }),
+      );
   }
 
   private exited(code: number): void {
     this.proc = null;
     if (this.closed) return;
+    if (this.reported) {
+      // Its result already reached the parent: this exit only cleans up a process kept for SendMessage.
+      this.closed = true;
+      this.busy = false;
+      this.timeoutGen++;
+      attempt(() => this.api.note("acp: task " + this.callId + ": " + this.entry.name + " ended (exit code " + String(code) + ") after its result"));
+      attempt(() => this.onDone());
+      return;
+    }
     const text = this.entry.name + " ended (exit code " + String(code) + ")";
     if (this.busy) {
       this.promptDone(text, true);
       return;
     }
     this.closed = true;
+    this.reported = true;
     this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: "stopped", summary: text });
-    this.flush();
-    this.persist();
-    this.onDone();
-    if (this.background) this.notify(text, true);
-    else this.reject(new Error(text));
+    attempt(() => this.flush());
+    attempt(() => this.persist());
+    attempt(() => this.onDone());
+    if (this.background) {
+      attempt(() => this.notify(text, true));
+    } else this.reject(new Error(text));
   }
 }
 
 /** The box this plugin started, stopped when the plugin deactivates. */
 let boxRunner: BoxRunner | null = null;
+/** The live Task runs, by id, so deactivation stops every process they started. */
+let liveRuns: Map<string, SubagentRun> = new Map();
 
 widecode.plugin({
   id: "acp",
   defaults: () => ({ agents: DEFAULT_AGENTS }),
   activate(api) {
+    crashOnUpdate = api.fs.env("WIDECODE_ACP_TEST_CRASH") === "update";
     const section = api.settings.section();
     const agents = agentsOf(section);
     const tasks = tasksOf(section);
+    for (const run of liveRuns.values()) run.stopQuietly();
+    liveRuns = new Map();
     boxRunner = tasks.box !== null ? new BoxRunner(api, tasks.box) : null;
     const box = boxRunner;
     api.ui.segment({
@@ -2151,7 +2264,19 @@ widecode.plugin({
     sweep(api, agents, "");
     if (tasks.targets.length === 0) return;
     /** The live runs by id: a background run can be messaged or stopped after its call answered. */
-    const runs = new Map<string, SubagentRun>();
+    const runs = liveRuns;
+    /** The parent session the runs belong to: a run of a session left since is stopped. */
+    let parentSession = api.agent.sessionId();
+    api.on("conversationChanged", () => {
+      const now = api.agent.sessionId();
+      if (now === parentSession) return;
+      parentSession = now;
+      for (const [id, run] of runs) {
+        if (!run.elsewhere(now)) continue;
+        run.stopQuietly();
+        runs.delete(id);
+      }
+    });
     /** Worktrees being made for a run not started yet. */
     let preparing = 0;
     /** The runs working now: an idle background run waits for a message and holds no place. */
@@ -2302,6 +2427,8 @@ widecode.plugin({
     });
   },
   deactivate() {
+    for (const run of liveRuns.values()) run.stopQuietly();
+    liveRuns.clear();
     if (boxRunner !== null) boxRunner.stop();
     boxRunner = null;
   },

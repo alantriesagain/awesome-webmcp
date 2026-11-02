@@ -2,6 +2,7 @@
 // tells, folder actions, tools) and the namespace dispatch into `src/api`.
 import { HostAnswer } from "@light/plugins/engine.ts";
 import { errorMessage } from "@light/lib/json.ts";
+import { log } from "@light/lib/log.ts";
 import type { JsRuntime } from "./runtime.ts";
 import { API_ANSWERS } from "./namespaces.ts";
 import { answer, json, num, refuse, str, strs } from "../api/values.ts";
@@ -24,6 +25,14 @@ const OWNER_FIRST = [
   "conversation.apply",
 ];
 
+/** A call's arguments for the log: its length, and its first and last 200 characters. */
+export function argsExcerpt(args: string): string {
+  if (args.length === 0) return "an empty string";
+  const head = String(args.length) + " characters: ";
+  if (args.length <= 400) return head + JSON.stringify(args);
+  return head + JSON.stringify(args.slice(0, 200)) + " … " + JSON.stringify(args.slice(args.length - 200));
+}
+
 export class HostRouter {
   readonly rt: JsRuntime;
 
@@ -36,6 +45,7 @@ export class HostRouter {
     try {
       parsed = JSON.parse(argsJson);
     } catch {
+      log("plugins: " + name + ": arguments that are not JSON, " + argsExcerpt(argsJson));
       return refuse("widecode: arguments that are not JSON");
     }
     const a: unknown[] = Array.isArray(parsed) ? (parsed as unknown[]) : [];

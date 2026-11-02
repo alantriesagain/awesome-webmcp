@@ -29,6 +29,9 @@
  * - `unknown`: a request of a method widecode does not offer, then a message with the error it
  *   answered (or none);
  * - `slow`: a chunk, then nothing until session/cancel ends the turn as cancelled;
+ * - `broken`: a line that is not JSON, as a damaged hand-off could send one;
+ * - `leave`: "Done.", the turn ended, then the process exits with code 3 after 100 ms (writing
+ *   "exit" to `--exit-log` first, when given);
  * - `work`: a call that runs 800 ms, then "Worked."; a prompt sent while it runs is taken into the
  *   turn, as opencode takes one (the reply adds "Also: <its text>"), and every prompt of the turn is
  *   answered when it ends;
@@ -62,6 +65,8 @@
  *
  * With `--log <path>` every message it reads is appended there, one per line, and sessions are
  * numbered across its runs from the session/new requests logged (fake-1, fake-2, …). With
+ * `--pid-file <path>` it writes its process id at start, and with `--exit-log <path>` the `leave`
+ * prompt records that it is about to exit. With
  * `--sessions` it prints "past-1" as an agent's own listing would (JSON, in the folder it runs in)
  * and exits.
  *
@@ -115,6 +120,10 @@ if (process.argv.includes("--skills")) {
 
 const logAt = process.argv.indexOf("--log");
 const log = logAt >= 0 ? process.argv[logAt + 1] : "";
+const pidAt = process.argv.indexOf("--pid-file");
+if (pidAt >= 0) writeFileSync(process.argv[pidAt + 1], String(process.pid));
+const exitLogAt = process.argv.indexOf("--exit-log");
+const exitLog = exitLogAt >= 0 ? process.argv[exitLogAt + 1] : "";
 
 const legacy = process.argv.includes("--legacy");
 const dsh = process.argv.includes("--dsh");
@@ -351,6 +360,17 @@ const prompt = (id, sessionId, params) => {
   } else if (first === "slow") {
     update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Working…") });
     slow = { id, session: sessionId };
+  } else if (first === "broken") {
+    // A protocol line no JSON parser takes, as a damaged hand-off could send one.
+    process.stdout.write('{"jsonrpc":"2.0","method":"session/update","params":{broken\n');
+  } else if (first === "leave") {
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Done.") });
+    end("end_turn");
+    // Its call is reported finished before the process goes; the exit must not report it again.
+    setTimeout(() => {
+      if (exitLog.length > 0) appendFileSync(exitLog, "exit\n");
+      process.exit(3);
+    }, 100);
   } else if (first === "fail") write({ id, error: { code: -32603, message: "model unavailable" } });
   else if (first === "exit") {
     update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Leaving.") });
