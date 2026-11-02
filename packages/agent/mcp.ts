@@ -9,6 +9,7 @@
 // user alone. No sessions, no stream of the server's own, no resources or prompts.
 import { randomBytes } from "node:crypto";
 import { isRecord } from "@light/lib/json.ts";
+import { log } from "@light/lib/log.ts";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
@@ -17,6 +18,16 @@ import { join } from "node:path";
 /** The protocol versions it speaks: the client's when it is one of them, else the first. */
 const VERSIONS = ["2025-06-18", "2025-11-25", "2025-03-26"];
 const MAX_BODY = 1048576;
+/**
+ * `text` within `max` characters, or its first three quarters of `max` and its last fifth with a
+ * paragraph between them saying why, so that a tool's answer never takes more of an agent's
+ * context than it can use.
+ */
+export function capResult(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const note = "[widecode cut this result: it was " + String(text.length) + " characters, over the " + String(max) + " it returns to an agent. Ask again for less: a narrower question, a filter, fewer lines, or one part at a time.]";
+  return text.slice(0, Math.floor(max * 0.75)) + "\n\n" + note + "\n\n" + text.slice(text.length - Math.floor(max * 0.2));
+}
 
 interface Rpc {
   id?: unknown;
@@ -109,6 +120,8 @@ export class McpServer {
   clients: McpClient[] = [];
   /** How long a call waits between progress notifications. */
   progressMs = 10000;
+  /** The most characters a tool's answer returns to an agent; a longer one is cut (`capResult`). */
+  resultLimit = 40000;
   /** Called with each call to a tool it offers; `answer` ends it. */
   onToolCall: ((call: McpCall) => void) | null = null;
   /** Called when the agent cancelled a call with `notifications/cancelled`, before the response closes. */
@@ -198,7 +211,12 @@ export class McpServer {
     for (const c of this.calls) {
       if (c.id !== id) continue;
       this.finish(c);
-      c.res.end(event(result(c.rpcId, '{"content":[{"type":"text","text":' + JSON.stringify(text) + '}],"isError":' + String(isError) + "}")));
+      let out = text;
+      if (text.length > this.resultLimit) {
+        out = capResult(text, this.resultLimit);
+        log("mcp: cut " + c.tool.name + " from " + String(text.length) + " to " + String(out.length) + " characters");
+      }
+      c.res.end(event(result(c.rpcId, '{"content":[{"type":"text","text":' + JSON.stringify(out) + '}],"isError":' + String(isError) + "}")));
       return;
     }
   }
