@@ -27,7 +27,7 @@ const RELOAD = {
 const API = {
   type: "object",
   properties: {
-    part: { type: "string", description: "guide (PLUGINS.md), types (widecode.d.ts whole), or one part of the API by name: a namespace (tools, ui, state, agent, ...) or an interface (Tool, Plugin, Command, ...). Left out, with no find: an index." },
+    part: { type: "string", description: "guide (PLUGINS.md's opening and its sections), a section of the guide by its heading (The harness, Agents, ...), or one part of the API by name: a namespace (tools, ui, state, agent, ...) or an interface (Tool, Plugin, Command, ...). types: the namespaces and interfaces to ask for. Left out, with no find: an index." },
     find: { type: "string", description: "Text to look up in the guide and the types: the lines holding it, with where they are." },
   },
 };
@@ -42,6 +42,12 @@ const CHECK = {
 const NONE = { type: "object", properties: {} };
 
 /** The block of the Api's namespace `name` in the types (`    name: {` to its closing brace), the interface or the type alias named `name`; "" for none. */
+/** The guide's sections: each "## " heading with its text up to the next. */
+const sectionsOf = (guide: string): { heading: string; text: string }[] => {
+  const parts = guide.split(/\n(?=## )/);
+  return parts.slice(1).map((t) => ({ heading: t.slice(3, t.indexOf("\n") < 0 ? t.length : t.indexOf("\n")).trim(), text: t }));
+};
+
 const partOf = (types: string, name: string): string => {
   const starts = ["\n    " + name + ": {", "\n  interface " + name + " {", "\n  type " + name + " ="];
   for (const start of starts) {
@@ -186,16 +192,23 @@ widecode.plugin({
           const hits = linesWith(docs.guide, find, "PLUGINS.md", 40).concat(linesWith(docs.types, find, "widecode.d.ts", 40));
           return hits.length > 0 ? hits.join("\n") : "nothing in the guide or the types holds " + JSON.stringify(find);
         }
-        if (part === "guide") return docs.guide;
-        if (part === "types") return docs.types;
         const namespaces = namesIn(partOf(docs.types, "Api"), /\n    ([a-zA-Z]+): \{/g);
         const interfaces = namesIn(docs.types, /\n  interface ([A-Za-z]+)/g);
+        // The guide and the types are each larger than a tool's answer may be: they answer by part.
+        const sections = sectionsOf(docs.guide);
+        if (part === "guide") {
+          const opening = docs.guide.split(/\n(?=## )/)[0];
+          return opening.trimEnd() + "\n\nThe guide's sections, each a part to ask for: " + sections.map((x) => x.heading).join(", ") + ".";
+        }
+        if (part === "types") return "widecode.d.ts by part. The namespaces of Api: " + namespaces.join(", ") + ". The interfaces: " + interfaces.join(", ") + ". find looks text up across it.";
+        const section = sections.find((x) => x.heading.toLowerCase() === part.toLowerCase());
+        if (section !== undefined) return section.text;
         if (part.length > 0) {
           const block = partOf(docs.types, part);
           if (block.length === 0) throw new Error("the API has no part named " + part + ". The namespaces: " + namespaces.join(", ") + ". The interfaces: " + interfaces.join(", "));
           return block;
         }
-        return "The plugin API. part: guide (how plugins work, where they load from, the harness), types (every type), one of the namespaces (" + namespaces.join(", ") + ") or one of the interfaces (" + interfaces.join(", ") + "). find: text to look up in both.";
+        return "The plugin API. part: guide (how plugins work, where they load from, the harness: its opening and its sections), a section of the guide by its heading, types (an index of the types), one of the namespaces (" + namespaces.join(", ") + ") or one of the interfaces (" + interfaces.join(", ") + "). find: text to look up in both.";
       },
     });
     api.tools.add({

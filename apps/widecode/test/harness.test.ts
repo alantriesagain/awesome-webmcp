@@ -188,7 +188,10 @@ const main = async (): Promise<void> => {
   const toolsPart = await callTool("api", '{"part":"tools"}');
   ok("api: one namespace of the types", toolsPart.text.startsWith("    tools: {") && toolsPart.text.includes("add(tool: Tool): void;"));
   ok("an interface", (await callTool("api", '{"part":"Tool"}')).text.includes("interface Tool {"));
-  ok("the guide", (await callTool("api", '{"part":"guide"}')).text.includes("## The harness"));
+  const guide = (await callTool("api", '{"part":"guide"}')).text;
+  ok("the guide: its opening and its sections", guide.startsWith("# widecode's plugins") && guide.includes("The harness, ") && !guide.includes("[widecode cut this result:"));
+  ok("a section of the guide", (await callTool("api", '{"part":"The harness"}')).text.startsWith("## The harness"));
+  ok("the types by part", (await callTool("api", '{"part":"types"}')).text.includes("interfaces: "));
   const found = (await callTool("api", '{"find":"harnessChanged"}')).text;
   ok("looked up in both", found.split("\n").some((l) => l.startsWith("PLUGINS.md:")) && found.includes("widecode.d.ts:"));
   const index = (await callTool("api", "{}")).text;
