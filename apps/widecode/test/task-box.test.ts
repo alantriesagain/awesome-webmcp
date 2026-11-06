@@ -1,9 +1,10 @@
 // ffi: @light/plugins/native/ffi.json
-// A boxed Task target: the run goes through `box.mjs ssh --forward-proxy`, the first run starts the
-// box's proxy and the box with the session folder and the configured projects, a box with another
-// project list fails the run with the box's message, an unboxed target runs its command on the
-// host, worktrees live in `.worktrees/` (listed in `.git/info/exclude`), and the status segment
-// says boxed or unboxed. The box credential file's shape checks run against fake files under /tmp.
+// A boxed Task target: a bwrap run goes through `box.mjs jail` with the proxy port and its projects
+// and starts no VM, a VM run goes through `box.mjs ssh --forward-proxy`, starts the proxy and the box
+// with the session folder and the configured projects, and stops once idle, a box with another
+// project list fails the run with the box's message, an unboxed target runs its command on the host,
+// worktrees live in `.worktrees/` (listed in `.git/info/exclude`), and the status segment names the
+// backend or says unboxed. The box credential file's shape checks run against fake files under /tmp.
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { request, type IncomingMessage } from "node:http";
@@ -21,6 +22,11 @@ import { done, eq, ok } from "@light/test/assert.ts";
 const fake = join(process.cwd(), "test/fake-acp.mjs");
 const fakeBox = join(process.cwd(), "test/fake-box.mjs");
 const boxScript = join(process.cwd(), "box/box.mjs");
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(() => resolve(), ms);
+  });
 
 const send = (url: string, token: string, body: string): Promise<string> =>
   new Promise((resolve) => {
@@ -83,7 +89,7 @@ const main = async (): Promise<void> => {
     acp: {
       agents: { fake: { name: "Fake", command: ["node", fake, "--log", acpLog] } },
       tasks: {
-        box: { script: fakeBox, proxyPort: 8899, memory: 2048, projects: [other] },
+        box: { script: fakeBox, kind: "vm", proxyPort: 8899, memory: 2048, projects: [other] },
         targets: {
           deepseek: { agent: "fake", model: "fake/large", description: "a boxed test subagent", box: true },
           host: { agent: "fake", description: "a host subagent" },
@@ -168,7 +174,7 @@ const main = async (): Promise<void> => {
   });
   const boxedSeg = allBoxed.w.host.screen.segments.find("box");
   const boxed = boxedSeg !== null ? boxedSeg.draw(new SegmentContext()) : [];
-  eq("every target boxed says boxed", boxed.map((r) => r.text).join(""), "boxed");
+  eq("every target boxed on the default kind says boxed: bwrap", boxed.map((r) => r.text).join(""), "boxed: bwrap");
   close(allBoxed.ws, allBoxed.w);
   rmSync(allBoxedFolder, { recursive: true, force: true });
 
@@ -179,6 +185,129 @@ const main = async (): Promise<void> => {
   eq("no targets draw nothing", String(empty.length), "0");
   close(none.ws, none.w);
   rmSync(noTargetsFolder, { recursive: true, force: true });
+
+  const bwrapFolder = mkdtempSync(join(tmpdir(), "widecode-task-bwrap-"));
+  const bwrapOther = mkdtempSync(join(tmpdir(), "widecode-task-bwrap-other-"));
+  const bwrapDir = mkdtempSync(join(tmpdir(), "widecode-task-bwrap-state-"));
+  const bwrapLog = join(bwrapDir, "calls.jsonl");
+  process.env.FAKE_BOX_DIR = bwrapDir;
+  process.env.FAKE_BOX_LOG = bwrapLog;
+  execFileSync("git", ["init", "-q"], { cwd: bwrapFolder });
+  execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-q", "--allow-empty", "-m", "start"], { cwd: bwrapFolder });
+  const bwrapApp = await open(bwrapFolder, {
+    acp: {
+      agents: { fake: { name: "Fake", command: ["node", fake] } },
+      tasks: {
+        box: { script: fakeBox, proxyPort: 8899, projects: [bwrapOther] },
+        targets: { deepseek: { agent: "fake", box: true } },
+      },
+    },
+  });
+  const bwrapSeg = bwrapApp.w.host.screen.segments.find("box");
+  const bwrapDrawn = bwrapSeg !== null ? bwrapSeg.draw(new SegmentContext()) : [];
+  eq("a bwrap box says boxed: bwrap", bwrapDrawn.map((r) => r.text).join(""), "boxed: bwrap");
+  eq("in the ok colour", String(bwrapDrawn[0]?.fg), String(palette.ok));
+  const bwrapUrl = await bwrapApp.w.js.mcp.start();
+  const bwrapToken = bwrapApp.w.js.mcp.tokenFor("claude");
+  const bwrapPost = (body: string): Promise<string> => send(bwrapUrl, bwrapToken, body);
+  const bwrapTask = (id: string, target: string, prompt: string): Promise<string> =>
+    bwrapPost('{"jsonrpc":"2.0","id":' + id + ',"method":"tools/call","params":{"name":"Task","arguments":{"description":"run","prompt":"' + prompt + '","subagent_type":"' + target + '"},"_meta":{"claudecode/toolUseId":"toolu-' + id + '"}}}');
+  bwrapApp.c.model.openTurn("main", 0, true);
+  bwrapApp.c.model.block("", "bw1", TOOL, "toolu-bw1", "Task", "");
+  const bwrapReply = await bwrapTask("1", "deepseek", "hello");
+  ok("a default bwrap run answers", bwrapReply.includes("Hello, world."));
+  const bwrapCalls = calls(bwrapLog);
+  const bwrapJail = bwrapCalls.filter((x) => x.cmd === "jail");
+  eq(
+    "its jail call gives the proxy port and the session folder then each configured project",
+    bwrapJail.length === 1 ? bwrapJail[0].args.slice(0, 8).join(" ") : "",
+    "--proxy-port 8899 --project " + bwrapFolder + " --project " + bwrapOther + " -- node",
+  );
+  ok("and runs the entry's command", bwrapJail.length === 1 && bwrapJail[0].args.includes(fake));
+  eq("bwrap starts the proxy", String(bwrapCalls.filter((x) => x.cmd === "proxy").length), "1");
+  eq("bwrap never starts a VM", String(bwrapCalls.filter((x) => x.cmd === "up").length), "0");
+  close(bwrapApp.ws, bwrapApp.w);
+  rmSync(bwrapFolder, { recursive: true, force: true });
+  rmSync(bwrapOther, { recursive: true, force: true });
+  rmSync(bwrapDir, { recursive: true, force: true });
+  delete process.env.FAKE_BOX_DIR;
+  delete process.env.FAKE_BOX_LOG;
+
+  const mixedFolder = mkdtempSync(join(tmpdir(), "widecode-task-mixed-"));
+  const mixedDir = mkdtempSync(join(tmpdir(), "widecode-task-mixed-state-"));
+  const mixedLog = join(mixedDir, "calls.jsonl");
+  process.env.FAKE_BOX_DIR = mixedDir;
+  process.env.FAKE_BOX_LOG = mixedLog;
+  const mixedApp = await open(mixedFolder, {
+    acp: {
+      agents: { fake: { name: "Fake", command: ["node", fake] } },
+      tasks: {
+        box: { script: fakeBox, kind: "bwrap" },
+        targets: { host: { agent: "fake", box: true }, vm: { agent: "fake", box: "vm" } },
+      },
+    },
+  });
+  const mixedSeg = mixedApp.w.host.screen.segments.find("box");
+  const mixedDrawn = mixedSeg !== null ? mixedSeg.draw(new SegmentContext()) : [];
+  eq("a bwrap target and a vm target say boxed: mixed", mixedDrawn.map((r) => r.text).join(""), "boxed: mixed");
+  const mixedUrl = await mixedApp.w.js.mcp.start();
+  const mixedToken = mixedApp.w.js.mcp.tokenFor("claude");
+  const mixedPost = (body: string): Promise<string> => send(mixedUrl, mixedToken, body);
+  const mixedTask = (id: string, target: string, prompt: string): Promise<string> =>
+    mixedPost('{"jsonrpc":"2.0","id":' + id + ',"method":"tools/call","params":{"name":"Task","arguments":{"description":"run","prompt":"' + prompt + '","subagent_type":"' + target + '"},"_meta":{"claudecode/toolUseId":"toolu-' + id + '"}}}');
+  mixedApp.c.model.openTurn("main", 0, true);
+  mixedApp.c.model.block("", "mx1", TOOL, "toolu-mx1", "Task", "");
+  const mixedReply = await mixedTask("1", "vm", "hello");
+  ok("a per-target vm run answers", mixedReply.includes("Hello, world."));
+  const mixedCalls = calls(mixedLog);
+  eq("a per-target vm overrides the bwrap default with an ssh call", String(mixedCalls.filter((x) => x.cmd === "ssh").length), "1");
+  eq("and starts the box", String(mixedCalls.filter((x) => x.cmd === "up").length), "1");
+  eq("and does not use the jail", String(mixedCalls.filter((x) => x.cmd === "jail").length), "0");
+  close(mixedApp.ws, mixedApp.w);
+  rmSync(mixedFolder, { recursive: true, force: true });
+  rmSync(mixedDir, { recursive: true, force: true });
+  delete process.env.FAKE_BOX_DIR;
+  delete process.env.FAKE_BOX_LOG;
+
+  const idleFolder = mkdtempSync(join(tmpdir(), "widecode-task-idle-"));
+  const idleDir = mkdtempSync(join(tmpdir(), "widecode-task-idle-state-"));
+  const idleLog = join(idleDir, "calls.jsonl");
+  process.env.FAKE_BOX_DIR = idleDir;
+  process.env.FAKE_BOX_LOG = idleLog;
+  const idleApp = await open(idleFolder, {
+    acp: {
+      agents: { fake: { name: "Fake", command: ["node", fake] } },
+      tasks: {
+        box: { script: fakeBox, kind: "vm", idleMinutes: 0.001 },
+        targets: { deepseek: { agent: "fake", box: true } },
+      },
+    },
+  });
+  const idleSeg = idleApp.w.host.screen.segments.find("box");
+  const idleDrawn = idleSeg !== null ? idleSeg.draw(new SegmentContext()) : [];
+  eq("a vm box says boxed: vm", idleDrawn.map((r) => r.text).join(""), "boxed: vm");
+  const idleUrl = await idleApp.w.js.mcp.start();
+  const idleToken = idleApp.w.js.mcp.tokenFor("claude");
+  const idlePost = (body: string): Promise<string> => send(idleUrl, idleToken, body);
+  const idleTask = (id: string, target: string, prompt: string): Promise<string> =>
+    idlePost('{"jsonrpc":"2.0","id":' + id + ',"method":"tools/call","params":{"name":"Task","arguments":{"description":"run","prompt":"' + prompt + '","subagent_type":"' + target + '"},"_meta":{"claudecode/toolUseId":"toolu-' + id + '"}}}');
+  idleApp.c.model.openTurn("main", 0, true);
+  idleApp.c.model.block("", "id1", TOOL, "toolu-id1", "Task", "");
+  const idleRun = idleTask("1", "deepseek", "work");
+  await sleep(300);
+  eq("the box is not stopped while a run is in flight", String(calls(idleLog).filter((x) => x.cmd === "down").length), "0");
+  const idleReply = await idleRun;
+  ok("the work run answers", idleReply.includes("Worked."));
+  await sleep(300);
+  const downs = calls(idleLog).filter((x) => x.cmd === "down");
+  eq("the idle box is stopped once after the last run", String(downs.length), "1");
+  ok("through down --if-idle", downs.length === 1 && downs[0].args.includes("--if-idle"));
+  eq("the VM had started", String(calls(idleLog).filter((x) => x.cmd === "up").length), "1");
+  close(idleApp.ws, idleApp.w);
+  rmSync(idleFolder, { recursive: true, force: true });
+  rmSync(idleDir, { recursive: true, force: true });
+  delete process.env.FAKE_BOX_DIR;
+  delete process.env.FAKE_BOX_LOG;
 
   // The credential file's shape checks, against fake files under /tmp: a wrong value is refused
   // with the key and what is wrong, never the value.

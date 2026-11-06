@@ -224,21 +224,23 @@ const agentsOf = (section: unknown): Record<string, Entry> => {
   return out;
 };
 
-/** A subagent target: the `subagent_type` Claude names, the agent entry it runs on, its model ("" for the entry's default), what it is for, and whether it runs in the box. */
+/** A subagent target: the `subagent_type` Claude names, the agent entry it runs on, its model ("" for the entry's default), what it is for, and the box kind it runs in ("" when it is unboxed). */
 interface TaskTarget {
   name: string;
   agent: string;
   model: string;
   description: string;
-  box: boolean;
+  box: string;
 }
 
-/** The box a boxed target runs in: the box script, the host proxy's port, the memory the box gets, and the folders it shares beside the session's. */
+/** The box a boxed target runs in: the box script, the host proxy's port, the memory the box gets, the folders it shares beside the session's, its backend kind and, for the VM, the idle minutes before it stops. */
 interface BoxConfig {
   script: string;
   proxyPort: number;
   memory: number;
   projects: string[];
+  kind: "bwrap" | "vm";
+  idleMinutes: number;
 }
 
 /** The `tasks` section: whether Claude's own subagent tools are replaced, the targets, the bounds, and the box a boxed target needs. */
@@ -255,6 +257,15 @@ interface TasksConfig {
 const tasksOf = (section: unknown): TasksConfig => {
   const t = obj(obj(section)?.tasks);
   const out: TasksConfig = { replace: t?.replaceClaudeSubagents === true, targets: [], box: null, maxConcurrent: 4, timeoutMs: 1800000, worktreeSetup: [], worktreeSetupTimeoutMs: 300000 };
+  const b = obj(t?.box);
+  let kind: "bwrap" | "vm" = "bwrap";
+  if (b !== null && str(b.script).length > 0) {
+    const proxyPort = typeof b.proxyPort === "number" && b.proxyPort >= 1 && b.proxyPort <= 65535 ? Math.floor(b.proxyPort) : 8888;
+    const memory = typeof b.memory === "number" && b.memory >= 512 ? Math.floor(b.memory) : 4096;
+    const idleMinutes = typeof b.idleMinutes === "number" && b.idleMinutes > 0 ? b.idleMinutes : 10;
+    kind = str(b.kind) === "vm" ? "vm" : "bwrap";
+    out.box = { script: str(b.script), proxyPort, memory, projects: list(b.projects).filter((w): w is string => typeof w === "string" && w.length > 0), kind, idleMinutes };
+  }
   const targets = obj(t?.targets);
   if (targets !== null)
     for (const name of Object.keys(targets)) {
@@ -262,14 +273,10 @@ const tasksOf = (section: unknown): TasksConfig => {
       if (e === null) continue;
       const agent = str(e.agent).length > 0 ? str(e.agent) : name;
       const model = str(e.model);
-      out.targets.push({ name, agent, model, description: str(e.description).length > 0 ? str(e.description) : "Runs on " + (model.length > 0 ? model : agent), box: e.box === true });
+      const wanted = e.box;
+      const box = wanted === true ? kind : wanted === "bwrap" || wanted === "vm" ? wanted : "";
+      out.targets.push({ name, agent, model, description: str(e.description).length > 0 ? str(e.description) : "Runs on " + (model.length > 0 ? model : agent), box });
     }
-  const b = obj(t?.box);
-  if (b !== null && str(b.script).length > 0) {
-    const proxyPort = typeof b.proxyPort === "number" && b.proxyPort >= 1 && b.proxyPort <= 65535 ? Math.floor(b.proxyPort) : 8888;
-    const memory = typeof b.memory === "number" && b.memory >= 512 ? Math.floor(b.memory) : 4096;
-    out.box = { script: str(b.script), proxyPort, memory, projects: list(b.projects).filter((w): w is string => typeof w === "string" && w.length > 0) };
-  }
   if (typeof t?.maxConcurrent === "number" && t.maxConcurrent > 0) out.maxConcurrent = Math.floor(t.maxConcurrent);
   if (typeof t?.timeoutMs === "number" && t.timeoutMs >= 1000) out.timeoutMs = Math.floor(t.timeoutMs);
   out.worktreeSetup = list(t?.worktreeSetup).filter((w): w is string => typeof w === "string" && w.length > 0);
@@ -278,19 +285,44 @@ const tasksOf = (section: unknown): TasksConfig => {
 };
 
 /**
- * The box a boxed run starts in: it reads the box's status, keeps its host proxy running and
- * starts the box with the session's folder and the configured projects. Calls are serialized, so
- * two runs at once never start a second box.
+ * The box a boxed run starts in: it reads the box's status and keeps its host proxy running. The
+ * VM backend also starts the box with the session's folder and the configured projects, and stops
+ * it once no VM run has been in flight for `idleMinutes`. The bwrap backend needs only the proxy.
+ * Calls are serialized, so two runs at once never start a second box.
  */
 class BoxRunner {
   private readonly api: widecode.Api;
   readonly config: BoxConfig;
   private proxy: widecode.ProcessHandle | null = null;
   private chain: Promise<void> = Promise.resolve();
+  private vmRuns = 0;
+  private idleGen = 0;
 
   constructor(api: widecode.Api, config: BoxConfig) {
     this.api = api;
     this.config = config;
+  }
+
+  /** A VM run starts: it keeps the box up, and a pending idle stop is dropped. */
+  enterVm(): void {
+    this.vmRuns++;
+    this.idleGen++;
+  }
+
+  /** A VM run ended: with none left, the box stops after the idle minutes unless another run starts. */
+  leaveVm(): void {
+    if (this.vmRuns > 0) this.vmRuns--;
+    if (this.vmRuns !== 0) return;
+    const gen = ++this.idleGen;
+    const ms = Math.max(1, Math.round(this.config.idleMinutes * 60000));
+    this.api.after(ms, () => {
+      if (gen !== this.idleGen || this.vmRuns !== 0) return;
+      const command = ["node", this.config.script, "down", "--if-idle"].map(quote).join(" ");
+      this.api.process.run(command, "", 90000).then((r) => {
+        const said = r.out.trim().length > 0 ? r.out.trim() : r.err.trim();
+        if (said.length > 0) this.api.note("box down: " + said);
+      });
+    });
   }
 
   /** The box's own state: whether it runs, its projects and whether its proxy runs. */
@@ -323,21 +355,22 @@ class BoxRunner {
     return Promise.resolve();
   }
 
-  private async ready(folder: string): Promise<string> {
-    const desired = [folder, ...this.config.projects];
+  private async ready(folder: string, kind: string): Promise<string> {
     const s = await this.status();
-    const same = s.running && s.projects.length === desired.length && s.projects.every((p, i) => p === desired[i]);
     if (!s.proxy) await this.startProxy();
+    if (kind === "bwrap") return "";
+    const desired = [folder, ...this.config.projects];
+    const same = s.running && s.projects.length === desired.length && s.projects.every((p, i) => p === desired[i]);
     if (same) return "";
     const up = await this.api.process.run(["node", this.config.script, "up", "--memory", String(this.config.memory), ...desired].map(quote).join(" "), "", 120000);
     if (up.code !== 0) return (up.err.trim().length > 0 ? up.err.trim() : up.out.trim()) || "the box did not start";
     return "";
   }
 
-  /** "" when the box runs with `folder` and the configured projects, else why not. */
-  ensure(folder: string): Promise<string> {
+  /** "" when the box of `kind` runs with `folder` and the configured projects, else why not. */
+  ensure(folder: string, kind: string): Promise<string> {
     const next = this.chain.then(() =>
-      this.ready(folder).then(
+      this.ready(folder, kind).then(
         (why) => why,
         (e: unknown) => (e instanceof Error ? e.message : String(e)),
       ),
@@ -1759,6 +1792,8 @@ class SubagentRun {
   private readonly timeoutMs: number;
   private readonly onDone: () => void;
   private proc: widecode.ProcessHandle | null = null;
+  /** Whether this run holds a VM run in the box's count, released as it ends. */
+  private vmRun = false;
   private seq = 0;
   private waiting: Waiter[] = [];
   private session = "";
@@ -1846,6 +1881,18 @@ class SubagentRun {
     }
   }
 
+  private beginVm(): void {
+    if (this.box === null || this.vmRun) return;
+    this.vmRun = true;
+    this.box.enterVm();
+  }
+
+  private releaseVm(): void {
+    if (!this.vmRun || this.box === null) return;
+    this.vmRun = false;
+    this.box.leaveVm();
+  }
+
   /** An exception while handling what the process said: settle the call, or just note it once it has a result. */
   private crashed(where: string, e: unknown): void {
     const why = e instanceof Error ? e.message : String(e);
@@ -1886,30 +1933,39 @@ class SubagentRun {
     this.emit({ type: "facts", id: this.callId, category: "agent", summary: this.target.name + ": " + this.description, agentType: this.target.name, agentTask: this.description, agentPrompt: prompt });
     this.emit({ type: "task", id: this.callId, taskId: this.callId, description: this.description, agentType: this.target.name, background: this.background });
     this.flush();
-    if (this.target.box) {
+    if (this.target.box.length > 0) {
       if (this.box === null) {
         this.fail("no box is configured for " + this.target.name);
         return this.promise;
       }
+      const kind = this.target.box;
+      if (kind === "vm") this.beginVm();
       this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: "running", summary: "starting the box" });
       this.flush();
-      return this.box.ensure(this.boxFolder).then((why) => {
+      return this.box.ensure(this.boxFolder, kind).then((why) => {
         let out: Promise<string> = this.promise;
         this.guard("its box", () => {
           if (why.length > 0) this.fail(why);
-          else out = this.launch(prompt, true);
+          else out = this.launch(prompt, kind);
         });
         return out;
       });
     }
-    return this.launch(prompt, false);
+    return this.launch(prompt, "");
   }
 
-  private launch(prompt: string, boxed: boolean): Promise<string> {
+  private launch(prompt: string, boxKind: string): Promise<string> {
     const command = resolved(this.api, this.entry.command);
-    const words = boxed && this.box !== null
-      ? ["node", this.box.config.script, "ssh", "--forward-proxy", String(this.box.config.proxyPort), "--", ...command]
-      : command;
+    let words = command;
+    if (boxKind.length > 0 && this.box !== null) {
+      if (boxKind === "bwrap") {
+        const projects: string[] = ["--project", this.boxFolder];
+        for (const p of this.box.config.projects) projects.push("--project", p);
+        words = ["node", this.box.config.script, "jail", "--proxy-port", String(this.box.config.proxyPort), ...projects, "--", ...command];
+      } else {
+        words = ["node", this.box.config.script, "ssh", "--forward-proxy", String(this.box.config.proxyPort), "--", ...command];
+      }
+    }
     const p = this.api.process.spawn(words, { cwd: this.cwd }, {
       // Each batch goes under the card as it comes, so the run streams and no one call carries all of it.
       lines: (lines) =>
@@ -1922,6 +1978,7 @@ class SubagentRun {
         this.guard("its error output", () => this.api.note(this.entry.name + ": " + text.trimEnd())),
     });
     if (!p.started) {
+      this.releaseVm();
       const text = "cannot start " + words.join(" ");
       this.closed = true;
       this.onDone();
@@ -1958,6 +2015,7 @@ class SubagentRun {
   /** The agent cancelled the call, or the user stopped the run: its session stops and its card says so. */
   cancel(): void {
     if (this.closed) return;
+    this.releaseVm();
     this.closed = true;
     this.busy = false;
     this.timeoutGen++;
@@ -1977,6 +2035,7 @@ class SubagentRun {
 
   /** End its process without reporting: the plugin, or the session it ran in, is going away (`why`, for its transcript). */
   stopQuietly(why: string): void {
+    this.releaseVm();
     const unsettled = !this.reported && !this.closed;
     this.closed = true;
     this.busy = false;
@@ -2007,6 +2066,7 @@ class SubagentRun {
   /** A prompt or the start failed: the card says so, and a background run tells the main agent. */
   private fail(text: string): void {
     if (this.closed || this.reported) return;
+    this.releaseVm();
     this.closed = true;
     this.busy = false;
     this.timeoutGen++;
@@ -2259,6 +2319,7 @@ class SubagentRun {
   }
 
   private exited(code: number): void {
+    this.releaseVm();
     this.proc = null;
     if (this.closed) return;
     if (this.reported) {
@@ -2308,8 +2369,14 @@ widecode.plugin({
       name: "box",
       draw: () => {
         if (tasks.targets.length === 0) return [];
-        const boxed = tasks.box !== null && tasks.targets.every((t) => t.box);
-        return boxed ? [{ text: "boxed", fg: widecode.theme.ok }] : [{ text: "unboxed", fg: widecode.theme.warn }];
+        if (tasks.box === null || tasks.targets.some((t) => t.box.length === 0)) return [{ text: "unboxed", fg: widecode.theme.warn }];
+        let bwrap = false;
+        let vm = false;
+        for (const t of tasks.targets) {
+          if (t.box === "vm") vm = true;
+          else bwrap = true;
+        }
+        return [{ text: bwrap && vm ? "boxed: mixed" : vm ? "boxed: vm" : "boxed: bwrap", fg: widecode.theme.ok }];
       },
     });
     /** The ACP main's calls of widecode's Task tool that are in flight, which the Task tool runs under. */

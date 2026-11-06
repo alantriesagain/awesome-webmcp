@@ -2,12 +2,13 @@
 /**
  * @file A stand-in for the box script (`box/box.mjs`) in tests. It keeps the box's state in a JSON
  * file under `FAKE_BOX_DIR` (or `WIDECODE_BOX_DIR`, else a folder under the OS temp folder), and
- * records each `up`, `proxy` and `ssh` call, its arguments as JSON on a line, in
+ * records each `up`, `proxy`, `ssh`, `jail` and `down` call, its arguments as JSON on a line, in
  * `FAKE_BOX_LOG` (else `fake-box.log` beside the state). `status --json` prints whether the box
  * runs, its projects and whether its proxy runs. `up` sets the box running with the folders it is
  * given (refusing another list, as the real box does), `proxy` stays alive until it is stopped,
- * and `ssh --forward-proxy N -- cmd...` runs the command on the host with the same stdio, so a
- * fake ACP agent runs through a boxed Task run.
+ * `ssh --forward-proxy N -- cmd...` and `jail --proxy-port N -- cmd...` run the command on the host
+ * with the same stdio, so a fake ACP agent runs through a boxed Task run, and `down --if-idle` stops
+ * the box and its proxy.
  */
 import { spawn } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -91,8 +92,8 @@ if (command === "proxy") {
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
   setInterval(() => {}, 1000);
-} else if (command === "ssh") {
-  record({ cmd: "ssh", args });
+} else if (command === "ssh" || command === "jail") {
+  record({ cmd: command, args });
   let index = args.indexOf("--");
   if (index < 0) index = args.length;
   const words = args.slice(index + 1);
@@ -105,6 +106,16 @@ if (command === "proxy") {
     say(String(error));
     process.exit(1);
   });
+} else if (command === "down") {
+  record({ cmd: "down", args });
+  const state = read();
+  if (args.includes("--if-idle") && !state.running) {
+    say("the box is not running");
+    process.exit(0);
+  }
+  write({ running: false, projects: [], proxy: false });
+  say("box stopped");
+  process.exit(0);
 } else {
   say(`unknown command "${command}"`);
   process.exit(2);

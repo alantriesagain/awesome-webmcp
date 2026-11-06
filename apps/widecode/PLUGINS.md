@@ -282,7 +282,7 @@ targets:
         "targets": {
           "deepseek": { "agent": "opencode", "model": "opencode-go/deepseek-v4.1-flash", "description": "A cheap subagent", "box": true }
         },
-        "box": { "script": "apps/widecode/box/box.mjs", "proxyPort": 8888, "memory": 4096, "projects": [] },
+        "box": { "script": "apps/widecode/box/box.mjs", "kind": "bwrap", "idleMinutes": 10, "proxyPort": 8888, "memory": 4096, "projects": [] },
         "maxConcurrent": 4,
         "timeoutMs": 1800000
       }
@@ -291,12 +291,18 @@ targets:
 }
 ```
 
-A target names an entry in `agents`, its model and what it is for. With `box: true` its run goes
-through the box script (`<script> ssh --forward-proxy <proxyPort> -- <entry command>`), and before
-the first such run widecode reads the box's `status --json`, starts its proxy when needed and starts
-the box with the session's folder and `projects`; a box running with another project list fails the
-run with the box's message. The `box` status segment says `boxed` when every target is boxed and
-`unboxed` (in the warning color) otherwise. The run starts that entry in the session's folder,
+A target names an entry in `agents`, its model and what it is for. Its `box` is `true` to use the
+`box.kind` backend, `"bwrap"` or `"vm"` to pick one for that target, or absent or `false` to run it
+on the host. `box.kind` is `"bwrap"` (the default) or `"vm"`. Both read the box's `status --json`
+and start its host proxy when needed. A bwrap run goes through the box script
+(`<script> jail --proxy-port <proxyPort> --project <folder> --project <project>... -- <entry
+command>`) and needs no VM. A VM run goes through `<script> ssh --forward-proxy <proxyPort> -- <entry
+command>`, and before the first such run widecode starts the box with the session's folder and
+`projects`; a box running with another project list fails the run with the box's message. The VM
+stops `box.idleMinutes` (10 by default) after its last run ends, through `<script> down --if-idle`.
+The `box` status segment says `boxed: bwrap`, `boxed: vm` or `boxed: mixed` when the targets differ,
+and `unboxed` (in the warning color) when any target is unboxed or no box is configured. The run
+starts that entry in the session's folder,
 streams its thought, words, calls, plans and diffs under the Task call, puts
 its permission asks in the request panel under the call, marks the call in the Agents tab, and
 answers the main agent with its last words. `run_in_background` starts the run and answers at once;
