@@ -147,6 +147,10 @@ const main = async (): Promise<void> => {
   const jailState = mkdtempSync(join(tmpdir(), "widecode-box-jail-"));
   const jailProject = mkdtempSync(join(tmpdir(), "widecode-box-project-"));
   mkdirSync(join(jailProject, ".widecode"));
+  mkdirSync(join(jailProject, ".git"));
+  mkdirSync(join(jailProject, ".worktrees", "task-1"), { recursive: true });
+  writeFileSync(join(jailProject, ".worktrees", "task-1", ".git"), "gitdir: " + join(jailProject, ".git", "worktrees", "task-1") + "\n");
+  mkdirSync(join(jailProject, ".worktrees", "stray"));
   const dry = runBox(
     jailProject,
     [boxScript, "jail", "--proxy-port", "8899", "--project", jailProject, "--dry-run", "--", "node", "-e", "0"],
@@ -165,6 +169,11 @@ const main = async (): Promise<void> => {
   ok("the jail uses unshare-all and dies with its parent", argv.includes("--unshare-all") && argv.includes("--die-with-parent"));
   ok("the project is bound read-write", triple("--bind", jailProject, jailProject));
   ok("its .widecode is read-only when present", triple("--ro-bind", join(jailProject, ".widecode"), join(jailProject, ".widecode")));
+  ok("its .git is read-only whole", triple("--ro-bind", join(jailProject, ".git"), join(jailProject, ".git")));
+  const tree = join(jailProject, ".worktrees", "task-1");
+  ok("its .worktrees and each worktree are mount points", triple("--bind", join(jailProject, ".worktrees"), join(jailProject, ".worktrees")) && triple("--bind", tree, tree));
+  ok("a worktree's .git file is read-only", triple("--ro-bind", join(tree, ".git"), join(tree, ".git")));
+  ok("a folder in .worktrees with no .git is left as it is", !argv.includes(join(jailProject, ".worktrees", "stray")));
   const jailHome = join(jailState, "jail-home");
   ok("home is the jail home", triple("--bind", jailHome, homedir()));
   ok("no /run is bound", !argv.some((value) => value === "/run" || value.startsWith("/run/")));

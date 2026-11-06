@@ -22,7 +22,7 @@
  * Claude Code and opencode from their own installers, and scriptc's wrapper at
  * ~/.local/bin/scriptc-dev. `up` boots a fresh overlay on base with restrict=on.
  * A per-boot cloud-init seed mounts the shares and bind-mounts .widecode,
- * .claude and .git/hooks read-only, because the project paths change per boot.
+ * .claude and .git read-only, because the project paths change per boot.
  * A host folder, <state>/guest-cache, is shared the same way and mounted over
  * /home/agent/.cache, so the guest's scriptc cache survives down and up.
  *
@@ -72,6 +72,10 @@ const CONSOLE = path.join(STATE, "console.log");
 const MONITOR = path.join(STATE, "monitor.sock");
 const RECORD = path.join(STATE, "box.json");
 const LOCK = path.join(STATE, "box.lock");
+
+/** The paths the box may not write, each read-only over its project: what the host runs without asking. */
+const PROTECTED = [".widecode", ".claude", ".git"];
+
 const PROXY_PID = path.join(STATE, "proxy.pid");
 const PROXY_LOG = path.join(STATE, "proxy.log");
 const PROXY_SOCK = path.join(STATE, "proxy.sock");
@@ -702,7 +706,7 @@ ${projects
   .map(
     (project, index) => `mkdir -p ${shq(project)}
 ${mount(index, project)}
-for rel in .widecode .claude .git/hooks; do
+for rel in ${PROTECTED.join(" ")}; do
   src=${shq(project)}/"$rel"
   if [ -e "$src" ]; then
     mount --bind "$src" "$src"
@@ -1208,6 +1212,35 @@ const toolMounts = () => {
   return { mounts: mounts.filter((value) => !coveredBySystem(value)), dirs };
 };
 
+/**
+ * The bwrap mounts that keep `project`'s protected paths from the jail. `.git` is read-only whole:
+ * its config, a `commondir` file and its hooks all decide what the host's git runs. A protected
+ * path is a mount point, so it cannot be renamed away and replaced; a task's worktree under
+ * `.worktrees/` is a folder with a `.git` file naming its git dir, so `.worktrees` and each
+ * worktree are bound onto themselves first, which keeps them from being renamed the same way.
+ */
+const protectedMounts = (/** @type {string} */ project) => {
+  /** @type {string[]} */
+  const args = [];
+  const roots = [project];
+  const worktrees = path.join(project, ".worktrees");
+  if (existsSync(worktrees) && lstatSync(worktrees).isDirectory()) {
+    args.push("--bind", worktrees, worktrees);
+    for (const name of readdirSync(worktrees)) {
+      const tree = path.join(worktrees, name);
+      if (!lstatSync(tree).isDirectory() || !existsSync(path.join(tree, ".git"))) continue;
+      args.push("--bind", tree, tree);
+      roots.push(tree);
+    }
+  }
+  for (const root of roots)
+    for (const rel of PROTECTED) {
+      const protectedPath = path.join(root, rel);
+      if (existsSync(protectedPath)) args.push("--ro-bind", protectedPath, protectedPath);
+    }
+  return args;
+};
+
 const jailArgv = (
   /** @type {number} */ port,
   /** @type {string[]} */ projects,
@@ -1239,10 +1272,7 @@ const jailArgv = (
   args.push("--bind", JAIL_HOME, HOST_HOME);
   for (const project of projects) {
     args.push("--bind", project, project);
-    for (const rel of [".widecode", ".claude", ".git/hooks"]) {
-      const protectedPath = path.join(project, rel);
-      if (existsSync(protectedPath)) args.push("--ro-bind", protectedPath, protectedPath);
-    }
+    args.push(...protectedMounts(project));
   }
   const tools = toolMounts();
   for (const mount of tools.mounts) args.push("--ro-bind", mount, mount);

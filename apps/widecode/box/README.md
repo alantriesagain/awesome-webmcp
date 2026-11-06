@@ -72,8 +72,9 @@ The virtiofsd sandbox is `namespace` when `newuidmap` is on the host, else `none
 sandbox.
 
 A per-boot cloud-init seed, rather than a unit baked into the image, mounts each share and
-bind-mounts `.widecode/`, `.claude/` and `.git/hooks` read-only over it when they exist, because the
-project paths change per boot. The seed also mounts the host's `<state>/guest-cache` over
+bind-mounts `.widecode/`, `.claude/` and `.git` read-only over it when they exist, because the
+project paths change per boot. The seed runs once, at boot, so a task's worktree made later is not
+covered in the VM; the jail covers it (below). The seed also mounts the host's `<state>/guest-cache` over
 `/home/agent/.cache` and gives it to `agent`, so the guest's scriptc cache lasts across `down` and
 `up`. `up` waits for SSH and for the `/run/widecode-box-ready` marker the seed writes, and saves the
 project list, the share kind, memory, CPUs and ports in `box.json`. A second `up` with the same list
@@ -139,7 +140,18 @@ Each tool found on the host `PATH` among `node`, `pnpm`, `opencode`, `claude` an
 read-only at its host path, after resolving symlinks: the whole nvm version folder for node under
 nvm, `~/.opencode/bin` for opencode, and the file alone for scriptc-dev. `box.mjs` itself is
 read-only too. Each `--project` is read-write at its own path, with `.widecode/`, `.claude/` and
-`.git/hooks` read-only over it when they exist. The cwd must be inside a project.
+`.git` read-only over it when they exist. The cwd must be inside a project.
+
+`.git` is read-only whole because the host's git runs what it says: `config` (`core.fsmonitor`,
+`core.hooksPath`), a `commondir` file, which moves where git reads its config from, and the hooks.
+Inside the jail `git status`, `diff`, `log` and `grep` work; `add`, `commit` and `stash` fail, since
+they write the index. Each protected path is a mount point, so it cannot be renamed away and replaced
+by a folder the jail made. A task's worktree under `<project>/.worktrees/<name>` has a `.git` file
+naming its git dir: `.worktrees` and each worktree with a `.git` are bound onto themselves, which
+keeps them from being renamed, and the worktree's `.widecode/`, `.claude/` and `.git` are read-only
+as the project's are. A live check renamed `.git`, `.worktrees` and a worktree, wrote `.git/config`,
+`.git/commondir` and a worktree's `.git`, and removed `.git/HEAD`: each failed with `Read-only file
+system` or `Device or resource busy`.
 
 The proxy socket is bound at its state path. The environment is cleared and gets `HOME`, `USER`,
 `PATH` (the tool folders and `/usr/local/bin:/usr/bin:/bin`), `LANG`, `TERM`, `HTTPS_PROXY`,
