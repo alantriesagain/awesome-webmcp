@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * A development spike for the VM box in PLAN-security.md (V1).
+ * widecode's box: a QEMU VM and a lighter bubblewrap jail on the host.
  *
  * Plain QEMU as the user, no root, as bootstrapp's packages/vps/testvm/vm.mjs
  * does: a Debian 13 cloud image as the read-only backing file, a qcow2 overlay
  * per box, a cloud-init seed ISO built with genisoimage, user-mode networking
  * with one hostfwd for SSH, a pid file and a console log.
  *
- * There is one box. `up` takes every project the box shares, each at its own
+ * There is one VM. `up` takes every project the box shares, each at its own
  * host path, and keeps the list in the state dir. A second `up` with the same
  * list is a no-op; with a different list it says to restart the box. A lock and
  * the QEMU pid file keep a second VM from starting.
@@ -23,26 +23,40 @@
  * ~/.local/bin/scriptc-dev. `up` boots a fresh overlay on base with restrict=on.
  * A per-boot cloud-init seed mounts the shares and bind-mounts .widecode,
  * .claude and .git/hooks read-only, because the project paths change per boot.
+ * A host folder, <state>/guest-cache, is shared the same way and mounted over
+ * /home/agent/.cache, so the guest's scriptc cache survives down and up.
  *
- * `proxy` is a host-side HTTP(S) proxy on loopback with a domain allow list.
- * `ssh` can forward it (`--forward-proxy`) and other host ports (`--forward`)
- * into the restricted guest, and points the remote command's HTTPS_PROXY at it.
+ * `jail` is the lighter backend: it runs a command under bubblewrap with no
+ * network but loopback, no host folders but the project, the tools and a
+ * private home, and the proxy over a unix socket. `jail-inner` is the part
+ * bwrap runs inside, which carries loopback to that socket.
+ *
+ * `proxy` is a host-side HTTP(S) proxy on loopback and on <state>/proxy.sock
+ * with a domain allow list. `ssh` can forward it (`--forward-proxy`) and other
+ * host ports (`--forward`) into the restricted guest, and points the remote
+ * command's HTTPS_PROXY at it. Each `ssh` keeps a session file so `down
+ * --if-idle` leaves a box several windows share running while one is open.
  *
  * Usage:
  *   node box.mjs provision
  *   node box.mjs up [--memory <MB>] [--cpus <n>] [--port <host>[:<guest>]]... <folder> [<folder>...]
  *   node box.mjs ssh [--forward-proxy <port>] [--forward <remotePort>:<hostPort>]... [--] [cmd...]
  *   node box.mjs proxy [--port N] [--allow domain,...]
+ *   node box.mjs jail --proxy-port <port> [--project <dir>]... [--dry-run] -- <cmd...>
  *   node box.mjs creds
- *   node box.mjs down | status | reset
+ *   node box.mjs down [--if-idle] | status | reset
  */
 
 import { spawn, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync, chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync,
+  readlinkSync, realpathSync, rmSync, statSync, writeFileSync,
+} from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const STATE = process.env.WIDECODE_BOX_DIR || path.join(os.homedir(), ".cache", "widecode", "box");
 const CACHED_IMAGE = path.join(os.homedir(), ".cache", "bootstrapp", "vps-test", "debian-13-genericcloud-amd64.qcow2");
@@ -60,8 +74,17 @@ const RECORD = path.join(STATE, "box.json");
 const LOCK = path.join(STATE, "box.lock");
 const PROXY_PID = path.join(STATE, "proxy.pid");
 const PROXY_LOG = path.join(STATE, "proxy.log");
+const PROXY_SOCK = path.join(STATE, "proxy.sock");
+const SESSIONS = path.join(STATE, "sessions");
+const JAIL_HOME = path.join(STATE, "jail-home");
+const GUEST_CACHE = path.join(STATE, "guest-cache");
 const VIRTIOFS = path.join(STATE, "virtiofsd.json");
 const VIRTIOFS_DIR = path.join(STATE, "virtiofs");
+
+const SCRIPT = fileURLToPath(import.meta.url);
+const HOST_HOME = os.homedir();
+const BWRAP = "/usr/bin/bwrap";
+const TOOL_NAMES = ["node", "pnpm", "opencode", "claude", "scriptc-dev"];
 
 const ENV_DIR = "/home/agent/.config/widecode-box";
 const ENV_FILE = `${ENV_DIR}/env`;
@@ -101,6 +124,14 @@ const VIRTIOFSD_SANDBOX = ["/usr/bin/newuidmap", "/usr/local/bin/newuidmap"].som
 
 const say = (/** @type {string} */ msg) => process.stderr.write(`${msg}\n`);
 const sleep = (/** @type {number} */ ms) => new Promise((r) => setTimeout(r, ms));
+
+const forwardSignals = (/** @type {import("node:child_process").ChildProcess} */ child) => {
+  const forward = (/** @type {NodeJS.Signals} */ signal) => {
+    try { child.kill(signal); } catch {}
+  };
+  process.on("SIGTERM", () => forward("SIGTERM"));
+  process.on("SIGINT", () => forward("SIGINT"));
+};
 
 /** @param {string} cmd @param {string[]} args @param {{ quiet?: boolean, timeout?: number, input?: string }} [opts] */
 const run = (cmd, args, { quiet = false, timeout = 0, input } = {}) => {
@@ -159,6 +190,28 @@ const proxyPid = () => {
 };
 
 const reachable = () => ssh("true", { quiet: true, timeout: 10000 }).status === 0;
+
+const liveSessions = () => {
+  if (!existsSync(SESSIONS)) return 0;
+  let count = 0;
+  for (const name of readdirSync(SESSIONS)) {
+    const value = Number(name);
+    const file = path.join(SESSIONS, name);
+    if (!value || !alive(value)) {
+      rmSync(file, { force: true });
+      continue;
+    }
+    count += 1;
+  }
+  return count;
+};
+
+const beginSession = () => {
+  mkdirSync(SESSIONS, { recursive: true });
+  const file = path.join(SESSIONS, String(process.pid));
+  writeFileSync(file, "");
+  return () => rmSync(file, { force: true });
+};
 
 const record = () => {
   if (!existsSync(RECORD)) return {};
@@ -433,6 +486,7 @@ const stopProxy = async () => {
     try { process.kill(running, "SIGKILL"); } catch {}
   }
   rmSync(PROXY_PID, { force: true });
+  rmSync(PROXY_SOCK, { force: true });
 };
 
 const yamlBlock = (/** @type {string} */ text) =>
@@ -497,38 +551,70 @@ const credentialSummary = (/** @type {{ values: Record<string, string> }} */ cre
   `claude ${creds.values.CLAUDE_CODE_OAUTH_TOKEN ? "set" : "empty"}, ` +
   `opencode-go ${creds.values.OPENCODE_API_KEY ? "set" : "empty"}`;
 
-const installCredentials = (/** @type {{ values: Record<string, string> }} */ creds) => {
+const credentialEnvText = (/** @type {{ values: Record<string, string> }} */ creds) => {
   const claude = creds.values.CLAUDE_CODE_OAUTH_TOKEN || "";
-  const opencode = creds.values.OPENCODE_API_KEY || "";
+  return claude ? `export CLAUDE_CODE_OAUTH_TOKEN=${shq(claude)}\n` : null;
+};
+
+/** @param {string} text @param {string} key */
+const mergeOpenCodeAuth = (text, key) => {
+  let data = {};
+  if (text.trim()) {
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) data = parsed;
+    } catch {}
+  }
+  if (key) data["opencode-go"] = { type: "api", key };
+  else delete data["opencode-go"];
+  return `${JSON.stringify(data, null, 2)}\n`;
+};
+
+/** Write the guest's credential files directly under `root`, for the jail's home. */
+const installLocalCredentials = (/** @type {string} */ root, /** @type {{ values: Record<string, string> }} */ creds) => {
+  const envDir = path.join(root, ".config", "widecode-box");
+  const envFile = path.join(envDir, "env");
+  const env = credentialEnvText(creds);
+  if (env) {
+    mkdirSync(envDir, { recursive: true, mode: 0o700 });
+    chmodSync(envDir, 0o700);
+    writeFileSync(envFile, env, { mode: 0o600 });
+    chmodSync(envFile, 0o600);
+  } else {
+    rmSync(envFile, { force: true });
+  }
+  const authDir = path.join(root, ".local", "share", "opencode");
+  const authFile = path.join(authDir, "auth.json");
+  const key = creds.values.OPENCODE_API_KEY || "";
+  const existing = existsSync(authFile) ? readFileSync(authFile, "utf8") : "";
+  if (!key && !existing.trim()) {
+    rmSync(authFile, { force: true });
+    return;
+  }
+  mkdirSync(authDir, { recursive: true });
+  writeFileSync(authFile, mergeOpenCodeAuth(existing, key), { mode: 0o600 });
+  chmodSync(authFile, 0o600);
+};
+
+const installCredentials = (/** @type {{ values: Record<string, string> }} */ creds) => {
+  const authProbe = ssh(`cat ${OPENCODE_AUTH} 2>/dev/null || true`, { quiet: true, timeout: 30000 });
+  const existing = authProbe.status === 0 ? authProbe.stdout || "" : "";
+  const env = credentialEnvText(creds);
+  const auth = mergeOpenCodeAuth(existing, creds.values.OPENCODE_API_KEY || "");
+  const encodedEnv = Buffer.from(env ?? "", "utf8").toString("base64");
+  const encodedAuth = Buffer.from(auth, "utf8").toString("base64");
   const script = `#!/bin/bash
 set -e
 umask 077
 mkdir -p ${ENV_DIR}
 chmod 700 ${ENV_DIR}
-${claude
-    ? `printf 'export CLAUDE_CODE_OAUTH_TOKEN=%s\\n' ${shq(claude)} > ${ENV_FILE}
+${env
+    ? `printf %s ${encodedEnv} | base64 -d > ${ENV_FILE}
 chmod 600 ${ENV_FILE}`
     : `rm -f ${ENV_FILE}`}
 mkdir -p /home/agent/.local/share/opencode
-WIDECODE_BOX_OPENCODE_KEY=${shq(opencode)} python3 - <<'PY'
-import json
-import os
-path = ${JSON.stringify(OPENCODE_AUTH)}
-try:
-    with open(path) as handle:
-        data = json.load(handle)
-except (FileNotFoundError, ValueError):
-    data = {}
-key = os.environ.get("WIDECODE_BOX_OPENCODE_KEY", "")
-if key:
-    data["opencode-go"] = {"type": "api", "key": key}
-else:
-    data.pop("opencode-go", None)
-with open(path, "w") as handle:
-    json.dump(data, handle, indent=2)
-    handle.write("\\n")
-os.chmod(path, 0o600)
-PY
+printf %s ${encodedAuth} | base64 -d > ${OPENCODE_AUTH}
+chmod 600 ${OPENCODE_AUTH}
 `;
   const result = ssh("bash -s", { quiet: true, input: script, timeout: 30000 });
   if (result.status !== 0) {
@@ -625,6 +711,9 @@ for rel in .widecode .claude .git/hooks; do
 done`,
   )
   .join("\n")}
+mkdir -p /home/agent/.cache
+${mount(projects.length, "/home/agent/.cache")}
+chown -R agent:agent /home/agent/.cache
 touch ${READY}
 `;
   return `#cloud-config
@@ -780,6 +869,9 @@ const up = async (/** @type {string[]} */ args) => {
     rmSync(BOX, { force: true });
     say("• creating box.qcow2 on base.qcow2");
     must(QEMU_IMG, ["create", "-q", "-f", "qcow2", "-F", "qcow2", "-b", BASE, BOX, DISK_SIZE]);
+    mkdirSync(GUEST_CACHE, { recursive: true, mode: 0o700 });
+    chmodSync(GUEST_CACHE, 0o700);
+    const shared = [...projects, GUEST_CACHE];
     const seed = path.join(STATE, "seed-up.iso");
     buildSeed(seed, upUserData(projects, shares));
     say(
@@ -787,6 +879,7 @@ const up = async (/** @type {string[]} */ args) => {
         `${memory}MB, ${cpus} vcpu, ssh on ${HOST}:${PORT}`,
     );
     for (const [index, project] of projects.entries()) say(`• project${index}: ${project}`);
+    say(`• guest cache: ${GUEST_CACHE}`);
     for (const port of ports) say(`• port: ${HOST}:${port.host} -> guest ${port.guest}`);
     if (shares === "virtiofs") say(`• virtiofsd: ${VIRTIOFSD} (unprivileged, sandbox ${VIRTIOFSD_SANDBOX})`);
     else if (forcedShares === "9p") say("• 9p forced by WIDECODE_BOX_SHARES=9p");
@@ -794,8 +887,8 @@ const up = async (/** @type {string[]} */ args) => {
     const started = Date.now();
     let sockets = [];
     try {
-      if (shares === "virtiofs") sockets = await startVirtiofs(projects);
-      await boot(BOX, seed, { restrict: true, projects, shares, sockets, memory, cpus, ports });
+      if (shares === "virtiofs") sockets = await startVirtiofs(shared);
+      await boot(BOX, seed, { restrict: true, projects: shared, shares, sockets, memory, cpus, ports });
       if (!(await waitForSsh(180))) throw new Error(`no ssh after 180s; see ${CONSOLE}`);
       const sshSeconds = Math.round((Date.now() - started) / 1000);
       say(`• ssh answered after ${sshSeconds}s, waiting for the shares`);
@@ -823,9 +916,16 @@ const up = async (/** @type {string[]} */ args) => {
   }
 };
 
-const down = async () => {
+const down = async (/** @type {string[]} */ args = []) => {
   acquireLock();
   try {
+    if (args.includes("--if-idle")) {
+      const sessions = liveSessions();
+      if (sessions > 0) {
+        say(`• the box is in use by ${sessions} session(s)`);
+        return;
+      }
+    }
     await stopProxy();
     const running = pid();
     if (!running) say("• the VM is not running");
@@ -953,7 +1053,7 @@ const proxy = async (/** @type {string[]} */ args) => {
   if (!allow.length) throw new Error("the allow list is empty");
   if (proxyPid()) throw new Error(`a proxy is already running (pid ${proxyPid()}); stop it first`);
 
-  const server = http.createServer((req, res) => {
+  const handleRequest = (req, res) => {
     let target;
     try {
       target = new URL(String(req.url));
@@ -986,9 +1086,9 @@ const proxy = async (/** @type {string[]} */ args) => {
       res.end("upstream error\n");
     });
     req.pipe(upstream);
-  });
+  };
 
-  server.on("connect", (req, clientSocket, head) => {
+  const handleConnect = (req, clientSocket, head) => {
     const [rawHost, rawPort] = String(req.url).split(":");
     const host = rawHost ?? "";
     const targetPort = Number(rawPort || 443);
@@ -1011,19 +1111,32 @@ const proxy = async (/** @type {string[]} */ args) => {
       clientSocket.destroy();
     });
     clientSocket.on("close", () => upstream.destroy());
-  });
+  };
 
+  const server = http.createServer(handleRequest);
+  server.on("connect", handleConnect);
+  const socketServer = http.createServer(handleRequest);
+  socketServer.on("connect", handleConnect);
+
+  rmSync(PROXY_SOCK, { force: true });
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(port, HOST, () => resolve(undefined));
   });
+  await new Promise((resolve, reject) => {
+    socketServer.once("error", reject);
+    socketServer.listen(PROXY_SOCK, () => resolve(undefined));
+  });
+  chmodSync(PROXY_SOCK, 0o600);
   writeFileSync(PROXY_PID, String(process.pid));
-  logProxy(`started on ${HOST}:${port}, allow ${allow.join(",")}`);
-  say(`• proxy listening on http://${HOST}:${port}`);
+  logProxy(`started on ${HOST}:${port} and ${PROXY_SOCK}, allow ${allow.join(",")}`);
+  say(`• proxy listening on http://${HOST}:${port} and ${PROXY_SOCK}`);
   say(`• allow: ${allow.join(", ")}`);
   say(`• log: ${PROXY_LOG}`);
   const stop = () => {
     try { server.close(); } catch {}
+    try { socketServer.close(); } catch {}
+    rmSync(PROXY_SOCK, { force: true });
     if (existsSync(PROXY_PID) && readFileSync(PROXY_PID, "utf8").trim() === String(process.pid)) {
       rmSync(PROXY_PID, { force: true });
     }
@@ -1033,6 +1146,270 @@ const proxy = async (/** @type {string[]} */ args) => {
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
   await new Promise(() => undefined);
+};
+
+const inside = (/** @type {string} */ child, /** @type {string} */ parent) => {
+  const rel = path.relative(parent, child);
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+};
+
+const findExecutable = (/** @type {string} */ name) => {
+  const search = process.env.PATH || "/usr/local/bin:/usr/bin:/bin";
+  for (const dir of search.split(path.delimiter)) {
+    if (!dir) continue;
+    const candidate = path.join(dir, name);
+    try {
+      const info = statSync(candidate);
+      if (!info.isFile() || (info.mode & 0o111) === 0) continue;
+      return realpathSync(candidate);
+    } catch {}
+  }
+  return null;
+};
+
+const coveredBySystem = (/** @type {string} */ value) =>
+  value === "/usr" || value.startsWith("/usr/") || value === "/etc" || value.startsWith("/etc/");
+
+const toolMounts = () => {
+  /** @type {string[]} */
+  const mounts = [];
+  /** @type {string[]} */
+  const dirs = [];
+  const addMount = (/** @type {string} */ value) => {
+    if (!mounts.includes(value)) mounts.push(value);
+  };
+  const addDir = (/** @type {string} */ value) => {
+    if (!dirs.includes(value)) dirs.push(value);
+  };
+  for (const name of TOOL_NAMES) {
+    const resolved = findExecutable(name);
+    if (!resolved) continue;
+    if (name === "scriptc-dev") {
+      addMount(resolved);
+      addDir(path.dirname(resolved));
+      continue;
+    }
+    if (name === "opencode") {
+      const bin = path.join(HOST_HOME, ".opencode", "bin");
+      const folder = existsSync(bin) ? realpathSync(bin) : path.dirname(resolved);
+      addMount(folder);
+      addDir(path.dirname(resolved));
+      continue;
+    }
+    if (name === "node") {
+      const match = /^(.*[/\\]\.nvm[/\\]versions[/\\]node[/\\][^/\\]+)/.exec(resolved);
+      addMount(match ? match[1] : path.dirname(resolved));
+      addDir(path.dirname(resolved));
+      continue;
+    }
+    addMount(path.dirname(resolved));
+    addDir(path.dirname(resolved));
+  }
+  return { mounts: mounts.filter((value) => !coveredBySystem(value)), dirs };
+};
+
+const jailArgv = (
+  /** @type {number} */ port,
+  /** @type {string[]} */ projects,
+  /** @type {string} */ cwd,
+  /** @type {string[]} */ command,
+) => {
+  const args = [
+    BWRAP,
+    "--unshare-all",
+    "--die-with-parent",
+    "--new-session",
+    "--proc", "/proc",
+    "--dev", "/dev",
+    "--tmpfs", "/tmp",
+  ];
+  args.push("--ro-bind", "/usr", "/usr");
+  args.push("--ro-bind", "/etc", "/etc");
+  for (const name of ["bin", "lib", "lib64", "sbin"]) {
+    const host = `/${name}`;
+    let info;
+    try {
+      info = lstatSync(host);
+    } catch {
+      continue;
+    }
+    if (info.isSymbolicLink()) args.push("--symlink", readlinkSync(host), host);
+    else args.push("--ro-bind", host, host);
+  }
+  args.push("--bind", JAIL_HOME, HOST_HOME);
+  for (const project of projects) {
+    args.push("--bind", project, project);
+    for (const rel of [".widecode", ".claude", ".git/hooks"]) {
+      const protectedPath = path.join(project, rel);
+      if (existsSync(protectedPath)) args.push("--ro-bind", protectedPath, protectedPath);
+    }
+  }
+  const tools = toolMounts();
+  for (const mount of tools.mounts) args.push("--ro-bind", mount, mount);
+  args.push("--ro-bind", SCRIPT, SCRIPT);
+  args.push("--bind", PROXY_SOCK, PROXY_SOCK);
+  args.push("--chdir", cwd);
+  args.push("--clearenv");
+  const pathValue = [...tools.dirs, "/usr/local/bin", "/usr/bin", "/bin"].join(":");
+  const proxy = `http://127.0.0.1:${port}`;
+  args.push("--setenv", "HOME", HOST_HOME);
+  args.push("--setenv", "USER", process.env.USER || os.userInfo().username);
+  args.push("--setenv", "PATH", pathValue);
+  args.push("--setenv", "LANG", process.env.LANG || "C.UTF-8");
+  args.push("--setenv", "TERM", process.env.TERM || "xterm-256color");
+  args.push("--setenv", "HTTPS_PROXY", proxy);
+  args.push("--setenv", "HTTP_PROXY", proxy);
+  args.push("--setenv", "https_proxy", proxy);
+  args.push("--setenv", "http_proxy", proxy);
+  args.push("--setenv", "NO_PROXY", "localhost,127.0.0.1");
+  args.push(
+    "node", SCRIPT, "jail-inner",
+    "--proxy-port", String(port),
+    "--socket", PROXY_SOCK,
+    "--", ...command,
+  );
+  return args;
+};
+
+const parseJailArgs = (/** @type {string[]} */ args) => {
+  let proxyPort = null;
+  let dryRun = false;
+  /** @type {string[]} */
+  const projects = [];
+  /** @type {string[]} */
+  let command = [];
+  let index = 0;
+  for (; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--") {
+      command = args.slice(index + 1);
+      break;
+    }
+    if (arg === "--proxy-port") {
+      proxyPort = Number(args[++index]);
+    } else if (arg.startsWith("--proxy-port=")) {
+      proxyPort = Number(arg.slice("--proxy-port=".length));
+    } else if (arg === "--project") {
+      projects.push(String(args[++index] ?? ""));
+    } else if (arg.startsWith("--project=")) {
+      projects.push(arg.slice("--project=".length));
+    } else if (arg === "--dry-run") {
+      dryRun = true;
+    } else {
+      throw new Error(`unknown jail option "${arg}"`);
+    }
+  }
+  if (!Number.isInteger(proxyPort) || proxyPort < 1 || proxyPort > 65535) {
+    throw new Error(`bad --proxy-port "${proxyPort}"; expected a port`);
+  }
+  if (!command.length) throw new Error("jail needs a command after --");
+  const cwd = process.cwd();
+  const resolved = [...new Set(projects.map((project) => path.resolve(project)))];
+  if (!resolved.length) throw new Error("jail needs at least one --project");
+  for (const project of resolved) {
+    if (!existsSync(project)) throw new Error(`no such project: ${project}`);
+  }
+  if (!resolved.some((project) => inside(cwd, project))) {
+    throw new Error(`${cwd} is not inside a --project; list the folder with --project <dir>`);
+  }
+  return { proxyPort, dryRun, projects: resolved, command, cwd };
+};
+
+const jail = async (/** @type {string[]} */ args) => {
+  const options = parseJailArgs(args);
+  const argv = jailArgv(options.proxyPort, options.projects, options.cwd, options.command);
+  if (options.dryRun) {
+    process.stdout.write(`${JSON.stringify(argv)}\n`);
+    return;
+  }
+  if (!existsSync(BWRAP)) {
+    throw new Error("bubblewrap is missing; install it (for example: apt install bubblewrap) and run jail again");
+  }
+  if (!existsSync(PROXY_SOCK)) {
+    throw new Error(`the proxy socket ${PROXY_SOCK} is missing; start it with "node ${SCRIPT} proxy" and run jail again`);
+  }
+  mkdirSync(JAIL_HOME, { recursive: true, mode: 0o700 });
+  chmodSync(JAIL_HOME, 0o700);
+  installLocalCredentials(JAIL_HOME, loadCredentials());
+  const child = spawn(BWRAP, argv.slice(1), { stdio: "inherit" });
+  forwardSignals(child);
+  child.on("error", (error) => {
+    say(`• ${error.message}`);
+    process.exit(1);
+  });
+  child.on("exit", (code, signal) => process.exit(signal ? 1 : code ?? 1));
+};
+
+const parseJailInnerArgs = (/** @type {string[]} */ args) => {
+  let proxyPort = null;
+  let socket = "";
+  /** @type {string[]} */
+  let command = [];
+  let index = 0;
+  for (; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--") {
+      command = args.slice(index + 1);
+      break;
+    }
+    if (arg === "--proxy-port") {
+      proxyPort = Number(args[++index]);
+    } else if (arg.startsWith("--proxy-port=")) {
+      proxyPort = Number(arg.slice("--proxy-port=".length));
+    } else if (arg === "--socket") {
+      socket = String(args[++index] ?? "");
+    } else if (arg.startsWith("--socket=")) {
+      socket = arg.slice("--socket=".length);
+    } else {
+      throw new Error(`unknown jail-inner option "${arg}"`);
+    }
+  }
+  if (!Number.isInteger(proxyPort) || proxyPort < 1 || proxyPort > 65535) {
+    throw new Error(`bad --proxy-port "${proxyPort}"; expected a port`);
+  }
+  if (!socket) throw new Error("jail-inner needs --socket <path>");
+  if (!command.length) throw new Error("jail-inner needs a command after --");
+  return { proxyPort, socket, command };
+};
+
+const claudeToken = () => {
+  const file = path.join(process.env.HOME || "", ".config", "widecode-box", "env");
+  if (!existsSync(file)) return "";
+  const match = /^export\s+CLAUDE_CODE_OAUTH_TOKEN=(.*)$/m.exec(readFileSync(file, "utf8"));
+  return match ? unquote(match[1].trim()) : "";
+};
+
+const jailInner = async (/** @type {string[]} */ args) => {
+  const options = parseJailInnerArgs(args);
+  const server = net.createServer((client) => {
+    client.on("error", () => undefined);
+    const upstream = net.connect(options.socket);
+    upstream.on("error", () => client.destroy());
+    upstream.on("connect", () => {
+      client.pipe(upstream);
+      upstream.pipe(client);
+    });
+    client.on("close", () => upstream.destroy());
+    upstream.on("close", () => client.destroy());
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(options.proxyPort, HOST, () => resolve(undefined));
+  });
+  const env = { ...process.env };
+  const token = claudeToken();
+  if (token) env.CLAUDE_CODE_OAUTH_TOKEN = token;
+  const child = spawn(options.command[0], options.command.slice(1), { stdio: "inherit", env });
+  forwardSignals(child);
+  child.on("error", (error) => {
+    say(`• ${error.message}`);
+    try { server.close(); } catch {}
+    process.exit(1);
+  });
+  child.on("exit", (code, signal) => {
+    try { server.close(); } catch {}
+    process.exit(signal ? 1 : code ?? 1);
+  });
 };
 
 const sshCommand = (/** @type {string[]} */ args) => {
@@ -1100,14 +1477,23 @@ const [command = "status", ...rest] = process.argv.slice(2);
 const commands = {
   provision,
   up: () => up(rest),
-  down,
+  down: () => down(rest),
   reset,
   status: () => status(rest),
   creds: credsCommand,
   proxy: () => proxy(rest),
+  jail: () => jail(rest),
+  "jail-inner": () => jailInner(rest),
   ssh: () => {
-    const result = sshCommand(rest);
-    process.exit(result.status ?? 1);
+    const end = beginSession();
+    let status = 1;
+    try {
+      const result = sshCommand(rest);
+      status = result.status ?? 1;
+    } finally {
+      end();
+    }
+    process.exit(status);
   },
 };
 

@@ -5,9 +5,11 @@
 // exit code and output, "Don't run" answers an error and runs nothing, an unknown action is
 // refused, and /box lists the actions. A plugin switched off or a section with no actions offers no
 // tool.
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { request, type IncomingMessage } from "node:http";
-import { tmpdir } from "node:os";
+import * as net from "node:net";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "@widecode/conversation/conversation.ts";
 import { TOOL } from "@widecode/conversation/model.ts";
@@ -132,6 +134,134 @@ const main = async (): Promise<void> => {
   off.js.killProcesses();
   offWs.close();
   rmSync(offFolder, { recursive: true, force: true });
+
+  // The jail's bwrap argv, the proxy's unix socket and down --if-idle. The jail is checked with
+  // --dry-run, so the test needs no bubblewrap; the live jail is checked on the host.
+  const boxScript = join(process.cwd(), "box/box.mjs");
+  const boxEnv = (state: string) => ({ ...process.env, WIDECODE_BOX_DIR: state });
+  const quote = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
+  const runBox = (folder: string | null, args: string[], env: NodeJS.ProcessEnv) => {
+    const command = `exec node ${args.map(quote).join(" ")}`;
+    return spawnSync("sh", ["-c", folder === null ? command : `cd ${quote(folder)} && ${command}`], { encoding: "utf8", env });
+  };
+  const jailState = mkdtempSync(join(tmpdir(), "widecode-box-jail-"));
+  const jailProject = mkdtempSync(join(tmpdir(), "widecode-box-project-"));
+  mkdirSync(join(jailProject, ".widecode"));
+  const dry = runBox(
+    jailProject,
+    [boxScript, "jail", "--proxy-port", "8899", "--project", jailProject, "--dry-run", "--", "node", "-e", "0"],
+    boxEnv(jailState),
+  );
+  eq("jail --dry-run exits 0", String(dry.status), "0");
+  const argv = JSON.parse(dry.stdout.trim()) as string[];
+  const triple = (flag: string, source: string, target: string): boolean =>
+    argv.some((value, index) => value === flag && argv[index + 1] === source && argv[index + 2] === target);
+  const setenv = (name: string): string => {
+    for (let index = 0; index < argv.length; index += 1) {
+      if (argv[index] === "--setenv" && argv[index + 1] === name) return argv[index + 2] ?? "";
+    }
+    return "";
+  };
+  ok("the jail uses unshare-all and dies with its parent", argv.includes("--unshare-all") && argv.includes("--die-with-parent"));
+  ok("the project is bound read-write", triple("--bind", jailProject, jailProject));
+  ok("its .widecode is read-only when present", triple("--ro-bind", join(jailProject, ".widecode"), join(jailProject, ".widecode")));
+  const jailHome = join(jailState, "jail-home");
+  ok("home is the jail home", triple("--bind", jailHome, homedir()));
+  ok("no /run is bound", !argv.some((value) => value === "/run" || value.startsWith("/run/")));
+  ok("the host home itself is not bound", !triple("--bind", homedir(), homedir()));
+  ok(
+    "no host .ssh or .config folder is bound",
+    !argv.some((value) =>
+      value === join(homedir(), ".ssh") || value.startsWith(join(homedir(), ".ssh") + "/") ||
+      value === join(homedir(), ".config") || value.startsWith(join(homedir(), ".config") + "/")),
+  );
+  const proxyUrl = "http://127.0.0.1:8899";
+  ok(
+    "the proxy environment is set",
+    setenv("HTTPS_PROXY") === proxyUrl && setenv("HTTP_PROXY") === proxyUrl &&
+      setenv("https_proxy") === proxyUrl && setenv("http_proxy") === proxyUrl &&
+      setenv("NO_PROXY") === "localhost,127.0.0.1",
+  );
+  const outside = mkdtempSync(join(tmpdir(), "widecode-box-outside-"));
+  const cwdRefused = runBox(
+    outside,
+    [boxScript, "jail", "--proxy-port", "8899", "--project", jailProject, "--dry-run", "--", "true"],
+    boxEnv(jailState),
+  );
+  eq("a cwd outside every project exits 1", String(cwdRefused.status), "1");
+  ok("and says what to fix", ((cwdRefused.stdout || "") + (cwdRefused.stderr || "")).includes("is not inside a --project"));
+  rmSync(outside, { recursive: true, force: true });
+  rmSync(jailProject, { recursive: true, force: true });
+  rmSync(jailState, { recursive: true, force: true });
+
+  const proxyState = mkdtempSync(join(tmpdir(), "widecode-box-proxy-"));
+  const freePort = await new Promise<number>((resolve, reject) => {
+    const probe = net.createServer();
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", () => {
+      const address = probe.address();
+      const port = address !== null && typeof address === "object" ? address.port : 0;
+      probe.close(() => resolve(port));
+    });
+  });
+  const proxyChild = spawn(
+    "node",
+    [boxScript, "proxy", "--port", String(freePort), "--allow", "api.anthropic.com"],
+    { env: boxEnv(proxyState), stdio: "ignore" },
+  );
+  const socketPath = join(proxyState, "proxy.sock");
+  const deadline = Date.now() + 5000;
+  while (!existsSync(socketPath) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+  ok("the proxy creates its unix socket", existsSync(socketPath));
+  const overSocket = await new Promise<string>((resolve) => {
+    const client = net.connect(socketPath, () => client.write("CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n"));
+    let text = "";
+    client.on("data", (chunk: Buffer) => {
+      text += chunk.toString("utf8");
+      if (text.includes("\r\n")) {
+        client.destroy();
+        resolve(text);
+      }
+    });
+    client.on("error", (error: Error) => resolve("error " + error.message));
+    setTimeout(() => {
+      client.destroy();
+      resolve(text);
+    }, 3000);
+  });
+  ok("its socket answers a disallowed CONNECT with 403", overSocket.includes("403"));
+  proxyChild.kill("SIGTERM");
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      proxyChild.kill("SIGKILL");
+      resolve();
+    }, 3000);
+    proxyChild.on("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+  ok("the socket is removed with the proxy", !existsSync(socketPath));
+  rmSync(proxyState, { recursive: true, force: true });
+
+  const idleState = mkdtempSync(join(tmpdir(), "widecode-box-idle-"));
+  mkdirSync(join(idleState, "sessions"));
+  const stale = join(idleState, "sessions", "999999");
+  writeFileSync(stale, "");
+  const idle = spawnSync("node", [boxScript, "down", "--if-idle"], { encoding: "utf8", env: boxEnv(idleState) });
+  eq("down --if-idle ignores a stale session", String(idle.status), "0");
+  ok("and removes the stale file", !existsSync(stale));
+  rmSync(idleState, { recursive: true, force: true });
+
+  const liveState = mkdtempSync(join(tmpdir(), "widecode-box-live-"));
+  mkdirSync(join(liveState, "sessions"));
+  const live = join(liveState, "sessions", String(process.pid));
+  writeFileSync(live, "");
+  const busy = spawnSync("node", [boxScript, "down", "--if-idle"], { encoding: "utf8", env: boxEnv(liveState) });
+  eq("down --if-idle leaves the box alone with a live session", String(busy.status), "0");
+  ok("and says it is in use", ((busy.stdout || "") + (busy.stderr || "")).includes("the box is in use by 1 session(s)"));
+  ok("and keeps the live session file", existsSync(live));
+  rmSync(liveState, { recursive: true, force: true });
 
   done();
 };

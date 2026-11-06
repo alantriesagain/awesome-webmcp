@@ -1,10 +1,13 @@
-# widecode's VM box (spike)
+# widecode's box (spike)
 
-V1 in `PLAN-security.md`: a Debian 13 VM that an agent can run in, built and driven by node scripts
-with no dependencies. It follows bootstrapp's test VM (`packages/vps/testvm/vm.mjs`): QEMU runs as
-the user, the Debian cloud image is a read-only backing file, each box is a fresh qcow2 overlay,
-cloud-init comes in on a genisoimage seed ISO, networking is user-mode with one hostfwd, and the
-state is a pid file plus a console log.
+The box has two backends: a Debian 13 VM and a bubblewrap jail on the host. The jail is the lighter
+one, with no VM memory cost; the VM is V1 in `PLAN-security.md`. Both are built and driven by node
+scripts with no dependencies.
+
+The VM follows bootstrapp's test VM (`packages/vps/testvm/vm.mjs`): QEMU runs as the user, the Debian
+cloud image is a read-only backing file, each box is a fresh qcow2 overlay, cloud-init comes in on a
+genisoimage seed ISO, networking is user-mode with one hostfwd, and the state is a pid file plus a
+console log.
 
 There is one VM. It shares every project `up` lists, each at its own host path, so every agent in
 every project uses the same guest. A lock file and the QEMU pid file keep a second VM from starting.
@@ -21,8 +24,9 @@ node apps/widecode/box/box.mjs provision
 node apps/widecode/box/box.mjs up [--memory <MB>] [--cpus <n>] [--port <host>[:<guest>]]... <folder> [<folder>...]
 node apps/widecode/box/box.mjs ssh [--forward-proxy <port>] [--forward <remotePort>:<hostPort>]... [--] [cmd...]
 node apps/widecode/box/box.mjs proxy [--port N] [--allow domain,...]
+node apps/widecode/box/box.mjs jail --proxy-port <port> [--project <dir>]... [--dry-run] -- <cmd...>
 node apps/widecode/box/box.mjs creds
-node apps/widecode/box/box.mjs down
+node apps/widecode/box/box.mjs down [--if-idle]
 node apps/widecode/box/box.mjs status [--json]
 node apps/widecode/box/box.mjs reset
 ```
@@ -69,28 +73,33 @@ sandbox.
 
 A per-boot cloud-init seed, rather than a unit baked into the image, mounts each share and
 bind-mounts `.widecode/`, `.claude/` and `.git/hooks` read-only over it when they exist, because the
-project paths change per boot. `up` waits for SSH and for the `/run/widecode-box-ready` marker the
-seed writes, and saves the project list, the share kind, memory, CPUs and ports in `box.json`. A
-second `up` with the same list returns at once; with a different list it refuses and says to run
-`down`, then `up`.
+project paths change per boot. The seed also mounts the host's `<state>/guest-cache` over
+`/home/agent/.cache` and gives it to `agent`, so the guest's scriptc cache lasts across `down` and
+`up`. `up` waits for SSH and for the `/run/widecode-box-ready` marker the seed writes, and saves the
+project list, the share kind, memory, CPUs and ports in `box.json`. A second `up` with the same list
+returns at once; with a different list it refuses and says to run `down`, then `up`.
 
 ### scriptc and the build cache
 
 `/home/agent/.local/bin/scriptc-dev` is the host wrapper's script (`git -C
 /home/alanleal/Projects/scriptc rev-parse --short HEAD`, `stat` on
 `packages/compiler/dist/index.js`, `SCRIPTC_CACHE_MAX_MB=20480`) running the shared checkout's node
-CLI. Its cache is on the guest's own disk, `~/.cache/scriptc-fork/<id>` (mode 700), never a host
-folder: a host-shared cache would let the box plant a build the host then runs. The shared projects
-are `/home/alanleal/Projects/{widecode,light,scriptc}`, so `widecode/light` (a symlink to `../light`)
+CLI. Its cache is `~/.cache/scriptc-fork/<id>` (mode 700), which inside the guest is the host folder
+`<state>/guest-cache`. A host-shared cache would let the box plant a build the host then runs, so
+the folder is the box's alone: only the guest has it, and the host's own scriptc cache lives
+elsewhere and never reads it. The shared projects are
+`/home/alanleal/Projects/{widecode,light,scriptc}`, so `widecode/light` (a symlink to `../light`)
 resolves inside the guest when light is shared at its own path.
 
 `proxy` is a host-side HTTP proxy on `127.0.0.1` (default port 8888, override with `--port` or
-`WIDECODE_BOX_PROXY_PORT`). It handles plain HTTP and `CONNECT`, allows a host that equals an entry
-in `--allow` (comma-separated, default: `api.anthropic.com`, `claude.ai`, `platform.claude.com`,
+`WIDECODE_BOX_PROXY_PORT`) and on `<state>/proxy.sock`. Both listeners use the same allow list and
+write the same log lines. It handles plain HTTP and `CONNECT`, allows a host that equals an entry in
+`--allow` (comma-separated, default: `api.anthropic.com`, `claude.ai`, `platform.claude.com`,
 `claude.com`, `statsig.anthropic.com`, `opencode.ai`, `*.opencode.ai`, `registry.npmjs.org`,
 `github.com`, `*.github.com`, `*.githubusercontent.com`) or is a subdomain of a `*.domain` entry, and
 answers 403 to everything else. It logs every allowed and refused request to `proxy.log` in the state
-directory, writes its pid to `proxy.pid`, and runs until `down` or a signal stops it.
+directory, writes its pid to `proxy.pid`, and runs until `down` or a signal stops it. It removes a
+stale socket before listening, sets the new one to mode 600, and removes it when it stops.
 
 `ssh` runs as `agent` with the box key, `BatchMode=yes` and the box's own `known_hosts`. It puts
 `~/.local/bin` and `~/.opencode/bin` first on the remote `PATH`, so `claude` and `opencode` resolve
@@ -98,9 +107,54 @@ without a login shell, and sources `/home/agent/.config/widecode-box/env` when i
 Claude token is set for every session. `--forward-proxy <port>` adds `-R <port>:127.0.0.1:<port>` and exports
 `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY=localhost,127.0.0.1` in the remote command; `--forward
 <remotePort>:<hostPort>` adds `-R <remotePort>:127.0.0.1:<hostPort>` and may be repeated. Forwards use
-`ExitOnForwardFailure=yes`. `down` stops the proxy, asks for an ACPI powerdown through the QEMU
-monitor and terminates the process after 45 seconds if the guest does not leave. `reset` drops
-`box.qcow2`; `base.qcow2` is kept.
+`ExitOnForwardFailure=yes`. While an `ssh` runs it keeps `<state>/sessions/<pid>` and removes the file
+when it ends. `down --if-idle` stops the box only when no live session remains, after removing files
+whose pid is gone; otherwise it prints `the box is in use by <n> session(s)` and leaves the box
+running, so several widecode windows can share one VM. Plain `down` always stops it. `down` stops the
+proxy, asks for an ACPI powerdown through the QEMU monitor and terminates the process after 45 seconds
+if the guest does not leave. `reset` drops `box.qcow2`; `base.qcow2` is kept.
+
+## The jail
+
+`jail` is the lighter backend. It runs a command under `/usr/bin/bwrap` with the caller's cwd and
+passes stdin, stdout and stderr through, so ACP carries its JSON-RPC over stdio. It exits with the
+command's code, forwards SIGTERM and SIGINT, and bwrap's `--die-with-parent` ends the sandbox with
+its parent.
+
+If bubblewrap or `<state>/proxy.sock` is missing, it exits 1 with one line naming the missing piece
+and how to fix it. `--dry-run` prints the bwrap argv as one JSON line and exits 0, without running it
+or touching credentials. Tests use it.
+
+The sandbox has `--unshare-all` (a network namespace with only loopback), `--die-with-parent`,
+`--new-session`, `/proc`, `/dev` and a tmpfs `/tmp`. `/usr` and `/etc` are read-only; `/bin`, `/lib`,
+`/lib64` and `/sbin` are recreated as on the host, as symlinks into `usr` on a merged-usr host and
+read-only binds otherwise. It sees no host home beyond the jail home and the tool folders, no
+`/run`, `/var`, `/media` or `/mnt`.
+
+The jail home is `<state>/jail-home` (mode 700). It is bound read-write at the host user's real home
+path, so absolute paths under home keep working. It holds the jail's own opencode data, the scriptc
+cache at `$HOME/.cache/scriptc-fork` and pnpm's store.
+
+Each tool found on the host `PATH` among `node`, `pnpm`, `opencode`, `claude` and `scriptc-dev` is
+read-only at its host path, after resolving symlinks: the whole nvm version folder for node under
+nvm, `~/.opencode/bin` for opencode, and the file alone for scriptc-dev. `box.mjs` itself is
+read-only too. Each `--project` is read-write at its own path, with `.widecode/`, `.claude/` and
+`.git/hooks` read-only over it when they exist. The cwd must be inside a project.
+
+The proxy socket is bound at its state path. The environment is cleared and gets `HOME`, `USER`,
+`PATH` (the tool folders and `/usr/local/bin:/usr/bin:/bin`), `LANG`, `TERM`, `HTTPS_PROXY`,
+`HTTP_PROXY`, `https_proxy` and `http_proxy` at `http://127.0.0.1:<port>`, and
+`NO_PROXY=localhost,127.0.0.1`.
+
+Inside, bwrap runs `node box.mjs jail-inner --proxy-port <port> --socket <path> -- <cmd...>`. That
+part listens on `127.0.0.1:<port>`, pipes each connection to the proxy socket, reads
+`~/.config/widecode-box/env` from the jail home and adds `CLAUDE_CODE_OAUTH_TOKEN` to the child's
+environment when it is set, then starts the command.
+
+Before starting bwrap, `jail` writes the jail home's `.config/widecode-box/env` (mode 600) and
+merges the `opencode-go` entry into `.local/share/opencode/auth.json` (mode 600), from
+`~/.widecode/box/credentials.env`, using the same reader, checks and merge as `up`. An empty value
+removes the file or entry. Values never go on a command line and are never printed.
 
 ## Credentials
 
