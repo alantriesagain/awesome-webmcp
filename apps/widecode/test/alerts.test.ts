@@ -4,8 +4,10 @@
 // category left out of "on"; bell and notify each turned off; the plugin switched off; two
 // requests alert twice, one never twice, and a request answered at once does not alert. Alerts
 // run only in the real app (the host's flag, as startup.ts sets it), and a notification click
-// runs the section's onClick line and shows its request.
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+// runs the section's onClick line and shows its request. A notify-send notification gets the
+// section's expire time as -t and runs under coreutils timeout, a custom notifyCommand gets no -t,
+// and a bad expireSeconds falls back to 600.
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "@widecode/conversation/conversation.ts";
@@ -33,6 +35,14 @@ const main = async (): Promise<void> => {
   const recorder = join(folder, "notify.sh");
   writeFileSync(recorder, "#!/bin/sh\nprintf '%s\\n' \"$@\" >> \"$WIDECODE_ALERTS_LOG\"\n");
   chmodSync(recorder, 0o755);
+  const notifier = (name: string): string => {
+    const dir = join(folder, name);
+    mkdirSync(dir);
+    const path = join(dir, "notify-send");
+    writeFileSync(path, "#!/bin/sh\n{ printf 'args\\n'; printf '%s\\n' \"$@\"; printf 'parent\\n'; tr '\\0' '\\n' < /proc/$PPID/cmdline; } >> \"$WIDECODE_ALERTS_LOG\"\n");
+    chmodSync(path, 0o755);
+    return path;
+  };
   let run = 0;
 
   const make = (plugins: unknown, real = true): App => {
@@ -56,6 +66,12 @@ const main = async (): Promise<void> => {
 
   const quiet = async (app: App): Promise<string> => {
     await wait(150);
+    return existsSync(app.log) ? readFileSync(app.log, "utf8") : "";
+  };
+
+  const capture = async (app: App): Promise<string> => {
+    await until(() => existsSync(app.log), 3000);
+    await wait(100);
     return existsSync(app.log) ? readFileSync(app.log, "utf8") : "";
   };
 
@@ -122,6 +138,33 @@ const main = async (): Promise<void> => {
   late.summary = "rm a.txt asks for permission";
   app.c.changed();
   ok("a question under an earlier turn's card alerts too", await until(() => app.rings.length === 3, 3000));
+  app.w.host.kernel.stop();
+
+  // notify-send's own expire time and the coreutils timeout around the line, from its parent's argv.
+  app = make({ alerts: { notifyCommand: [notifier("default-expire")] } });
+  open(app, "req-1", "permission", "Bash", "Bash ls: allow it?");
+  const defaultLine = await capture(app);
+  eq("the default expire is -t 600000", defaultLine.split("parent\n")[0], "args\n-t\n600000\nwidecode: permission\nBash ls: allow it?\n");
+  ok("the default expire line runs under timeout 605", defaultLine.includes("parent\ntimeout\n605\n") && defaultLine.includes("\n-t\n600000\nwidecode: permission\n"));
+  app.w.host.kernel.stop();
+
+  app = make({ alerts: { notifyCommand: [notifier("configured-expire")], expireSeconds: 30 } });
+  open(app, "req-1", "permission", "Bash", "Bash ls: allow it?");
+  const configuredLine = await capture(app);
+  eq("a configured expireSeconds is -t 30000", configuredLine.split("parent\n")[0], "args\n-t\n30000\nwidecode: permission\nBash ls: allow it?\n");
+  ok("a configured expireSeconds bounds timeout at 35", configuredLine.includes("parent\ntimeout\n35\n") && configuredLine.includes("\n-t\n30000\n"));
+  app.w.host.kernel.stop();
+
+  app = make({ alerts: { notifyCommand: [notifier("bad-expire")], expireSeconds: "soon" } });
+  open(app, "req-1", "permission", "Bash", "Bash ls: allow it?");
+  const badLine = await capture(app);
+  ok("an invalid expireSeconds falls back to the default", badLine.includes("parent\ntimeout\n605\n") && badLine.includes("\n-t\n600000\n"));
+  app.w.host.kernel.stop();
+
+  app = make({ alerts: { notifyCommand: [recorder] } });
+  open(app, "req-1", "permission", "Bash", "Bash ls: allow it?");
+  const customLine = await capture(app);
+  eq("a custom notifyCommand gets no -t", customLine, "widecode: permission\nBash ls: allow it?\n");
   app.w.host.kernel.stop();
 
   // notify-send's action: when it prints `open`, the section's onClick line runs and the request shows.
