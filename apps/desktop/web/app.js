@@ -4,7 +4,7 @@
  * apps/harness/src/app.ts, the terminal screen, with the browser's own text box.
  */
 import View from "@lightstart/light";
-import titleBar from "@lightstart/light/components/app/title-bar.js";
+import titleBar from "@lightstart/components/app/title-bar.js";
 import { html, key } from "@lightstart/light/html";
 import { connect } from "@lightstart/light/native/desktop/client.js";
 

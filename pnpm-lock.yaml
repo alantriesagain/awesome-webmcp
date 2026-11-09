@@ -23,6 +23,9 @@ importers:
       '@light/lib':
         specifier: workspace:*
         version: link:../../light/packages/native/lib
+      '@lightstart/components':
+        specifier: workspace:*
+        version: link:../../light/packages/components
       '@lightstart/light':
         specifier: workspace:*
         version: link:../../light/packages/light

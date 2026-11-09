@@ -1,5 +1,6 @@
 packages:
   - 'light/packages/light'
+  - 'light/packages/components'
   - 'light/packages/native/*'
   - 'light/packages/tui/*'
   - 'packages/*'

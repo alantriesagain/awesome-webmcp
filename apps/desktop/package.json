@@ -5,6 +5,7 @@
   "description": "The chat as a desktop app: a scriptc backend on light's desktop host, a light page in the system web view.",
   "dependencies": {
     "@lightstart/light": "workspace:*",
+    "@lightstart/components": "workspace:*",
     "@widecode/agent": "workspace:*",
     "@light/lib": "workspace:*"
   },
