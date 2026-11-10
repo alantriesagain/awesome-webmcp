@@ -1,9 +1,11 @@
 // Prompt templates in pi's format: the args of a command line with shell-like quoting; each
 // placeholder form (`$1`, `$@`, `$ARGUMENTS`, `${1:-default}`, `${@:-default}`, `${@:N}`,
-// `${@:N:L}`) and a missing argument empty; the scan's folders in order, first found wins by name,
-// only direct `.md` children, the description from the frontmatter or the body's first line cut to
-// 60 characters, the argument hint, pi's agent folder from `PI_CODING_AGENT_DIR` or `~/.pi/agent`,
-// and a trusted folder's templates left out while it is not trusted.
+// `${@:N:L}`) and a missing argument empty; the scan's folders in order (the folder's, its plugin
+// folders' under `.widecode/plugins`, the harness's, the store's plugin folders' under `plugins`,
+// pi's), first found wins by name, a plugin folder without `index.js` is not a plugin, only direct
+// `.md` children, the description from the frontmatter or the body's first line cut to 60
+// characters, the argument hint, pi's agent folder from `PI_CODING_AGENT_DIR` or `~/.pi/agent`, and
+// a trusted folder's templates left out while it is not trusted.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,11 +22,22 @@ const template = (dir: string, name: string, text: string): void => {
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, name + ".md"), text);
 };
+const plugin = (dir: string): void => {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "index.js"), "// a plugin\n");
+};
 
 template(join(folder, ".widecode", "prompts"), "review", "---\ndescription: Review a change\nargument-hint: <path>\n---\nReview $1 in $2.\n");
 template(join(folder, ".pi", "prompts"), "project", "---\ndescription: Pi project\n---\nProject it.\n");
+plugin(join(folder, ".widecode", "plugins", "beta"));
+template(join(folder, ".widecode", "plugins", "beta", "prompts"), "plugproject", "---\ndescription: Project plugin\n---\nProject plugin.\n");
+template(join(folder, ".widecode", "plugins", "nope", "prompts"), "ignored", "---\ndescription: Not a plugin\n---\nIgnored.\n");
 template(join(harness, "prompts"), "review", "---\ndescription: Harness review\n---\nHarness review.\n");
 template(join(harness, "prompts"), "notes", "---\ndescription: Harness notes\n---\nTake notes.\n");
+plugin(join(root, "store", "plugins", "zeta"));
+plugin(join(root, "store", "plugins", "alpha"));
+template(join(root, "store", "plugins", "zeta", "prompts"), "plugzeta", "---\ndescription: Zeta's prompt\n---\nZeta.\n");
+template(join(root, "store", "plugins", "alpha", "prompts"), "plugalpha", "---\ndescription: Alpha's prompt\n---\nAlpha.\n");
 template(join(piAgent, "prompts"), "env", "---\ndescription: Env template\n---\nEnv.\n");
 const long = "A description line much longer than sixty characters so that the fallback cuts it short";
 template(join(piAgent, "prompts"), "fallback", "\n\n  " + long + "\nA second line.\n");
@@ -43,10 +56,10 @@ eq("a slice past the end is empty", substituteArgs("${@:5}", ["a"]), "");
 eq("zero starts at the first argument", substituteArgs("${@:0:2}", ["a", "b"]), "a b");
 
 const all = scanTemplates(folder, true, home, harness);
-eq("the project's folders, then the harness's, then pi's; a name found twice is the first one's; only direct .md files", all.map((t) => t.name + ":" + t.source).join(" "), "review:project project:project notes:harness env:user fallback:user");
-eq("the descriptions, the body's first line cut to 60 characters", all.map((t) => t.description).join(" | "), "Review a change | Pi project | Harness notes | Env template | " + long.slice(0, 60));
-eq("the argument hint", all.map((t) => t.argumentHint).join("|"), "<path>||||");
-eq("an untrusted folder's are left out", scanTemplates(folder, false, home, harness).map((t) => t.name + ":" + t.source).join(" "), "notes:harness review:harness env:user fallback:user");
+eq("the project's folders and its plugin folders', then the harness's, then the store's plugin folders', then pi's; a name found twice is the first one's; only direct .md files; a plugin folder without index.js is none", all.map((t) => t.name + ":" + t.source).join(" "), "review:project project:project plugproject:project notes:harness plugalpha:user plugzeta:user env:user fallback:user");
+eq("the descriptions, the body's first line cut to 60 characters", all.map((t) => t.description).join(" | "), "Review a change | Pi project | Project plugin | Harness notes | Alpha's prompt | Zeta's prompt | Env template | " + long.slice(0, 60));
+eq("the argument hint", all.map((t) => t.argumentHint).join("|"), "<path>|||||||");
+eq("an untrusted folder's are left out, its plugins' too", scanTemplates(folder, false, home, harness).map((t) => t.name + ":" + t.source).join(" "), "notes:harness review:harness plugalpha:user plugzeta:user env:user fallback:user");
 
 const made = new TemplateInfo("made", "/nowhere", "user");
 made.body = "Say $1 to $2.\n";
@@ -56,7 +69,7 @@ eq("a line that is not a command is the text as it came", expandTemplate("made x
 eq("the scanned template expands", expandTemplate('/review "a b" c', all), "Review a b in c.\n");
 
 delete process.env["PI_CODING_AGENT_DIR"];
-eq("without the variable pi's agent folder is under the home", scanTemplates(folder, true, home, harness).map((t) => t.name + ":" + t.source).join(" "), "review:project project:project notes:harness default:user");
+eq("without the variable pi's agent folder is under the home", scanTemplates(folder, true, home, harness).map((t) => t.name + ":" + t.source).join(" "), "review:project project:project plugproject:project notes:harness plugalpha:user plugzeta:user default:user");
 
 rmSync(root, { recursive: true, force: true });
 done();

@@ -1,13 +1,14 @@
 // The skills the harness offers, in the Agent Skills format: a folder holding a SKILL.md whose
 // frontmatter names it and says what it is for. They are found in the folder's `.agents/skills`,
-// `.claude/skills` and `.pi/skills` (a trusted folder's), then the user's `~/.agents/skills`,
-// `~/.claude/skills` and its synced folders, pi's agent folder and the harness's own under the
-// store; a name found twice is the first one's. pi's agent folder is `PI_CODING_AGENT_DIR` when
-// set, else `~/.pi/agent`. The system prompt lists the names and descriptions, and the Skill tool
-// gives the body when the model asks for one; a skill whose frontmatter says
-// `disable-model-invocation: true` is not listed for the model.
+// `.claude/skills` and `.pi/skills` and each plugin folder's `skills` under its `.widecode/plugins`
+// (a trusted folder's), then the user's `~/.agents/skills`, `~/.claude/skills` and its synced
+// folders, pi's agent folder, each plugin folder's `skills` under the store's `plugins` and the
+// harness's own under the store; a name found twice is the first one's. pi's agent folder is
+// `PI_CODING_AGENT_DIR` when set, else `~/.pi/agent`. The system prompt lists the names and
+// descriptions, and the Skill tool gives the body when the model asks for one; a skill whose
+// frontmatter says `disable-model-invocation: true` is not listed for the model.
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { listText, objectText } from "@light/lib/json.ts";
 import { readTextOr } from "@light/lib/fs.ts";
 
@@ -80,6 +81,16 @@ const names = (dir: string): string[] => {
   }
 };
 
+/** The plugin folders of `dir` (a folder of plugin folders): those holding an `index.js`, by name. */
+export const pluginFolders = (dir: string): string[] => {
+  const out: string[] = [];
+  for (const entry of names(dir)) {
+    const path = join(dir, entry);
+    if (isDir(path) && existsSync(join(path, "index.js"))) out.push(path);
+  }
+  return out;
+};
+
 /** The skills of `dir` (a folder of skill folders), named with `prefix`, into `out` past those named already. */
 const scanDir = (dir: string, source: string, prefix: string, out: SkillInfo[]): void => {
   for (const entry of names(dir)) {
@@ -103,6 +114,7 @@ export const scanSkills = (cwd: string, trusted: boolean, home: string, harnessR
     scanDir(join(cwd, ".agents", "skills"), "project", "", out);
     scanDir(join(cwd, ".claude", "skills"), "project", "", out);
     scanDir(join(cwd, ".pi", "skills"), "project", "", out);
+    for (const plugin of pluginFolders(join(cwd, ".widecode", "plugins"))) scanDir(join(plugin, "skills"), "project", "", out);
   }
   if (home.length > 0) {
     scanDir(join(home, ".agents", "skills"), "user", "", out);
@@ -112,7 +124,10 @@ export const scanSkills = (cwd: string, trusted: boolean, home: string, harnessR
   }
   const pi = piAgentDir(home);
   if (pi.length > 0) scanDir(join(pi, "skills"), "user", "", out);
-  if (harnessRoot.length > 0) scanDir(join(harnessRoot, "skills"), "harness", "", out);
+  if (harnessRoot.length > 0) {
+    for (const plugin of pluginFolders(join(dirname(harnessRoot), "plugins"))) scanDir(join(plugin, "skills"), "user", "", out);
+    scanDir(join(harnessRoot, "skills"), "harness", "", out);
+  }
   return out;
 };
 

@@ -1,14 +1,15 @@
 // Prompt templates in pi's format: a Markdown file whose name without `.md` is the command and
 // whose body is the prompt, with `$1`, `$@` and `${@:N:L}` expanded from the words after the
-// command. They are found in a trusted folder's `.widecode/prompts` and `.pi/prompts`, then the
-// harness's own `prompts` under the store, then pi's agent folder (`PI_CODING_AGENT_DIR` when
-// set, else `~/.pi/agent`); a name found twice is the first one's. The frontmatter's `description`
-// is the command's description, else the body's first non-empty line cut to 60 characters, and its
-// `argument-hint` is the hint a client shows beside the command.
+// command. They are found in a trusted folder's `.widecode/prompts` and `.pi/prompts` and each
+// plugin folder's `prompts` under its `.widecode/plugins`, then the harness's own `prompts` under
+// the store, each plugin folder's `prompts` under the store's `plugins`, then pi's agent folder
+// (`PI_CODING_AGENT_DIR` when set, else `~/.pi/agent`); a name found twice is the first one's. The
+// frontmatter's `description` is the command's description, else the body's first non-empty line cut
+// to 60 characters, and its `argument-hint` is the hint a client shows beside the command.
 import { readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { readTextOr } from "@light/lib/fs.ts";
-import { frontmatter, piAgentDir } from "./skills.ts";
+import { frontmatter, piAgentDir, pluginFolders } from "./skills.ts";
 
 /** How much of a body's first line the description takes when the frontmatter gives none. */
 const DESCRIPTION_MAX = 60;
@@ -75,8 +76,12 @@ export const scanTemplates = (cwd: string, trusted: boolean, home: string, harne
   if (trusted && cwd.length > 0) {
     scanDir(join(cwd, ".widecode", "prompts"), "project", out);
     scanDir(join(cwd, ".pi", "prompts"), "project", out);
+    for (const plugin of pluginFolders(join(cwd, ".widecode", "plugins"))) scanDir(join(plugin, "prompts"), "project", out);
   }
-  if (harnessRoot.length > 0) scanDir(join(harnessRoot, "prompts"), "harness", out);
+  if (harnessRoot.length > 0) {
+    scanDir(join(harnessRoot, "prompts"), "harness", out);
+    for (const plugin of pluginFolders(join(dirname(harnessRoot), "plugins"))) scanDir(join(plugin, "prompts"), "user", out);
+  }
   const pi = piAgentDir(home);
   if (pi.length > 0) scanDir(join(pi, "prompts"), "user", out);
   return out;
