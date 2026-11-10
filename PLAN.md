@@ -466,12 +466,19 @@ answers only `session/request_permission`.
       through `sendRequest`), answered by the acp plugin the way pi's RPC client answers
       `extension_ui_request`: dialogs to the request panel, notify, setStatus, setWidget lines,
       setTitle; `ctx.hasUI` false for a client that did not say it takes them.
-- [ ] **The rest of the API.** `pi.exec` over `proc.ts`; `appendEntry` as a `custom` entry kept on
+- [x] **An instance per session, and exec.** pi makes a runtime per session, so an extension's
+      module state is a session's: the engine stays one per folder and trust, and each session
+      evaluates every extension again with a `pi` of its own (its handlers, tools and commands
+      the session's; a Task subagent uses its parent's). `pi.exec(command, args, { signal,
+      timeout, cwd })` over `proc.ts` answering `{ stdout, stderr, code, killed, truncated }`;
+      the test-only sleep replaced by it.
+- [ ] **The rest of the API.** `appendEntry` as a `custom` entry kept on
       load and `ctx.sessionManager` read-only over the branch; `sendMessage` and
       `sendUserMessage` (steer, follow up); `getActiveTools`, `setActiveTools`, `getAllTools`;
       `setModel` and the thinking level; `pi.events`; the turn, agent, model, input, compaction
-      and shutdown events; `/reload`. What the harness offers beyond pi (files without Node) is
-      a namespace of its own, never under pi's names.
+      and shutdown events; `/reload`; a command or tool registered after the session opened
+      announced again (available_commands, the tool set). What the harness offers beyond pi
+      (files without Node) is a namespace of its own, never under pi's names.
 - [ ] **Extensions live as plugins do.** A saved file in an extensions folder reloads that file
       alone (its `session_shutdown`, then its source again and `session_start` with `reload`), the
       other extensions and the turn going on; a removed file takes its tools and commands away; a
@@ -514,6 +521,8 @@ answers only `session/request_permission`.
 
 ## Log
 
+- `e23ebd0`, `767b9c4` Milestone K, the UI over ACP: calls settle when their promise does,
+  `ctx.ui` as `_widecode/ui` requests and notifications. Test: `extensions`.
 - `cc701b1` Milestone K, the engine: extensions in pi's shape, tools, commands, five events.
   `276c5bf` the acp plugin's `_widecode/ui`. Tests: `ext-source`, `ext-names`, `extensions`,
   `acp-ui`.

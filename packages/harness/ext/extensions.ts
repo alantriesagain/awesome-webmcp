@@ -13,6 +13,7 @@ import { PluginSource, sourcesIn } from "@light/plugins/sources.ts";
 import { Abort } from "../loop/abort.ts";
 import { Message } from "../model/message.ts";
 import { HarnessPaths } from "../paths.ts";
+import { ExecProcess } from "../tools/proc.ts";
 import { ExtraTool, Tool, ToolContext, ToolOutcome } from "../tools/tool.ts";
 import { ExtContext } from "./context.ts";
 import { messagesFromPi, messagesToPi } from "./messages.ts";
@@ -52,6 +53,17 @@ export class ExtEntry {
 
   constructor(file: string) {
     this.file = file;
+  }
+}
+
+/** One file's source after the pass, with the entry its state is kept on. */
+class LoadedSource {
+  readonly entry: ExtEntry;
+  readonly code: string;
+
+  constructor(entry: ExtEntry, code: string) {
+    this.entry = entry;
+    this.code = code;
   }
 }
 
@@ -144,9 +156,10 @@ export class Extensions extends HostHandler {
   started = false;
   engine: JsEngine | null = null;
   private readonly entries: ExtEntry[] = [];
-  readonly handlers: HandlerRef[] = [];
-  readonly toolDefs: ExtToolDef[] = [];
-  readonly commandDefs: ExtCommand[] = [];
+  private readonly sources: LoadedSource[] = [];
+  private readonly instances = new Map<number, ExtSession>();
+  private instanceSeq = 0;
+  private readonly execs = new Map<number, ExecProcess>();
   private currentFile = "";
   private readonly contexts = new Map<number, ExtContext>();
   private readonly ctxEntries = new Map<number, ExtEntry>();
@@ -157,8 +170,6 @@ export class Extensions extends HostHandler {
   private readonly dialogs = new Map<number, ExtDialog>();
   private hostSettleId = -1;
   private activeEntry: ExtEntry | null = null;
-  private ready: Promise<void> = new Promise<void>((settle) => settle());
-  private toolSeq = 0;
 
   constructor(paths: HarnessPaths, folder: string, trusted: boolean, ui: ExtUiHost | null) {
     super();
@@ -203,7 +214,6 @@ export class Extensions extends HostHandler {
     }
     const settleId = engine.eval("JSON.stringify(__hostSettleId)", "harness:ext-prelude");
     if (settleId.status === OK) this.hostSettleId = num(parseJson(settleId.text), -1);
-    const starts: Promise<void>[] = [];
     for (const source of sources) {
       const entry = new ExtEntry(source.file);
       this.entries.push(entry);
@@ -213,35 +223,22 @@ export class Extensions extends HostHandler {
         log(passed.error);
         continue;
       }
-      this.currentFile = source.file;
-      engine.eval("__ext.begin(" + JSON.stringify(source.file) + ")", "harness:ext-begin");
-      const evaluated = engine.eval(passed.code, source.file);
-      this.currentFile = "";
-      if (evaluated.status !== OK) {
-        entry.enabled = false;
-        log("extension " + source.file + ": " + evaluated.message());
-        continue;
-      }
-      starts.push(this.startEntry(entry));
-    }
-    this.ready = this.settleStarts(starts);
-  }
-
-  private async startEntry(entry: ExtEntry): Promise<void> {
-    const started = await this.call(entry, 0, "[]", "start", null);
-    if (!started.ok) {
-      entry.enabled = false;
-      log("extension " + entry.file + ": " + started.error);
+      this.sources.push(new LoadedSource(entry, passed.code));
     }
   }
 
-  private async settleStarts(starts: Promise<void>[]): Promise<void> {
-    for (const p of starts) await p;
+  /** A session's instance: every enabled file evaluated again with a `pi` of its own, its handlers, tools and commands its own. */
+  instance(sessionId: string, cwd: string): ExtSession {
+    this.ensure();
+    const instance = new ExtSession(this, ++this.instanceSeq, sessionId, cwd.length > 0 ? cwd : this.folder);
+    this.instances.set(instance.id, instance);
+    instance.load(this.sources);
+    return instance;
   }
 
-  /** The handlers of `event` whose extension still runs. */
-  private forEvent(event: string): HandlerRef[] {
-    return this.handlers.filter((h) => h.event === event && h.entry.enabled);
+  instanceOf(id: number): ExtSession | null {
+    const found = this.instances.get(id);
+    return found === undefined ? null : found;
   }
 
   private switchOff(entry: ExtEntry, why: string): void {
@@ -261,7 +258,7 @@ export class Extensions extends HostHandler {
     log("extension " + entry.file + " (" + event + "): " + why);
   }
 
-  private ctxObject(ctx: ExtContext | null): Record<string, unknown> {
+  ctxObject(ctx: ExtContext | null): Record<string, unknown> {
     const out: Record<string, unknown> = { cwd: ctx !== null ? ctx.cwd : "", mode: "rpc", hasUI: ctx !== null && ctx.hasUI, model: null, aborted: ctx !== null && ctx.aborted };
     if (ctx !== null) {
       ctx.ctxId = ++this.ctxSeq;
@@ -431,17 +428,20 @@ export class Extensions extends HostHandler {
     switch (name) {
       case "extHandler": {
         const entry = this.entryOf(str(args[0]));
-        if (entry !== null) this.handlers.push(new HandlerRef(entry, str(args[1]), num(args[2], -1)));
+        const instance = this.instanceOf(num(args[1], -1));
+        if (entry !== null && instance !== null) instance.handlers.push(new HandlerRef(entry, str(args[2]), num(args[3], -1)));
         return new HostAnswer(OK, "null");
       }
       case "extTool": {
         const entry = this.entryOf(str(args[0]));
-        if (entry !== null) this.toolDefs.push(new ExtToolDef(entry, str(args[1]), str(args[2]), str(args[3]), args[4], num(args[5], -1)));
+        const instance = this.instanceOf(num(args[1], -1));
+        if (entry !== null && instance !== null) instance.toolDefs.push(new ExtToolDef(entry, str(args[2]), str(args[3]), str(args[4]), args[5], num(args[6], -1)));
         return new HostAnswer(OK, "null");
       }
       case "extCommand": {
         const entry = this.entryOf(str(args[0]));
-        if (entry !== null) this.commandDefs.push(new ExtCommand(entry, str(args[1]), str(args[2]), num(args[3], -1)));
+        const instance = this.instanceOf(num(args[1], -1));
+        if (entry !== null && instance !== null) instance.commandDefs.push(new ExtCommand(entry, str(args[2]), str(args[3]), num(args[4], -1)));
         return new HostAnswer(OK, "null");
       }
       case "extSettle": {
@@ -466,11 +466,30 @@ export class Extensions extends HostHandler {
         }
         return new HostAnswer(OK, "null");
       }
-      case "extSleep": {
-        const id = num(args[0], -1);
-        const ms = num(args[1], 0);
-        const entry = this.activeEntry;
-        if (entry !== null) setTimeout(() => this.settleHost(entry, id, "", "null"), ms);
+      case "extExec": {
+        const hostId = num(args[0], -1);
+        const execId = num(args[1], -1);
+        const instance = this.instanceOf(num(args[2], -1));
+        const entry = this.entryOf(str(args[3]));
+        const command = str(args[4]);
+        const argv: string[] = [];
+        for (const v of listOf(args[5])) argv.push(str(v));
+        const options = recordOf(args[6]) ?? {};
+        const wanted = str(options["cwd"]);
+        const cwd = wanted.length > 0 ? wanted : instance !== null ? instance.cwd : this.folder;
+        const run = new ExecProcess(command, argv, cwd, num(options["timeout"], 0));
+        this.execs.set(execId, run);
+        run.done.then((result) => {
+          this.execs.delete(execId);
+          if (entry === null) return;
+          const value: Record<string, unknown> = { stdout: result.stdout, stderr: result.stderr, code: result.code, killed: result.killed, truncated: result.truncated };
+          this.settleHost(entry, hostId, "", JSON.stringify(value));
+        });
+        return new HostAnswer(OK, "null");
+      }
+      case "extExecKill": {
+        const run = this.execs.get(num(args[0], -1));
+        if (run !== undefined) run.kill();
         return new HostAnswer(OK, "null");
       }
       case "extAbort": {
@@ -552,15 +571,78 @@ export class Extensions extends HostHandler {
     for (const entry of this.entries) if (entry.file === wanted) return entry;
     return null;
   }
+}
+
+/** One session's extensions: the same files evaluated again, with a `pi` of its own and what it registered. */
+export class ExtSession {
+  readonly owner: Extensions;
+  readonly id: number;
+  readonly sessionId: string;
+  readonly cwd: string;
+  readonly key: string;
+  readonly engine: JsEngine | null;
+  readonly handlers: HandlerRef[] = [];
+  readonly toolDefs: ExtToolDef[] = [];
+  readonly commandDefs: ExtCommand[] = [];
+  ready: Promise<void> = new Promise<void>((settle) => settle());
+  private toolSeq = 0;
+
+  constructor(owner: Extensions, id: number, sessionId: string, cwd: string) {
+    this.owner = owner;
+    this.id = id;
+    this.sessionId = sessionId;
+    this.cwd = cwd;
+    this.key = owner.key;
+    this.engine = owner.engine;
+  }
+
+  /** Evaluate every enabled file again in the shared engine, its default export called with this instance's `pi`. */
+  load(sources: LoadedSource[]): void {
+    const engine = this.engine;
+    if (engine === null) return;
+    const starts: Promise<void>[] = [];
+    for (const source of sources) {
+      if (!source.entry.enabled) continue;
+      const begin = engine.eval("__ext.begin(" + JSON.stringify(source.entry.file) + ", " + String(this.id) + ")", "harness:ext-begin");
+      if (begin.status !== OK) {
+        log("extension " + source.entry.file + ": " + begin.message());
+        continue;
+      }
+      const evaluated = engine.eval(source.code, source.entry.file);
+      if (evaluated.status !== OK) {
+        source.entry.enabled = false;
+        log("extension " + source.entry.file + ": " + evaluated.message());
+        continue;
+      }
+      starts.push(this.startEntry(source.entry));
+    }
+    this.ready = this.settleStarts(starts);
+  }
+
+  private async startEntry(entry: ExtEntry): Promise<void> {
+    const started = await this.owner.call(entry, 0, "[]", "start", null);
+    if (!started.ok) {
+      entry.enabled = false;
+      log("extension " + entry.file + ": " + started.error);
+    }
+  }
+
+  private async settleStarts(starts: Promise<void>[]): Promise<void> {
+    for (const p of starts) await p;
+  }
+
+  /** The handlers of `event` this instance registered whose extension still runs. */
+  private forEvent(event: string): HandlerRef[] {
+    return this.handlers.filter((h) => h.event === event && h.entry.enabled);
+  }
 
   /** session_start, after the files loaded: startup for a new session of this pair first, then new; resume and fork as asked. */
   async sessionStart(reason: string, ctx: ExtContext): Promise<void> {
-    this.ensure();
     await this.ready;
     if (this.engine === null) return;
-    const actual = reason === "new" && !this.started ? "startup" : reason;
-    this.started = true;
-    for (const h of this.forEvent("session_start")) await this.call(h.entry, h.id, JSON.stringify([{ type: "session_start", reason: actual }, this.ctxObject(ctx)]), "session_start", ctx);
+    const actual = reason === "new" && !this.owner.started ? "startup" : reason;
+    this.owner.started = true;
+    for (const h of this.forEvent("session_start")) await this.owner.call(h.entry, h.id, JSON.stringify([{ type: "session_start", reason: actual }, this.owner.ctxObject(ctx)]), "session_start", ctx);
   }
 
   /** before_agent_start: a system prompt replacement and custom messages from the handlers. */
@@ -569,7 +651,7 @@ export class Extensions extends HostHandler {
     let current = systemPrompt;
     for (const h of this.forEvent("before_agent_start")) {
       const event: Record<string, unknown> = { type: "before_agent_start", prompt, images, systemPrompt: current };
-      const r = await this.call(h.entry, h.id, JSON.stringify([event, this.ctxObject(ctx)]), "before_agent_start", ctx);
+      const r = await this.owner.call(h.entry, h.id, JSON.stringify([event, this.owner.ctxObject(ctx)]), "before_agent_start", ctx);
       if (!r.ok) continue;
       const value = recordOf(parseJson(r.text));
       const answer = value !== null ? recordOf(value["result"]) : null;
@@ -595,7 +677,7 @@ export class Extensions extends HostHandler {
     let replacement: Message[] | null = null;
     for (const h of this.forEvent("context")) {
       const event: Record<string, unknown> = { type: "context", messages: parseJson(current) };
-      const r = await this.call(h.entry, h.id, JSON.stringify([event, this.ctxObject(ctx)]), "context", ctx);
+      const r = await this.owner.call(h.entry, h.id, JSON.stringify([event, this.owner.ctxObject(ctx)]), "context", ctx);
       if (!r.ok) continue;
       const value = recordOf(parseJson(r.text));
       const answer = value !== null ? recordOf(value["result"]) : null;
@@ -618,7 +700,7 @@ export class Extensions extends HostHandler {
     let input = toPiInput(toolName, recordOf(parseJson(inputJson.length > 0 ? inputJson : "{}")) ?? {});
     for (const h of handlers) {
       const event: Record<string, unknown> = { type: "tool_call", toolCallId, toolName: piName, input };
-      const r = await this.call(h.entry, h.id, JSON.stringify([event, this.ctxObject(ctx)]), "tool_call", ctx);
+      const r = await this.owner.call(h.entry, h.id, JSON.stringify([event, this.owner.ctxObject(ctx)]), "tool_call", ctx);
       if (!r.ok) {
         out.block = true;
         out.reason = "blocked by " + h.entry.file + ": " + (r.error.length > 0 ? r.error : "the extension failed");
@@ -650,7 +732,7 @@ export class Extensions extends HostHandler {
     let isError = outcome.isError;
     for (const h of handlers) {
       const event: Record<string, unknown> = { type: "tool_result", toolCallId, toolName: piName, input: piInput, content: parseJson(content), details, isError };
-      const r = await this.call(h.entry, h.id, JSON.stringify([event, this.ctxObject(ctx)]), "tool_result", ctx);
+      const r = await this.owner.call(h.entry, h.id, JSON.stringify([event, this.owner.ctxObject(ctx)]), "tool_result", ctx);
       if (!r.ok) continue;
       const value = recordOf(parseJson(r.text));
       const answer = value !== null ? recordOf(value["result"]) : null;
@@ -664,7 +746,7 @@ export class Extensions extends HostHandler {
     outcome.detailsJson = details === null ? "" : JSON.stringify(details);
   }
 
-  /** The commands this pair's extensions registered, enabled ones only. */
+  /** The commands this instance's extensions registered, enabled ones only. */
   commands(): ExtCommand[] {
     return this.commandDefs.filter((c) => c.entry.enabled);
   }
@@ -676,8 +758,13 @@ export class Extensions extends HostHandler {
 
   /** Run a command's handler; `error` says why it failed ("" when it ran). */
   async runCommand(command: ExtCommand, args: string, ctx: ExtContext): Promise<string> {
-    const r = await this.call(command.entry, command.handlerId, JSON.stringify([args, this.ctxObject(ctx)]), "command " + command.name, ctx);
+    const r = await this.owner.call(command.entry, command.handlerId, JSON.stringify([args, this.owner.ctxObject(ctx)]), "command " + command.name, ctx);
     return r.ok ? "" : r.error;
+  }
+
+  /** Dialogs this instance's session opened resolve to their defaults. */
+  cancelDialogs(sessionId: string): void {
+    this.owner.cancelDialogs(sessionId);
   }
 
   /** The tools to offer the model, one per registered tool, a disabled extension's left out. */
@@ -709,8 +796,8 @@ export class Extensions extends HostHandler {
     ctx.sessionId = toolCtx.sessionId;
     ctx.hasUI = toolCtx.hasUI;
     const callId = "ext_" + String(++this.toolSeq);
-    const args = JSON.stringify([callId, recordOf(parseJson(inputJson.length > 0 ? inputJson : "{}")) ?? {}, this.ctxObject(ctx)]);
-    const r = await this.call(def.entry, def.executeId, args, "tool " + def.name, ctx);
+    const args = JSON.stringify([callId, recordOf(parseJson(inputJson.length > 0 ? inputJson : "{}")) ?? {}, this.owner.ctxObject(ctx)]);
+    const r = await this.owner.call(def.entry, def.executeId, args, "tool " + def.name, ctx);
     if (!r.ok) return ToolOutcome.failed("the extension " + def.entry.file + " failed: " + r.error);
     return outcomeOf(parseJson(r.text));
   }
@@ -777,7 +864,7 @@ const outcomeOf = (value: unknown): ToolOutcome => {
   return out;
 };
 
-/** The extensions of the daemon's sessions, one instance per (folder, trusted) pair. */
+/** The extensions of the daemon's sessions: one engine per (folder, trusted) pair, an instance per session. */
 export class ExtensionsRegistry {
   private readonly paths: HarnessPaths;
   private readonly ui: ExtUiHost | null;

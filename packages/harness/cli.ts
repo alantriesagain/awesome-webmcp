@@ -105,7 +105,7 @@ export const harnessMain = (storeRoot: string, args: string[], build: string): P
     // In the folder the command runs in: the user's rules and the project's, and the tools its extensions register.
     const cwd = process.cwd();
     const rules = parseRules(rulesIn(paths.configPath()).concat(rulesIn(join(cwd, ".widecode", "config.json"))));
-    const extensions = new ExtensionsRegistry(paths).forSession(cwd, folderTrusted(paths, cwd));
+    const extensions = new ExtensionsRegistry(paths).forSession(cwd, folderTrusted(paths, cwd)).instance("", cwd);
     process.stdout.write(toolsListing(tools, rules, extensions.tools().map((t) => t.name)) + "\n");
     return done(0);
   }

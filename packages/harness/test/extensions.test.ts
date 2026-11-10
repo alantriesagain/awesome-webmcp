@@ -290,18 +290,18 @@ const main = async (): Promise<void> => {
     rig.close();
   }
 
-  // A tool_call handler that sleeps in its promise still decides before the call runs.
+  // A tool_call handler that waits in its promise still decides before the call runs.
   {
     const rig = new Rig(['{"match":"sleepblock","text":"Running.","tools":[{"name":"Bash","input":{"command":"echo hi"}}]}', '{"match":"result","text":"Blocked after sleep."}'].join("\n"));
     rig.extension([
       "export default function (pi) {",
-      '  pi.on("tool_call", async () => { await globalThis.__harnessTest.sleep(30); return { block: true, reason: "slept first" }; });',
+      '  pi.on("tool_call", async () => { await pi.exec("sleep", ["0.03"]); return { block: true, reason: "slept first" }; });',
       "}",
     ].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
     await rig.prompt(sid, "sleepblock");
     const turn = rig.taken();
-    ok("a slept tool_call handler still blocks the call", toolText(turn).includes("blocked by") && toolText(turn).includes("slept first"));
+    ok("a waiting tool_call handler still blocks the call", toolText(turn).includes("blocked by") && toolText(turn).includes("slept first"));
     eq("the turn goes on after the block", text(turn), "Running.Blocked after sleep.");
     rig.close();
   }
@@ -311,7 +311,7 @@ const main = async (): Promise<void> => {
     const rig = new Rig(['{"match":"slowtool","text":"Calling.","tools":[{"name":"slow","input":{}}]}', '{"match":"result","text":"Slow done."}'].join("\n"));
     rig.extension([
       "export default function (pi) {",
-      '  pi.registerTool({ name: "slow", label: "Slow", description: "Answer later", parameters: { type: "object" }, execute: async () => { await globalThis.__harnessTest.sleep(30); return { content: [{ type: "text", text: "after sleep" }] }; } });',
+      '  pi.registerTool({ name: "slow", label: "Slow", description: "Answer later", parameters: { type: "object" }, execute: async () => { await pi.exec("sleep", ["0.03"]); return { content: [{ type: "text", text: "after sleep" }] }; } });',
       "}",
     ].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -349,7 +349,7 @@ const main = async (): Promise<void> => {
     const logFile = rig.logFile();
     rig.extension([
       "export default function (pi) {",
-      '  pi.registerCommand("slowcmd", { description: "Answer later", handler: async (args, ctx) => { await globalThis.__harnessTest.sleep(30); ctx.ui.notify("command slept"); } });',
+      '  pi.registerCommand("slowcmd", { description: "Answer later", handler: async (args, ctx) => { await pi.exec("sleep", ["0.03"]); ctx.ui.notify("command slept"); } });',
       "}",
     ].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -357,17 +357,17 @@ const main = async (): Promise<void> => {
     const before = rig.asks().length;
     await rig.prompt(sid, "/slowcmd now");
     const command = rig.taken();
-    ok("the command is answered after its sleep, without a turn", command.some((line) => line.includes('"stopReason":"end_turn"')) && rig.asks().length === before);
+    ok("the command is answered after its wait, without a turn", command.some((line) => line.includes('"stopReason":"end_turn"')) && rig.asks().length === before);
     ok("its continuation ran", readFileSync(logFile, "utf8").includes("command slept"));
     rig.close();
   }
 
-  // Two sessions of one folder with handlers sleeping at once both answer.
+  // Two sessions of one folder with handlers waiting at once both answer.
   {
     const rig = new Rig(['{"match":"first","text":"First answer."}', '{"match":"second","text":"Second answer."}'].join("\n"));
     rig.extension([
       "export default function (pi) {",
-      '  pi.on("before_agent_start", async () => { await globalThis.__harnessTest.sleep(40); });',
+      '  pi.on("before_agent_start", async () => { await pi.exec("sleep", ["0.04"]); });',
       "}",
     ].join("\n"));
     const one = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -376,7 +376,7 @@ const main = async (): Promise<void> => {
     rig.taken();
     await Promise.all([rig.prompt(one, "first"), rig.prompt(two, "second")]);
     const both = rig.taken();
-    ok("both sleeping sessions are answered", text(both).includes("First answer.") && text(both).includes("Second answer."));
+    ok("both waiting sessions are answered", text(both).includes("First answer.") && text(both).includes("Second answer."));
     rig.close();
   }
 
@@ -386,7 +386,7 @@ const main = async (): Promise<void> => {
     const logFile = rig.logFile();
     rig.extension([
       "export default function (pi) {",
-      '  pi.on("before_agent_start", async () => { await globalThis.__harnessTest.sleep(20); while (true) {} });',
+      '  pi.on("before_agent_start", async () => { await pi.exec("sleep", ["0.02"]); while (true) {} });',
       "}",
     ].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -559,13 +559,91 @@ const main = async (): Promise<void> => {
     rig.close();
   }
 
-  // No file, no engine; the same pair shares the instance.
+  // Two sessions of one folder each get their own module state.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  let n = 0;',
+      '  pi.registerCommand("count", { handler: (a, ctx) => { n++; ctx.ui.notify(String(n)); } });',
+      "}",
+    ].join("\n"));
+    rig.initialize(true);
+    const one = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    const two = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(one, "/count");
+    eq("the first session counts from 1", String((await rig.uiNotification("notify"))["message"]), "1");
+    await rig.prompt(two, "/count");
+    eq("the second session counts from 1 too", String((await rig.uiNotification("notify"))["message"]), "1");
+    await rig.prompt(one, "/count");
+    eq("and the first keeps its own count", String((await rig.uiNotification("notify"))["message"]), "2");
+    rig.close();
+  }
+
+  // What an instance registers later is its own, though another session's instance began after it.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.registerCommand("reg", { handler: (a, ctx) => { pi.registerCommand("late", { handler: (b, c) => { c.ui.notify("late"); } }); ctx.ui.notify("registered"); } });',
+      "}",
+    ].join("\n"));
+    rig.initialize(true);
+    const one = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    const two = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(one, "/reg");
+    eq("the first session registers a command", String((await rig.uiNotification("notify"))["message"]), "registered");
+    await rig.prompt(one, "/late");
+    const late = await rig.uiNotification("notify");
+    ok("and it runs in that session", late["message"] === "late" && late["sessionId"] === one && two.length > 0);
+    rig.close();
+  }
+
+  // pi.exec: the streams and code, a failing command, a shell exit, a timeout, the session's folder and a cap.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.registerCommand("exechi", { handler: async (a, ctx) => { const r = await pi.exec("printf", ["hi"]); ctx.ui.notify("hi:" + r.stdout + ":" + String(r.code)); } });',
+      '  pi.registerCommand("execfail", { handler: async (a, ctx) => { const r = await pi.exec("false", []); ctx.ui.notify("fail:" + String(r.code)); } });',
+      '  pi.registerCommand("exitsh", { handler: async (a, ctx) => { const r = await pi.exec("sh", ["-c", "exit 3"]); ctx.ui.notify("sh:" + String(r.code)); } });',
+      '  pi.registerCommand("exectimeout", { handler: async (a, ctx) => { const r = await pi.exec("sleep", ["5"], { timeout: 100 }); ctx.ui.notify("to:" + String(r.killed)); } });',
+      '  pi.registerCommand("execpwd", { handler: async (a, ctx) => { const r = await pi.exec("pwd", []); ctx.ui.notify("pwd:" + r.stdout.trim()); } });',
+      '  pi.registerCommand("exectrunc", { handler: async (a, ctx) => { const r = await pi.exec("sh", ["-c", "seq 1 20000"]); ctx.ui.notify("tr:" + String(r.truncated)); } });',
+      "}",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "/exechi");
+    eq("printf hi answers its stdout and code 0", String((await rig.uiNotification("notify"))["message"]), "hi:hi:0");
+    await rig.prompt(sid, "/execfail");
+    ok("a failing command answers its code", String((await rig.uiNotification("notify"))["message"]) === "fail:1");
+    await rig.prompt(sid, "/exitsh");
+    eq("sh -c exit 3 answers code 3", String((await rig.uiNotification("notify"))["message"]), "sh:3");
+    const started = Date.now();
+    await rig.prompt(sid, "/exectimeout");
+    const elapsed = Date.now() - started;
+    eq("a timeout kills the child", String((await rig.uiNotification("notify"))["message"]), "to:true");
+    ok("and answers well under five seconds", elapsed < 3000);
+    await rig.prompt(sid, "/execpwd");
+    eq("cwd defaults to the session's folder", String((await rig.uiNotification("notify"))["message"]), "pwd:" + rig.folder);
+    await rig.prompt(sid, "/exectrunc");
+    eq("a long stream is cut and says so", String((await rig.uiNotification("notify"))["message"]), "tr:true");
+    rig.close();
+  }
+
+  // No file, no engine; the same pair stays one.
   {
     const folder = mkdtempSync(join(tmpdir(), "harness-ext-empty-"));
     const registry = new ExtensionsRegistry(new HarnessPaths(join(folder, "home")));
     const one = registry.forSession(folder, true);
     const two = registry.forSession(folder, true);
-    ok("no extension file makes no engine, and the pair shares its instance", one.engine === null && one === two);
+    ok("no extension file makes no engine, and the pair stays one", one.engine === null && one === two);
     rmSync(folder, { recursive: true, force: true });
   }
 

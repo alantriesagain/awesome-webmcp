@@ -10,6 +10,7 @@ export const EXT_PRELUDE: string =
   const fns = [];
   let seq = 0;
   let file = "";
+  let instance = 0;
   const call = (name, ...args) => parse(__host(name, stringify(args)));
   const fn = (f) => {
     fns.push(f);
@@ -132,9 +133,10 @@ export const EXT_PRELUDE: string =
       if (r !== null && typeof r === "object" && typeof r.then === "function") return r.then((v) => ({ result: v === undefined ? null : v, input: event.input }));
       return { result: r === undefined ? null : r, input: event.input };
     });
-  const pi = {
+  // A pi of its own per file and instance: what it registers or runs later is that instance's.
+  const piFor = (file, instance) => ({
     on: (name, handler) => {
-      call("extHandler", file, name, handled(handler));
+      call("extHandler", file, instance, name, handled(handler));
     },
     registerTool: (def) => {
       if (def === null || typeof def !== "object" || typeof def.name !== "string" || typeof def.execute !== "function") throw new Error("pi.registerTool: a tool needs a name and execute()");
@@ -142,33 +144,48 @@ export const EXT_PRELUDE: string =
         const c = ctxOf(ctx);
         return def.execute(toolCallId, params, c.signal, () => {}, c);
       });
-      call("extTool", file, def.name, def.label === undefined ? def.name : String(def.label), def.description === undefined ? "" : String(def.description), def.parameters === undefined ? { type: "object" } : def.parameters, id);
+      call("extTool", file, instance, def.name, def.label === undefined ? def.name : String(def.label), def.description === undefined ? "" : String(def.description), def.parameters === undefined ? { type: "object" } : def.parameters, id);
     },
     registerCommand: (name, def) => {
       if (typeof name !== "string" || def === null || typeof def !== "object" || typeof def.handler !== "function") throw new Error("pi.registerCommand: a command needs a name and handler()");
       const id = fn((args, ctx) => def.handler(args, ctxOf(ctx)));
-      call("extCommand", file, name, def.description === undefined ? "" : String(def.description), id);
+      call("extCommand", file, instance, name, def.description === undefined ? "" : String(def.description), id);
     },
-  };
+    exec: (command, args, options) => {
+      const o = options === null || typeof options !== "object" ? {} : options;
+      const opts = {
+        cwd: typeof o.cwd === "string" ? o.cwd : "",
+        timeout: typeof o.timeout === "number" && o.timeout > 0 ? o.timeout : 0,
+      };
+      const argv = Array.isArray(args) ? args.map((a) => String(a)) : [];
+      const execId = ++seq;
+      const progressed = hostLater("extExec", [execId, instance, file, String(command), argv, opts]);
+      const kill = () => __host("extExecKill", stringify([execId]));
+      const sig = o.signal;
+      if (sig !== undefined && sig !== null) {
+        if (sig.aborted === true) kill();
+        else if (typeof sig.addEventListener === "function") sig.addEventListener("abort", kill);
+      }
+      return progressed;
+    },
+  });
   globalThis.__ext = {
     main: null,
-    begin(f) {
+    begin(f, i) {
       file = f;
+      instance = i;
       __ext.main = null;
     },
     start() {
       const m = __ext.main;
       if (typeof m !== "function") throw new Error(file + ": no default export function");
-      return m(pi);
+      return m(piFor(file, instance));
     },
   };
   const start = fn(() => __ext.start());
   globalThis.__startId = start;
   const hostSettleId = fn((id, error, value) => hostSettle(id, error, value));
   globalThis.__hostSettleId = hostSettleId;
-  globalThis.__harnessTest = {
-    sleep: (ms) => hostLater("extSleep", [ms]),
-  };
   globalThis.__invoke = (id, json) => {
     const f = fns[id];
     if (typeof f !== "function") throw new Error("extension: no function " + String(id));

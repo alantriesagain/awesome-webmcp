@@ -36,7 +36,7 @@ import { Tool, ToolOutcome, ToolSet } from "../tools/tool.ts";
 import { WebSettings } from "../tools/web.ts";
 import { parseRules, rulesIn } from "../tools/permissions.ts";
 import { ExtContext } from "../ext/context.ts";
-import { ExtCommand, Extensions, ExtensionsRegistry, ExtUiHost } from "../ext/extensions.ts";
+import { ExtCommand, ExtSession, ExtensionsRegistry, ExtUiHost } from "../ext/extensions.ts";
 import { join } from "node:path";
 import { Choice, ConfigOptions } from "./options.ts";
 import { AcpServer, Incoming } from "./server.ts";
@@ -81,8 +81,8 @@ export class HarnessSession {
   titled = false;
   /** The prompt templates the session offers, scanned when it opens. */
   templates: TemplateInfo[] = [];
-  /** The extensions of the session's folder and trust (null until the session opens). */
-  ext: Extensions | null = null;
+  /** The session's extension instance (null until the session opens). */
+  ext: ExtSession | null = null;
   /** Settles once the session's extensions had their session_start (a turn starts after). */
   started: Promise<void> = new Promise<void>((settle) => settle());
 
@@ -171,11 +171,12 @@ export class AcpAgent {
     return new SessionStore(this.paths.sessionsDir(cwd));
   }
 
-  /** The session's extension pair; a folder or trust that changed gets its own. */
-  private extFor(s: HarnessSession): Extensions {
+  /** The session's extension instance; a folder or trust that changed gets a new one for the new pair. */
+  private extFor(s: HarnessSession): ExtSession {
     const key = this.extensions.keyFor(s.cwd, s.trusted);
     if (s.ext === null || s.ext.key !== key) {
-      s.ext = this.extensions.forSession(s.cwd, s.trusted);
+      // A closed session's instance stays in the engine until the daemon ends (the agent has no per-session close).
+      s.ext = this.extensions.forSession(s.cwd, s.trusted).instance(s.id, s.cwd);
       s.loop.ext = s.ext;
     }
     return s.ext;
@@ -622,7 +623,7 @@ export class AcpAgent {
   }
 
   /** The extension's before_agent_start before the turn's first request. */
-  private async beforeTurn(s: HarnessSession, text: string, images: Part[], ext: Extensions): Promise<void> {
+  private async beforeTurn(s: HarnessSession, text: string, images: Part[], ext: ExtSession): Promise<void> {
     const attached: Record<string, unknown>[] = [];
     for (const image of images) attached.push({ type: "image", data: image.data, mimeType: image.mediaType });
     const answer = await ext.beforeAgentStart(text, attached, s.loop.system.join("\n\n"), this.extContext(s, s.abort));

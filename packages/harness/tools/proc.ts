@@ -47,6 +47,88 @@ export class ChildEnd {
   error = "";
 }
 
+/** What `pi.exec` answers: the two streams, the exit code, whether it was killed, whether either stream was cut. */
+export class ExecResult {
+  stdout = "";
+  stderr = "";
+  code = -1;
+  killed = false;
+  truncated = false;
+}
+
+/** One child for `pi.exec`: spawned without a shell, its streams capped as Bash's, a timeout and a kill handle. */
+export class ExecProcess {
+  readonly result = new ExecResult();
+  readonly done: Promise<ExecResult>;
+  private child: ChildProcess | null = null;
+  private resolveDone: ((r: ExecResult) => void) | null = null;
+  private finished = false;
+  private readonly out = new CappedText(20000, 10000);
+  private readonly err = new CappedText(20000, 10000);
+  private killTimer: ReturnType<typeof setTimeout> | null = null;
+  private timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(command: string, args: string[], cwd: string, timeoutMs: number) {
+    this.done = new Promise<ExecResult>((resolve) => {
+      this.resolveDone = resolve;
+    });
+    const outDecoder = new StringDecoder("utf8");
+    const errDecoder = new StringDecoder("utf8");
+    let child: ChildProcess;
+    try {
+      child = spawn(command, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    } catch (e) {
+      this.result.stderr = e instanceof Error ? e.message : "the command could not start";
+      this.finish();
+      return;
+    }
+    this.child = child;
+    child.stdout!.on("data", (c: Buffer) => this.out.push(outDecoder.write(c)));
+    child.stderr!.on("data", (c: Buffer) => this.err.push(errDecoder.write(c)));
+    child.on("error", (e: Error) => {
+      this.result.stderr = this.result.stderr.length > 0 ? this.result.stderr + "\n" + e.message : e.message;
+      this.finish();
+    });
+    child.on("close", (code: number | null) => {
+      this.out.push(outDecoder.end());
+      this.err.push(errDecoder.end());
+      this.result.code = code === null ? -1 : code;
+      this.finish();
+    });
+    if (timeoutMs > 0) {
+      this.timeoutTimer = setTimeout(() => {
+        this.result.killed = true;
+        this.kill();
+      }, timeoutMs);
+    }
+  }
+
+  /** End the child now (SIGTERM, SIGKILL after two seconds); the result says it was killed. */
+  kill(): void {
+    const child = this.child;
+    if (child === null || this.finished) return;
+    this.result.killed = true;
+    child.kill("SIGTERM");
+    if (this.killTimer === null) {
+      this.killTimer = setTimeout(() => {
+        if (!this.finished) child.kill("SIGKILL");
+      }, 2000);
+    }
+  }
+
+  private finish(): void {
+    if (this.finished) return;
+    this.finished = true;
+    if (this.timeoutTimer !== null) clearTimeout(this.timeoutTimer);
+    if (this.killTimer !== null) clearTimeout(this.killTimer);
+    this.result.stdout = this.out.text();
+    this.result.stderr = this.err.text();
+    this.result.truncated = this.out.omitted > 0 || this.err.omitted > 0;
+    const resolveDone = this.resolveDone;
+    if (resolveDone !== null) resolveDone(this.result);
+  }
+}
+
 /** Run `command` with bash in `cwd` (Claude Code's own variables removed), the output to `onOutput` as it comes and into the cap; killed past `timeoutMs` or on abort. */
 export const runBash = (command: string, cwd: string, timeoutMs: number, output: CappedText, onOutput: ((text: string) => void) | null, abort: Abort): Promise<ChildEnd> =>
   new Promise<ChildEnd>((settle) => {

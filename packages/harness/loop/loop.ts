@@ -19,7 +19,7 @@ import { DenyRule, deniedBy } from "../tools/permissions.ts";
 import { parseJson, recordOf } from "@light/lib/json.ts";
 import { Tool, ToolContext, ToolOutcome, ToolSet } from "../tools/tool.ts";
 import { turnNote } from "../prompt/system.ts";
-import { Extensions } from "../ext/extensions.ts";
+import { ExtSession } from "../ext/extensions.ts";
 import { ExtContext } from "../ext/context.ts";
 
 const two = (n: number): string => (n < 10 ? "0" : "") + String(n);
@@ -79,8 +79,8 @@ export class LoopSession {
   /** Whether the model reads images, and the images the next prompt carries (taken by `run`). */
   vision = false;
   pendingImages: Part[] = [];
-  /** The extensions of the session's folder and trust (null for none). */
-  ext: Extensions | null = null;
+  /** The session's extension instance (null for none). */
+  ext: ExtSession | null = null;
   /** A `before_agent_start` handler's custom user messages, added after the prompt. */
   pendingNotes: string[] = [];
   /** The context's size after the last request (its real count), and how many messages there were then. */
