@@ -495,7 +495,7 @@ The app's runtime evaluates the file and runs `activate`; the harness daemon eva
 file in its own engine and runs `agent`. A plugin lives in a folder of its own (`plugins/<id>/`:
 `index.js`, its `skills/` and `prompts/`, a README), a single `plugins/<id>.js` still loading.
 
-- [ ] **One plugin, two parts.** The harness loads widecode's plugins: the built-in ones (the app
+- [x] **One plugin, two parts.** The harness loads widecode's plugins: the built-in ones (the app
       hands the daemon their sources; the daemon is the same binary), the store's `plugins/` and a
       trusted folder's `.widecode/plugins/`, in the app's order and override rule (an id defined
       again replaces the earlier). Its prelude defines `widecode.plugin`, `widecode.util` and a

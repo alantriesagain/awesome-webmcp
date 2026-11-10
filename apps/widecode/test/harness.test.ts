@@ -175,8 +175,10 @@ const main = async (): Promise<void> => {
   eq("check: a source that loads, its plugin, a requirement nobody provides and a globalThis write as warnings", [good.ok, good.plugins.map((p) => p.id + ":" + p.requires.join("+")).join(","), good.errors.length, good.warnings.join(" | ")].join(" / "), "true / zed:nope / 0 / zed requires nope, which no plugin provides | a write to globalThis reaches every plugin and outlives a reload of the file");
   const broken = JSON.parse((await callTool("check", JSON.stringify({ code: "widecode.plugin({ id: " }))).text) as { ok: boolean; errors: string[] };
   ok("a syntax error", !broken.ok && broken.errors.length === 1 && broken.errors[0].includes("SyntaxError"));
-  const bare = JSON.parse((await callTool("check", JSON.stringify({ code: 'widecode.plugin({ id: "x" });' }))).text) as { ok: boolean; errors: string[] };
-  ok("a plugin without activate", !bare.ok && bare.errors[0].includes("a plugin needs an id and activate(api)"));
+  const bare = JSON.parse((await callTool("check", JSON.stringify({ code: 'widecode.plugin({ id: "x" });' }))).text) as { ok: boolean; plugins: { id: string }[]; errors: string[] };
+  ok("a plugin without activate loads, registering nothing", bare.ok && bare.errors.length === 0 && bare.plugins[0].id === "x");
+  const noId = JSON.parse((await callTool("check", JSON.stringify({ code: 'widecode.plugin({ activate(api) {} });' }))).text) as { ok: boolean; errors: string[] };
+  ok("a plugin without an id is refused", !noId.ok && noId.errors[0].includes("a plugin needs an id"));
   const none = JSON.parse((await callTool("check", JSON.stringify({ code: "const x = 1;" }))).text) as { ok: boolean; errors: string[] };
   ok("a file registering nothing", !none.ok && none.errors[0].includes("registers no plugin"));
   const replacing = JSON.parse((await callTool("check", JSON.stringify({ code: 'widecode.plugin({ id: "greeter", activate(api) {} });', file: ".widecode/plugins/other.js" }))).text) as { warnings: string[] };

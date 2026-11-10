@@ -994,6 +994,204 @@ declare namespace widecode {
     tools: string[];
   }
 
+  /** A part of a message the agent reads: text, an image, the assistant's thinking or a call. */
+  interface AgentTextPart {
+    type: "text";
+    text: string;
+  }
+
+  interface AgentImagePart {
+    type: "image";
+    data: string;
+    mimeType: string;
+  }
+
+  interface AgentThinkingPart {
+    type: "thinking";
+    thinking: string;
+    thinkingSignature?: string;
+  }
+
+  interface AgentToolCallPart {
+    type: "toolCall";
+    id: string;
+    name: string;
+    arguments: unknown;
+  }
+
+  type AgentMessagePart = AgentTextPart | AgentImagePart | AgentThinkingPart | AgentToolCallPart;
+
+  /** One message in the agent's shape, as the context event and a handler's answer hold it. */
+  interface AgentMessage {
+    role: "user" | "assistant" | "toolResult";
+    content?: AgentMessagePart[] | string;
+    toolCallId?: string;
+    toolName?: string;
+    isError?: boolean;
+  }
+
+  /** The turn's abort: it fires once, and its listeners hear it. */
+  interface AgentSignal {
+    aborted: boolean;
+    addEventListener(name: string, listener: (event: unknown) => void): void;
+    removeEventListener(name: string, listener: (event: unknown) => void): void;
+  }
+
+  /** A session's entries as the agent keeps them. */
+  interface AgentSessionManager {
+    getSessionId(): string;
+    getSessionFile(): string | undefined;
+    getCwd(): string;
+    getSessionName(): string | undefined;
+    getLeafId(): string;
+    getHeader(): unknown;
+    getEntries(): unknown[];
+    getBranch(): unknown[];
+    getEntry(id: string): unknown;
+  }
+
+  /** The dialog and status calls a plugin's handlers have when the client takes them. */
+  interface AgentUi {
+    select(title: string, options: string[], opts?: { timeout?: number; signal?: AgentSignal }): Promise<string | undefined>;
+    input(title: string, placeholder?: string, opts?: { timeout?: number; signal?: AgentSignal }): Promise<string | undefined>;
+    editor(title: string, prefill?: string): Promise<string | undefined>;
+    confirm(title: string, message?: string, opts?: { timeout?: number; signal?: AgentSignal }): Promise<boolean>;
+    notify(message: string, type?: string): void;
+    setStatus(key: string, text?: string | null): void;
+    setWidget(key: string, content?: string[] | (() => string[]), options?: string | { placement?: string }): void;
+    setTitle(title: string): void;
+    setEditorText(text: string): void;
+    pasteToEditor(text: string): void;
+    getEditorText(): string;
+  }
+
+  /** What a handler gets besides its event: the folder and mode, the model, the turn's abort, the session and the UI. */
+  interface AgentContext {
+    cwd: string;
+    mode: string;
+    sessionManager: AgentSessionManager;
+    hasUI: boolean;
+    model: { provider: string; id: string } | null;
+    signal: AgentSignal;
+    abort(): void;
+    isIdle(): boolean;
+    getContextUsage(): { tokens: number; contextWindow: number; percent: number | null };
+    getSystemPrompt(): string;
+    ui: AgentUi;
+  }
+
+  /** A session's start, after the files loaded. */
+  interface SessionStartEvent {
+    type: "session_start";
+    reason: string;
+  }
+
+  /** A turn is about to start: the prompt, its images and the system prompt. */
+  interface BeforeAgentStartEvent {
+    type: "before_agent_start";
+    prompt: string;
+    images: unknown[];
+    systemPrompt: string;
+  }
+
+  /** What a before_agent_start handler may answer: a system prompt and a message for the turn. */
+  interface BeforeAgentStartAnswer {
+    systemPrompt?: string;
+    message?: AgentMessage;
+  }
+
+  /** The messages one request sends. */
+  interface ContextEvent {
+    type: "context";
+    messages: AgentMessage[];
+  }
+
+  /** What a context handler may answer: the messages to send instead. */
+  interface ContextAnswer {
+    messages?: AgentMessage[];
+  }
+
+  /** A tool call by the harness's own tool name and input. */
+  interface ToolCallEvent {
+    type: "tool_call";
+    toolCallId: string;
+    toolName: string;
+    input: Record<string, unknown>;
+  }
+
+  /** What a tool_call handler may answer: block the call, with why. The input it left in the event is the call's input. */
+  interface ToolCallAnswer {
+    block?: boolean;
+    reason?: string;
+  }
+
+  /** A tool call's result, with the input it ran with. */
+  interface ToolResultEvent {
+    type: "tool_result";
+    toolCallId: string;
+    toolName: string;
+    input: Record<string, unknown>;
+    content: AgentMessagePart[];
+    details: unknown;
+    isError: boolean;
+  }
+
+  /** What a tool_result handler may answer: the content, details and error flag to keep instead. */
+  interface ToolResultAnswer {
+    content?: AgentMessagePart[];
+    details?: unknown;
+    isError?: boolean;
+  }
+
+  /** A tool a plugin offers the model. */
+  interface AgentToolDef {
+    name: string;
+    label?: string;
+    description?: string;
+    parameters?: unknown;
+    execute(toolCallId: string, params: Record<string, unknown>, signal: AgentSignal, onUpdate: () => void, ctx: AgentContext): AgentToolResult | Promise<AgentToolResult>;
+  }
+
+  /** What a tool's execute answers. */
+  interface AgentToolResult {
+    content?: AgentMessagePart[];
+    details?: unknown;
+    isError?: boolean;
+  }
+
+  /** A command a plugin adds to the agent's. */
+  interface AgentCommandDef {
+    description?: string;
+    handler(args: string, ctx: AgentContext): void | Promise<void>;
+  }
+
+  /** What exec ran and answered. */
+  interface ExecResult {
+    stdout: string;
+    stderr: string;
+    code: number;
+    killed: boolean;
+    truncated: boolean;
+  }
+
+  /** The agent part: the harness daemon's loop, its handlers, tools and commands, its session and processes. */
+  interface AgentApi {
+    on(event: "session_start", handler: (event: SessionStartEvent, ctx: AgentContext) => void | Promise<void>): void;
+    on(event: "before_agent_start", handler: (event: BeforeAgentStartEvent, ctx: AgentContext) => BeforeAgentStartAnswer | void | Promise<BeforeAgentStartAnswer | void>): void;
+    on(event: "context", handler: (event: ContextEvent, ctx: AgentContext) => ContextAnswer | void | Promise<ContextAnswer | void>): void;
+    on(event: "tool_call", handler: (event: ToolCallEvent, ctx: AgentContext) => ToolCallAnswer | void | Promise<ToolCallAnswer | void>): void;
+    on(event: "tool_result", handler: (event: ToolResultEvent, ctx: AgentContext) => ToolResultAnswer | void | Promise<ToolResultAnswer | void>): void;
+    registerTool(def: AgentToolDef): void;
+    registerCommand(name: string, def: AgentCommandDef): void;
+    appendEntry(customType: string, data?: unknown): void;
+    sendUserMessage(content: string | AgentMessagePart[], options?: { deliverAs?: "steer" | "followUp" }): void;
+    sendMessage(message: { customType?: string; content?: string | AgentMessagePart[]; display?: boolean; details?: unknown }, options?: { deliverAs?: "steer" | "followUp" | "nextTurn"; triggerTurn?: boolean }): void;
+    setSessionName(name: string): void;
+    getSessionName(): string | undefined;
+    settings(): Record<string, unknown>;
+    exec(command: string, args?: string[], options?: { signal?: AgentSignal; timeout?: number; cwd?: string }): Promise<ExecResult>;
+  }
+
   interface Plugin {
     /** The name config.json and other plugins know it by; a plugin with the id of another replaces it. */
     id: string;
@@ -1001,7 +1199,10 @@ declare namespace widecode {
     requires?: string[];
     /** Its section for a new config.json (true when it has no settings). */
     defaults?(): unknown;
-    activate(api: Api): void;
+    /** The app's part: what it adds to widecode. */
+    activate?(api: Api): void;
+    /** The harness daemon runs this when the harness is the agent; the app runs `activate`. */
+    agent?(agent: AgentApi): void;
     deactivate?(): void;
   }
 

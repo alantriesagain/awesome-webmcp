@@ -3,6 +3,7 @@
 // `later`) has an answer in the runtime (a `case` in src/runtime/runtime.ts or src/api/*.ts), every
 // answer has a call, and every call's member is typed in widecode.d.ts (in its namespace's block of
 // the Api, or as a method of what it returns, a handle's).
+import { EXT_PRELUDE } from "@widecode/harness/ext/prelude.ts";
 import { PRELUDE } from "../src/runtime/prelude.ts";
 import { API_ANSWERS } from "../src/runtime/namespaces.ts";
 import { NAMESPACE_AGENTS } from "../src/api/agent.ts";
@@ -102,5 +103,26 @@ eq(
   inOrder(NAMESPACE_UI.source, /\bp\.(\w+)/g, PANEL_SLOTS).join(","),
   PANEL_SLOTS.join(","),
 );
+
+// The agent API's three sides agree: the harness prelude's agentFor and ctxOf, and widecode.d.ts's
+// AgentApi, AgentContext and AgentUi.
+const interfaceNames = (name: string): string[] => {
+  const at = dts.indexOf("interface " + name + " {");
+  return at >= 0 ? namesIn(blockAt(dts, dts.indexOf("{", at)), /^ {4}([a-zA-Z]\w*)\??[(:]/gm) : [];
+};
+const agentAt = EXT_PRELUDE.indexOf("const agentFor =");
+ok("the harness prelude defines agentFor and ctxOf", agentAt >= 0 && EXT_PRELUDE.indexOf("const ctxOf =") >= 0);
+const agentFor = blockAt(EXT_PRELUDE, EXT_PRELUDE.indexOf("{", EXT_PRELUDE.indexOf("=> (", agentAt)));
+const apiNames = namesIn(agentFor, /^ {4}([a-zA-Z]\w*)\s*:/gm);
+const ctxAt = EXT_PRELUDE.indexOf("const ctxOf =");
+const ctxAtReturn = EXT_PRELUDE.indexOf("return {", ctxAt);
+const ctxObject = blockAt(EXT_PRELUDE, EXT_PRELUDE.indexOf("{", ctxAtReturn));
+const ctxNames = namesIn(ctxObject, /^ {4}([a-zA-Z]\w*)\s*[:,]/gm);
+const uiObject = blockAt(ctxObject, ctxObject.indexOf("{", ctxObject.indexOf("ui: {")));
+const uiNames = namesIn(uiObject, /^ {6}([a-zA-Z]\w*)\s*:/gm);
+ok("agentFor, ctxOf and its ui have members", apiNames.length > 5 && ctxNames.length > 5 && uiNames.length > 5);
+eq("AgentApi types agentFor's members", interfaceNames("AgentApi").join(","), apiNames.join(","));
+eq("AgentContext types ctxOf's members", interfaceNames("AgentContext").join(","), ctxNames.join(","));
+eq("AgentUi types ctxOf's ui members", interfaceNames("AgentUi").join(","), uiNames.join(","));
 
 done();

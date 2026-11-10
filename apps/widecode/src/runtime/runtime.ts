@@ -64,6 +64,7 @@ export class JsPlugin extends Plugin {
 
   override activate(): void {
     this.gen = this.runtime.table.nextInstance();
+    if (this.activateFn < 0) return;
     const r = this.runtime.invoke(this.id, this.activateFn, "[]");
     if (r.status !== OK) this.problem = r.message();
   }
