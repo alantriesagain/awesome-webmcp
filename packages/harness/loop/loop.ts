@@ -189,12 +189,14 @@ export class AgentLoop {
       }
       s.pendingNotes = [];
     }
+    const ext = s.ext;
+    let turnIndex = 0;
     for (;;) {
       // The mode's tools as it stands now (a plan approved mid-turn leaves plan mode), then the plugin's active set.
       const tools = this.tools.forMode(s.mode).plus(s.extraTools).only(s.activeTools);
       if (s.contextEstimate() > compactThreshold(s.window, this.compactAt)) {
-        const c = await this.compactContext(s, this.keepTokens, "", abort);
-        if (c !== null && c.error.length === 0) {
+        const c = await this.compactContext(s, this.keepTokens, "", abort, "threshold");
+        if (c !== null && !c.cancelled && c.error.length === 0) {
           const fn = listener.onCompaction;
           if (fn !== null) fn(c);
         }
@@ -203,6 +205,9 @@ export class AgentLoop {
           return end;
         }
       }
+      const index = turnIndex;
+      turnIndex++;
+      if (ext !== null) await ext.turnStart(this.extContext(s, abort, s.system.join("\n\n")), index);
       const assistant = new Message("assistant", s.nextAssistantId());
       const got = await this.request(s, assistant, tools, listener, abort);
       if (assistant.parts.length > 0) this.add(s, assistant, listener);
@@ -211,25 +216,48 @@ export class AgentLoop {
       const onUsage = listener.onUsage;
       if (onUsage !== null) onUsage(got.usage);
       const calls = assistant.parts.filter((p) => p.kind === TOOL_CALL).map((p) => new Call(p));
+      const endTurn = async (results: Message[]): Promise<void> => {
+        if (ext !== null) await ext.turnEnd(this.extContext(s, abort, s.system.join("\n\n")), index, assistant, results);
+      };
       if (abort.aborted || got.stopReason === CANCELLED) {
-        if (calls.length > 0) this.add(s, this.results(s, calls, tools, "interrupted"), listener);
+        const results: Message[] = [];
+        if (calls.length > 0) {
+          const r = this.results(s, calls, tools, "interrupted");
+          this.add(s, r, listener);
+          results.push(r);
+        }
+        await endTurn(results);
         end.stopReason = CANCELLED;
         return end;
       }
       if (got.stopReason === FAILED) {
-        if (calls.length > 0) this.add(s, this.results(s, calls, tools, "the request failed: " + got.error), listener);
+        const results: Message[] = [];
+        if (calls.length > 0) {
+          const r = this.results(s, calls, tools, "the request failed: " + got.error);
+          this.add(s, r, listener);
+          results.push(r);
+        }
+        await endTurn(results);
         end.stopReason = FAILED;
         end.error = got.error;
         return end;
       }
       if (got.stopReason === MAX_TOKENS) {
-        if (calls.length > 0) this.add(s, this.results(s, calls, tools, "the reply was cut off at the output limit; the call did not run"), listener);
+        const results: Message[] = [];
+        if (calls.length > 0) {
+          const r = this.results(s, calls, tools, "the reply was cut off at the output limit; the call did not run");
+          this.add(s, r, listener);
+          results.push(r);
+        }
+        await endTurn(results);
         end.stopReason = MAX_TOKENS;
         return end;
       }
       if (got.stopReason === TOOL_USE && calls.length > 0) {
         await this.batch(s, calls, tools, listener, abort);
-        this.add(s, this.results(s, calls, tools, "interrupted"), listener);
+        const resultMessage = this.results(s, calls, tools, "interrupted");
+        this.add(s, resultMessage, listener);
+        await endTurn([resultMessage]);
         if (abort.aborted) {
           end.stopReason = CANCELLED;
           return end;
@@ -237,6 +265,7 @@ export class AgentLoop {
         this.steer(s, listener);
         continue;
       }
+      await endTurn([]);
       if (s.steering.length > 0 || s.steeringMessages.length > 0) {
         this.steer(s, listener);
         continue;
@@ -253,23 +282,42 @@ export class AgentLoop {
     if (fn !== null) fn(m);
   }
 
-  /** Compact the context: the messages before the last `keep` tokens summarized (everything, with `keep` 0), the summary standing for them from now on. Null when there is nothing before the kept tail; `error` set when the model gave no summary. */
-  async compactContext(s: LoopSession, keep: number, hint: string, abort: Abort): Promise<CompactionResult | null> {
+  /** Compact the context: the messages before the last `keep` tokens summarized (everything, with `keep` 0), the summary standing for them from now on. Null when there is nothing before the kept tail; `error` set when the model gave no summary; `cancelled` when a handler said not to compact. */
+  async compactContext(s: LoopSession, keep: number, hint: string, abort: Abort, reason = "threshold"): Promise<CompactionResult | null> {
     const cut = cutPoint(s.messages, keep);
     if (cut === 0) return null;
     const c = new CompactionResult();
     c.tokensBefore = s.contextEstimate();
-    const got = await summarize(this.client, s.model, s.summary, s.messages.slice(0, cut), hint, abort);
-    if (got[0].length === 0) {
-      c.error = got[1].length > 0 ? got[1] : "the model gave no summary";
-      return c;
+    const ext = s.ext;
+    let summary = "";
+    let fromPlugin = false;
+    if (ext !== null) {
+      const answer = await ext.beforeCompact(this.extContext(s, abort, s.system.join("\n\n")), reason, hint);
+      if (answer.cancel) {
+        c.cancelled = true;
+        return c;
+      }
+      if (answer.summary.length > 0) {
+        summary = answer.summary;
+        fromPlugin = true;
+      }
     }
-    c.summary = got[0];
+    if (summary.length === 0) {
+      const got = await summarize(this.client, s.model, s.summary, s.messages.slice(0, cut), hint, abort);
+      if (got[0].length === 0) {
+        c.error = got[1].length > 0 ? got[1] : "the model gave no summary";
+        return c;
+      }
+      summary = got[0];
+    }
+    c.summary = summary;
+    c.fromPlugin = fromPlugin;
     c.firstKeptId = cut < s.messages.length ? s.messages[cut].id : "";
     s.summary = c.summary;
     s.messages = s.messages.slice(cut);
     c.tokensAfter = contextAfter(s.summary, s.messages);
     s.noteContext(c.tokensAfter);
+    if (ext !== null) await ext.sessionCompact(this.extContext(s, abort, s.system.join("\n\n")), c.summary, fromPlugin);
     return c;
   }
 

@@ -51,6 +51,7 @@ const DEFAULT_WINDOW = 200000;
 const COMMANDS = [
   ["compact", "summarize the conversation so far, freeing context"],
   ["title", "give the session a title"],
+  ["reload", "reload the session's plugins"],
 ];
 
 /** A user message an extension sent, waiting for a turn to start. */
@@ -110,6 +111,8 @@ export class HarnessSession {
   pendingTurns: QueuedMessage[] = [];
   /** Custom messages whose triggerTurn waits for an idle session, and the user chunks' ids. */
   pendingCustomStarts: Message[] = [];
+  /** The messages the turn in progress added. */
+  turnMessages: Message[] = [];
   sentSeq = 0;
 
   constructor(id: string, options: ConfigOptions) {
@@ -192,6 +195,27 @@ export class AcpAgent {
     this.extensions = new ExtensionsRegistry(paths, ui, builtins);
   }
 
+  /** session_shutdown to every live session's plugins, within a short limit, then the watchers stop. */
+  async shutdown(reason = "quit"): Promise<void> {
+    const work: Promise<void>[] = [];
+    for (const s of this.sessions.values()) {
+      const ext = s.ext;
+      if (ext === null) continue;
+      work.push(
+        ext.sessionShutdown(reason).catch((err: unknown) => {
+          log("extension session_shutdown " + s.id + ": " + errorMessage(err, "failed"));
+        }),
+      );
+    }
+    await Promise.race([
+      Promise.all(work).then(() => {}),
+      new Promise<void>((settle) => {
+        setTimeout(settle, 2000);
+      }),
+    ]);
+    this.stop();
+  }
+
   /** Stop the plugins' folder watchers (the daemon is ending). */
   stop(): void {
     this.extensions.stop();
@@ -266,14 +290,26 @@ export class AcpAgent {
     s.loop.activeTools = names;
   }
 
+  /** model_select and thinking_level_select: the option changed, from the client or a plugin. */
+  private async emitOption(s: HarnessSession, id: string, previous: string, source: string): Promise<void> {
+    const ext = s.ext;
+    if (ext === null || ext.engine === null) return;
+    if (id === "model") await ext.modelSelect(this.extContext(s, null), s.options.model, previous, source);
+    else if (id === "effort") await ext.thinkingLevelSelect(this.extContext(s, null), s.options.effort, previous);
+  }
+
   /** A model or effort set from a plugin, as set_config_option does it: "" when taken, else why not. */
   private setOptionFromPlugin(s: HarnessSession, id: string, value: string): string {
+    const previous = id === "model" ? s.options.model : s.options.effort;
     const why = s.options.set(id, value);
     if (why.length > 0) return why;
     if (id === "model") this.effortsOf(s.options, this.registry.model(value));
     this.apply(s);
     if ((id === "model" || id === "mode") && s.file !== null && s.file.leaf.length > 0) this.note(s, id === "model" ? MODEL : MODE, value);
     this.server.notify("session/update", optionsUpdate(s.id, s.options.text()));
+    this.emitOption(s, id, previous, "plugin").catch((err: unknown) => {
+      log("extension model_select " + s.id + ": " + errorMessage(err, "failed"));
+    });
     return "";
   }
 
@@ -664,11 +700,19 @@ export class AcpAgent {
   }
 
   /** A copy of the session's conversation as a session of its own (a side question's), its branch copied into a file of its own. */
-  private fork(idText: string, p: Record<string, unknown> | null): void {
+  private async fork(idText: string, p: Record<string, unknown> | null): Promise<void> {
     const from = this.sessionOf(p);
     if (from === null) {
       this.server.refuse(idText, -32602, "no such session here");
       return;
+    }
+    const fromExt = from.ext;
+    if (fromExt !== null && fromExt.engine !== null) {
+      const answer = await fromExt.beforeFork(this.extContext(from, null));
+      if (answer.cancel) {
+        this.server.refuse(idText, -32602, "the fork was refused by plugin " + answer.plugin);
+        return;
+      }
     }
     const s = this.make(p);
     s.cwd = from.cwd;
@@ -709,6 +753,7 @@ export class AcpAgent {
     }
     const id = str(p["configId"]);
     const value = str(p["value"]);
+    const previous = id === "model" ? s.options.model : s.options.effort;
     const why = s.options.set(id, value);
     if (why.length > 0) {
       this.server.refuse(idText, -32602, why);
@@ -718,6 +763,18 @@ export class AcpAgent {
     this.apply(s);
     // A change in a session written already is an entry; one before any message is where the first message's note comes from.
     if ((id === "model" || id === "mode") && s.file !== null && s.file.leaf.length > 0) this.note(s, id === "model" ? MODEL : MODE, value);
+    const ext = s.ext;
+    if ((id === "model" || id === "effort") && ext !== null && ext.engine !== null) {
+      this.emitOption(s, id, previous, "set").then(
+        () => this.answerOption(s, idText, id, value),
+        () => this.answerOption(s, idText, id, value),
+      );
+      return;
+    }
+    this.answerOption(s, idText, id, value);
+  }
+
+  private answerOption(s: HarnessSession, idText: string, id: string, value: string): void {
     this.server.answer(idText, '{"configOptions":' + s.options.text() + "}");
     if (id === "mode") this.server.notify("session/update", modeUpdate(s.id, value));
     else if (id === "model" || id === "effort") this.server.notify("session/update", optionsUpdate(s.id, s.options.text()));
@@ -741,6 +798,10 @@ export class AcpAgent {
       this.compactRequested(s, idText, words.slice("/compact".length).trim());
       return;
     }
+    if (words === "/reload" || words.startsWith("/reload ")) {
+      this.reloadPlugins(s, idText);
+      return;
+    }
     // An extension's command, unless a prompt template of the same name wins.
     const named = /^\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(words);
     if (named !== null && !s.templates.some((t) => t.name === named[1])) {
@@ -750,8 +811,48 @@ export class AcpAgent {
         return;
       }
     }
+    this.inputPrompt(s, idText, p);
+  }
+
+  /** The images as the agent's shape, for an input handler. */
+  private imageObjects(images: Part[]): Record<string, unknown>[] {
+    const out: Record<string, unknown>[] = [];
+    for (const image of images) out.push({ type: "image", data: image.data, mimeType: image.mediaType });
+    return out;
+  }
+
+  /** A handler's images back as parts. */
+  private imageParts(value: unknown): Part[] {
+    const out: Part[] = [];
+    for (const v of listOf(value)) {
+      const r = recordOf(v);
+      if (r === null || str(r["type"]) !== "image" || str(r["data"]).length === 0) continue;
+      const p = new Part(IMAGE);
+      p.mediaType = str(r["mimeType"]).length > 0 ? str(r["mimeType"]) : "image/png";
+      p.data = str(r["data"]);
+      out.push(p);
+    }
+    return out;
+  }
+
+  /** The input event: null when a handler answered the message without a turn. */
+  private async inputEvent(s: HarnessSession, text: string, images: Part[], source: string): Promise<QueuedMessage | null> {
+    const ext = s.ext;
+    if (ext === null || ext.engine === null) return new QueuedMessage(text, images);
+    const answer = await ext.input(text, JSON.stringify(this.imageObjects(images)), source, this.extContext(s, s.abort));
+    if (answer.action === "handled") return null;
+    return new QueuedMessage(answer.text, this.imageParts(parseJson(answer.images)));
+  }
+
+  /** A prompt after the built-in and plugin commands: the input event, then the template, then the turn. */
+  private async inputPrompt(s: HarnessSession, idText: string, p: Record<string, unknown>): Promise<void> {
+    const got = await this.inputEvent(s, promptText(p["prompt"]), promptImages(p["prompt"]), "client");
+    if (got === null) {
+      this.server.answer(idText, '{"stopReason":"end_turn","usage":{"inputTokens":0,"outputTokens":0}}');
+      return;
+    }
     // A prompt template of the session's, expanded as the user's message; the built-in commands above win.
-    const expanded = expandTemplate(text, s.templates);
+    const expanded = expandTemplate(got.text, s.templates);
     if (s.running) {
       // A steering message: into the turn after its current request, answered with it.
       s.loop.steering.push(expanded);
@@ -759,7 +860,7 @@ export class AcpAgent {
       return;
     }
     // Its images, for a model that reads them; another is told they were left out.
-    const images = promptImages(p["prompt"]);
+    const images = got.images;
     const model = this.registry.model(s.options.model);
     if (images.length > 0 && !(model !== null && model.vision)) {
       this.startTurn(s, expanded + "\n\n[" + String(images.length) + (images.length === 1 ? " image was" : " images were") + " attached; this model does not read images, so they were left out]", [idText], images);
@@ -767,6 +868,34 @@ export class AcpAgent {
     }
     s.loop.pendingImages = images;
     this.startTurn(s, expanded, [idText], images);
+  }
+
+  /** `/reload`: every plugin of the session's folder and trust again, as a save reloads one, then a line of what happened. */
+  private reloadPlugins(s: HarnessSession, idText: string): void {
+    if (s.running) {
+      this.said(s, idText, "A turn is running: /reload when it ends.");
+      return;
+    }
+    s.running = true;
+    s.promptIds = [idText];
+    s.abort = new Abort();
+    this.apply(s);
+    const group = s.ext !== null ? s.ext.owner : this.extensions.forSession(s.cwd, s.trusted);
+    group.reloadAll().then(
+      () => {
+        const n = group.entries.length;
+        s.running = false;
+        s.promptIds = [];
+        this.said(s, idText, "Reloaded " + String(n) + (n === 1 ? " plugin." : " plugins."));
+        this.pumpPending(s);
+      },
+      (err: unknown) => {
+        s.running = false;
+        s.promptIds = [];
+        this.said(s, idText, "Not reloaded: " + errorMessage(err, "the reload failed"));
+        this.pumpPending(s);
+      },
+    );
   }
 
   /** A user message's content as text and images (pi's string or text/image blocks). */
@@ -801,16 +930,26 @@ export class AcpAgent {
     return m;
   }
 
-  /** An extension's user message started as a turn, as a prompt is. */
-  private beginUserTurn(s: HarnessSession, q: QueuedMessage): void {
-    this.notifyUser(s, q);
-    this.startTurn(s, q.text, [], q.images);
+  /** An extension's user message started as a turn, after the input event as a prompt is (source "plugin"). */
+  private async beginUserTurn(s: HarnessSession, q: QueuedMessage): Promise<void> {
+    const got = await this.inputEvent(s, q.text, q.images, "plugin");
+    if (got === null) return;
+    this.notifyUser(s, got);
+    this.startTurn(s, got.text, [], got.images);
   }
 
   /** An extension's user message steered into the turn that runs. */
   private steerUser(s: HarnessSession, q: QueuedMessage): void {
-    this.notifyUser(s, q);
-    s.loop.steeringMessages.push(this.userMessage(s, q));
+    this.inputEvent(s, q.text, q.images, "plugin").then(
+      (got: QueuedMessage | null) => {
+        if (got === null) return;
+        this.notifyUser(s, got);
+        s.loop.steeringMessages.push(this.userMessage(s, got));
+      },
+      (err: unknown) => {
+        log("extension input " + s.id + ": " + errorMessage(err, "failed"));
+      },
+    );
   }
 
   /** pi.sendUserMessage: a turn at once when idle, steered or followed up when one runs. */
@@ -900,6 +1039,7 @@ export class AcpAgent {
     s.turnActive = true;
     s.promptIds = ids;
     s.abort = new Abort();
+    s.turnMessages = [];
     this.apply(s);
     s.loop.system = this.blocksFor(s);
     const ext = s.ext;
@@ -920,6 +1060,7 @@ export class AcpAgent {
     const answer = await ext.beforeAgentStart(text, attached, s.loop.system.join("\n\n"), this.extContext(s, s.abort));
     if (answer.systemPrompt.length > 0) s.loop.system = [answer.systemPrompt];
     for (const message of answer.messages) s.loop.pendingNotes.push(message);
+    await ext.agentStart(this.extContext(s, s.abort));
   }
 
   private turnFailed(s: HarnessSession, err: unknown): void {
@@ -988,7 +1129,10 @@ export class AcpAgent {
       const diff = outcome.diffPath.length > 0 && !outcome.isError ? new DiffBlock(outcome.diffPath, outcome.created, outcome.oldText, outcome.newText) : null;
       this.server.notify("session/update", toolCallEnd(s.id, callId, outcome.isError, outcome.text, diff, outcome.rawOutputJson));
     };
-    listener.onMessage = (m: Message) => this.kept(s, m);
+    listener.onMessage = (m: Message) => {
+      s.turnMessages.push(m);
+      this.kept(s, m);
+    };
     listener.onCompaction = (c: CompactionResult) => {
       this.write(s, Entry.ofCompaction(c.summary, c.firstKeptId, c.tokensBefore, Date.now()));
       s.used = c.tokensAfter;
@@ -1017,9 +1161,10 @@ export class AcpAgent {
       this.said(s, idText, note);
       if (steered.length > 0) this.startTurn(s, steered.join("\n"), waiting, []);
     };
-    this.loop.compactContext(s.loop, 0, hint, s.abort).then(
+    this.loop.compactContext(s.loop, 0, hint, s.abort, "manual").then(
       (c: CompactionResult | null) => {
         if (c === null) return settle("Nothing to compact yet.");
+        if (c.cancelled) return settle("Compaction cancelled by a plugin.");
         if (c.error.length > 0) return settle("Not compacted: " + c.error);
         const fn = listener.onCompaction;
         if (fn !== null) fn(c);
@@ -1029,19 +1174,34 @@ export class AcpAgent {
     );
   }
 
-  /** The turn is over: every prompt of it is answered with how it ended; the first turn that ended well names the session. */
-  private turnEnded(s: HarnessSession, end: TurnEnd): void {
+  /** The turn is over: its extensions hear agent_end, every prompt of it is answered, then agent_settled; the first turn that ended well names the session. */
+  private async turnEnded(s: HarnessSession, end: TurnEnd): Promise<void> {
     s.running = false;
     s.turnActive = false;
     const ids = s.promptIds;
     s.promptIds = [];
     s.loop.steering = [];
     s.loop.steeringMessages = [];
+    const ext = s.ext;
+    if (ext !== null && ext.engine !== null) {
+      try {
+        await ext.agentEnd(this.extContext(s, null), s.turnMessages.slice());
+      } catch (err: unknown) {
+        log("extension agent_end " + s.id + ": " + errorMessage(err, "failed"));
+      }
+    }
     const stop = end.stopReason === CANCELLED ? "cancelled" : end.stopReason === FAILED ? "end_turn" : end.stopReason;
     const result = '{"stopReason":' + JSON.stringify(stop) + ',"usage":{"inputTokens":' + String(end.usage.input + end.usage.cacheRead + end.usage.cacheWrite) + ',"outputTokens":' + String(end.usage.output) + "}}";
     for (const id of ids) {
       if (end.stopReason === FAILED) this.server.refuse(id, -32603, end.error);
       else this.server.answer(id, result);
+    }
+    if (ext !== null && ext.engine !== null) {
+      try {
+        await ext.agentSettled(this.extContext(s, null), end.stopReason === CANCELLED);
+      } catch (err: unknown) {
+        log("extension agent_settled " + s.id + ": " + errorMessage(err, "failed"));
+      }
     }
     if (!s.titled && end.stopReason !== FAILED && end.stopReason !== CANCELLED && s.file !== null && s.file.leaf.length > 0) {
       s.titled = true;

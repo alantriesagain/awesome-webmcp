@@ -254,6 +254,10 @@ const AGENT_RUNTIME: string = `"use strict";
       }
       return progressed;
     },
+    reload: () => {
+      call("extReload", key, inst);
+      return Promise.resolve(true);
+    },
   });
   globalThis.__extFile = (f) => {
     file = f;

@@ -1204,6 +1204,146 @@ const main = async (): Promise<void> => {
     rig.close();
   }
 
+  // The turn events: agent_start, turn_start, turn_end, agent_end and agent_settled around two requests.
+  {
+    const rig = new Rig(['{"match":"order","text":"Calling.","tools":[{"name":"Read","input":{"file_path":"a.txt"}}]}', '{"match":"result","text":"Done."}'].join("\n"));
+    writeFileSync(join(rig.folder, "a.txt"), "first\n");
+    rig.extension([
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.on("agent_start", (e, ctx) => { ctx.ui.notify("agent_start"); });',
+      '  agent.on("turn_start", (e, ctx) => { ctx.ui.notify("turn_start:" + e.turnIndex); });',
+      '  agent.on("turn_end", (e, ctx) => { ctx.ui.notify("turn_end:" + e.turnIndex + ":" + e.toolResults.length); });',
+      '  agent.on("agent_end", (e, ctx) => { ctx.ui.notify("agent_end:" + e.messages.map((m) => m.role).join("/")); });',
+      '  agent.on("agent_settled", (e, ctx) => { ctx.ui.notify("agent_settled:" + e.aborted); });',
+      "} });",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "order it");
+    const notes = rig.uiNotifications("notify").map((p) => String(p["message"]));
+    const events = notes.filter((m) => /^(agent|turn)_/.test(m));
+    eq("the turn events come in order, two turns", events.join(","), "agent_start,turn_start:0,turn_end:0:1,turn_start:1,turn_end:1:0,agent_end:user/assistant/toolResult/assistant,agent_settled:false");
+    rig.close();
+  }
+
+  // The input event: a transform replaces the prompt, handled answers it without a request.
+  {
+    const rig = new Rig(['{"match":"changed","text":"Saw changed."}'].join("\n"));
+    rig.extension([
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.on("input", (e) => {',
+      '    if (e.text === "handle me") return { action: "handled" };',
+      '    if (e.text === "transform me") return { action: "transform", text: "changed words" };',
+      "  });",
+      "} });",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    const before = rig.asks().length;
+    await rig.prompt(sid, "handle me");
+    const handled = rig.taken();
+    ok("a handled input is answered without a request", rig.asks().length === before && handled.some((line) => line.includes('"stopReason":"end_turn"')));
+    await rig.prompt(sid, "transform me");
+    const asks = rig.asks();
+    ok("a transform is what the request carries", asks[asks.length - 1].messages.some((m) => m.role === "user" && m.text() === "changed words"));
+    rig.close();
+  }
+
+  // model_select from the client's set_config_option.
+  {
+    const rig = new Rig(['{"match":"hello","text":"Hi."}'].join("\n"));
+    const other = new ModelInfo("fake", "other", "Fake Other");
+    other.efforts = ["low", "medium", "high"];
+    rig.agent!.registry.models.push(other);
+    rig.extension([
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.on("model_select", (e, ctx) => { ctx.ui.notify("model:" + e.previousModel + ">" + e.model + ":" + e.source); });',
+      "} });",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    const set = rig.send("session/set_config_option", { sessionId: sid, configId: "model", value: "fake/other" });
+    await until(() => rig.out.some((line) => line.includes('"id":' + set + ",")));
+    const notes = rig.uiNotifications("notify").map((p) => String(p["message"]));
+    ok("model_select names the old and new model, from set", notes.some((m) => m === "model:fake/fake>fake/other:set"));
+    rig.close();
+  }
+
+  // session_before_compact cancels a manual compaction and gives another its summary.
+  {
+    const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
+    rig.extension([
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.on("session_before_compact", (e) => {',
+      '    if (e.reason === "manual" && e.customInstructions === "stop") return { cancel: true };',
+      '    return { compaction: { summary: "Plugin summary: " + e.customInstructions } };',
+      "  });",
+      '  agent.on("session_compact", (e, ctx) => { ctx.ui.notify("compact:" + e.summary + ":" + e.fromPlugin); });',
+      "} });",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "hello");
+    rig.taken();
+    await rig.prompt(sid, "/compact stop");
+    ok("a cancelled manual compaction says so", text(rig.taken()).includes("cancelled"));
+    await rig.prompt(sid, "/compact keep");
+    const notes = rig.uiNotifications("notify").map((p) => String(p["message"]));
+    ok("a handler's summary is used without asking the model", text(rig.taken()).includes("Compacted"));
+    eq("session_compact carries the handler's summary", notes.filter((m) => m.startsWith("compact:")).join(","), "compact:Plugin summary: keep:true");
+    ok("the summary is the context's", rig.agent!.contextOf(sid).includes("Plugin summary: keep"));
+    ok("the file keeps the compaction entry", readFileSync(new SessionStore(rig.paths!.sessionsDir(rig.folder)).pathOf(sid), "utf8").includes('"kind":"compaction"') && readFileSync(new SessionStore(rig.paths!.sessionsDir(rig.folder)).pathOf(sid), "utf8").includes("Plugin summary: keep"));
+    eq("no summarizer request was made", String(rig.client!.requests.filter((r) => r.system.length > 0 && r.system[0].startsWith("You summarize")).length), "0");
+    rig.close();
+  }
+
+  // session_before_fork refuses a fork, naming the plugin.
+  {
+    const rig = new Rig(['{"match":"hello","text":"Hi."}'].join("\n"));
+    rig.extension([
+      'widecode.plugin({ id: "gate", agent(agent) {',
+      '  agent.on("session_before_fork", () => ({ cancel: true }));',
+      "} });",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    const id = rig.send("session/fork", { sessionId: sid, cwd: rig.folder, mcpServers: [] });
+    await until(() => rig.out.some((line) => line.includes('"id":' + id + ",")));
+    const answer = rig.out.find((line) => line.includes('"id":' + id + ",")) ?? "";
+    ok("the fork is refused with the plugin's name", answer.includes('"error"') && answer.includes("refused by plugin gate"));
+    rig.close();
+  }
+
+  // session_shutdown when the daemon stops, and /reload announced and reloading every plugin.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    const logFile = rig.logFile();
+    rig.extension([
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.on("session_shutdown", (e, ctx) => { ctx.ui.notify("shutdown:" + e.reason); });',
+      '  agent.on("session_start", (e, ctx) => { ctx.ui.notify("start:" + e.reason); });',
+      "} });",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    const made = rig.taken();
+    ok("/reload is announced with the built-in commands", made.some((line) => line.includes("available_commands_update") && line.includes('"name":"reload"')));
+    rig.uiNotifications("notify");
+    await rig.prompt(sid, "/reload");
+    const reloaded = rig.taken();
+    ok("/reload answers without a turn", reloaded.some((line) => line.includes('"stopReason":"end_turn"')) && text(reloaded).includes("Reloaded"));
+    const kept = readFileSync(logFile, "utf8");
+    ok("/reload shuts down and starts the plugins with reason reload", kept.includes("shutdown:reload") && kept.includes("start:reload"));
+    await rig.agent!.shutdown();
+    ok("the daemon's stop sends session_shutdown quit", readFileSync(logFile, "utf8").includes("shutdown:quit"));
+    rig.close();
+  }
+
   done();
 };
 

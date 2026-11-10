@@ -212,9 +212,11 @@ export const harnessMain = (storeRoot: string, args: string[], build: string, bu
     const end = (why: string): void => {
       if (ended) return;
       ended = true;
-      agent.stop();
       log(why);
-      settle(0);
+      agent.shutdown().then(
+        () => settle(0),
+        () => settle(0),
+      );
     };
     server.onStdinEnd = () => end("stdin ended: stopping");
     process.on("SIGTERM", () => end("signal SIGTERM"));

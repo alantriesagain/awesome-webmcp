@@ -155,6 +155,26 @@ export class BeforeStartAnswer {
   messages: string[] = [];
 }
 
+/** An input handler's answer: go on, transform the message, or answer it without a turn. */
+export class InputAnswer {
+  action = "";
+  text = "";
+  /** The images as JSON, in the agent's image shape. */
+  images = "[]";
+}
+
+/** A session_before_compact handler's answer: skip the compaction or give its summary. */
+export class CompactAnswer {
+  cancel = false;
+  summary = "";
+}
+
+/** A session_before_fork handler's answer: refuse the fork, and the plugin that did. */
+export class ForkAnswer {
+  cancel = false;
+  plugin = "";
+}
+
 /** A folder and its trust: the plugin files, one engine, the ids with an agent part, and what they registered. */
 export class Extensions extends HostHandler {
   readonly folder: string;
@@ -457,6 +477,19 @@ export class Extensions extends HostHandler {
       }
       if (instance.onReloaded !== null) instance.onReloaded();
     }
+  }
+
+  /** Reload every plugin of the pair in every live instance, as a save does: shutdown, the source again, start. */
+  async reloadAll(): Promise<void> {
+    await this.syncSources();
+    const files: string[] = [];
+    for (const entry of this.entries) if (!files.includes(entry.file)) files.push(entry.file);
+    this.rebuildEntries(files);
+    for (const file of files) {
+      const source = this.sourceNamed(file);
+      await this.reloadFile(file, source, true, source !== null);
+    }
+    this.watchFolders();
   }
 
   /** Watch the plugin folders and each plugin's own folder, for the files the engine has. */
@@ -892,6 +925,16 @@ export class Extensions extends HostHandler {
         const instance = this.instanceOf(num(args[0], -1));
         return new HostAnswer(OK, JSON.stringify(instance !== null && instance.onGetEffort !== null ? instance.onGetEffort() : ""));
       }
+      case "extReload": {
+        const instance = this.instanceOf(num(args[0], -1));
+        if (instance !== null) {
+          const group = instance.owner;
+          setTimeout(() => {
+            group.reloadAll().catch((err: unknown) => log("plugins: reload: " + (err instanceof Error ? err.message : String(err))));
+          }, 0);
+        }
+        return new HostAnswer(OK, "null");
+      }
       case "extLog": {
         const instance = this.instanceOf(num(args[0], -1));
         log("plugin " + (instance !== null ? "session " + instance.sessionId : "?") + " " + str(args[1]) + ": " + str(args[2]));
@@ -1060,6 +1103,137 @@ export class ExtSession {
       }
     }
     return out;
+  }
+
+  /** The handlers of `event`, told `data`, their answers in order (a handler that fails is skipped). */
+  private async dispatch(event: string, data: Record<string, unknown>, ctx: ExtContext): Promise<Record<string, unknown>[]> {
+    const answers: Record<string, unknown>[] = [];
+    for (const h of this.forEvent(event)) {
+      const r = await this.owner.call(h.entry, h.id, JSON.stringify([data, this.owner.ctxObject(ctx)]), event, ctx);
+      if (!r.ok) continue;
+      const value = recordOf(parseJson(r.text));
+      const answer = value !== null ? recordOf(value["result"]) : null;
+      if (answer !== null) answers.push(answer);
+    }
+    return answers;
+  }
+
+  /** agent_start: a turn begins, after before_agent_start. */
+  async agentStart(ctx: ExtContext): Promise<void> {
+    await this.dispatch("agent_start", { type: "agent_start" }, ctx);
+  }
+
+  /** agent_end: the turn's requests are done, the messages it added. */
+  async agentEnd(ctx: ExtContext, messages: Message[]): Promise<void> {
+    await this.dispatch("agent_end", { type: "agent_end", messages: parseJson(messagesToAgent(messages)) }, ctx);
+  }
+
+  /** agent_settled: the prompt is answered, `aborted` when its turn was cancelled. */
+  async agentSettled(ctx: ExtContext, aborted: boolean): Promise<void> {
+    await this.dispatch("agent_settled", { type: "agent_settled", aborted }, ctx);
+  }
+
+  /** turn_start: before one request of the loop. */
+  async turnStart(ctx: ExtContext, turnIndex: number): Promise<void> {
+    await this.dispatch("turn_start", { type: "turn_start", turnIndex, timestamp: Date.now() }, ctx);
+  }
+
+  /** turn_end: after a request's tool batch, its assistant message and its tool results. */
+  async turnEnd(ctx: ExtContext, turnIndex: number, message: Message, toolResults: Message[]): Promise<void> {
+    const results = listOf(parseJson(messagesToAgent(toolResults)));
+    const messages = listOf(parseJson(messagesToAgent([message])));
+    const first = messages.length > 0 ? messages[0] : null;
+    await this.dispatch("turn_end", { type: "turn_end", turnIndex, message: first, toolResults: results }, ctx);
+  }
+
+  /** input: a prompt arrives; a transform feeds the next handler, handled answers it without a turn. */
+  async input(text: string, imagesJson: string, source: string, ctx: ExtContext): Promise<InputAnswer> {
+    const out = new InputAnswer();
+    out.text = text;
+    out.images = imagesJson;
+    let currentText = text;
+    let currentImages = parseJson(imagesJson);
+    for (const h of this.forEvent("input")) {
+      const event: Record<string, unknown> = { type: "input", text: currentText, images: currentImages, source };
+      const r = await this.owner.call(h.entry, h.id, JSON.stringify([event, this.owner.ctxObject(ctx)]), "input", ctx);
+      if (!r.ok) continue;
+      const value = recordOf(parseJson(r.text));
+      const answer = value !== null ? recordOf(value["result"]) : null;
+      if (answer === null) continue;
+      const action = str(answer["action"]);
+      if (action === "handled") {
+        out.action = "handled";
+        break;
+      }
+      if (action === "transform") {
+        out.action = "transform";
+        if (typeof answer["text"] === "string") currentText = answer["text"];
+        if (Array.isArray(answer["images"])) currentImages = answer["images"];
+      }
+    }
+    out.text = currentText;
+    out.images = JSON.stringify(currentImages);
+    return out;
+  }
+
+  /** model_select: the model option changed, by the client or a plugin. */
+  async modelSelect(ctx: ExtContext, model: string, previousModel: string, source: string): Promise<void> {
+    await this.dispatch("model_select", { type: "model_select", model, previousModel, source }, ctx);
+  }
+
+  /** thinking_level_select: the effort changed. */
+  async thinkingLevelSelect(ctx: ExtContext, level: string, previousLevel: string): Promise<void> {
+    await this.dispatch("thinking_level_select", { type: "thinking_level_select", level, previousLevel }, ctx);
+  }
+
+  /** session_before_compact: cancel the compaction or give the summary it would ask the model for. */
+  async beforeCompact(ctx: ExtContext, reason: string, customInstructions: string): Promise<CompactAnswer> {
+    const out = new CompactAnswer();
+    for (const h of this.forEvent("session_before_compact")) {
+      const event: Record<string, unknown> = { type: "session_before_compact", reason, customInstructions };
+      const r = await this.owner.call(h.entry, h.id, JSON.stringify([event, this.owner.ctxObject(ctx)]), "session_before_compact", ctx);
+      if (!r.ok) continue;
+      const value = recordOf(parseJson(r.text));
+      const answer = value !== null ? recordOf(value["result"]) : null;
+      if (answer === null) continue;
+      if (answer["cancel"] === true) {
+        out.cancel = true;
+        return out;
+      }
+      const compaction = recordOf(answer["compaction"]);
+      const summary = compaction !== null ? str(compaction["summary"]) : "";
+      if (summary.length > 0) out.summary = summary;
+    }
+    return out;
+  }
+
+  /** session_compact: the compaction happened, its summary from a plugin or the model. */
+  async sessionCompact(ctx: ExtContext, summary: string, fromPlugin: boolean): Promise<void> {
+    await this.dispatch("session_compact", { type: "session_compact", summary, fromPlugin }, ctx);
+  }
+
+  /** session_before_fork: a handler may refuse the fork. */
+  async beforeFork(ctx: ExtContext): Promise<ForkAnswer> {
+    const out = new ForkAnswer();
+    for (const h of this.forEvent("session_before_fork")) {
+      const r = await this.owner.call(h.entry, h.id, JSON.stringify([{ type: "session_before_fork" }, this.owner.ctxObject(ctx)]), "session_before_fork", ctx);
+      if (!r.ok) continue;
+      const value = recordOf(parseJson(r.text));
+      const answer = value !== null ? recordOf(value["result"]) : null;
+      if (answer !== null && answer["cancel"] === true) {
+        out.cancel = true;
+        out.plugin = h.entry.id.length > 0 ? h.entry.id : h.entry.file;
+        break;
+      }
+    }
+    return out;
+  }
+
+  /** session_shutdown: every handler the instance has, before the daemon or a reload ends them. */
+  async sessionShutdown(reason: string): Promise<void> {
+    for (const h of this.handlers.slice()) {
+      await this.owner.call(h.entry, h.id, JSON.stringify([{ type: "session_shutdown", reason }, this.owner.ctxObject(null)]), "session_shutdown", null);
+    }
   }
 
   /** context: the messages one request sends, replaced when a handler answers with others. */

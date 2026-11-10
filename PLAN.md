@@ -514,7 +514,7 @@ file in its own engine and runs `agent`. A plugin lives in a folder of its own (
       view shows. A save anywhere in a folder reloads that plugin alone, in the app and in the
       daemon (its `session_shutdown`, its source again, `session_start` with `reload`), the turn
       going on; a removed folder takes its tools and commands away.
-- [ ] **The rest of the agent API.** `getActiveTools`, `setActiveTools`, `getAllTools`;
+- [x] **The rest of the agent API.** `getActiveTools`, `setActiveTools`, `getAllTools`;
       `setModel` and the thinking level; `agent.events` between a plugin's handlers; the turn,
       agent, model, input, compaction (`session_before_compact` answering a summary),
       `session_before_fork` and shutdown events; `/reload`.
@@ -549,6 +549,8 @@ file in its own engine and runs `agent`. A plugin lives in a folder of its own (
 
 ## Log
 
+- `9529f70` and the next commit, Milestone K, the rest of the agent API; `9ed9c07`
+  permission-gate and protected-paths with `test/support/agent-rig.ts`.
 - `9557d66` (light `b5f449e`) Milestone K, plugin folders and the built-ins in them; `d1fcc56` a
   plugin folder's skills and prompts in the harness; the daemon's reload on save. Tests:
   `reload`, `skills`, `prompts`, `extensions`.

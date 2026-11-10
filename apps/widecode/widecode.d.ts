@@ -1143,6 +1143,104 @@ declare namespace widecode {
     isError?: boolean;
   }
 
+  /** A turn begins, after before_agent_start. */
+  interface AgentStartEvent {
+    type: "agent_start";
+  }
+
+  /** A turn's requests are done, with the messages it added. */
+  interface AgentEndEvent {
+    type: "agent_end";
+    messages: AgentMessage[];
+  }
+
+  /** The prompt is answered; aborted when its turn was cancelled. */
+  interface AgentSettledEvent {
+    type: "agent_settled";
+    aborted: boolean;
+  }
+
+  /** One request of the loop is about to start. */
+  interface TurnStartEvent {
+    type: "turn_start";
+    turnIndex: number;
+    timestamp: number;
+  }
+
+  /** A request's tool batch is done: its assistant message and the tool results. */
+  interface TurnEndEvent {
+    type: "turn_end";
+    turnIndex: number;
+    message: AgentMessage;
+    toolResults: AgentMessage[];
+  }
+
+  /** A prompt arrives, from the client or a plugin's sendUserMessage. */
+  interface InputEvent {
+    type: "input";
+    text: string;
+    images: AgentImagePart[];
+    source: "client" | "plugin";
+  }
+
+  /** What an input handler may answer: go on, replace the message, or answer it without a turn; a transform feeds the next handler. */
+  interface InputAnswer {
+    action?: "continue" | "transform" | "handled";
+    text?: string;
+    images?: AgentImagePart[];
+  }
+
+  /** The model option changed, from the client's set_config_option or a plugin's setModel. */
+  interface ModelSelectEvent {
+    type: "model_select";
+    model: string;
+    previousModel: string;
+    source: "set" | "plugin";
+  }
+
+  /** The thinking level changed. */
+  interface ThinkingLevelSelectEvent {
+    type: "thinking_level_select";
+    level: string;
+    previousLevel: string;
+  }
+
+  /** A compaction is about to happen. */
+  interface SessionBeforeCompactEvent {
+    type: "session_before_compact";
+    reason: "manual" | "threshold";
+    customInstructions: string;
+  }
+
+  /** What a session_before_compact handler may answer: skip it, or give the summary instead of asking the model. */
+  interface SessionBeforeCompactAnswer {
+    cancel?: boolean;
+    compaction?: { summary: string };
+  }
+
+  /** A compaction happened, its summary from a plugin or the model. */
+  interface SessionCompactEvent {
+    type: "session_compact";
+    summary: string;
+    fromPlugin: boolean;
+  }
+
+  /** A session/fork is about to happen. */
+  interface SessionBeforeForkEvent {
+    type: "session_before_fork";
+  }
+
+  /** What a session_before_fork handler may answer: refuse the fork. */
+  interface SessionBeforeForkAnswer {
+    cancel?: boolean;
+  }
+
+  /** A live session ends, for the daemon or a reload. */
+  interface SessionShutdownEvent {
+    type: "session_shutdown";
+    reason: "quit" | "reload";
+  }
+
   /** A tool a plugin offers the model. */
   interface AgentToolDef {
     name: string;
@@ -1181,6 +1279,18 @@ declare namespace widecode {
     on(event: "context", handler: (event: ContextEvent, ctx: AgentContext) => ContextAnswer | void | Promise<ContextAnswer | void>): void;
     on(event: "tool_call", handler: (event: ToolCallEvent, ctx: AgentContext) => ToolCallAnswer | void | Promise<ToolCallAnswer | void>): void;
     on(event: "tool_result", handler: (event: ToolResultEvent, ctx: AgentContext) => ToolResultAnswer | void | Promise<ToolResultAnswer | void>): void;
+    on(event: "agent_start", handler: (event: AgentStartEvent, ctx: AgentContext) => void | Promise<void>): void;
+    on(event: "agent_end", handler: (event: AgentEndEvent, ctx: AgentContext) => void | Promise<void>): void;
+    on(event: "agent_settled", handler: (event: AgentSettledEvent, ctx: AgentContext) => void | Promise<void>): void;
+    on(event: "turn_start", handler: (event: TurnStartEvent, ctx: AgentContext) => void | Promise<void>): void;
+    on(event: "turn_end", handler: (event: TurnEndEvent, ctx: AgentContext) => void | Promise<void>): void;
+    on(event: "input", handler: (event: InputEvent, ctx: AgentContext) => InputAnswer | void | Promise<InputAnswer | void>): void;
+    on(event: "model_select", handler: (event: ModelSelectEvent, ctx: AgentContext) => void | Promise<void>): void;
+    on(event: "thinking_level_select", handler: (event: ThinkingLevelSelectEvent, ctx: AgentContext) => void | Promise<void>): void;
+    on(event: "session_before_compact", handler: (event: SessionBeforeCompactEvent, ctx: AgentContext) => SessionBeforeCompactAnswer | void | Promise<SessionBeforeCompactAnswer | void>): void;
+    on(event: "session_compact", handler: (event: SessionCompactEvent, ctx: AgentContext) => void | Promise<void>): void;
+    on(event: "session_before_fork", handler: (event: SessionBeforeForkEvent, ctx: AgentContext) => SessionBeforeForkAnswer | void | Promise<SessionBeforeForkAnswer | void>): void;
+    on(event: "session_shutdown", handler: (event: SessionShutdownEvent, ctx: AgentContext) => void | Promise<void>): void;
     registerTool(def: AgentToolDef): void;
     registerCommand(name: string, def: AgentCommandDef): void;
     appendEntry(customType: string, data?: unknown): void;
@@ -1204,6 +1314,8 @@ declare namespace widecode {
     setThinkingLevel(level: string): Promise<boolean>;
     /** The channels the plugins of this session's instance share. */
     events: AgentEvents;
+    /** Reload every plugin of the session's folder and trust, as `/reload` does. */
+    reload(): Promise<boolean>;
   }
 
   /** A tool of the session: its name, what it does, its input schema and where it came from. */

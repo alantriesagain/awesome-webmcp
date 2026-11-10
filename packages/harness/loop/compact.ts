@@ -64,6 +64,10 @@ export class CompactionResult {
   tokensAfter = 0;
   /** Why it did not happen ("" when it did). */
   error = "";
+  /** A session_before_compact handler said not to compact. */
+  cancelled = false;
+  /** The summary came from a handler rather than the model. */
+  fromPlugin = false;
 }
 
 /** The messages a request sends: the summary, as the user's first message, before the kept ones. */
