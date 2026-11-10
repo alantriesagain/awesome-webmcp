@@ -19,6 +19,8 @@ import { DenyRule, deniedBy } from "../tools/permissions.ts";
 import { parseJson, recordOf } from "@light/lib/json.ts";
 import { Tool, ToolContext, ToolOutcome, ToolSet } from "../tools/tool.ts";
 import { turnNote } from "../prompt/system.ts";
+import { Extensions } from "../ext/extensions.ts";
+import { ExtContext } from "../ext/context.ts";
 
 const two = (n: number): string => (n < 10 ? "0" : "") + String(n);
 
@@ -73,6 +75,10 @@ export class LoopSession {
   /** Whether the model reads images, and the images the next prompt carries (taken by `run`). */
   vision = false;
   pendingImages: Part[] = [];
+  /** The extensions of the session's folder and trust (null for none). */
+  ext: Extensions | null = null;
+  /** A `before_agent_start` handler's custom user messages, added after the prompt. */
+  pendingNotes: string[] = [];
   /** The context's size after the last request (its real count), and how many messages there were then. */
   contextTokens = 0;
   sinceIndex = 0;
@@ -163,6 +169,12 @@ export class AgentLoop {
     for (const img of s.pendingImages) user.parts.push(img);
     s.pendingImages = [];
     this.add(s, user, listener);
+    for (const note of s.pendingNotes) {
+      const m = new Message("user", s.nextUserId());
+      m.parts.push(textPart(note));
+      this.add(s, m, listener);
+    }
+    s.pendingNotes = [];
     for (;;) {
       // The mode's tools as it stands now (a plan approved mid-turn leaves plan mode).
       const tools = this.tools.forMode(s.mode).plus(s.extraTools);
@@ -267,6 +279,7 @@ export class AgentLoop {
     sub.web = s.web;
     sub.deny = s.deny;
     sub.vision = s.vision;
+    sub.ext = s.ext;
     const loop = new AgentLoop(this.client, this.tools.without("Task"));
     loop.extras = this.extras;
     loop.compactAt = this.compactAt;
@@ -301,6 +314,20 @@ export class AgentLoop {
     next.parts.push(textPart(s.steering.join("\n")));
     s.steering = [];
     this.add(s, next, listener);
+  }
+
+  /** The context a session's extension callbacks get. */
+  private extContext(s: LoopSession, abort: Abort, systemPrompt: string): ExtContext {
+    const c = new ExtContext();
+    c.cwd = s.cwd;
+    c.modelValue = s.model;
+    c.systemPrompt = systemPrompt;
+    c.tokens = s.contextEstimate();
+    c.window = s.window;
+    c.aborted = abort.aborted;
+    c.idle = false;
+    c.abort = () => abort.fire();
+    return c;
   }
 
   /** One request: the stream into `assistant`'s parts and the listener. */
@@ -347,7 +374,13 @@ export class AgentLoop {
     const planTool = s.extraTools.find((t) => t.name.endsWith("__PresentPlan")) ?? null;
     const system = s.system.slice();
     system.push(turnNote(today(), s.mode, planTool !== null ? planTool.name : ""));
-    const req = new ModelRequest(s.model, system, withSummary(s.summary, s.messages));
+    let messages = withSummary(s.summary, s.messages);
+    const ext = s.ext;
+    if (ext !== null) {
+      const replaced = ext.context(messages, this.extContext(s, abort, system.join("\n\n")));
+      if (replaced !== null) messages = replaced;
+    }
+    const req = new ModelRequest(s.model, system, messages);
     req.systemCached = s.system.length;
     req.effort = s.effort;
     req.toolsJson = tools.json(this.extras);
@@ -364,6 +397,10 @@ export class AgentLoop {
     ctx.harnessRoot = s.harnessRoot;
     ctx.web = s.web;
     ctx.vision = s.vision;
+    ctx.modelValue = s.model;
+    ctx.systemPrompt = s.system.join("\n\n");
+    ctx.tokens = s.contextEstimate();
+    ctx.window = s.window;
     const sequential = calls.some((c) => {
       const t = tools.find(c.part.name);
       return t === null || t.mutating;
@@ -374,18 +411,31 @@ export class AgentLoop {
       const why = tools.checkInput(p.name, p.inputJson);
       const onStart = listener.onToolStart;
       if (onStart !== null) onStart(p.callId, p.name, p.inputJson.length > 0 ? p.inputJson : "{}");
+      let inputJson = p.inputJson.length > 0 ? p.inputJson : "{}";
+      let blocked = "";
+      let ran = false;
+      const ext = s.ext;
+      const extCtx = ext !== null ? this.extContext(s, abort, s.system.join("\n\n")) : null;
+      if (why.length === 0 && ext !== null && extCtx !== null) {
+        const decision = ext.toolCall(p.callId, p.name, inputJson, extCtx);
+        if (decision.block) blocked = decision.reason;
+        else inputJson = decision.inputJson;
+      }
       let outcome: ToolOutcome;
-      const refused = why.length > 0 ? "" : deniedBy(s.deny, p.name, recordOf(parseJson(p.inputJson.length > 0 ? p.inputJson : "{}")) ?? {}, s.cwd, s.home);
+      const refused = why.length > 0 || blocked.length > 0 ? "" : deniedBy(s.deny, p.name, recordOf(parseJson(inputJson)) ?? {}, s.cwd, s.home);
       if (why.length > 0) outcome = ToolOutcome.failed(why);
+      else if (blocked.length > 0) outcome = ToolOutcome.failed(blocked);
       else if (refused.length > 0) outcome = ToolOutcome.failed("refused by the rule " + refused + " in permissions.deny: take another way, or ask the user");
       else {
         const onOutput = listener.onToolOutput;
+        ran = true;
         try {
-          outcome = p.name === "Task" ? await this.subagent(s, p.inputJson, listener, abort) : await tools.run(p.name, p.inputJson, ctx, abort, onOutput !== null ? (text: string) => onOutput(p.callId, text) : null);
+          outcome = p.name === "Task" ? await this.subagent(s, inputJson, listener, abort) : await tools.run(p.name, inputJson, ctx, abort, onOutput !== null ? (text: string) => onOutput(p.callId, text) : null);
         } catch (err) {
           outcome = ToolOutcome.failed(err instanceof Error ? err.message : "the tool failed");
         }
       }
+      if (ran && ext !== null && extCtx !== null) ext.toolResult(p.callId, p.name, inputJson, outcome, extCtx);
       c.outcome = outcome;
       const onEnd = listener.onToolEnd;
       if (onEnd !== null) onEnd(p.callId, outcome);

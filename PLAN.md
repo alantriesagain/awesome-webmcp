@@ -448,7 +448,7 @@ answers only `session/request_permission`.
       `${@:N:L}`, shell-like quoting) from `.widecode/prompts`, `.pi/prompts` (trusted),
       `~/.widecode/harness/prompts` and `~/.pi/agent/prompts`, offered as commands and expanded in
       `prompt`. Tests: `prompts.test.ts`, `skills.test.ts`.
-- [ ] **The engine in the daemon.** `@light/plugins` as a dependency of `@widecode/harness`; an
+- [x] **The engine in the daemon.** `@light/plugins` as a dependency of `@widecode/harness`; an
       extension is a `.js` file in pi's shape (`export default function (pi) {}`, no `import`: a
       load error names the line), from the store's `extensions/` (`~/.widecode/extensions/`, or
       `$WIDECODE_HOME/extensions`) and a trusted folder's `.widecode/extensions/`, beside the
@@ -460,7 +460,10 @@ answers only `session/request_permission`.
       onUpdate, ctx)` answering `{ content, details, isError }`), `registerCommand`, and `on` for
       `session_start`, `before_agent_start`, `context`, `tool_call` and `tool_result`. Tests with
       `// ffi: @light/plugins/native/ffi.json`.
-- [ ] **The UI over ACP.** `ctx.ui` as an ACP extension request from the harness (`_widecode/ui`,
+- [ ] **The UI over ACP.** First the engine's calls made asynchronous: a callback's promise
+      settles when the host answers (today `Extensions.call` pumps the jobs once and takes what
+      settled, so only a promise that needs no host work answers), the hooks awaited in the loop.
+      Then `ctx.ui` as an ACP extension request from the harness (`_widecode/ui`,
       through `sendRequest`), answered by the acp plugin the way pi's RPC client answers
       `extension_ui_request`: dialogs to the request panel, notify, setStatus, setWidget lines,
       setTitle; `ctx.hasUI` false for a client that did not say it takes them.
@@ -512,6 +515,8 @@ answers only `session/request_permission`.
 
 ## Log
 
+- `102598a` Milestone K, pi as an agent: `plugins/pi.ts` over `pi --mode rpc`, extension UI
+  requests to the request panel and the screen. Tests: `pi` against `fake-pi.mjs`.
 - `b71864a` Milestone K, shared formats: pi's skills folders, prompt templates in pi's format as
   the harness's session commands. Tests: `prompts`, `skills` (natively too), `agent`.
 - `8af5202` Folder switch, `--trust`, retired-agent fallback, hook removal, prelude cycle. Tests:

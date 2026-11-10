@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@light/lib": "workspace:*",
+    "@light/plugins": "workspace:*",
     "@light/workspace": "workspace:*",
     "@widecode/agent": "workspace:*",
     "@widecode/conversation": "workspace:*"

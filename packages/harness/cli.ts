@@ -8,6 +8,7 @@
 // providers have a key) and `--harness-auth <provider>` (a key read from stdin into auth.json).
 import { join } from "node:path";
 import { log, nameLog, openLogIn } from "@light/lib/log.ts";
+import { readTextOr } from "@light/lib/fs.ts";
 import { errorMessage, listOf, parseJson, recordOf, str } from "@light/lib/json.ts";
 import { AcpAgent } from "./acp/agent.ts";
 import { AcpServer, Incoming } from "./acp/server.ts";
@@ -24,16 +25,29 @@ import { Fetched, WebSettings, httpText, searchOrder } from "./tools/web.ts";
 import { Abort } from "./loop/abort.ts";
 import { SessionStore, sessionsJson } from "./session/store.ts";
 import { ToolSet, builtInTools } from "./tools/tool.ts";
+import { ExtensionsRegistry } from "./ext/extensions.ts";
 
 const argValue = (args: string[], name: string): string | null => {
   const at = args.indexOf(name);
   return at >= 0 && at + 1 < args.length ? args[at + 1] : null;
 };
 
-/** The tools of a mode, every one on, as opencode's `debug agent` prints them, plan mode's the read-only ones; a tool the deny rules refuse whole marked so. */
-export const toolsListing = (mode: string, rules: DenyRule[]): string => {
+/** The tools of a mode, every one on, as opencode's `debug agent` prints them, plan mode's the read-only ones; a tool the deny rules refuse whole marked so. `extra` are the names extensions registered. */
+export const toolsListing = (mode: string, rules: DenyRule[], extra: string[] = []): string => {
   const names = new ToolSet(builtInTools()).forMode(mode).tools.map((t) => t.name);
+  for (const name of extra) if (!names.includes(name)) names.push(name);
   return '{"tools":{' + names.map((n) => JSON.stringify(n) + ":true").join(",") + '},"permission":' + listingRules(rules) + "}";
+};
+
+/** Whether the store's `trusted.json` lists `folder` (the app's trust, which the ACP client otherwise passes per session). */
+const folderTrusted = (paths: HarnessPaths, folder: string): boolean => {
+  try {
+    const list = parseJson(readTextOr(join(paths.storeRoot, "trusted.json"), ""));
+    for (const v of listOf(list)) if (v === folder) return true;
+  } catch {
+    return false;
+  }
+  return false;
 };
 
 /** The search APIs a key is kept for, beside the model providers. */
@@ -88,9 +102,11 @@ export const harnessMain = (storeRoot: string, args: string[], build: string): P
   const paths = new HarnessPaths(storeRoot);
   const tools = argValue(args, "--harness-tools");
   if (tools !== null) {
-    // In the folder the command runs in: the user's rules and the project's.
-    const rules = parseRules(rulesIn(paths.configPath()).concat(rulesIn(join(process.cwd(), ".widecode", "config.json"))));
-    process.stdout.write(toolsListing(tools, rules) + "\n");
+    // In the folder the command runs in: the user's rules and the project's, and the tools its extensions register.
+    const cwd = process.cwd();
+    const rules = parseRules(rulesIn(paths.configPath()).concat(rulesIn(join(cwd, ".widecode", "config.json"))));
+    const extensions = new ExtensionsRegistry(paths).forSession(cwd, folderTrusted(paths, cwd));
+    process.stdout.write(toolsListing(tools, rules, extensions.tools().map((t) => t.name)) + "\n");
     return done(0);
   }
   paths.userHome = process.env["HOME"] ?? "";

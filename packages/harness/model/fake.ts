@@ -40,6 +40,8 @@ const wait = (ms: number): Promise<void> => new Promise<void>((settle) => setTim
 
 export class FakeClient {
   readonly replies: FakeReply[] = [];
+  /** Every request it played, in order (tests read what the model got). */
+  readonly requests: ModelRequest[] = [];
   private calls = 0;
 
   /** Replies from JSONL text, a record per line (a line that is not a record is skipped). */
@@ -85,6 +87,7 @@ export class FakeClient {
   }
 
   async play(req: ModelRequest, listener: StreamListener, abort: Abort): Promise<StreamEnd> {
+    this.requests.push(req);
     // A request naming a session (the naming prompt first in the system): one fixed answer.
     if (req.system.length > 0 && req.system[0].startsWith("You name coding sessions")) {
       const fn = listener.onText;

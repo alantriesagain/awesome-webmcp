@@ -31,6 +31,11 @@ export class ToolContext {
   web = new WebSettings();
   /** Whether the session's model reads images. */
   vision = false;
+  /** What an extension tool's ctx reports: the session's model, system prompt and context. */
+  modelValue = "";
+  systemPrompt = "";
+  tokens = 0;
+  window = 0;
 
   constructor(cwd: string, mode: string, reads: Set<string>) {
     this.cwd = cwd;
@@ -53,6 +58,8 @@ export class ToolOutcome {
   /** An image the call gives the model (a Read of an image file): its type and base64 data. */
   imageType = "";
   imageData = "";
+  /** An extension tool's `details`, as JSON text ("" for none), kept in the session file's outcome. */
+  detailsJson = "";
 
   static failed(why: string): ToolOutcome {
     const o = new ToolOutcome();
@@ -64,7 +71,7 @@ export class ToolOutcome {
   /** The outcome as JSON text, kept beside a call's result in a session file; `kind` the tool's ACP kind, `title` what its call showed as. */
   json(kind: string, title: string): string {
     const text = this.text.length > 2048 ? this.text.slice(0, 2048) + "…" : this.text;
-    return objectText(["kind", "title", "text", "isError", "locations", "diffPath", "created", "oldText", "newText", "patch", "rawOutputJson"], [JSON.stringify(kind), JSON.stringify(title), JSON.stringify(text), this.isError ? "true" : "false", listText(this.locations.map((l) => JSON.stringify(l))), JSON.stringify(this.diffPath), this.created ? "true" : "false", JSON.stringify(this.oldText), JSON.stringify(this.newText), JSON.stringify(this.patch), JSON.stringify(this.rawOutputJson)]);
+    return objectText(["kind", "title", "text", "isError", "locations", "diffPath", "created", "oldText", "newText", "patch", "rawOutputJson", "detailsJson"], [JSON.stringify(kind), JSON.stringify(title), JSON.stringify(text), this.isError ? "true" : "false", listText(this.locations.map((l) => JSON.stringify(l))), JSON.stringify(this.diffPath), this.created ? "true" : "false", JSON.stringify(this.oldText), JSON.stringify(this.newText), JSON.stringify(this.patch), JSON.stringify(this.rawOutputJson), JSON.stringify(this.detailsJson)]);
   }
 
   /** An outcome and its kind from that text; null when it is not one. */
@@ -81,6 +88,7 @@ export class ToolOutcome {
     o.newText = str(r["newText"]);
     o.patch = str(r["patch"]);
     o.rawOutputJson = str(r["rawOutputJson"]);
+    o.detailsJson = str(r["detailsJson"]);
     return new KeptOutcome(o, str(r["kind"]), str(r["title"]));
   }
 }
@@ -98,6 +106,11 @@ export class KeptOutcome {
   }
 }
 
+/** What runs a tool an extension registered, a callback field rather than a method: a subclass's async method does not compile natively. */
+export class ExtraTool {
+  runExtra: ((inputJson: string, ctx: ToolContext, abort: Abort) => Promise<ToolOutcome>) | null = null;
+}
+
 export class Tool {
   readonly name: string;
   readonly description: string;
@@ -107,6 +120,8 @@ export class Tool {
   readonly mutating: boolean;
   /** What its calls show as to the client: the name, but for an MCP tool (`widecode_AskUser`). */
   title: string;
+  /** What runs it when an extension registered it (null for a built-in or MCP tool). */
+  extra: ExtraTool | null = null;
 
   constructor(name: string, description: string, schemaJson: string, kind: string, mutating: boolean) {
     this.name = name;
@@ -174,9 +189,11 @@ export class ToolSet {
     return new ToolSet(this.tools.filter((t) => t.name !== name));
   }
 
-  /** These tools and `more` (a session's MCP tools). */
+  /** These tools and `more` (a session's MCP or extension tools), one of `more` replacing a tool of its name. */
   plus(more: Tool[]): ToolSet {
-    return more.length === 0 ? this : new ToolSet(this.tools.concat(more));
+    if (more.length === 0) return this;
+    const kept = this.tools.filter((t) => !more.some((m) => m.name === t.name));
+    return new ToolSet(kept.concat(more));
   }
 
   find(name: string): Tool | null {
@@ -225,6 +242,9 @@ export class ToolSet {
   /** Run `name` with its input (JSON text, validated already) in `ctx`; `onOutput` hears a long call's output as it comes. */
   async run(name: string, inputJson: string, ctx: ToolContext, abort: Abort, onOutput: ((text: string) => void) | null): Promise<ToolOutcome> {
     const input = recordOf(parseJson(inputJson.length > 0 ? inputJson : "{}")) ?? {};
+    const found = this.find(name);
+    const extra = found !== null ? found.extra : null;
+    if (extra !== null && extra.runExtra !== null) return extra.runExtra(inputJson, ctx, abort);
     switch (name) {
       case "Read": {
         const o = await readTool(input, ctx);

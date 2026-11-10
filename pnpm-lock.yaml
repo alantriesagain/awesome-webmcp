@@ -188,6 +188,9 @@ importers:
       '@light/lib':
         specifier: workspace:*
         version: link:../../light/packages/native/lib
+      '@light/plugins':
+        specifier: workspace:*
+        version: link:../../light/packages/native/plugins
       '@light/workspace':
         specifier: workspace:*
         version: link:../../light/packages/native/workspace

@@ -35,6 +35,8 @@ import { McpLink, McpListing } from "../tools/mcp.ts";
 import { Tool, ToolOutcome, ToolSet } from "../tools/tool.ts";
 import { WebSettings } from "../tools/web.ts";
 import { parseRules, rulesIn } from "../tools/permissions.ts";
+import { ExtContext } from "../ext/context.ts";
+import { ExtCommand, Extensions, ExtensionsRegistry } from "../ext/extensions.ts";
 import { join } from "node:path";
 import { Choice, ConfigOptions } from "./options.ts";
 import { AcpServer, Incoming } from "./server.ts";
@@ -79,6 +81,8 @@ export class HarnessSession {
   titled = false;
   /** The prompt templates the session offers, scanned when it opens. */
   templates: TemplateInfo[] = [];
+  /** The extensions of the session's folder and trust (null until the session opens). */
+  ext: Extensions | null = null;
 
   constructor(id: string, options: ConfigOptions) {
     this.id = id;
@@ -141,6 +145,7 @@ export class AcpAgent {
   /** What the web tools have (the browser, the search backends), set by the daemon. */
   web = new WebSettings();
   private readonly sessions = new Map<string, HarnessSession>();
+  private readonly extensions: ExtensionsRegistry;
 
   constructor(server: AcpServer, client: ModelClient, tools: ToolSet, registry: ModelRegistry, config: HarnessConfig, build: string, platform: string, paths: HarnessPaths) {
     this.server = server;
@@ -151,11 +156,43 @@ export class AcpAgent {
     this.build = build;
     this.platform = platform;
     this.paths = paths;
+    this.extensions = new ExtensionsRegistry(paths);
   }
 
   /** The folder's session files. */
   private storeFor(cwd: string): SessionStore {
     return new SessionStore(this.paths.sessionsDir(cwd));
+  }
+
+  /** The session's extension pair; a folder or trust that changed gets its own. */
+  private extFor(s: HarnessSession): Extensions {
+    const key = this.extensions.keyFor(s.cwd, s.trusted);
+    if (s.ext === null || s.ext.key !== key) {
+      s.ext = this.extensions.forSession(s.cwd, s.trusted);
+      s.loop.ext = s.ext;
+    }
+    return s.ext;
+  }
+
+  /** The context an extension callback gets. */
+  private extContext(s: HarnessSession, abort: Abort | null): ExtContext {
+    const c = new ExtContext();
+    c.cwd = s.cwd;
+    c.modelValue = s.loop.model;
+    c.systemPrompt = s.loop.system.join("\n\n");
+    c.tokens = s.loop.contextEstimate();
+    c.window = s.window;
+    c.aborted = abort !== null && abort.aborted;
+    c.idle = !s.running;
+    c.abort = () => {
+      if (abort !== null) abort.fire();
+    };
+    return c;
+  }
+
+  /** A session_start event to the session's extensions. */
+  private sessionStarted(s: HarnessSession, reason: string): void {
+    this.extFor(s).sessionStart(reason, this.extContext(s, null));
   }
 
   /** The options a new session starts with: every model by provider, the chosen model's efforts, the config's choices. */
@@ -187,9 +224,12 @@ export class AcpAgent {
       case "initialize":
         this.server.answer(m.idText, '{"protocolVersion":1,"agentCapabilities":' + CAPABILITIES + ',"authMethods":[],"agentInfo":{"name":"widecode-harness","version":' + JSON.stringify(this.build) + "}}");
         return;
-      case "session/new":
-        this.announce(m.idText, this.make(p));
+      case "session/new": {
+        const made = this.make(p);
+        this.announce(m.idText, made);
+        this.sessionStarted(made, "new");
         return;
+      }
       case "session/load":
         this.reopen(m.idText, p, true);
         return;
@@ -241,6 +281,7 @@ export class AcpAgent {
     s.mcpServersText = Array.isArray(servers) ? JSON.stringify(servers) : "[]";
     this.takeMeta(s, p);
     s.file = this.storeFor(s.cwd).open(s.id, s.cwd);
+    this.extFor(s);
     this.apply(s);
     this.link(s);
     this.sessions.set(s.id, s);
@@ -254,7 +295,8 @@ export class AcpAgent {
     const links = McpLink.fromSession(s.mcpServersText);
     for (const l of links) l.httpKind = this.config.http;
     s.loop.servers = links;
-    s.loop.extraTools = [];
+    const extTools = s.ext !== null ? s.ext.tools() : [];
+    s.loop.extraTools = extTools;
     if (links.length === 0) {
       s.toolsReady = new Promise<void>((settle) => settle());
       return;
@@ -269,7 +311,7 @@ export class AcpAgent {
           tools.push(t);
         }
       }
-      s.loop.extraTools = tools;
+      s.loop.extraTools = extTools.concat(tools);
     });
   }
 
@@ -297,6 +339,7 @@ export class AcpAgent {
     s.loop.harnessRoot = this.paths.root();
     s.loop.web = this.web;
     s.loop.vision = m0 !== null && m0.vision;
+    s.loop.ext = s.ext;
     // The user's rules, and a trusted project's (its .widecode/config.json, read again as the session goes).
     s.loop.deny = parseRules(s.trusted && s.cwd.length > 0 ? this.config.denyRules.concat(rulesIn(join(s.cwd, ".widecode", "config.json"))) : this.config.denyRules);
     const m = this.registry.model(s.options.model);
@@ -312,9 +355,14 @@ export class AcpAgent {
     this.server.answer(idText, '{"sessionId":' + JSON.stringify(s.id) + ',"configOptions":' + s.options.text() + "}");
     const commands = COMMANDS.slice();
     for (const t of s.templates) {
-      if (COMMANDS.some((c) => c[0] === t.name)) continue;
+      if (commands.some((c) => c[0] === t.name)) continue;
       commands.push([t.name, t.description, t.argumentHint]);
     }
+    if (s.ext !== null)
+      for (const c of s.ext.commands()) {
+        if (commands.some((known) => known[0] === c.name)) continue;
+        commands.push([c.name, c.description, ""]);
+      }
     this.server.notify("session/update", commandsUpdate(s.id, commands));
     this.server.notify("session/update", usageUpdate(s.id, s.used, s.window, s.costUsd));
   }
@@ -389,6 +437,7 @@ export class AcpAgent {
       this.write(s, Entry.ofMessage(fix, Date.now()));
     }
     s.titled = s.title.length > 0;
+    this.extFor(s);
     this.apply(s);
     this.link(s);
     this.sessions.set(id, s);
@@ -408,14 +457,19 @@ export class AcpAgent {
     this.takeMeta(s, p);
     const servers = p !== null ? p["mcpServers"] : null;
     if (Array.isArray(servers)) s.mcpServersText = JSON.stringify(servers);
+    this.extFor(s);
     this.apply(s);
     this.link(s);
     if (!replay) {
       this.announce(idText, s);
+      this.sessionStarted(s, "resume");
       return;
     }
     replayPaced(replayUpdates(s.id, s.history), (text: string) => this.server.notify("session/update", text)).then(
-      () => this.announce(idText, s),
+      () => {
+        this.announce(idText, s);
+        this.sessionStarted(s, "resume");
+      },
       (err: unknown) => this.server.refuse(idText, -32603, errorMessage(err, "the session could not be shown again")),
     );
   }
@@ -452,8 +506,10 @@ export class AcpAgent {
     const store = this.storeFor(from.cwd);
     const copied = store.fork(from.id, s.id);
     s.file = copied !== null ? copied : store.open(s.id, from.cwd);
+    this.extFor(s);
     this.apply(s);
     this.announce(idText, s);
+    this.sessionStarted(s, "fork");
   }
 
   private setOption(idText: string, p: Record<string, unknown> | null): void {
@@ -484,6 +540,7 @@ export class AcpAgent {
       return;
     }
     this.takeMeta(s, p);
+    this.extFor(s);
     const text = promptText(p["prompt"]);
     const words = text.trim();
     if (words === "/title" || words.startsWith("/title ")) {
@@ -493,6 +550,15 @@ export class AcpAgent {
     if (words === "/compact" || words.startsWith("/compact ")) {
       this.compactRequested(s, idText, words.slice("/compact".length).trim());
       return;
+    }
+    // An extension's command, unless a prompt template of the same name wins.
+    const named = /^\/([^\s]+)(?:\s+([\s\S]*))?$/.exec(words);
+    if (named !== null && !s.templates.some((t) => t.name === named[1])) {
+      const command = s.ext !== null ? s.ext.commandNamed(named[1]) : null;
+      if (command !== null) {
+        this.runExtensionCommand(s, idText, command, named[2] ?? "");
+        return;
+      }
     }
     // A prompt template of the session's, expanded as the user's message; the built-in commands above win.
     const expanded = expandTemplate(text, s.templates);
@@ -506,20 +572,28 @@ export class AcpAgent {
     const images = promptImages(p["prompt"]);
     const model = this.registry.model(s.options.model);
     if (images.length > 0 && !(model !== null && model.vision)) {
-      this.startTurn(s, expanded + "\n\n[" + String(images.length) + (images.length === 1 ? " image was" : " images were") + " attached; this model does not read images, so they were left out]", [idText]);
+      this.startTurn(s, expanded + "\n\n[" + String(images.length) + (images.length === 1 ? " image was" : " images were") + " attached; this model does not read images, so they were left out]", [idText], images);
       return;
     }
     s.loop.pendingImages = images;
-    this.startTurn(s, expanded, [idText]);
+    this.startTurn(s, expanded, [idText], images);
   }
 
   /** A turn: the model asked with `text`, its events to the client, the prompts `ids` answered at its end. */
-  private startTurn(s: HarnessSession, text: string, ids: string[]): void {
+  private startTurn(s: HarnessSession, text: string, ids: string[], images: Part[]): void {
     s.running = true;
     s.promptIds = ids;
     s.abort = new Abort();
     this.apply(s);
     s.loop.system = this.blocksFor(s);
+    const ext = s.ext;
+    if (ext !== null) {
+      const attached: Record<string, unknown>[] = [];
+      for (const image of images) attached.push({ type: "image", data: image.data, mimeType: image.mediaType });
+      const answer = ext.beforeAgentStart(text, attached, s.loop.system.join("\n\n"), this.extContext(s, s.abort));
+      if (answer.systemPrompt.length > 0) s.loop.system = [answer.systemPrompt];
+      for (const message of answer.messages) s.loop.pendingNotes.push(message);
+    }
     const listener = this.listenerFor(s);
     const failed = (err: unknown): void => {
       const end = new TurnEnd();
@@ -532,6 +606,24 @@ export class AcpAgent {
       () => this.loop.run(s.loop, text, listener, s.abort).then((end: TurnEnd) => this.turnEnded(s, end), failed),
       failed,
     );
+  }
+
+  /** `/name args` for an extension's command: the handler runs instead of a turn, the prompt answered when it settles. */
+  private runExtensionCommand(s: HarnessSession, idText: string, command: ExtCommand, args: string): void {
+    if (s.running) {
+      this.said(s, idText, "A turn is running: try the command when it ends.");
+      return;
+    }
+    s.running = true;
+    s.promptIds = [idText];
+    s.abort = new Abort();
+    this.apply(s);
+    const ext = s.ext;
+    const error = ext !== null ? ext.runCommand(command, args, this.extContext(s, s.abort)) : "the extension is not loaded";
+    s.running = false;
+    s.promptIds = [];
+    if (error.length > 0) this.said(s, idText, error);
+    else this.server.answer(idText, '{"stopReason":"end_turn","usage":{"inputTokens":0,"outputTokens":0}}');
   }
 
   /** The loop's events to the client and the session's file. */
@@ -591,7 +683,7 @@ export class AcpAgent {
       s.promptIds = [];
       s.loop.steering = [];
       this.said(s, idText, note);
-      if (steered.length > 0) this.startTurn(s, steered.join("\n"), waiting);
+      if (steered.length > 0) this.startTurn(s, steered.join("\n"), waiting, []);
     };
     this.loop.compactContext(s.loop, 0, hint, s.abort).then(
       (c: CompactionResult | null) => {

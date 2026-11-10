@@ -15,6 +15,11 @@ export class HarnessPaths {
     return join(this.storeRoot, "harness");
   }
 
+  /** The user's extensions, beside the app's plugins (`~/.widecode/extensions`). */
+  extensionsDir(): string {
+    return join(this.storeRoot, "extensions");
+  }
+
   logsDir(): string {
     return join(this.root(), "logs");
   }
