@@ -217,6 +217,9 @@ const AGENT_RUNTIME: string = `"use strict";
   globalThis.__extReset = () => {
     for (const id of Object.keys(defs)) delete defs[id];
   };
+  globalThis.__extForget = (f) => {
+    for (const id of Object.keys(defs)) if (defs[id].file === f) delete defs[id];
+  };
   globalThis.widecode = Object.freeze({
     version: base.version,
     util: base.util,

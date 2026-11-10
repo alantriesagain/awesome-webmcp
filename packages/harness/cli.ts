@@ -212,6 +212,7 @@ export const harnessMain = (storeRoot: string, args: string[], build: string, bu
     const end = (why: string): void => {
       if (ended) return;
       ended = true;
+      agent.stop();
       log(why);
       settle(0);
     };

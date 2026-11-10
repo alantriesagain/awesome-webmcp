@@ -175,7 +175,7 @@ export class AcpAgent {
   /** Whether the client said it takes `_widecode/ui` (initialize's `clientCapabilities._meta.widecode.ui`). */
   hasUI = false;
   private readonly sessions = new Map<string, HarnessSession>();
-  private readonly extensions: ExtensionsRegistry;
+  readonly extensions: ExtensionsRegistry;
 
   constructor(server: AcpServer, client: ModelClient, tools: ToolSet, registry: ModelRegistry, config: HarnessConfig, build: string, platform: string, paths: HarnessPaths, builtins: PluginSource[] = []) {
     this.server = server;
@@ -190,6 +190,11 @@ export class AcpAgent {
     ui.request = (paramsText: string) => this.server.sendRequest("_widecode/ui", paramsText);
     ui.notify = (paramsText: string) => this.server.notify("_widecode/ui", paramsText);
     this.extensions = new ExtensionsRegistry(paths, ui, builtins);
+  }
+
+  /** Stop the plugins' folder watchers (the daemon is ending). */
+  stop(): void {
+    this.extensions.stop();
   }
 
   /** The folder's session files. */
@@ -218,6 +223,7 @@ export class AcpAgent {
     ext.onSetSessionName = (name: string) => this.setSessionName(s, name);
     ext.onGetSessionName = () => s.title;
     ext.onRegistered = (kind: string) => this.afterRegistration(s, kind);
+    ext.onReloaded = () => this.afterRegistration(s, "reload");
   }
 
   /** Appending a custom entry through the store, outside the context. */

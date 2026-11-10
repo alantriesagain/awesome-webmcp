@@ -34,6 +34,24 @@ const until = (what: () => boolean): Promise<void> =>
     tick();
   });
 
+const waitUpTo = async (what: () => boolean, ms: number): Promise<boolean> => {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (what()) return true;
+    await new Promise<void>((settle) => setTimeout(settle, 20));
+  }
+  return what();
+};
+
+const notifyStarting = async (rig: Rig, prefix: string): Promise<string> => {
+  let message = "";
+  for (let i = 0; i < 5; i++) {
+    message = String((await rig.uiNotification("notify"))["message"]);
+    if (message.startsWith(prefix)) return message;
+  }
+  return message;
+};
+
 class Rig {
   folder = "";
   home = "";
@@ -60,9 +78,13 @@ class Rig {
   }
 
   extension(code: string, project = false): void {
+    this.extensionFile("ext.js", code, project);
+  }
+
+  extensionFile(name: string, code: string, project = false): void {
     const dir = project ? join(this.folder, ".widecode", "plugins") : join(this.home, "plugins");
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "ext.js"), code);
+    writeFileSync(join(dir, name), code);
   }
 
   logFile(): string {
@@ -169,6 +191,7 @@ class Rig {
   }
 
   close(): void {
+    if (this.agent !== null) this.agent.stop();
     rmSync(this.folder, { recursive: true, force: true });
   }
 }
@@ -678,6 +701,7 @@ const main = async (): Promise<void> => {
     writeFileSync(join(folder, ".widecode", "config.json"), '{"plugins":{"ext":false}}');
     const loose = new ExtensionsRegistry(paths).forSession(folder, false);
     ok("an untrusted folder's false is not read", loose.engine !== null);
+    loose.stopWatching();
     const trusted = new ExtensionsRegistry(paths).forSession(folder, true);
     ok("a trusted folder's false switches it off", trusted.engine === null);
     rmSync(folder, { recursive: true, force: true });
@@ -945,6 +969,134 @@ const main = async (): Promise<void> => {
     await rig.prompt(sid, "/reg");
     const lines = rig.taken();
     ok("a late command is announced again", lines.some((line) => line.includes("available_commands_update") && line.includes('"name":"late"')));
+    rig.close();
+  }
+
+  // A changed file is reloaded in the live instance: its command answers the new code, its commands are announced again, and shutdown then start say reload.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    const logFile = rig.logFile();
+    const code = (reply: string): string =>
+      [
+        'widecode.plugin({ id: "ext", agent(agent) {',
+        '  agent.on("session_shutdown", (e, ctx) => { ctx.ui.notify("shutdown:" + e.reason); });',
+        '  agent.on("session_start", (e, ctx) => { ctx.ui.notify("start:" + e.reason); });',
+        '  agent.registerCommand("hello", { handler: (a, ctx) => { ctx.ui.notify("' + reply + '"); } });',
+        "} });",
+      ].join("\n");
+    rig.extension(code("hello:v1"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    rig.uiNotifications("notify");
+    await rig.prompt(sid, "/hello");
+    eq("the first code answers first", await notifyStarting(rig, "hello:"), "hello:v1");
+    rig.extension(code("hello:v2"));
+    await rig.agent!.extensions.forSession(rig.folder, false).syncNow();
+    const updated = rig.taken();
+    ok("the commands are announced again after the reload", updated.some((line) => line.includes("available_commands_update")));
+    await rig.prompt(sid, "/hello");
+    eq("the session's command answers the new code", await notifyStarting(rig, "hello:"), "hello:v2");
+    const kept = readFileSync(logFile, "utf8");
+    const shutdown = kept.indexOf("shutdown:reload");
+    const start = kept.indexOf("start:reload");
+    ok("session_shutdown then session_start carried reason reload", shutdown >= 0 && start > shutdown);
+    rig.close();
+  }
+
+  // A reload of one file leaves another plugin's module state in the instance.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    const counter = (id: string): string =>
+      [
+        'widecode.plugin({ id: "' + id + '", agent(agent) {',
+        "  let n = 0;",
+        '  agent.registerCommand("' + id + '", { handler: (a, ctx) => { ctx.ui.notify("' + id + ':" + String(++n)); } });',
+        "} });",
+      ].join("\n");
+    rig.extensionFile("a.js", counter("a"));
+    rig.extensionFile("b.js", counter("b"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    rig.uiNotifications("notify");
+    await rig.prompt(sid, "/b");
+    eq("the second plugin counts from 1", await notifyStarting(rig, "b:"), "b:1");
+    rig.extensionFile("a.js", counter("a"));
+    await rig.agent!.extensions.forSession(rig.folder, false).syncNow();
+    await rig.prompt(sid, "/a");
+    eq("the reloaded file starts its state again", await notifyStarting(rig, "a:"), "a:1");
+    await rig.prompt(sid, "/b");
+    eq("the other file keeps its state through the reload", await notifyStarting(rig, "b:"), "b:2");
+    rig.close();
+  }
+
+  // A removed file takes its command away.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    rig.extension('widecode.plugin({ id: "ext", agent(agent) { agent.registerCommand("gone", { handler: () => {} }); } });');
+    rig.initialize(true);
+    rig.session({ cwd: rig.folder, mcpServers: [] });
+    const made = rig.taken();
+    ok("the command is there first", made.some((line) => line.includes('"name":"gone"')));
+    rmSync(join(rig.home, "plugins", "ext.js"));
+    const group = rig.agent!.extensions.forSession(rig.folder, false);
+    await group.syncNow();
+    ok("the file's entry is gone", !group.entries.some((entry) => entry.id === "ext"));
+    const updated = rig.taken().filter((line) => line.includes("available_commands_update"));
+    ok("the next command list leaves it out", updated.length > 0 && !updated[updated.length - 1].includes('"name":"gone"'));
+    rig.close();
+  }
+
+  // A plugin switched off for its budget comes back when its file changes.
+  {
+    const rig = new Rig(['{"match":"hello","text":"Hi."}'].join("\n"));
+    const logFile = rig.logFile();
+    rig.extension([
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.on("before_agent_start", () => { while (true) {} });',
+      '  agent.registerCommand("fixed", { handler: (a, ctx) => { ctx.ui.notify("fixed:v1"); } });',
+      "} });",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    rig.uiNotifications("notify");
+    await rig.prompt(sid, "hello");
+    rig.taken();
+    ok("the busy loop switches the plugin off", readFileSync(logFile, "utf8").includes("switched off"));
+    rig.extension('widecode.plugin({ id: "ext", agent(agent) { agent.registerCommand("fixed", { handler: (a, ctx) => { ctx.ui.notify("fixed:ok"); } }); } });');
+    await rig.agent!.extensions.forSession(rig.folder, false).syncNow();
+    await rig.prompt(sid, "/fixed");
+    eq("the fixed code runs after the change", await notifyStarting(rig, "fixed:"), "fixed:ok");
+    rig.close();
+  }
+
+  // The folder watcher reloads a changed file after its debounce.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    const logFile = rig.logFile();
+    const code = (reply: string): string =>
+      [
+        'widecode.plugin({ id: "ext", agent(agent) {',
+        '  agent.on("session_shutdown", (e, ctx) => { ctx.ui.notify("shutdown:" + e.reason); });',
+        '  agent.on("session_start", (e, ctx) => { ctx.ui.notify("start:" + e.reason); });',
+        '  agent.registerCommand("hello", { handler: (a, ctx) => { ctx.ui.notify("' + reply + '"); } });',
+        "} });",
+      ].join("\n");
+    rig.extension(code("watch:v1"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    rig.uiNotifications("notify");
+    rig.extension(code("watch:v2"));
+    const reloaded = await waitUpTo(() => {
+      const kept = readFileSync(logFile, "utf8");
+      return kept.includes("shutdown:reload") && kept.includes("start:reload");
+    }, 3000);
+    ok("the watcher reloads the changed file", reloaded);
+    await rig.prompt(sid, "/hello");
+    eq("the watcher's reload answers the new code", await notifyStarting(rig, "watch:"), "watch:v2");
     rig.close();
   }
 

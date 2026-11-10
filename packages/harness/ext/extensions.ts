@@ -8,10 +8,12 @@
 // one over budget is switched off for the daemon's life. The async answer path is the app runtime's:
 // the prelude calls back with the call's id and the settled value or error, and the host keeps the
 // invocation's outcome.
-import { join } from "node:path";
+import { existsSync, watch } from "node:fs";
+import { dirname, join } from "node:path";
 import { readTextOr } from "@light/lib/fs.ts";
 import { listOf, num, parseJson, recordOf, str } from "@light/lib/json.ts";
 import { log, trail } from "@light/lib/log.ts";
+import { Closer } from "@light/lib/timing.ts";
 import { FAILED, HostAnswer, HostHandler, JsEngine, JsResult, OVER_BUDGET, OK } from "@light/plugins/engine.ts";
 import { PluginSource, sourcesIn } from "@light/plugins/sources.ts";
 import { Abort } from "../loop/abort.ts";
@@ -26,6 +28,8 @@ import { EXT_PRELUDE } from "./prelude.ts";
 /** The app's per-call CPU budget. */
 const BUDGET_MS = 250;
 const MEMORY_MB = 32;
+/** How long a plugin folder's changes settle before the files are read again. */
+const RELOAD_MS = 150;
 
 class CallResult {
   ok = true;
@@ -164,7 +168,8 @@ export class Extensions extends HostHandler {
   engine: JsEngine | null = null;
   readonly entries: ExtEntry[] = [];
   private readonly sources: LoadedSource[] = [];
-  private agentSources: LoadedSource[] = [];
+  private readonly idsByFile = new Map<string, string[]>();
+  private readonly dirSources = new Map<string, LoadedSource[]>();
   agentIds: string[] = [];
   private readonly instances = new Map<number, ExtSession>();
   private instanceSeq = 0;
@@ -179,6 +184,12 @@ export class Extensions extends HostHandler {
   private hostSettleId = -1;
   startId = -1;
   private activeEntry: ExtEntry | null = null;
+  private readonly closers: Closer[] = [];
+  private watchTimer: ReturnType<typeof setTimeout> | null = null;
+  private watchSeq = 0;
+  private syncQueued = false;
+  private syncing = false;
+  private calls = 0;
 
   constructor(paths: HarnessPaths, folder: string, trusted: boolean, ui: ExtUiHost | null, builtins: PluginSource[] = []) {
     super();
@@ -190,12 +201,77 @@ export class Extensions extends HostHandler {
     this.key = folder + "\u0000" + (trusted ? "1" : "0");
   }
 
-  /** The files: the built-ins the caller handed in, the user's, a trusted folder's, in that order. */
-  private findSources(): PluginSource[] {
-    const out: PluginSource[] = [];
-    for (const source of this.builtins) out.push(source);
-    for (const source of sourcesIn(this.paths.pluginsDir())) out.push(source);
-    if (this.trusted && this.folder.length > 0) for (const source of sourcesIn(join(this.folder, ".widecode", "plugins"))) out.push(source);
+  /** The folders the plugin files are read from: the store's, and a trusted folder's. */
+  private pluginDirs(): string[] {
+    const out: string[] = [this.paths.pluginsDir()];
+    if (this.trusted && this.folder.length > 0) out.push(join(this.folder, ".widecode", "plugins"));
+    return out;
+  }
+
+  /** Evaluate `file`'s wrapped code in the engine, logging a failure. */
+  private evaluate(engine: JsEngine, file: string, code: string): boolean {
+    const begin = engine.eval("__extFile(" + JSON.stringify(file) + ")", "harness:plugin-file");
+    if (begin.status !== OK) {
+      log("plugin " + file + ": " + begin.message());
+      return false;
+    }
+    const evaluated = engine.eval(code, file);
+    if (evaluated.status !== OK) {
+      log("plugin " + file + ": " + evaluated.message());
+      return false;
+    }
+    return true;
+  }
+
+  /** The ids `file` defined in the engine, from the definitions still standing for it. */
+  private activeIdsFor(engine: JsEngine, file: string): string[] {
+    const out: string[] = [];
+    const active = engine.eval("__ext.active()", "harness:plugin-active");
+    if (active.status !== OK) {
+      log("plugin ids: " + active.message());
+      return out;
+    }
+    for (const value of listOf(parseJson(active.text))) {
+      const record = recordOf(value);
+      if (record === null || str(record["file"]) !== file) continue;
+      const id = str(record["id"]);
+      if (id.length > 0 && !out.includes(id)) out.push(id);
+    }
+    return out;
+  }
+
+  /** The entries from the ids each file defines, an id defined again naming the later file; `fresh` files lose a switch-off. */
+  private rebuildEntries(fresh: string[]): void {
+    const old = this.entries.slice();
+    this.entries.length = 0;
+    this.agentIds = [];
+    const plugins = this.plugins();
+    const named = new Map<string, string>();
+    for (const source of this.sources) {
+      const ids = this.idsByFile.get(source.file);
+      if (ids === undefined) continue;
+      for (const id of ids) named.set(id, source.file);
+    }
+    for (const source of this.sources) {
+      const ids = this.idsByFile.get(source.file);
+      if (ids === undefined) continue;
+      for (const id of ids) {
+        if (named.get(id) !== source.file || plugins[id] === false) continue;
+        const entry = new ExtEntry(id, source.file);
+        const before = old.find((e) => e.key === entry.key);
+        if (before !== undefined && !fresh.includes(source.file)) entry.enabled = before.enabled;
+        this.entries.push(entry);
+        if (!this.agentIds.includes(id)) this.agentIds.push(id);
+      }
+    }
+  }
+
+  /** The files with an agent part, as they stand. */
+  private agentSources(): LoadedSource[] {
+    const files: string[] = [];
+    for (const entry of this.entries) if (!files.includes(entry.file)) files.push(entry.file);
+    const out: LoadedSource[] = [];
+    for (const source of this.sources) if (files.includes(source.file)) out.push(source);
     return out;
   }
 
@@ -227,7 +303,15 @@ export class Extensions extends HostHandler {
   ensure(): void {
     if (this.loaded) return;
     this.loaded = true;
-    const sources = this.findSources();
+    const sources: PluginSource[] = [];
+    for (const source of this.builtins) sources.push(source);
+    for (const dir of this.pluginDirs()) {
+      const list = sourcesIn(dir);
+      const loaded: LoadedSource[] = [];
+      for (const source of list) loaded.push(new LoadedSource(source.file, "(function () {\n" + source.code + "\n})();"));
+      this.dirSources.set(dir, loaded);
+      for (const source of list) sources.push(source);
+    }
     if (sources.length === 0) return;
     const engine = new JsEngine(this, MEMORY_MB, BUDGET_MS);
     this.engine = engine;
@@ -245,44 +329,21 @@ export class Extensions extends HostHandler {
     engine.eval("__extReset()", "harness:plugin-prelude");
     for (const source of sources) {
       const code = "(function () {\n" + source.code + "\n})();";
-      const begin = engine.eval("__extFile(" + JSON.stringify(source.file) + ")", "harness:plugin-file");
-      if (begin.status !== OK) {
-        log("plugin " + source.file + ": " + begin.message());
-        continue;
-      }
-      const evaluated = engine.eval(code, source.file);
-      if (evaluated.status !== OK) {
-        log("plugin " + source.file + ": " + evaluated.message());
-        continue;
-      }
+      if (!this.evaluate(engine, source.file, code)) continue;
       this.sources.push(new LoadedSource(source.file, code));
+      this.idsByFile.set(source.file, this.activeIdsFor(engine, source.file));
     }
-    const active = engine.eval("__ext.active()", "harness:plugin-active");
-    if (active.status !== OK) {
-      log("plugin ids: " + active.message());
-      engine.free();
-      this.engine = null;
-      return;
-    }
-    const plugins = this.plugins();
-    const files: string[] = [];
-    for (const value of listOf(parseJson(active.text))) {
-      const record = recordOf(value);
-      if (record === null) continue;
-      const id = str(record["id"]);
-      const file = str(record["file"]);
-      if (id.length === 0 || file.length === 0 || plugins[id] === false) continue;
-      this.entries.push(new ExtEntry(id, file));
-      if (!this.agentIds.includes(id)) this.agentIds.push(id);
-      if (!files.includes(file)) files.push(file);
-    }
+    this.rebuildEntries([]);
     if (this.agentIds.length === 0) {
       engine.free();
       this.engine = null;
+      this.idsByFile.clear();
+      this.sources.length = 0;
+      this.dirSources.clear();
       return;
     }
-    for (const source of this.sources) if (files.includes(source.file)) this.agentSources.push(source);
     engine.eval("__extReset()", "harness:plugin-prelude");
+    this.watchFolders();
   }
 
   /** A session's instance: the files with an agent part evaluated again with an api of its own. */
@@ -290,13 +351,151 @@ export class Extensions extends HostHandler {
     this.ensure();
     const instance = new ExtSession(this, ++this.instanceSeq, sessionId, cwd.length > 0 ? cwd : this.folder);
     this.instances.set(instance.id, instance);
-    instance.load(this.agentSources);
+    instance.load(this.agentSources());
     return instance;
   }
 
   instanceOf(id: number): ExtSession | null {
     const found = this.instances.get(id);
     return found === undefined ? null : found;
+  }
+
+  /** A file's current source, null when it was removed. */
+  private sourceNamed(file: string): LoadedSource | null {
+    for (const source of this.sources) if (source.file === file) return source;
+    return null;
+  }
+
+  /** Read every plugin folder again and reload the files that changed, were added or removed. */
+  async syncNow(): Promise<void> {
+    if (this.syncing) {
+      this.syncQueued = true;
+      return;
+    }
+    if (this.calls > 0) {
+      this.syncQueued = true;
+      return;
+    }
+    this.syncing = true;
+    const at = trail.enter("plugins", "reload");
+    try {
+      await this.syncSources();
+    } catch (err: unknown) {
+      log("plugins: reload: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      trail.leave(at);
+      this.syncing = false;
+    }
+    if (this.syncQueued) {
+      this.syncQueued = false;
+      setTimeout(() => this.syncNow(), 0);
+    }
+  }
+
+  private async syncSources(): Promise<void> {
+    const engine = this.engine;
+    if (engine === null) return;
+    const dirs = this.pluginDirs();
+    const beforeFiles: string[] = [];
+    for (const list of this.dirSources.values()) for (const source of list) beforeFiles.push(source.file);
+    const nowByDir = new Map<string, LoadedSource[]>();
+    const nowFiles: string[] = [];
+    for (const dir of dirs) {
+      const loaded: LoadedSource[] = [];
+      for (const source of sourcesIn(dir)) loaded.push(new LoadedSource(source.file, "(function () {\n" + source.code + "\n})();"));
+      nowByDir.set(dir, loaded);
+      for (const source of loaded) nowFiles.push(source.file);
+    }
+    const changed: string[] = [];
+    for (const file of beforeFiles) if (!nowFiles.includes(file)) changed.push(file);
+    for (const dir of dirs) {
+      const before = this.dirSources.get(dir) ?? [];
+      for (const source of nowByDir.get(dir) ?? []) {
+        const prev = before.find((s) => s.file === source.file);
+        if (prev === undefined || prev.code !== source.code) changed.push(source.file);
+      }
+    }
+    if (changed.length === 0) return;
+    const had = new Map<string, boolean>();
+    for (const file of changed) had.set(file, this.entries.some((e) => e.file === file));
+    this.dirSources.clear();
+    for (const dir of dirs) this.dirSources.set(dir, nowByDir.get(dir) ?? []);
+    this.sources.length = 0;
+    for (const source of this.builtins) this.sources.push(new LoadedSource(source.file, "(function () {\n" + source.code + "\n})();"));
+    for (const dir of dirs) for (const source of this.dirSources.get(dir) ?? []) this.sources.push(source);
+    const fresh: string[] = [];
+    for (const file of changed) {
+      fresh.push(file);
+      const source = this.sourceNamed(file);
+      if (source === null) {
+        this.idsByFile.delete(file);
+        continue;
+      }
+      engine.eval("__extForget(" + JSON.stringify(file) + ")", "harness:plugin-file");
+      this.idsByFile.set(file, this.evaluate(engine, file, source.code) ? this.activeIdsFor(engine, file) : []);
+    }
+    this.rebuildEntries(fresh);
+    for (const file of changed) {
+      const source = this.sourceNamed(file);
+      await this.reloadFile(file, source, had.get(file) === true, this.entries.some((e) => e.file === file));
+    }
+    this.watchFolders();
+  }
+
+  /** Reload `file` in every live instance: its shutdown, its registrations dropped, its new code and start. */
+  private async reloadFile(file: string, source: LoadedSource | null, before: boolean, after: boolean): Promise<void> {
+    if (!before && !after) return;
+    for (const instance of Array.from(this.instances.values())) {
+      if (before) {
+        await instance.shutdownFile(file);
+        instance.dropFile(file);
+      }
+      if (after && source !== null) {
+        instance.reloadSource(source);
+        await instance.startFile(file);
+        await instance.sessionStart("reload", null, file);
+      }
+      if (instance.onReloaded !== null) instance.onReloaded();
+    }
+  }
+
+  /** Watch the plugin folders and each plugin's own folder, for the files the engine has. */
+  private watchFolders(): void {
+    this.stopWatching();
+    for (const dir of this.pluginDirs()) {
+      if (!existsSync(dir)) continue;
+      this.watchOne(dir);
+      for (const source of sourcesIn(dir)) if (source.file.endsWith("/index.js") && dirname(dirname(source.file)) === dir) this.watchOne(dirname(source.file));
+    }
+  }
+
+  private watchOne(dir: string): void {
+    try {
+      const w = watch(dir, () => this.changed());
+      this.closers.push(new Closer(() => w.close()));
+    } catch {
+      return;
+    }
+  }
+
+  /** Stop watching the plugin folders. */
+  stopWatching(): void {
+    for (const closer of this.closers) closer.unwatch();
+    this.closers.length = 0;
+    if (this.watchTimer !== null) {
+      clearTimeout(this.watchTimer);
+      this.watchTimer = null;
+    }
+  }
+
+  private changed(): void {
+    const ticket = ++this.watchSeq;
+    if (this.watchTimer !== null) clearTimeout(this.watchTimer);
+    this.watchTimer = setTimeout(() => {
+      this.watchTimer = null;
+      if (ticket !== this.watchSeq) return;
+      this.syncNow();
+    }, RELOAD_MS);
   }
 
   private switchOff(entry: ExtEntry, why: string): void {
@@ -347,6 +546,7 @@ export class Extensions extends HostHandler {
     let result = FAILED;
     let text = "";
     let over = false;
+    this.calls++;
     try {
       const r = invoke();
       result = r.status;
@@ -356,8 +556,13 @@ export class Extensions extends HostHandler {
         else if (job.status !== OK) this.failedCall(entry, event, job.message());
       }
     } finally {
+      this.calls--;
       this.activeEntry = wasEntry;
       trail.leave(at);
+      if (this.calls === 0 && this.syncQueued && !this.syncing) {
+        this.syncQueued = false;
+        setTimeout(() => this.syncNow(), 0);
+      }
     }
     if (result === OVER_BUDGET) over = true;
     if (over) {
@@ -695,6 +900,8 @@ export class ExtSession {
   onGetSessionName: (() => string) | null = null;
   /** A tool or command was registered after the session opened. */
   onRegistered: ((kind: string) => void) | null = null;
+  /** One of the session's files was reloaded or removed (its commands and tools are offered again). */
+  onReloaded: (() => void) | null = null;
   private toolSeq = 0;
 
   constructor(owner: Extensions, id: number, sessionId: string, cwd: string) {
@@ -727,6 +934,39 @@ export class ExtSession {
     this.ready = this.settleStarts(starts);
   }
 
+  /** Evaluate `file` again in this instance, after its old registrations were dropped. */
+  reloadSource(source: LoadedSource): void {
+    const engine = this.engine;
+    if (engine === null) return;
+    const begin = engine.eval("__extFile(" + JSON.stringify(source.file) + ")", "harness:plugin-file");
+    if (begin.status !== OK) {
+      log("plugin " + source.file + ": " + begin.message());
+      return;
+    }
+    const evaluated = engine.eval(source.code, source.file);
+    if (evaluated.status !== OK) log("plugin " + source.file + ": " + evaluated.message());
+  }
+
+  /** Every entry `file` defines now gets its agent part started in this instance. */
+  async startFile(file: string): Promise<void> {
+    for (const entry of this.owner.entries) if (entry.enabled && entry.file === file) await this.startEntry(entry);
+  }
+
+  /** session_shutdown to the handlers `file` registered, before they are dropped. */
+  async shutdownFile(file: string): Promise<void> {
+    for (const h of this.handlers.slice()) {
+      if (h.entry.file !== file) continue;
+      await this.owner.call(h.entry, h.id, JSON.stringify([{ type: "session_shutdown", reason: "reload" }, this.owner.ctxObject(null)]), "session_shutdown", null);
+    }
+  }
+
+  /** Drop everything `file` registered in this instance, leaving other files' state. */
+  dropFile(file: string): void {
+    for (let i = this.handlers.length - 1; i >= 0; i--) if (this.handlers[i].entry.file === file) this.handlers.splice(i, 1);
+    for (let i = this.toolDefs.length - 1; i >= 0; i--) if (this.toolDefs[i].entry.file === file) this.toolDefs.splice(i, 1);
+    for (let i = this.commandDefs.length - 1; i >= 0; i--) if (this.commandDefs[i].entry.file === file) this.commandDefs.splice(i, 1);
+  }
+
   private async startEntry(entry: ExtEntry): Promise<void> {
     if (this.engine === null) return;
     const started = await this.owner.call(entry, this.owner.startId, JSON.stringify([entry.id, this.id]), "start", null);
@@ -745,13 +985,16 @@ export class ExtSession {
     return this.handlers.filter((h) => h.event === event && h.entry.enabled);
   }
 
-  /** session_start, after the files loaded: startup for a new session of this pair first, then new; resume and fork as asked. */
-  async sessionStart(reason: string, ctx: ExtContext): Promise<void> {
+  /** session_start, after the files loaded: startup for a new session of this pair first, then new; resume and fork as asked. `file` limits it to one file's handlers (a reload). */
+  async sessionStart(reason: string, ctx: ExtContext | null, file = ""): Promise<void> {
     await this.ready;
     if (this.engine === null) return;
     const actual = reason === "new" && !this.owner.started ? "startup" : reason;
     this.owner.started = true;
-    for (const h of this.forEvent("session_start")) await this.owner.call(h.entry, h.id, JSON.stringify([{ type: "session_start", reason: actual }, this.owner.ctxObject(ctx)]), "session_start", ctx);
+    for (const h of this.forEvent("session_start")) {
+      if (file.length > 0 && h.entry.file !== file) continue;
+      await this.owner.call(h.entry, h.id, JSON.stringify([{ type: "session_start", reason: actual }, this.owner.ctxObject(ctx)]), "session_start", ctx);
+    }
   }
 
   /** before_agent_start: a system prompt replacement and custom messages from the handlers. */
@@ -987,6 +1230,11 @@ export class ExtensionsRegistry {
 
   keyFor(folder: string, trusted: boolean): string {
     return folder + "\u0000" + (trusted ? "1" : "0");
+  }
+
+  /** Stop every pair's watchers. */
+  stop(): void {
+    for (const group of this.groups.values()) group.stopWatching();
   }
 
   /** The pair's plugins, made on its first session and loaded then. */
