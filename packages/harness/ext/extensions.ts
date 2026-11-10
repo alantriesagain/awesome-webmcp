@@ -1,11 +1,15 @@
-// The daemon's extensions: pi-shaped `.js` files from the store's `extensions` (beside the app's
-// `plugins`) and a trusted folder's `.widecode/extensions`, run in one QuickJS context per (folder, trusted)
-// pair on the @light/plugins engine. A file's default export gets its `pi` object; handlers,
-// tools and commands are registered through the host. Every call has the app's 250 ms CPU budget;
-// one that throws is logged and the turn goes on, one over budget is switched off for the daemon's
-// life. The async answer path is the app runtime's: the prelude calls back with the call's id and
-// the settled value or error, and the host keeps the invocation's outcome.
+// The daemon's plugins: widecode plugin files (one `widecode.plugin({ id, agent(agent) })` each, the
+// app's `activate` left to the app) from the built-ins the caller hands in, the store's `plugins/` and
+// a trusted folder's `.widecode/plugins/`, in the app's order: an id defined again replaces the earlier.
+// One QuickJS context per (folder, trusted) pair evaluates every file once, to learn which ids have an
+// agent part; none leaves no engine. A session evaluates the files of its agent parts again and calls
+// each `agent(agent)` with an api of its own; handlers, tools and commands are registered through the
+// host. Every call has the app's 250 ms CPU budget; one that throws is logged and the turn goes on,
+// one over budget is switched off for the daemon's life. The async answer path is the app runtime's:
+// the prelude calls back with the call's id and the settled value or error, and the host keeps the
+// invocation's outcome.
 import { join } from "node:path";
+import { readTextOr } from "@light/lib/fs.ts";
 import { listOf, num, parseJson, recordOf, str } from "@light/lib/json.ts";
 import { log, trail } from "@light/lib/log.ts";
 import { FAILED, HostAnswer, HostHandler, JsEngine, JsResult, OVER_BUDGET, OK } from "@light/plugins/engine.ts";
@@ -16,10 +20,8 @@ import { HarnessPaths } from "../paths.ts";
 import { ExecProcess } from "../tools/proc.ts";
 import { ExtraTool, Tool, ToolContext, ToolOutcome } from "../tools/tool.ts";
 import { ExtContext } from "./context.ts";
-import { messagesFromPi, messagesToPi } from "./messages.ts";
-import { fromPiInput, piNameOf, toPiInput } from "./names.ts";
+import { messagesFromAgent, messagesToAgent } from "./messages.ts";
 import { EXT_PRELUDE } from "./prelude.ts";
-import { extSource } from "./source.ts";
 
 /** The app's per-call CPU budget. */
 const BUDGET_MS = 250;
@@ -48,21 +50,25 @@ class Waiter {
 }
 
 export class ExtEntry {
+  readonly id: string;
   readonly file: string;
+  readonly key: string;
   enabled = true;
 
-  constructor(file: string) {
+  constructor(id: string, file: string) {
+    this.id = id;
     this.file = file;
+    this.key = id + "\u0000" + file;
   }
 }
 
-/** One file's source after the pass, with the entry its state is kept on. */
+/** One file's source as the engine takes it. */
 class LoadedSource {
-  readonly entry: ExtEntry;
+  readonly file: string;
   readonly code: string;
 
-  constructor(entry: ExtEntry, code: string) {
-    this.entry = entry;
+  constructor(file: string, code: string) {
+    this.file = file;
     this.code = code;
   }
 }
@@ -111,7 +117,7 @@ export class ExtCommand {
   }
 }
 
-/** How the extensions reach the client's screen: a dialog request, and a notification. */
+/** How the plugins reach the client's screen: a dialog request, and a notification. */
 export class ExtUiHost {
   request: ((paramsText: string) => Promise<unknown>) | null = null;
   notify: ((paramsText: string) => void) | null = null;
@@ -145,22 +151,24 @@ export class BeforeStartAnswer {
   messages: string[] = [];
 }
 
-/** An extension's extension: one folder and its trust, its files, one engine and what they registered. */
+/** A folder and its trust: the plugin files, one engine, the ids with an agent part, and what they registered. */
 export class Extensions extends HostHandler {
   readonly folder: string;
   readonly trusted: boolean;
   readonly key: string;
   private readonly paths: HarnessPaths;
   private readonly ui: ExtUiHost | null;
+  private readonly builtins: PluginSource[];
   private loaded = false;
   started = false;
   engine: JsEngine | null = null;
-  private readonly entries: ExtEntry[] = [];
+  readonly entries: ExtEntry[] = [];
   private readonly sources: LoadedSource[] = [];
+  private agentSources: LoadedSource[] = [];
+  agentIds: string[] = [];
   private readonly instances = new Map<number, ExtSession>();
   private instanceSeq = 0;
   private readonly execs = new Map<number, ExecProcess>();
-  private currentFile = "";
   private readonly contexts = new Map<number, ExtContext>();
   private readonly ctxEntries = new Map<number, ExtEntry>();
   private ctxSeq = 0;
@@ -169,35 +177,53 @@ export class Extensions extends HostHandler {
   private readonly waiterEntries = new Map<number, ExtEntry>();
   private readonly dialogs = new Map<number, ExtDialog>();
   private hostSettleId = -1;
+  startId = -1;
   private activeEntry: ExtEntry | null = null;
 
-  constructor(paths: HarnessPaths, folder: string, trusted: boolean, ui: ExtUiHost | null) {
+  constructor(paths: HarnessPaths, folder: string, trusted: boolean, ui: ExtUiHost | null, builtins: PluginSource[] = []) {
     super();
     this.paths = paths;
     this.folder = folder;
     this.trusted = trusted;
     this.ui = ui;
+    this.builtins = builtins;
     this.key = folder + "\u0000" + (trusted ? "1" : "0");
   }
 
-  /** The files, the user's first and a trusted folder's after, a name found twice the first one's. */
+  /** The files: the built-ins the caller handed in, the user's, a trusted folder's, in that order. */
   private findSources(): PluginSource[] {
     const out: PluginSource[] = [];
-    const seen = new Set<string>();
-    const dirs: string[] = [this.paths.extensionsDir()];
-    if (this.trusted && this.folder.length > 0) dirs.push(join(this.folder, ".widecode", "extensions"));
-    for (const dir of dirs)
-      for (const source of sourcesIn(dir)) {
-        const at = source.file.lastIndexOf("/");
-        const name = at >= 0 ? source.file.slice(at + 1) : source.file;
-        if (seen.has(name)) continue;
-        seen.add(name);
-        out.push(source);
-      }
+    for (const source of this.builtins) out.push(source);
+    for (const source of sourcesIn(this.paths.pluginsDir())) out.push(source);
+    if (this.trusted && this.folder.length > 0) for (const source of sourcesIn(join(this.folder, ".widecode", "plugins"))) out.push(source);
     return out;
   }
 
-  /** Load the files once, on the first session that uses this pair; no file leaves no engine. */
+  /** The `plugins` value of the user's config.json with a trusted folder's over it, per id. */
+  private plugins(): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    const user = this.pluginsAt(this.paths.configPath());
+    for (const id of Object.keys(user)) out[id] = user[id];
+    if (this.trusted && this.folder.length > 0) {
+      const project = this.pluginsAt(join(this.folder, ".widecode", "config.json"));
+      for (const id of Object.keys(project)) out[id] = project[id];
+    }
+    return out;
+  }
+
+  private pluginsAt(path: string): Record<string, unknown> {
+    const root = recordOf(parseJson(readTextOr(path, "{}")));
+    const plugins = root !== null ? recordOf(root["plugins"]) : null;
+    return plugins !== null ? plugins : {};
+  }
+
+  /** A plugin's section of `plugins`, an object or `{}`. */
+  pluginSettings(id: string): string {
+    const value = recordOf(this.plugins()[id]);
+    return JSON.stringify(value !== null ? value : {});
+  }
+
+  /** Load the files once, on the first session that uses this pair, to learn which ids have an agent part; none leaves no engine. */
   ensure(): void {
     if (this.loaded) return;
     this.loaded = true;
@@ -205,34 +231,66 @@ export class Extensions extends HostHandler {
     if (sources.length === 0) return;
     const engine = new JsEngine(this, MEMORY_MB, BUDGET_MS);
     this.engine = engine;
-    const prelude = engine.eval(EXT_PRELUDE, "harness:ext-prelude");
+    const prelude = engine.eval(EXT_PRELUDE, "harness:plugin-prelude");
     if (prelude.status !== OK) {
-      log("the extension prelude: " + prelude.message());
+      log("the plugin prelude: " + prelude.message());
       engine.free();
       this.engine = null;
       return;
     }
-    const settleId = engine.eval("JSON.stringify(__hostSettleId)", "harness:ext-prelude");
+    const settleId = engine.eval("JSON.stringify(__hostSettleId)", "harness:plugin-prelude");
     if (settleId.status === OK) this.hostSettleId = num(parseJson(settleId.text), -1);
+    const startId = engine.eval("JSON.stringify(__agentStartId)", "harness:plugin-prelude");
+    if (startId.status === OK) this.startId = num(parseJson(startId.text), -1);
+    engine.eval("__extReset()", "harness:plugin-prelude");
     for (const source of sources) {
-      const entry = new ExtEntry(source.file);
-      this.entries.push(entry);
-      const passed = extSource(source);
-      if (passed.error.length > 0) {
-        entry.enabled = false;
-        log(passed.error);
+      const code = "(function () {\n" + source.code + "\n})();";
+      const begin = engine.eval("__extFile(" + JSON.stringify(source.file) + ")", "harness:plugin-file");
+      if (begin.status !== OK) {
+        log("plugin " + source.file + ": " + begin.message());
         continue;
       }
-      this.sources.push(new LoadedSource(entry, passed.code));
+      const evaluated = engine.eval(code, source.file);
+      if (evaluated.status !== OK) {
+        log("plugin " + source.file + ": " + evaluated.message());
+        continue;
+      }
+      this.sources.push(new LoadedSource(source.file, code));
     }
+    const active = engine.eval("__ext.active()", "harness:plugin-active");
+    if (active.status !== OK) {
+      log("plugin ids: " + active.message());
+      engine.free();
+      this.engine = null;
+      return;
+    }
+    const plugins = this.plugins();
+    const files: string[] = [];
+    for (const value of listOf(parseJson(active.text))) {
+      const record = recordOf(value);
+      if (record === null) continue;
+      const id = str(record["id"]);
+      const file = str(record["file"]);
+      if (id.length === 0 || file.length === 0 || plugins[id] === false) continue;
+      this.entries.push(new ExtEntry(id, file));
+      if (!this.agentIds.includes(id)) this.agentIds.push(id);
+      if (!files.includes(file)) files.push(file);
+    }
+    if (this.agentIds.length === 0) {
+      engine.free();
+      this.engine = null;
+      return;
+    }
+    for (const source of this.sources) if (files.includes(source.file)) this.agentSources.push(source);
+    engine.eval("__extReset()", "harness:plugin-prelude");
   }
 
-  /** A session's instance: every enabled file evaluated again with a `pi` of its own, its handlers, tools and commands its own. */
+  /** A session's instance: the files with an agent part evaluated again with an api of its own. */
   instance(sessionId: string, cwd: string): ExtSession {
     this.ensure();
     const instance = new ExtSession(this, ++this.instanceSeq, sessionId, cwd.length > 0 ? cwd : this.folder);
     this.instances.set(instance.id, instance);
-    instance.load(this.sources);
+    instance.load(this.agentSources);
     return instance;
   }
 
@@ -244,18 +302,18 @@ export class Extensions extends HostHandler {
   private switchOff(entry: ExtEntry, why: string): void {
     if (!entry.enabled) return;
     entry.enabled = false;
-    log("extension " + entry.file + " switched off: " + why);
+    log("plugin " + entry.id + " (" + entry.file + ") switched off: " + why);
     this.waiterEntries.forEach((e: ExtEntry, cid: number) => {
       if (e !== entry) return;
       this.waiterEntries.delete(cid);
       const waiter = this.waiters.get(cid);
       this.waiters.delete(cid);
-      if (waiter !== undefined && waiter.resolve !== null) waiter.resolve(CallResult.failed("the extension is switched off"));
+      if (waiter !== undefined && waiter.resolve !== null) waiter.resolve(CallResult.failed("the plugin is switched off"));
     });
   }
 
   private failedCall(entry: ExtEntry, event: string, why: string): void {
-    log("extension " + entry.file + " (" + event + "): " + why);
+    log("plugin " + entry.id + " (" + entry.file + ") (" + event + "): " + why);
   }
 
   ctxObject(ctx: ExtContext | null): Record<string, unknown> {
@@ -281,11 +339,11 @@ export class Extensions extends HostHandler {
   /** The invocation and the promise jobs it left, the budget, the trail and the switch-off; `text` the value as JSON. */
   private invokeAndPump(entry: ExtEntry, event: string, invoke: () => JsResult): CallResult {
     const engine = this.engine;
-    if (engine === null) return CallResult.failed("no extension context");
-    if (!entry.enabled) return CallResult.failed("the extension is switched off");
+    if (engine === null) return CallResult.failed("no plugin context");
+    if (!entry.enabled) return CallResult.failed("the plugin is switched off");
     const wasEntry = this.activeEntry;
     this.activeEntry = entry;
-    const at = trail.enter("extension", entry.file);
+    const at = trail.enter("plugin", entry.file);
     let result = FAILED;
     let text = "";
     let over = false;
@@ -318,8 +376,8 @@ export class Extensions extends HostHandler {
   /** One call into the engine, its answer awaited when a promise settles later; `text` the value as JSON. */
   async call(entry: ExtEntry, id: number, args: string, event: string, ctx: ExtContext | null): Promise<CallResult> {
     const engine = this.engine;
-    if (engine === null) return CallResult.failed("no extension context");
-    if (!entry.enabled) return CallResult.failed("the extension is switched off");
+    if (engine === null) return CallResult.failed("no plugin context");
+    if (!entry.enabled) return CallResult.failed("the plugin is switched off");
     const ctxId = ctx !== null ? ctx.ctxId : 0;
     if (ctx !== null) {
       this.contexts.set(ctxId, ctx);
@@ -550,20 +608,20 @@ export class Extensions extends HostHandler {
         const ctx = this.contexts.get(ctxId);
         const method = str(args[1]);
         if (method === "setWidget" && str(args[3]) === "function") {
-          log("extension " + (entry !== undefined ? entry.file : "?") + ": ui.setWidget " + str(args[2]) + ": a function's lines are not sent");
+          log("plugin " + (entry !== undefined ? entry.id + " (" + entry.file + ")" : "?") + ": ui.setWidget " + str(args[2]) + ": a function's lines are not sent");
           return new HostAnswer(OK, "null");
         }
         if (method === "setWidget" && str(args[3]) === "invalid") {
-          log("extension " + (entry !== undefined ? entry.file : "?") + ": ui.setWidget " + str(args[2]) + ": the content is not an array of strings");
+          log("plugin " + (entry !== undefined ? entry.id + " (" + entry.file + ")" : "?") + ": ui.setWidget " + str(args[2]) + ": the content is not an array of strings");
           return new HostAnswer(OK, "null");
         }
         if (ctx !== undefined && ctx.hasUI && ctx.sessionId.length > 0) {
           const text = JSON.stringify(this.uiParams(ctx.sessionId, method, args));
           const host = this.ui;
           if (host !== null && host.notify !== null) host.notify(text);
-          else log("extension " + (entry !== undefined ? entry.file : "?") + ": ui." + method + " " + text);
+          else log("plugin " + (entry !== undefined ? entry.id + " (" + entry.file + ")" : "?") + ": ui." + method + " " + text);
         } else {
-          log("extension " + (entry !== undefined ? entry.file : "?") + ": ui." + method + " " + JSON.stringify(args.slice(2)));
+          log("plugin " + (entry !== undefined ? entry.id + " (" + entry.file + ")" : "?") + ": ui." + method + " " + JSON.stringify(args.slice(2)));
         }
         return new HostAnswer(OK, "null");
       }
@@ -598,19 +656,22 @@ export class Extensions extends HostHandler {
         const name = instance !== null && instance.onGetSessionName !== null ? instance.onGetSessionName() : "";
         return new HostAnswer(OK, JSON.stringify(name.length > 0 ? name : null));
       }
+      case "extSettings": {
+        const entry = this.entryOf(str(args[0]));
+        return new HostAnswer(OK, entry !== null ? this.pluginSettings(entry.id) : "{}");
+      }
       default:
-        return new HostAnswer(FAILED, "extensions: no host call " + name);
+        return new HostAnswer(FAILED, "plugins: no host call " + name);
     }
   }
 
-  private entryOf(file: string): ExtEntry | null {
-    const wanted = file.length > 0 ? file : this.currentFile;
-    for (const entry of this.entries) if (entry.file === wanted) return entry;
+  private entryOf(key: string): ExtEntry | null {
+    for (const entry of this.entries) if (entry.key === key) return entry;
     return null;
   }
 }
 
-/** One session's extensions: the same files evaluated again, with a `pi` of its own and what it registered. */
+/** One session's plugins: its files evaluated again, with an agent api of its own and what it registered. */
 export class ExtSession {
   readonly owner: Extensions;
   readonly id: number;
@@ -645,34 +706,33 @@ export class ExtSession {
     this.engine = owner.engine;
   }
 
-  /** Evaluate every enabled file again in the shared engine, its default export called with this instance's `pi`. */
+  /** Evaluate the files with an agent part again in the shared engine, then call each agent with this instance's api. */
   load(sources: LoadedSource[]): void {
     const engine = this.engine;
     if (engine === null) return;
     const starts: Promise<void>[] = [];
     for (const source of sources) {
-      if (!source.entry.enabled) continue;
-      const begin = engine.eval("__ext.begin(" + JSON.stringify(source.entry.file) + ", " + String(this.id) + ")", "harness:ext-begin");
+      const begin = engine.eval("__extFile(" + JSON.stringify(source.file) + ")", "harness:plugin-file");
       if (begin.status !== OK) {
-        log("extension " + source.entry.file + ": " + begin.message());
+        log("plugin " + source.file + ": " + begin.message());
         continue;
       }
-      const evaluated = engine.eval(source.code, source.entry.file);
+      const evaluated = engine.eval(source.code, source.file);
       if (evaluated.status !== OK) {
-        source.entry.enabled = false;
-        log("extension " + source.entry.file + ": " + evaluated.message());
+        log("plugin " + source.file + ": " + evaluated.message());
         continue;
       }
-      starts.push(this.startEntry(source.entry));
     }
+    for (const entry of this.owner.entries) if (entry.enabled) starts.push(this.startEntry(entry));
     this.ready = this.settleStarts(starts);
   }
 
   private async startEntry(entry: ExtEntry): Promise<void> {
-    const started = await this.owner.call(entry, 0, "[]", "start", null);
+    if (this.engine === null) return;
+    const started = await this.owner.call(entry, this.owner.startId, JSON.stringify([entry.id, this.id]), "start", null);
     if (!started.ok) {
       entry.enabled = false;
-      log("extension " + entry.file + ": " + started.error);
+      log("plugin " + entry.id + " (" + entry.file + "): " + started.error);
     }
   }
 
@@ -680,7 +740,7 @@ export class ExtSession {
     for (const p of starts) await p;
   }
 
-  /** The handlers of `event` this instance registered whose extension still runs. */
+  /** The handlers of `event` this instance registered whose plugin still runs. */
   private forEvent(event: string): HandlerRef[] {
     return this.handlers.filter((h) => h.event === event && h.entry.enabled);
   }
@@ -722,7 +782,7 @@ export class ExtSession {
   /** context: the messages one request sends, replaced when a handler answers with others. */
   async context(messages: Message[], ctx: ExtContext): Promise<Message[] | null> {
     if (this.forEvent("context").length === 0) return null;
-    let current = messagesToPi(messages);
+    let current = messagesToAgent(messages);
     let replacement: Message[] | null = null;
     for (const h of this.forEvent("context")) {
       const event: Record<string, unknown> = { type: "context", messages: parseJson(current) };
@@ -731,28 +791,27 @@ export class ExtSession {
       const value = recordOf(parseJson(r.text));
       const answer = value !== null ? recordOf(value["result"]) : null;
       if (answer === null || answer["messages"] === undefined) continue;
-      const converted = messagesFromPi(answer["messages"]);
+      const converted = messagesFromAgent(answer["messages"]);
       if (converted === null) continue;
       replacement = converted;
-      current = messagesToPi(converted);
+      current = messagesToAgent(converted);
     }
     return replacement;
   }
 
-  /** tool_call: a call may be blocked or its input changed in place, in pi's names and arguments. */
+  /** tool_call: a call may be blocked or its input changed in place, under the harness's own tool names and inputs. */
   async toolCall(toolCallId: string, toolName: string, inputJson: string, ctx: ExtContext): Promise<ToolCallAnswer> {
     const out = new ToolCallAnswer();
     out.inputJson = inputJson;
     const handlers = this.forEvent("tool_call");
     if (handlers.length === 0) return out;
-    const piName = piNameOf(toolName);
-    let input = toPiInput(toolName, recordOf(parseJson(inputJson.length > 0 ? inputJson : "{}")) ?? {});
+    let input = recordOf(parseJson(inputJson.length > 0 ? inputJson : "{}")) ?? {};
     for (const h of handlers) {
-      const event: Record<string, unknown> = { type: "tool_call", toolCallId, toolName: piName, input };
+      const event: Record<string, unknown> = { type: "tool_call", toolCallId, toolName, input };
       const r = await this.owner.call(h.entry, h.id, JSON.stringify([event, this.owner.ctxObject(ctx)]), "tool_call", ctx);
       if (!r.ok) {
         out.block = true;
-        out.reason = "blocked by " + h.entry.file + ": " + (r.error.length > 0 ? r.error : "the extension failed");
+        out.reason = "blocked by " + h.entry.file + ": " + (r.error.length > 0 ? r.error : "the plugin failed");
         break;
       }
       const value = recordOf(parseJson(r.text));
@@ -766,7 +825,7 @@ export class ExtSession {
       const changed = value !== null ? recordOf(value["input"]) : null;
       if (changed !== null) input = changed;
     }
-    if (!out.block) out.inputJson = JSON.stringify(fromPiInput(toolName, input));
+    if (!out.block) out.inputJson = JSON.stringify(input);
     return out;
   }
 
@@ -774,13 +833,12 @@ export class ExtSession {
   async toolResult(toolCallId: string, toolName: string, inputJson: string, outcome: ToolOutcome, ctx: ExtContext): Promise<void> {
     const handlers = this.forEvent("tool_result");
     if (handlers.length === 0) return;
-    const piName = piNameOf(toolName);
-    const piInput = toPiInput(toolName, recordOf(parseJson(inputJson.length > 0 ? inputJson : "{}")) ?? {});
+    const input = recordOf(parseJson(inputJson.length > 0 ? inputJson : "{}")) ?? {};
     let content = contentText(outcome);
     let details = outcome.detailsJson.length > 0 ? parseJson(outcome.detailsJson) : null;
     let isError = outcome.isError;
     for (const h of handlers) {
-      const event: Record<string, unknown> = { type: "tool_result", toolCallId, toolName: piName, input: piInput, content: parseJson(content), details, isError };
+      const event: Record<string, unknown> = { type: "tool_result", toolCallId, toolName, input, content: parseJson(content), details, isError };
       const r = await this.owner.call(h.entry, h.id, JSON.stringify([event, this.owner.ctxObject(ctx)]), "tool_result", ctx);
       if (!r.ok) continue;
       const value = recordOf(parseJson(r.text));
@@ -795,7 +853,7 @@ export class ExtSession {
     outcome.detailsJson = details === null ? "" : JSON.stringify(details);
   }
 
-  /** The commands this instance's extensions registered, enabled ones only. */
+  /** The commands this instance's plugins registered, enabled ones only. */
   commands(): ExtCommand[] {
     return this.commandDefs.filter((c) => c.entry.enabled);
   }
@@ -816,7 +874,7 @@ export class ExtSession {
     this.owner.cancelDialogs(sessionId);
   }
 
-  /** The tools to offer the model, one per registered tool, a disabled extension's left out. */
+  /** The tools to offer the model, one per registered tool, a disabled plugin's left out. */
   tools(): Tool[] {
     const out: Tool[] = [];
     for (const def of this.toolDefs) {
@@ -832,7 +890,7 @@ export class ExtSession {
   }
 
   private async runTool(def: ExtToolDef, inputJson: string, toolCtx: ToolContext, abort: Abort): Promise<ToolOutcome> {
-    if (!def.entry.enabled) return ToolOutcome.failed("the extension " + def.entry.file + " is switched off");
+    if (!def.entry.enabled) return ToolOutcome.failed("the plugin " + def.entry.id + " (" + def.entry.file + ") is switched off");
     const ctx = new ExtContext();
     ctx.cwd = toolCtx.cwd;
     ctx.modelValue = toolCtx.modelValue;
@@ -848,7 +906,7 @@ export class ExtSession {
     const callId = "ext_" + String(++this.toolSeq);
     const args = JSON.stringify([callId, recordOf(parseJson(inputJson.length > 0 ? inputJson : "{}")) ?? {}, this.owner.ctxObject(ctx)]);
     const r = await this.owner.call(def.entry, def.executeId, args, "tool " + def.name, ctx);
-    if (!r.ok) return ToolOutcome.failed("the extension " + def.entry.file + " failed: " + r.error);
+    if (!r.ok) return ToolOutcome.failed("the plugin " + def.entry.id + " (" + def.entry.file + ") failed: " + r.error);
     return outcomeOf(parseJson(r.text));
   }
 }
@@ -914,27 +972,29 @@ const outcomeOf = (value: unknown): ToolOutcome => {
   return out;
 };
 
-/** The extensions of the daemon's sessions: one engine per (folder, trusted) pair, an instance per session. */
+/** The plugins of the daemon's sessions: one engine per (folder, trusted) pair, an instance per session. */
 export class ExtensionsRegistry {
   private readonly paths: HarnessPaths;
   private readonly ui: ExtUiHost | null;
+  private readonly builtins: PluginSource[];
   private readonly groups = new Map<string, Extensions>();
 
-  constructor(paths: HarnessPaths, ui: ExtUiHost | null = null) {
+  constructor(paths: HarnessPaths, ui: ExtUiHost | null = null, builtins: PluginSource[] = []) {
     this.paths = paths;
     this.ui = ui;
+    this.builtins = builtins;
   }
 
   keyFor(folder: string, trusted: boolean): string {
     return folder + "\u0000" + (trusted ? "1" : "0");
   }
 
-  /** The pair's extensions, made on its first session and loaded then. */
+  /** The pair's plugins, made on its first session and loaded then. */
   forSession(folder: string, trusted: boolean): Extensions {
     const key = this.keyFor(folder, trusted);
     const found = this.groups.get(key);
     if (found !== undefined) return found;
-    const made = new Extensions(this.paths, folder, trusted, this.ui);
+    const made = new Extensions(this.paths, folder, trusted, this.ui, this.builtins);
     this.groups.set(key, made);
     made.ensure();
     return made;

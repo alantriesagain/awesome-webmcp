@@ -1,10 +1,12 @@
 // ffi: @light/plugins/native/ffi.json
-// The extension runtime over AcpAgent and the fake model: a registered tool the model calls (its
-// details kept in the session file), a command answered without a turn, tool_call blocking bash and
-// changing a read's path, tool_result rewriting content, before_agent_start appending to the system
+// The plugins' agent halves over AcpAgent and the fake model: a registered tool the model calls (its
+// details kept in the session file), a command answered without a turn, tool_call blocking Bash and
+// changing a Read's path, tool_result rewriting content, before_agent_start appending to the system
 // prompt, context dropping a message, a handler that throws (the turn goes on), one in a busy loop
-// (switched off, the turn goes on), a trusted folder's extension loaded and an untrusted one's not,
-// and a session with no files making no engine.
+// (switched off, the turn goes on), a trusted folder's plugin loaded and an untrusted one's not, a
+// built-in replaced by a store plugin of the same id, a plugin switched off by config.json, the
+// plugin's settings, a plugin's top-level widecode.util and widecode.theme, and a session with no
+// agent parts making no engine.
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +18,7 @@ import { registryFor } from "../cli.ts";
 import { HarnessConfig } from "../config.ts";
 import { ExtensionsRegistry } from "../ext/extensions.ts";
 import { ModelClient, ModelRequest } from "../model/client.ts";
+import { PluginSource } from "@light/plugins/sources.ts";
 import { FakeClient } from "../model/fake.ts";
 import { HarnessPaths } from "../paths.ts";
 import { SessionStore } from "../session/store.ts";
@@ -42,7 +45,7 @@ class Rig {
   private readonly encoder = new TextEncoder();
   private n = 0;
 
-  constructor(fixture: string) {
+  constructor(fixture: string, builtins: PluginSource[] = []) {
     this.folder = mkdtempSync(join(tmpdir(), "harness-ext-"));
     this.home = join(this.folder, "home");
     this.paths = new HarnessPaths(this.home);
@@ -53,11 +56,11 @@ class Rig {
     const config = new HarnessConfig();
     const registry = registryFor(config, true);
     this.client = FakeClient.fromText(fixture);
-    this.agent = new AcpAgent(server, new ModelClient(registry, new Auth(join(this.folder, "auth.json")), "node", this.client), new ToolSet(builtInTools()), registry, config, "test", "linux", this.paths);
+    this.agent = new AcpAgent(server, new ModelClient(registry, new Auth(join(this.folder, "auth.json")), "node", this.client), new ToolSet(builtInTools()), registry, config, "test", "linux", this.paths, builtins);
   }
 
   extension(code: string, project = false): void {
-    const dir = project ? join(this.folder, ".widecode", "extensions") : join(this.home, "extensions");
+    const dir = project ? join(this.folder, ".widecode", "plugins") : join(this.home, "plugins");
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "ext.js"), code);
   }
@@ -187,10 +190,10 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"calltool","text":"Calling.","tools":[{"name":"echo","input":{"text":"hi"}}]}', '{"match":"result","text":"Echoed."}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.registerTool({ name: "echo", label: "Echo", description: "Echo the text", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] }, execute: async (id, params) => ({ content: [{ type: "text", text: "echo: " + params.text }], details: { seen: params.text } }) });',
-      '  pi.registerCommand("hello", { description: "Say hello", handler: (args) => {} });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerTool({ name: "echo", label: "Echo", description: "Echo the text", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] }, execute: async (id, params) => ({ content: [{ type: "text", text: "echo: " + params.text }], details: { seen: params.text } }) });',
+      '  agent.registerCommand("hello", { description: "Say hello", handler: (args) => {} });',
+      "} });",
     ].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
     const made = rig.taken();
@@ -220,15 +223,15 @@ const main = async (): Promise<void> => {
     writeFileSync(join(rig.folder, "a.txt"), "first\n");
     writeFileSync(join(rig.folder, "b.txt"), "second\n");
     rig.extension([
-      "export default function (pi) {",
-      '  pi.on("before_agent_start", (e) => ({ systemPrompt: e.systemPrompt + "\\nEXTRA" }));',
-      '  pi.on("tool_call", (e) => {',
-      '    if (e.toolName === "bash" && String(e.input.command).indexOf("rm -rf") >= 0) return { block: true, reason: "not here" };',
-      '    if (e.toolName === "read") e.input.path = "b.txt";',
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.on("before_agent_start", (e) => ({ systemPrompt: e.systemPrompt + "\\nEXTRA" }));',
+      '  agent.on("tool_call", (e) => {',
+      '    if (e.toolName === "Bash" && String(e.input.command).indexOf("rm -rf") >= 0) return { block: true, reason: "not here" };',
+      '    if (e.toolName === "Read") e.input.file_path = "b.txt";',
       "  });",
-      '  pi.on("tool_result", (e) => { if (e.toolName === "bash") return { content: [{ type: "text", text: "rewritten" }] }; });',
-      '  pi.on("context", (e) => ({ messages: e.messages.filter((m) => JSON.stringify(m.content).indexOf("drop me") < 0) }));',
-      "}",
+      '  agent.on("tool_result", (e) => { if (e.toolName === "Bash") return { content: [{ type: "text", text: "rewritten" }] }; });',
+      '  agent.on("context", (e) => ({ messages: e.messages.filter((m) => JSON.stringify(m.content).indexOf("drop me") < 0) }));',
+      "} });",
     ].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
     await rig.prompt(sid, "hook it");
@@ -254,7 +257,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"boomtool","text":"Running.","tools":[{"name":"Bash","input":{"command":"echo hi"}}]}', '{"match":"result","text":"Went on."}'].join("\n"));
     const logFile = rig.logFile();
-    rig.extension(["export default function (pi) {", '  pi.on("tool_call", () => { throw new Error("nope"); });', "}"].join("\n"));
+    rig.extension(['widecode.plugin({ id: "ext", agent(agent) {', '  agent.on("tool_call", () => { throw new Error("nope"); });', "} });"].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
     await rig.prompt(sid, "boomtool");
     const turn = rig.taken();
@@ -267,7 +270,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
     const logFile = rig.logFile();
-    rig.extension(["export default function (pi) {", '  pi.on("before_agent_start", () => { while (true) {} });', "}"].join("\n"));
+    rig.extension(['widecode.plugin({ id: "ext", agent(agent) {', '  agent.on("before_agent_start", () => { while (true) {} });', "} });"].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
     await rig.prompt(sid, "hello");
     eq("the turn goes on without the handler", text(rig.taken()), "Hello there.");
@@ -277,7 +280,7 @@ const main = async (): Promise<void> => {
 
   // A trusted folder's extension loads; the same folder untrusted keeps it out.
   {
-    const code = ["export default function (pi) {", '  pi.on("tool_call", (e) => { if (e.toolName === "bash") return { block: true, reason: "trusted only" }; });', "}"].join("\n");
+    const code = ['widecode.plugin({ id: "ext", agent(agent) {', '  agent.on("tool_call", (e) => { if (e.toolName === "Bash") return { block: true, reason: "trusted only" }; });', "} });"].join("\n");
     const rig = new Rig(['{"match":"run","text":"Running.","tools":[{"name":"Bash","input":{"command":"echo hi"}}]}', '{"match":"result","text":"Done."}', '{"match":"run","text":"Running.","tools":[{"name":"Bash","input":{"command":"echo hi"}}]}', '{"match":"result","text":"Done."}'].join("\n"));
     rig.extension(code, true);
     const untrusted = rig.session({ cwd: rig.folder, mcpServers: [], _meta: { widecode: { trusted: false } } });
@@ -294,9 +297,9 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"sleepblock","text":"Running.","tools":[{"name":"Bash","input":{"command":"echo hi"}}]}', '{"match":"result","text":"Blocked after sleep."}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.on("tool_call", async () => { await pi.exec("sleep", ["0.03"]); return { block: true, reason: "slept first" }; });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.on("tool_call", async () => { await agent.exec("sleep", ["0.03"]); return { block: true, reason: "slept first" }; });',
+      "} });",
     ].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
     await rig.prompt(sid, "sleepblock");
@@ -310,9 +313,9 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"slowtool","text":"Calling.","tools":[{"name":"slow","input":{}}]}', '{"match":"result","text":"Slow done."}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.registerTool({ name: "slow", label: "Slow", description: "Answer later", parameters: { type: "object" }, execute: async () => { await pi.exec("sleep", ["0.03"]); return { content: [{ type: "text", text: "after sleep" }] }; } });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerTool({ name: "slow", label: "Slow", description: "Answer later", parameters: { type: "object" }, execute: async () => { await agent.exec("sleep", ["0.03"]); return { content: [{ type: "text", text: "after sleep" }] }; } });',
+      "} });",
     ].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
     await rig.prompt(sid, "slowtool");
@@ -327,9 +330,9 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"asktool","text":"Asking.","tools":[{"name":"pick","input":{}}]}', '{"match":"result","text":"Picked."}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.registerTool({ name: "pick", label: "Pick", description: "Ask the user", parameters: { type: "object" }, execute: async (id, params, signal, onUpdate, ctx) => ({ content: [{ type: "text", text: String(ctx.hasUI) + ":" + String(await ctx.ui.select("Which?", ["a", "b"])) }] }) });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerTool({ name: "pick", label: "Pick", description: "Ask the user", parameters: { type: "object" }, execute: async (id, params, signal, onUpdate, ctx) => ({ content: [{ type: "text", text: String(ctx.hasUI) + ":" + String(await ctx.ui.select("Which?", ["a", "b"])) }] }) });',
+      "} });",
     ].join("\n"));
     rig.initialize(true);
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -348,9 +351,9 @@ const main = async (): Promise<void> => {
     const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
     const logFile = rig.logFile();
     rig.extension([
-      "export default function (pi) {",
-      '  pi.registerCommand("slowcmd", { description: "Answer later", handler: async (args, ctx) => { await pi.exec("sleep", ["0.03"]); ctx.ui.notify("command slept"); } });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("slowcmd", { description: "Answer later", handler: async (args, ctx) => { await agent.exec("sleep", ["0.03"]); ctx.ui.notify("command slept"); } });',
+      "} });",
     ].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
     rig.taken();
@@ -366,9 +369,9 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"first","text":"First answer."}', '{"match":"second","text":"Second answer."}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.on("before_agent_start", async () => { await pi.exec("sleep", ["0.04"]); });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.on("before_agent_start", async () => { await agent.exec("sleep", ["0.04"]); });',
+      "} });",
     ].join("\n"));
     const one = rig.session({ cwd: rig.folder, mcpServers: [] });
     rig.taken();
@@ -385,9 +388,9 @@ const main = async (): Promise<void> => {
     const rig = new Rig(['{"match":"budget","text":"Went on."}'].join("\n"));
     const logFile = rig.logFile();
     rig.extension([
-      "export default function (pi) {",
-      '  pi.on("before_agent_start", async () => { await pi.exec("sleep", ["0.02"]); while (true) {} });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.on("before_agent_start", async () => { await agent.exec("sleep", ["0.02"]); while (true) {} });',
+      "} });",
     ].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
     await rig.prompt(sid, "budget");
@@ -405,13 +408,13 @@ const main = async (): Promise<void> => {
       '{"match":"result","text":"Yes done."}',
     ].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.on("tool_call", async (e, ctx) => {',
-      '    if (e.toolName !== "bash") return;',
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.on("tool_call", async (e, ctx) => {',
+      '    if (e.toolName !== "Bash") return;',
       '    const yes = await ctx.ui.confirm("Run it?", "really run it");',
       '    return yes ? undefined : { block: true, reason: "said no" };',
       "  });",
-      "}",
+      "} });",
     ].join("\n"));
     rig.initialize(true);
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -435,11 +438,11 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.registerCommand("askselect", { handler: async (a, ctx) => { const v = await ctx.ui.select("Pick", ["a", "b"]); ctx.ui.notify("sel:" + String(v)); } });',
-      '  pi.registerCommand("askinput", { handler: async (a, ctx) => { const v = await ctx.ui.input("Name"); ctx.ui.notify("in:" + String(v)); } });',
-      '  pi.registerCommand("asktimeout", { handler: async (a, ctx) => { const v = await ctx.ui.confirm("Wait", "nobody", { timeout: 50 }); ctx.ui.notify("to:" + String(v)); } });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("askselect", { handler: async (a, ctx) => { const v = await ctx.ui.select("Pick", ["a", "b"]); ctx.ui.notify("sel:" + String(v)); } });',
+      '  agent.registerCommand("askinput", { handler: async (a, ctx) => { const v = await ctx.ui.input("Name"); ctx.ui.notify("in:" + String(v)); } });',
+      '  agent.registerCommand("asktimeout", { handler: async (a, ctx) => { const v = await ctx.ui.confirm("Wait", "nobody", { timeout: 50 }); ctx.ui.notify("to:" + String(v)); } });',
+      "} });",
     ].join("\n"));
     rig.initialize(true);
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -467,9 +470,9 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.registerCommand("wait", { handler: async (a, ctx) => { const v = await ctx.ui.select("Pick", ["a"]); ctx.ui.notify("after:" + String(v)); } });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("wait", { handler: async (a, ctx) => { const v = await ctx.ui.select("Pick", ["a"]); ctx.ui.notify("after:" + String(v)); } });',
+      "} });",
     ].join("\n"));
     rig.initialize(true);
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -486,9 +489,9 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.registerCommand("ask", { handler: async (a, ctx) => { const v = await ctx.ui.select("Pick", ["x", "y"]); ctx.ui.notify("picked:" + String(v)); } });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("ask", { handler: async (a, ctx) => { const v = await ctx.ui.select("Pick", ["x", "y"]); ctx.ui.notify("picked:" + String(v)); } });',
+      "} });",
     ].join("\n"));
     rig.initialize(true);
     const one = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -511,8 +514,8 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.registerCommand("uiall", { handler: (a, ctx) => {',
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("uiall", { handler: (a, ctx) => {',
       '    ctx.ui.notify("hello", "warning");',
       '    ctx.ui.setStatus("k", "busy");',
       '    ctx.ui.setStatus("k", undefined);',
@@ -522,7 +525,7 @@ const main = async (): Promise<void> => {
       '    ctx.ui.pasteToEditor("pasted");',
       '    ctx.ui.notify("ed:" + ctx.ui.getEditorText());',
       "  } });",
-      "}",
+      "} });",
     ].join("\n"));
     rig.initialize(true);
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -546,9 +549,9 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.registerCommand("askconfirm", { handler: async (a, ctx) => { const v = await ctx.ui.confirm("Sure?"); if (v === false) throw new Error("default confirm"); } });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("askconfirm", { handler: async (a, ctx) => { const v = await ctx.ui.confirm("Sure?"); if (v === false) throw new Error("default confirm"); } });',
+      "} });",
     ].join("\n"));
     rig.initialize(false);
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -563,10 +566,10 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
+      'widecode.plugin({ id: "ext", agent(agent) {',
       '  let n = 0;',
-      '  pi.registerCommand("count", { handler: (a, ctx) => { n++; ctx.ui.notify(String(n)); } });',
-      "}",
+      '  agent.registerCommand("count", { handler: (a, ctx) => { n++; ctx.ui.notify(String(n)); } });',
+      "} });",
     ].join("\n"));
     rig.initialize(true);
     const one = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -586,9 +589,9 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.registerCommand("reg", { handler: (a, ctx) => { pi.registerCommand("late", { handler: (b, c) => { c.ui.notify("late"); } }); ctx.ui.notify("registered"); } });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("reg", { handler: (a, ctx) => { agent.registerCommand("late", { handler: (b, c) => { c.ui.notify("late"); } }); ctx.ui.notify("registered"); } });',
+      "} });",
     ].join("\n"));
     rig.initialize(true);
     const one = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -603,18 +606,18 @@ const main = async (): Promise<void> => {
     rig.close();
   }
 
-  // pi.exec: the streams and code, a failing command, a shell exit, a timeout, the session's folder and a cap.
+  // agent.exec: the streams and code, a failing command, a shell exit, a timeout, the session's folder and a cap.
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.registerCommand("exechi", { handler: async (a, ctx) => { const r = await pi.exec("printf", ["hi"]); ctx.ui.notify("hi:" + r.stdout + ":" + String(r.code)); } });',
-      '  pi.registerCommand("execfail", { handler: async (a, ctx) => { const r = await pi.exec("false", []); ctx.ui.notify("fail:" + String(r.code)); } });',
-      '  pi.registerCommand("exitsh", { handler: async (a, ctx) => { const r = await pi.exec("sh", ["-c", "exit 3"]); ctx.ui.notify("sh:" + String(r.code)); } });',
-      '  pi.registerCommand("exectimeout", { handler: async (a, ctx) => { const r = await pi.exec("sleep", ["5"], { timeout: 100 }); ctx.ui.notify("to:" + String(r.killed)); } });',
-      '  pi.registerCommand("execpwd", { handler: async (a, ctx) => { const r = await pi.exec("pwd", []); ctx.ui.notify("pwd:" + r.stdout.trim()); } });',
-      '  pi.registerCommand("exectrunc", { handler: async (a, ctx) => { const r = await pi.exec("sh", ["-c", "seq 1 20000"]); ctx.ui.notify("tr:" + String(r.truncated)); } });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("exechi", { handler: async (a, ctx) => { const r = await agent.exec("printf", ["hi"]); ctx.ui.notify("hi:" + r.stdout + ":" + String(r.code)); } });',
+      '  agent.registerCommand("execfail", { handler: async (a, ctx) => { const r = await agent.exec("false", []); ctx.ui.notify("fail:" + String(r.code)); } });',
+      '  agent.registerCommand("exitsh", { handler: async (a, ctx) => { const r = await agent.exec("sh", ["-c", "exit 3"]); ctx.ui.notify("sh:" + String(r.code)); } });',
+      '  agent.registerCommand("exectimeout", { handler: async (a, ctx) => { const r = await agent.exec("sleep", ["5"], { timeout: 100 }); ctx.ui.notify("to:" + String(r.killed)); } });',
+      '  agent.registerCommand("execpwd", { handler: async (a, ctx) => { const r = await agent.exec("pwd", []); ctx.ui.notify("pwd:" + r.stdout.trim()); } });',
+      '  agent.registerCommand("exectrunc", { handler: async (a, ctx) => { const r = await agent.exec("sh", ["-c", "seq 1 20000"]); ctx.ui.notify("tr:" + String(r.truncated)); } });',
+      "} });",
     ].join("\n"));
     rig.initialize(true);
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -637,6 +640,85 @@ const main = async (): Promise<void> => {
     rig.close();
   }
 
+  // A plugin with only activate makes no engine: the harness runs agent parts alone.
+  {
+    const folder = mkdtempSync(join(tmpdir(), "harness-plugin-activate-"));
+    const root = join(folder, "home");
+    const paths = new HarnessPaths(root);
+    mkdirSync(join(root, "plugins"), { recursive: true });
+    writeFileSync(join(root, "plugins", "ext.js"), 'widecode.plugin({ id: "ext", activate(api) {} });');
+    const one = new ExtensionsRegistry(paths).forSession(folder, true);
+    ok("a plugin with only activate makes no engine", one.engine === null);
+    rmSync(folder, { recursive: true, force: true });
+  }
+
+  // A built-in source with an agent part handed to the registry, replaced by a store plugin of the same id.
+  {
+    const builtin = new PluginSource("builtin:gate.js", 'widecode.plugin({ id: "gate", agent(agent) { agent.registerCommand("builtin", { handler() {} }); } });');
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"), [builtin]);
+    rig.extension('widecode.plugin({ id: "gate", agent(agent) { agent.registerCommand("store", { handler() {} }); } });');
+    rig.session({ cwd: rig.folder, mcpServers: [] });
+    const made = rig.taken();
+    ok("the store plugin replaced the built-in's agent part", made.some((line) => line.includes('"name":"store"')) && !made.some((line) => line.includes('"name":"builtin"')));
+    rig.close();
+  }
+
+  // plugins.<id>: false in the store's config.json, or a trusted folder's over it, switches the agent part off.
+  {
+    const folder = mkdtempSync(join(tmpdir(), "harness-plugin-off-"));
+    const root = join(folder, "home");
+    const paths = new HarnessPaths(root);
+    mkdirSync(join(root, "plugins"), { recursive: true });
+    writeFileSync(join(root, "plugins", "ext.js"), 'widecode.plugin({ id: "ext", agent(agent) { agent.registerCommand("off", { handler() {} }); } });');
+    writeFileSync(join(root, "config.json"), '{"plugins":{"ext":false}}');
+    const off = new ExtensionsRegistry(paths).forSession(folder, true);
+    ok("the user's false makes no engine", off.engine === null);
+    writeFileSync(join(root, "config.json"), '{"plugins":{}}');
+    mkdirSync(join(folder, ".widecode"), { recursive: true });
+    writeFileSync(join(folder, ".widecode", "config.json"), '{"plugins":{"ext":false}}');
+    const loose = new ExtensionsRegistry(paths).forSession(folder, false);
+    ok("an untrusted folder's false is not read", loose.engine !== null);
+    const trusted = new ExtensionsRegistry(paths).forSession(folder, true);
+    ok("a trusted folder's false switches it off", trusted.engine === null);
+    rmSync(folder, { recursive: true, force: true });
+  }
+
+  // agent.settings answers the plugin's section of plugins.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    rig.extension([
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("settings", { handler: (a, ctx) => { ctx.ui.notify(JSON.stringify(agent.settings())); } });',
+      "} });",
+    ].join("\n"));
+    writeFileSync(join(rig.home, "config.json"), '{"plugins":{"ext":{"greeting":"hi","n":2}}}');
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "/settings");
+    eq("agent.settings is its section", String((await rig.uiNotification("notify"))["message"]), '{"greeting":"hi","n":2}');
+    rig.close();
+  }
+
+  // A plugin's top level reads widecode.util, widecode.theme and widecode.version.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    rig.extension([
+      "const u = widecode.util;",
+      "const T = widecode.theme;",
+      'const label = u.str("ok") + ":" + String(widecode.version) + ":" + String(T.dim.length > 0);',
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("theme", { handler: (a, ctx) => { ctx.ui.notify(label); } });',
+      "} });",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "/theme");
+    eq("widecode.util and widecode.theme exist at a plugin's top level", String((await rig.uiNotification("notify"))["message"]), "ok:1:true");
+    rig.close();
+  }
+
   // No file, no engine; the same pair stays one.
   {
     const folder = mkdtempSync(join(tmpdir(), "harness-ext-empty-"));
@@ -647,13 +729,13 @@ const main = async (): Promise<void> => {
     rmSync(folder, { recursive: true, force: true });
   }
 
-  // pi.appendEntry: a custom entry in the file, outside the context, still there after a load elsewhere.
+  // agent.appendEntry: a custom entry in the file, outside the context, still there after a load elsewhere.
   {
     const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.registerCommand("save", { handler: (a, ctx) => { pi.appendEntry("note", { count: 3, marker: "custom-marker" }); ctx.ui.notify("saved"); } });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("save", { handler: (a, ctx) => { agent.appendEntry("note", { count: 3, marker: "custom-marker" }); ctx.ui.notify("saved"); } });',
+      "} });",
     ].join("\n"));
     rig.initialize(true);
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -683,15 +765,15 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.registerCommand("save", { handler: () => { pi.appendEntry("note", { count: 3 }); } });',
-      '  pi.registerCommand("inspect", { handler: (a, ctx) => {',
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("save", { handler: () => { agent.appendEntry("note", { count: 3 }); } });',
+      '  agent.registerCommand("inspect", { handler: (a, ctx) => {',
       "    const sm = ctx.sessionManager;",
       '    const entries = sm.getEntries();',
       '    const custom = entries.filter((e) => e.type === "custom")[0];',
       '    ctx.ui.notify("inspect:" + JSON.stringify({ id: sm.getSessionId(), file: sm.getSessionFile(), cwd: sm.getCwd(), leaf: sm.getLeafId(), header: sm.getHeader(), entries: entries.length, branch: sm.getBranch().map((e) => e.type), custom: custom === undefined ? null : sm.getEntry(custom.id) }));',
       "  } });",
-      "}",
+      "} });",
     ].join("\n"));
     rig.initialize(true);
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -713,13 +795,13 @@ const main = async (): Promise<void> => {
     rig.close();
   }
 
-  // pi.setSessionName and getSessionName: the title entry and the session_info_update.
+  // agent.setSessionName and getSessionName: the title entry and the session_info_update.
   {
     const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.registerCommand("rename", { handler: (a, ctx) => { pi.setSessionName("Fresh name"); ctx.ui.notify("name:" + String(pi.getSessionName())); } });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("rename", { handler: (a, ctx) => { agent.setSessionName("Fresh name"); ctx.ui.notify("name:" + String(agent.getSessionName())); } });',
+      "} });",
     ].join("\n"));
     rig.initialize(true);
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -734,13 +816,13 @@ const main = async (): Promise<void> => {
     rig.close();
   }
 
-  // pi.sendUserMessage while idle: a turn at once, the client told the user's message.
+  // agent.sendUserMessage while idle: a turn at once, the client told the user's message.
   {
     const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.registerCommand("sendnow", { handler: () => { pi.sendUserMessage("hello now"); } });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("sendnow", { handler: () => { agent.sendUserMessage("hello now"); } });',
+      "} });",
     ].join("\n"));
     rig.initialize(true);
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -755,13 +837,13 @@ const main = async (): Promise<void> => {
     rig.close();
   }
 
-  // pi.sendUserMessage steered and followed up while a turn runs.
+  // agent.sendUserMessage steered and followed up while a turn runs.
   {
     const rig = new Rig(['{"match":"slow","text":"First answer."}', '{"match":"steer","text":"Steered answer."}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.on("before_agent_start", (e) => { if (e.prompt === "slow") pi.sendUserMessage("steer words", { deliverAs: "steer" }); });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.on("before_agent_start", (e) => { if (e.prompt === "slow") agent.sendUserMessage("steer words", { deliverAs: "steer" }); });',
+      "} });",
     ].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
     rig.taken();
@@ -775,9 +857,9 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"slow","text":"First answer."}', '{"match":"follow","text":"Followed answer."}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.on("before_agent_start", (e) => { if (e.prompt === "slow") pi.sendUserMessage("follow after", { deliverAs: "followUp" }); });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.on("before_agent_start", (e) => { if (e.prompt === "slow") agent.sendUserMessage("follow after", { deliverAs: "followUp" }); });',
+      "} });",
     ].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
     rig.taken();
@@ -790,13 +872,13 @@ const main = async (): Promise<void> => {
     rig.close();
   }
 
-  // pi.sendMessage with triggerTurn while idle, and steered into a running turn.
+  // agent.sendMessage with triggerTurn while idle, and steered into a running turn.
   {
     const rig = new Rig(['{"match":"custom","text":"Saw custom."}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.registerCommand("sendcustom", { handler: () => { pi.sendMessage({ customType: "note", content: "custom words", display: true, details: { a: 1 } }, { triggerTurn: true }); } });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("sendcustom", { handler: () => { agent.sendMessage({ customType: "note", content: "custom words", display: true, details: { a: 1 } }, { triggerTurn: true }); } });',
+      "} });",
     ].join("\n"));
     rig.initialize(true);
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
@@ -813,9 +895,9 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"slow","text":"First answer."}', '{"match":"injected","text":"Injected answer."}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.on("before_agent_start", (e) => { if (e.prompt === "slow") pi.sendMessage({ customType: "inject", content: "injected words", display: true }, { deliverAs: "steer" }); });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.on("before_agent_start", (e) => { if (e.prompt === "slow") agent.sendMessage({ customType: "inject", content: "injected words", display: true }, { deliverAs: "steer" }); });',
+      "} });",
     ].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
     rig.taken();
@@ -828,13 +910,13 @@ const main = async (): Promise<void> => {
     rig.close();
   }
 
-  // pi.sendMessage nextTurn: kept and added before the next turn's prompt.
+  // agent.sendMessage nextTurn: kept and added before the next turn's prompt.
   {
     const rig = new Rig(['{"match":"slow","text":"First answer."}', '{"match":"after","text":"After answer."}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.on("before_agent_start", (e) => { if (e.prompt === "slow") pi.sendMessage({ customType: "later", content: "next words", display: true }, { deliverAs: "nextTurn" }); });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.on("before_agent_start", (e) => { if (e.prompt === "slow") agent.sendMessage({ customType: "later", content: "next words", display: true }, { deliverAs: "nextTurn" }); });',
+      "} });",
     ].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
     rig.taken();
@@ -852,9 +934,9 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      "export default function (pi) {",
-      '  pi.registerCommand("reg", { handler: () => { pi.registerCommand("late", { handler: (b, c) => { c.ui.notify("late"); } }); } });',
-      "}",
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("reg", { handler: () => { agent.registerCommand("late", { handler: (b, c) => { c.ui.notify("late"); } }); } });',
+      "} });",
     ].join("\n"));
     rig.initialize(true);
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });

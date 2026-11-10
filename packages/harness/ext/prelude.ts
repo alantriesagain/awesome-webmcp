@@ -1,10 +1,18 @@
-// The JS side of the harness's extension API: the `pi` object an extension's default export is
-// called with, its handler and tool tables, and the answer path for a callback that returns a
+// The JS side of the harness's agent API: light's prelude first, for the `widecode` global a plugin's
+// top level reads (its `util` and `theme`), then the harness's own global over it, which records a
+// definition's `agent(agent)` part and never runs `activate`. The agent object keeps pi's design under
+// widecode's names: its handlers and tool tables, the answer path for a callback that returns a
 // promise (the prelude tells the host the call's id and the settled value or error, and the host
-// keeps the turn going meanwhile). Mirrors the app runtime's toolCall/toolDone shape.
-export const EXT_PRELUDE: string =
-  `"use strict";
+// keeps the turn going meanwhile), and its settings. Mirrors the app runtime's toolCall/toolDone shape.
+import { buildPrelude } from "@light/plugins/prelude.ts";
+
+/** The theme a plugin's top level sees: the fields the builder reads, and the names plugins use. */
+const HARNESS_THEME = '{"dim":"#666666","ok":"#5fd75f","bad":"#ff5f5f","warn":"#ffd75f","think":"#878787","link":"#5fafff","code":"#c0c0c0","prompt":"#ffffff","selected":"#303030","shown":"#202020","fresh":"#ffffff","band":"#101010","marks":{},"frames":["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"],"tick":80}';
+
+/** A plugin's `agent` part over the engine: evaluated after light's prelude, in the same context. */
+const AGENT_RUNTIME: string = `"use strict";
 (() => {
+  const base = globalThis.__widecodeBase;
   const parse = JSON.parse;
   const stringify = JSON.stringify;
   const fns = [];
@@ -146,39 +154,44 @@ export const EXT_PRELUDE: string =
       if (r !== null && typeof r === "object" && typeof r.then === "function") return r.then((v) => ({ result: v === undefined ? null : v, input: event.input }));
       return { result: r === undefined ? null : r, input: event.input };
     });
-  // A pi of its own per file and instance: what it registers or runs later is that instance's.
-  const piFor = (file, instance) => ({
+  // The definitions a file made: its plugin id, its file and its agent part, the latest per id.
+  const defs = Object.create(null);
+  const agentFor = (key, inst) => ({
     on: (name, handler) => {
-      call("extHandler", file, instance, name, handled(handler));
+      call("extHandler", key, inst, name, handled(handler));
     },
     registerTool: (def) => {
-      if (def === null || typeof def !== "object" || typeof def.name !== "string" || typeof def.execute !== "function") throw new Error("pi.registerTool: a tool needs a name and execute()");
+      if (def === null || typeof def !== "object" || typeof def.name !== "string" || typeof def.execute !== "function") throw new Error("agent.registerTool: a tool needs a name and execute()");
       const id = fn((toolCallId, params, ctx) => {
         const c = ctxOf(ctx);
         return def.execute(toolCallId, params, c.signal, () => {}, c);
       });
-      call("extTool", file, instance, def.name, def.label === undefined ? def.name : String(def.label), def.description === undefined ? "" : String(def.description), def.parameters === undefined ? { type: "object" } : def.parameters, id);
+      call("extTool", key, inst, def.name, def.label === undefined ? def.name : String(def.label), def.description === undefined ? "" : String(def.description), def.parameters === undefined ? { type: "object" } : def.parameters, id);
     },
     registerCommand: (name, def) => {
-      if (typeof name !== "string" || def === null || typeof def !== "object" || typeof def.handler !== "function") throw new Error("pi.registerCommand: a command needs a name and handler()");
+      if (typeof name !== "string" || def === null || typeof def !== "object" || typeof def.handler !== "function") throw new Error("agent.registerCommand: a command needs a name and handler()");
       const id = fn((args, ctx) => def.handler(args, ctxOf(ctx)));
-      call("extCommand", file, instance, name, def.description === undefined ? "" : String(def.description), id);
+      call("extCommand", key, inst, name, def.description === undefined ? "" : String(def.description), id);
     },
     appendEntry: (customType, data) => {
-      call("extAppendEntry", file, instance, String(customType), data === undefined ? null : data);
+      call("extAppendEntry", key, inst, String(customType), data === undefined ? null : data);
     },
     setSessionName: (name) => {
-      call("extSetSessionName", file, instance, String(name));
+      call("extSetSessionName", key, inst, String(name));
     },
     getSessionName: () => {
-      const v = parse(__host("extGetSessionName", stringify([file, instance])));
+      const v = parse(__host("extGetSessionName", stringify([key, inst])));
       return v === null || v === undefined ? undefined : v;
     },
+    settings: () => {
+      const v = parse(__host("extSettings", stringify([key])));
+      return v === null || v === undefined ? {} : v;
+    },
     sendUserMessage: (content, options) => {
-      call("extSendUserMessage", file, instance, content, options === undefined ? null : options);
+      call("extSendUserMessage", key, inst, content, options === undefined ? null : options);
     },
     sendMessage: (message, options) => {
-      call("extSendMessage", file, instance, message, options === undefined ? null : options);
+      call("extSendMessage", key, inst, message, options === undefined ? null : options);
     },
     exec: (command, args, options) => {
       const o = options === null || typeof options !== "object" ? {} : options;
@@ -188,7 +201,7 @@ export const EXT_PRELUDE: string =
       };
       const argv = Array.isArray(args) ? args.map((a) => String(a)) : [];
       const execId = ++seq;
-      const progressed = hostLater("extExec", [execId, instance, file, String(command), argv, opts]);
+      const progressed = hostLater("extExec", [execId, inst, key, String(command), argv, opts]);
       const kill = () => __host("extExecKill", stringify([execId]));
       const sig = o.signal;
       if (sig !== undefined && sig !== null) {
@@ -198,26 +211,44 @@ export const EXT_PRELUDE: string =
       return progressed;
     },
   });
-  globalThis.__ext = {
-    main: null,
-    begin(f, i) {
-      file = f;
-      instance = i;
-      __ext.main = null;
+  globalThis.__extFile = (f) => {
+    file = f;
+  };
+  globalThis.__extReset = () => {
+    for (const id of Object.keys(defs)) delete defs[id];
+  };
+  globalThis.widecode = Object.freeze({
+    version: base.version,
+    util: base.util,
+    theme: base.theme,
+    plugin(def) {
+      if (def === null || typeof def !== "object" || typeof def.id !== "string") throw new Error("widecode.plugin: a plugin needs an id");
+      if (typeof def.agent !== "function") {
+        delete defs[def.id];
+        return;
+      }
+      defs[def.id] = { id: def.id, file: file, agent: def.agent };
     },
-    start() {
-      const m = __ext.main;
-      if (typeof m !== "function") throw new Error(file + ": no default export function");
-      return m(piFor(file, instance));
+  });
+  globalThis.__ext = {
+    active() {
+      const out = [];
+      for (const id of Object.keys(defs)) out.push({ id: id, file: defs[id].file });
+      return stringify(out);
     },
   };
-  const start = fn(() => __ext.start());
-  globalThis.__startId = start;
+  // The agent part of a plugin id for one instance: the host calls this per plugin, so its budget applies.
+  const startAgent = fn((id, inst) => {
+    const d = defs[id];
+    if (d === undefined) throw new Error("widecode.plugin: no agent for " + id);
+    d.agent(agentFor(d.id + "\\u0000" + d.file, inst));
+  });
+  globalThis.__agentStartId = startAgent;
   const hostSettleId = fn((id, error, value) => hostSettle(id, error, value));
   globalThis.__hostSettleId = hostSettleId;
   globalThis.__invoke = (id, json) => {
     const f = fns[id];
-    if (typeof f !== "function") throw new Error("extension: no function " + String(id));
+    if (typeof f !== "function") throw new Error("plugin: no function " + String(id));
     const r = f(...parse(json));
     if (r !== null && typeof r === "object" && typeof r.then === "function") {
       const cid = ++seq;
@@ -233,5 +264,7 @@ export const EXT_PRELUDE: string =
     }
     return r === undefined ? "null" : stringify(r);
   };
-})();
-`;
+})();`;
+
+/** The prelude of a plugin engine: light's `__widecodeBase`, then the harness's `widecode` and agent. */
+export const EXT_PRELUDE: string = buildPrelude("__widecodeBase", HARNESS_THEME, "") + "\n" + AGENT_RUNTIME;

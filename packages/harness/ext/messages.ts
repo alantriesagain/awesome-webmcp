@@ -1,6 +1,6 @@
-// The conversation in pi's AgentMessage shape and back. A user message holds text and images, an
-// assistant one text, thinking with its signature and tool calls, and every tool result is a
-// message of its own. The `context` event gets this text; a replacement is converted back to the
+// The conversation in the agent's message shape and back, following pi's AgentMessage: a user
+// message holds text and images, an assistant one text, thinking with its signature and tool calls,
+// and every tool result is a message of its own. The `context` event gets this text; a replacement is converted back to the
 // harness's Message/Part and sent in that one request, never written to the session file.
 import { listOf, objectText, parseJson, recordOf, str } from "@light/lib/json.ts";
 import { IMAGE, Message, Part, TEXT, THINKING, TOOL_CALL, TOOL_RESULT } from "../model/message.ts";
@@ -11,8 +11,8 @@ const textContent = (text: string): string => objectText(["type", "text"], [json
 
 const imageContent = (data: string, mimeType: string): string => objectText(["type", "image", "data", "mimeType"], [json("image"), json(data), json(mimeType)]);
 
-/** The conversation as pi messages, JSON text. */
-export const messagesToPi = (messages: Message[]): string => {
+/** The conversation in the agent's message shape, JSON text. */
+export const messagesToAgent = (messages: Message[]): string => {
   const names = new Map<string, string>();
   for (const m of messages)
     for (const p of m.parts) if (p.kind === TOOL_CALL && p.callId.length > 0) names.set(p.callId, p.name);
@@ -48,9 +48,9 @@ export const messagesToPi = (messages: Message[]): string => {
   return "[" + out.join(",") + "]";
 };
 
-/** One message as pi's AgentMessage, null when it has none. */
-export const messageToPi = (m: Message): unknown => {
-  const list = listOf(parseJson(messagesToPi([m])));
+/** One message in the agent's shape, null when it has none. */
+export const messageToAgent = (m: Message): unknown => {
+  const list = listOf(parseJson(messagesToAgent([m])));
   return list.length > 0 ? list[0] : null;
 };
 
@@ -80,8 +80,8 @@ const partsOfContent = (content: unknown): Part[] => {
   return parts;
 };
 
-/** The pi messages back as the harness's, null for a value that is not a list of messages. */
-export const messagesFromPi = (value: unknown): Message[] | null => {
+/** The agent's messages back as the harness's, null for a value that is not a list of messages. */
+export const messagesFromAgent = (value: unknown): Message[] | null => {
   if (!Array.isArray(value)) return null;
   const out: Message[] = [];
   const list = value as unknown[];

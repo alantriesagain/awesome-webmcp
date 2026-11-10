@@ -32,6 +32,7 @@ import { argValue, hasArg, log, logPath, nameLog, openLog } from "@light/lib/log
 import { Terminal } from "@lightstart/light/native/tui";
 import { peersDaemonMain } from "@widecode/peers/cli.ts";
 import { harnessMain, isHarnessArgs } from "@widecode/harness/cli.ts";
+import { BUILTIN_PLUGINS } from "./runtime/builtin.ts";
 import { Store } from "./services/store.ts";
 import { BUILD, StartupHooks, startWidecode } from "./startup.ts";
 
@@ -42,7 +43,7 @@ if (hasArg("--version")) {
 
 // A daemon shares nothing with the app below: no terminal, no folder, its own log.
 if (hasArg("--peers-daemon")) void peersDaemonMain(Store.defaultRoot(), process.argv.slice(2), BUILD).then((code: number) => process.exit(code));
-else if (isHarnessArgs(process.argv.slice(2))) void harnessMain(Store.defaultRoot(), process.argv.slice(2), BUILD).then((code: number) => process.exit(code));
+else if (isHarnessArgs(process.argv.slice(2))) void harnessMain(Store.defaultRoot(), process.argv.slice(2), BUILD, BUILTIN_PLUGINS).then((code: number) => process.exit(code));
 else runApp();
 
 function runApp(): void {

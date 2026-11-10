@@ -9,4 +9,4 @@ const args = process.argv.slice(2);
 const at = args.indexOf("--harness-home");
 const env = process.env["WIDECODE_HOME"] ?? "";
 const home = at >= 0 && at + 1 < args.length ? args[at + 1] : env.length > 0 ? env : join(homedir(), ".widecode");
-void harnessMain(home, args, "dev").then((code: number) => process.exit(code));
+void harnessMain(home, args, "dev", []).then((code: number) => process.exit(code));

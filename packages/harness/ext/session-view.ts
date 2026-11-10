@@ -3,7 +3,7 @@
 // `session_info`, a custom entry with its data, and anything else with its own fields.
 import { recordOf } from "@light/lib/json.ts";
 import { COMPACTION, CUSTOM, Entry, MESSAGE, MODEL, SESSION, TITLE } from "../session/entries.ts";
-import { messageToPi } from "./messages.ts";
+import { messageToAgent } from "./messages.ts";
 
 const iso = (at: number): string => new Date(at).toISOString();
 
@@ -20,7 +20,7 @@ export const piHeader = (h: Entry): string => "{" + ['"type":"session"', '"versi
 /** One entry as pi's SessionEntry, JSON text. */
 export const piEntry = (e: Entry): string => {
   if (e.kind === MESSAGE) {
-    const pi = recordOf(messageToPi(e.message()));
+    const pi = recordOf(messageToAgent(e.message()));
     const content = pi !== null && pi["content"] !== undefined ? JSON.stringify(pi["content"]) : '"\\u0000"';
     if (e.customType.length > 0) {
       const fields = base("custom_message", e);

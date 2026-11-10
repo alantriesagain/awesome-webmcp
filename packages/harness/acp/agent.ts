@@ -38,6 +38,7 @@ import { WebSettings } from "../tools/web.ts";
 import { parseRules, rulesIn } from "../tools/permissions.ts";
 import { ExtContext } from "../ext/context.ts";
 import { ExtCommand, ExtSession, ExtensionsRegistry, ExtUiHost } from "../ext/extensions.ts";
+import { PluginSource } from "@light/plugins/sources.ts";
 import { piEntries, piEntry, piHeader } from "../ext/session-view.ts";
 import { join } from "node:path";
 import { Choice, ConfigOptions } from "./options.ts";
@@ -176,7 +177,7 @@ export class AcpAgent {
   private readonly sessions = new Map<string, HarnessSession>();
   private readonly extensions: ExtensionsRegistry;
 
-  constructor(server: AcpServer, client: ModelClient, tools: ToolSet, registry: ModelRegistry, config: HarnessConfig, build: string, platform: string, paths: HarnessPaths) {
+  constructor(server: AcpServer, client: ModelClient, tools: ToolSet, registry: ModelRegistry, config: HarnessConfig, build: string, platform: string, paths: HarnessPaths, builtins: PluginSource[] = []) {
     this.server = server;
     this.loop = new AgentLoop(client, tools);
     this.loop.compactAt = config.compactAt;
@@ -188,7 +189,7 @@ export class AcpAgent {
     const ui = new ExtUiHost();
     ui.request = (paramsText: string) => this.server.sendRequest("_widecode/ui", paramsText);
     ui.notify = (paramsText: string) => this.server.notify("_widecode/ui", paramsText);
-    this.extensions = new ExtensionsRegistry(paths, ui);
+    this.extensions = new ExtensionsRegistry(paths, ui, builtins);
   }
 
   /** The folder's session files. */

@@ -26,6 +26,7 @@ import { Abort } from "./loop/abort.ts";
 import { SessionStore, sessionsJson } from "./session/store.ts";
 import { ToolSet, builtInTools } from "./tools/tool.ts";
 import { ExtensionsRegistry } from "./ext/extensions.ts";
+import { PluginSource } from "@light/plugins/sources.ts";
 
 const argValue = (args: string[], name: string): string | null => {
   const at = args.indexOf(name);
@@ -97,7 +98,7 @@ const readLine = (): Promise<string> =>
   });
 
 /** Run what `args` ask for over the store at `storeRoot`; settles with the exit code. */
-export const harnessMain = (storeRoot: string, args: string[], build: string): Promise<number> => {
+export const harnessMain = (storeRoot: string, args: string[], build: string, builtins: PluginSource[] = []): Promise<number> => {
   const done = (code: number): Promise<number> => new Promise<number>((settle) => settle(code));
   const paths = new HarnessPaths(storeRoot);
   const tools = argValue(args, "--harness-tools");
@@ -105,7 +106,7 @@ export const harnessMain = (storeRoot: string, args: string[], build: string): P
     // In the folder the command runs in: the user's rules and the project's, and the tools its extensions register.
     const cwd = process.cwd();
     const rules = parseRules(rulesIn(paths.configPath()).concat(rulesIn(join(cwd, ".widecode", "config.json"))));
-    const extensions = new ExtensionsRegistry(paths).forSession(cwd, folderTrusted(paths, cwd)).instance("", cwd);
+    const extensions = new ExtensionsRegistry(paths, null, builtins).forSession(cwd, folderTrusted(paths, cwd)).instance("", cwd);
     process.stdout.write(toolsListing(tools, rules, extensions.tools().map((t) => t.name)) + "\n");
     return done(0);
   }
@@ -196,7 +197,7 @@ export const harnessMain = (storeRoot: string, args: string[], build: string): P
     const client = new ModelClient(registry, auth, config.http, fake);
     const server = new AcpServer();
     server.tracePath = argValue(args, "--log") ?? "";
-    const agent = new AcpAgent(server, client, new ToolSet(builtInTools()), registry, config, build, process.platform, paths);
+    const agent = new AcpAgent(server, client, new ToolSet(builtInTools()), registry, config, build, process.platform, paths, builtins);
     agent.web = webSettings(config, auth, paths);
     log("the web: " + (agent.web.browser.length > 0 ? "the browser " + agent.web.browser : "no browser, curl") + "; search " + (agent.web.order.length > 0 ? agent.web.order.join(", ") : "none"));
     server.onIncoming = (m: Incoming) => {
