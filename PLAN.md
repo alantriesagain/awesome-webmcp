@@ -521,7 +521,7 @@ file in its own engine and runs `agent`. A plugin lives in a folder of its own (
 - [ ] **The two parts talk.** `agent.send(type, data)` and `api.agent.on(type, f)` (and back) over
       an ACP notification of the plugin's id, so a plugin's agent part can feed its own view (a
       todo tool and a Todo tab).
-- [ ] **The important plugins.** Built-in plugins with an agent part, written from pi's examples:
+- [x] **The important plugins.** Built-in plugins with an agent part, written from pi's examples:
       `permission-gate`, `protected-paths`, `git-checkpoint`, `todo` (its tab too, once the parts
       talk), `inline-bash`, `tools`, `dirty-repo-guard`, `claude-rules`. A test each, switched off
       in a test too.
@@ -549,6 +549,11 @@ file in its own engine and runs `agent`. A plugin lives in a folder of its own (
 
 ## Log
 
+- `a2e1ca1` Milestone K, todo and tools-switch (the session view shows a tool result's name and
+  details, a batch's results as entries of their own); `a4b18d0` inline-bash, claude-rules,
+  dirty-repo-guard and git-checkpoint (no refs: a checkpoint is a commit kept in the session).
+  Tests: one per plugin. `coverage --apps` reported apps/widecode as not static at a4b18d0, the
+  sites all in light's model/ and html/ after light's TypeScript 7 commits and scriptc v0.4.11.
 - `9529f70` and the next commit, Milestone K, the rest of the agent API; `9ed9c07`
   permission-gate and protected-paths with `test/support/agent-rig.ts`.
 - `9557d66` (light `b5f449e`) Milestone K, plugin folders and the built-ins in them; `d1fcc56` a
