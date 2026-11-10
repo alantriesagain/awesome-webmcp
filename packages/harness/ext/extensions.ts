@@ -99,6 +99,29 @@ export class ExtCommand {
   }
 }
 
+/** How the extensions reach the client's screen: a dialog request, and a notification. */
+export class ExtUiHost {
+  request: ((paramsText: string) => Promise<unknown>) | null = null;
+  notify: ((paramsText: string) => void) | null = null;
+}
+
+/** One dialog waiting on the client: what settles it, and the default it falls back to. */
+class ExtDialog {
+  readonly entry: ExtEntry;
+  readonly hostId: number;
+  readonly sessionId: string;
+  readonly defaultValue: unknown;
+  settled = false;
+  timer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(entry: ExtEntry, hostId: number, sessionId: string, defaultValue: unknown) {
+    this.entry = entry;
+    this.hostId = hostId;
+    this.sessionId = sessionId;
+    this.defaultValue = defaultValue;
+  }
+}
+
 export class ToolCallAnswer {
   block = false;
   reason = "";
@@ -116,6 +139,7 @@ export class Extensions extends HostHandler {
   readonly trusted: boolean;
   readonly key: string;
   private readonly paths: HarnessPaths;
+  private readonly ui: ExtUiHost | null;
   private loaded = false;
   started = false;
   engine: JsEngine | null = null;
@@ -130,16 +154,18 @@ export class Extensions extends HostHandler {
   private readonly settled = new Map<number, Pending>();
   private readonly waiters = new Map<number, Waiter>();
   private readonly waiterEntries = new Map<number, ExtEntry>();
+  private readonly dialogs = new Map<number, ExtDialog>();
   private hostSettleId = -1;
   private activeEntry: ExtEntry | null = null;
   private ready: Promise<void> = new Promise<void>((settle) => settle());
   private toolSeq = 0;
 
-  constructor(paths: HarnessPaths, folder: string, trusted: boolean) {
+  constructor(paths: HarnessPaths, folder: string, trusted: boolean, ui: ExtUiHost | null) {
     super();
     this.paths = paths;
     this.folder = folder;
     this.trusted = trusted;
+    this.ui = ui;
     this.key = folder + "\u0000" + (trusted ? "1" : "0");
   }
 
@@ -236,7 +262,7 @@ export class Extensions extends HostHandler {
   }
 
   private ctxObject(ctx: ExtContext | null): Record<string, unknown> {
-    const out: Record<string, unknown> = { cwd: ctx !== null ? ctx.cwd : "", mode: "rpc", hasUI: false, model: null, aborted: ctx !== null && ctx.aborted };
+    const out: Record<string, unknown> = { cwd: ctx !== null ? ctx.cwd : "", mode: "rpc", hasUI: ctx !== null && ctx.hasUI, model: null, aborted: ctx !== null && ctx.aborted };
     if (ctx !== null) {
       ctx.ctxId = ++this.ctxSeq;
       out["ctxId"] = ctx.ctxId;
@@ -338,6 +364,68 @@ export class Extensions extends HostHandler {
     this.invokeAndPump(entry, "host", () => engine.invoke(this.hostSettleId, args));
   }
 
+  /** A dialog answered: settle the waiting call with `value`; a later answer is ignored. */
+  private settleDialog(d: ExtDialog, value: unknown): void {
+    if (d.settled) return;
+    d.settled = true;
+    if (d.timer !== null) {
+      clearTimeout(d.timer);
+      d.timer = null;
+    }
+    this.dialogs.delete(d.hostId);
+    this.settleHost(d.entry, d.hostId, "", JSON.stringify(value === undefined ? null : value));
+  }
+
+  /** Every open dialog of `sessionId` resolves its default (a turn's cancel). */
+  cancelDialogs(sessionId: string): void {
+    for (const d of Array.from(this.dialogs.values())) if (d.sessionId === sessionId) this.settleDialog(d, d.defaultValue);
+  }
+
+  /** What a client's answer to a dialog settles: its value, its confirmation, or the default. */
+  private dialogValue(method: string, result: unknown, fallback: unknown): unknown {
+    const r = recordOf(result);
+    if (r === null || r["cancelled"] === true) return fallback;
+    if (method === "confirm") return typeof r["confirmed"] === "boolean" ? r["confirmed"] : fallback;
+    return typeof r["value"] === "string" ? r["value"] : fallback;
+  }
+
+  /** The `_widecode/ui` request a dialog sends. */
+  private dialogParams(sessionId: string, method: string, fields: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = { sessionId, method, title: str(fields["title"]) };
+    if (method === "select") {
+      const options: string[] = [];
+      for (const v of listOf(fields["options"])) if (typeof v === "string") options.push(v);
+      out["options"] = options;
+    } else if (method === "confirm") out["message"] = str(fields["message"]);
+    else if (method === "input") out["placeholder"] = str(fields["placeholder"]);
+    else if (method === "editor") out["prefill"] = str(fields["prefill"]);
+    const timeout = num(fields["timeout"], 0);
+    if (timeout > 0) out["timeout"] = timeout;
+    return out;
+  }
+
+  /** The `_widecode/ui` notification a ui call sends. */
+  private uiParams(sessionId: string, method: string, args: unknown[]): Record<string, unknown> {
+    const out: Record<string, unknown> = { sessionId, method };
+    if (method === "notify") {
+      out["message"] = str(args[2]);
+      out["notifyType"] = str(args[3]);
+    } else if (method === "setStatus") {
+      out["statusKey"] = str(args[2]);
+      if (args[3] !== null && args[3] !== undefined) out["statusText"] = str(args[3]);
+    } else if (method === "setWidget") {
+      out["widgetKey"] = str(args[2]);
+      if (str(args[3]) === "lines") {
+        const lines: string[] = [];
+        for (const v of listOf(args[4])) if (typeof v === "string") lines.push(v);
+        out["widgetLines"] = lines;
+      }
+      if (typeof args[5] === "string" && args[5].length > 0) out["widgetPlacement"] = args[5];
+    } else if (method === "setTitle") out["title"] = str(args[2]);
+    else if (method === "set_editor_text") out["text"] = str(args[2]);
+    return out;
+  }
+
   override answer(name: string, argsJson: string): HostAnswer {
     const args = listOf(parseJson(argsJson));
     switch (name) {
@@ -404,9 +492,54 @@ export class Extensions extends HostHandler {
         const ctx = this.contexts.get(num(args[0], -1));
         return new HostAnswer(OK, JSON.stringify(ctx !== undefined ? ctx.systemPrompt : ""));
       }
+      case "extDialog": {
+        const hostId = num(args[0], -1);
+        const ctxId = num(args[1], -1);
+        const method = str(args[2]);
+        const fields = recordOf(args[3]) ?? {};
+        const ctx = this.contexts.get(ctxId);
+        const entry = this.ctxEntries.get(ctxId);
+        const fallback: unknown = method === "confirm" ? false : null;
+        if (ctx === undefined || entry === undefined || !ctx.hasUI || ctx.sessionId.length === 0) {
+          if (entry !== undefined) this.settleHost(entry, hostId, "", JSON.stringify(fallback));
+          return new HostAnswer(OK, "null");
+        }
+        const d = new ExtDialog(entry, hostId, ctx.sessionId, fallback);
+        this.dialogs.set(hostId, d);
+        const host = this.ui;
+        if (host === null || host.request === null) {
+          this.settleDialog(d, fallback);
+          return new HostAnswer(OK, "null");
+        }
+        const timeout = num(fields["timeout"], 0);
+        if (timeout > 0) d.timer = setTimeout(() => this.settleDialog(d, fallback), timeout);
+        host.request(JSON.stringify(this.dialogParams(ctx.sessionId, method, fields))).then(
+          (result: unknown) => this.settleDialog(d, this.dialogValue(method, result, fallback)),
+          () => this.settleDialog(d, fallback),
+        );
+        return new HostAnswer(OK, "null");
+      }
       case "extUi": {
-        const entry = this.ctxEntries.get(num(args[0], -1));
-        log("extension " + (entry !== undefined ? entry.file : "?") + ": ui." + str(args[1]) + " " + JSON.stringify(args.slice(2)));
+        const ctxId = num(args[0], -1);
+        const entry = this.ctxEntries.get(ctxId);
+        const ctx = this.contexts.get(ctxId);
+        const method = str(args[1]);
+        if (method === "setWidget" && str(args[3]) === "function") {
+          log("extension " + (entry !== undefined ? entry.file : "?") + ": ui.setWidget " + str(args[2]) + ": a function's lines are not sent");
+          return new HostAnswer(OK, "null");
+        }
+        if (method === "setWidget" && str(args[3]) === "invalid") {
+          log("extension " + (entry !== undefined ? entry.file : "?") + ": ui.setWidget " + str(args[2]) + ": the content is not an array of strings");
+          return new HostAnswer(OK, "null");
+        }
+        if (ctx !== undefined && ctx.hasUI && ctx.sessionId.length > 0) {
+          const text = JSON.stringify(this.uiParams(ctx.sessionId, method, args));
+          const host = this.ui;
+          if (host !== null && host.notify !== null) host.notify(text);
+          else log("extension " + (entry !== undefined ? entry.file : "?") + ": ui." + method + " " + text);
+        } else {
+          log("extension " + (entry !== undefined ? entry.file : "?") + ": ui." + method + " " + JSON.stringify(args.slice(2)));
+        }
         return new HostAnswer(OK, "null");
       }
       default:
@@ -573,6 +706,8 @@ export class Extensions extends HostHandler {
     ctx.aborted = abort.aborted;
     ctx.abort = () => abort.fire();
     ctx.idle = false;
+    ctx.sessionId = toolCtx.sessionId;
+    ctx.hasUI = toolCtx.hasUI;
     const callId = "ext_" + String(++this.toolSeq);
     const args = JSON.stringify([callId, recordOf(parseJson(inputJson.length > 0 ? inputJson : "{}")) ?? {}, this.ctxObject(ctx)]);
     const r = await this.call(def.entry, def.executeId, args, "tool " + def.name, ctx);
@@ -645,10 +780,12 @@ const outcomeOf = (value: unknown): ToolOutcome => {
 /** The extensions of the daemon's sessions, one instance per (folder, trusted) pair. */
 export class ExtensionsRegistry {
   private readonly paths: HarnessPaths;
+  private readonly ui: ExtUiHost | null;
   private readonly groups = new Map<string, Extensions>();
 
-  constructor(paths: HarnessPaths) {
+  constructor(paths: HarnessPaths, ui: ExtUiHost | null = null) {
     this.paths = paths;
+    this.ui = ui;
   }
 
   keyFor(folder: string, trusted: boolean): string {
@@ -660,7 +797,7 @@ export class ExtensionsRegistry {
     const key = this.keyFor(folder, trusted);
     const found = this.groups.get(key);
     if (found !== undefined) return found;
-    const made = new Extensions(this.paths, folder, trusted);
+    const made = new Extensions(this.paths, folder, trusted, this.ui);
     this.groups.set(key, made);
     made.ensure();
     return made;

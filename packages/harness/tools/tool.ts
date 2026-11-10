@@ -36,6 +36,9 @@ export class ToolContext {
   systemPrompt = "";
   tokens = 0;
   window = 0;
+  /** The session the call belongs to, and whether its client takes extension UI. */
+  sessionId = "";
+  hasUI = false;
 
   constructor(cwd: string, mode: string, reads: Set<string>) {
     this.cwd = cwd;

@@ -38,6 +38,8 @@ class Rig {
   client: FakeClient | null = null;
   agent: AcpAgent | null = null;
   paths: HarnessPaths | null = null;
+  server: AcpServer;
+  private readonly encoder = new TextEncoder();
   private n = 0;
 
   constructor(fixture: string) {
@@ -46,6 +48,7 @@ class Rig {
     this.paths = new HarnessPaths(this.home);
     openLog(join(this.folder, "log.txt"));
     const server = new AcpServer();
+    this.server = server;
     server.sink = (line: string) => this.out.push(line);
     const config = new HarnessConfig();
     const registry = registryFor(config, true);
@@ -71,15 +74,85 @@ class Rig {
     return id;
   }
 
+  /** initialize, saying whether the client takes `_widecode/ui`. */
+  initialize(ui: boolean): void {
+    const params: Record<string, unknown> = ui ? { clientCapabilities: { _meta: { widecode: { ui: true } } } } : { clientCapabilities: {} };
+    this.send("initialize", params);
+  }
+
   session(params: Record<string, unknown>): string {
-    this.send("session/new", params);
-    return /"sessionId":"([^"]+)"/.exec(this.out[0] ?? "")?.[1] ?? "";
+    const id = this.send("session/new", params);
+    const line = this.out.find((l) => l.includes('"id":' + id + ",") && l.includes("sessionId"));
+    return /"sessionId":"([^"]+)"/.exec(line ?? "")?.[1] ?? "";
   }
 
   async prompt(sessionId: string, text: string): Promise<string> {
     const id = this.send("session/prompt", { sessionId, prompt: [{ type: "text", text }] });
     await until(() => this.out.some((line) => line.includes('"id":' + id + ",")));
     return id;
+  }
+
+  /** A `_widecode/ui` request, taken out of the output; `method` the dialog's, when given. */
+  async uiRequest(method?: string): Promise<{ id: number; params: Record<string, unknown> }> {
+    let got: { id: number; params: Record<string, unknown> } | null = null;
+    await until(() => {
+      for (let i = 0; i < this.out.length; i++) {
+        const line = this.out[i];
+        if (!/"id":\d+,"method":"_widecode\/ui"/.test(line)) continue;
+        const msg = JSON.parse(line) as { id: number; params: Record<string, unknown> };
+        if (method !== undefined && msg.params["method"] !== method) continue;
+        this.out.splice(i, 1);
+        got = { id: msg.id, params: msg.params };
+        return true;
+      }
+      return false;
+    });
+    return got as unknown as { id: number; params: Record<string, unknown> };
+  }
+
+  /** A `_widecode/ui` notification with `method`, taken out of the output. */
+  async uiNotification(method: string): Promise<Record<string, unknown>> {
+    let got: Record<string, unknown> | null = null;
+    await until(() => {
+      for (let i = 0; i < this.out.length; i++) {
+        const line = this.out[i];
+        if (!/"method":"_widecode\/ui"/.test(line) || /"id":\d+/.test(line)) continue;
+        const msg = JSON.parse(line) as { params: Record<string, unknown> };
+        if (msg.params["method"] !== method) continue;
+        this.out.splice(i, 1);
+        got = msg.params;
+        return true;
+      }
+      return false;
+    });
+    return got as unknown as Record<string, unknown>;
+  }
+
+  /** Every `_widecode/ui` notification with `method` now in the output. */
+  uiNotifications(method: string): Record<string, unknown>[] {
+    const out: Record<string, unknown>[] = [];
+    for (let i = 0; i < this.out.length; i++) {
+      const line = this.out[i];
+      if (!/"method":"_widecode\/ui"/.test(line) || /"id":\d+/.test(line)) continue;
+      const msg = JSON.parse(line) as { params: Record<string, unknown> };
+      if (msg.params["method"] !== method) continue;
+      out.push(msg.params);
+      this.out.splice(i, 1);
+      i--;
+    }
+    return out;
+  }
+
+  /** The client's answer to request `id`. */
+  respond(id: number, result: unknown): void {
+    const line = JSON.stringify({ jsonrpc: "2.0", id, result });
+    this.server.feed(this.encoder.encode(line + "\n"));
+  }
+
+  /** The client's refusal of request `id`. */
+  refuse(id: number, message: string): void {
+    const line = JSON.stringify({ jsonrpc: "2.0", id, error: { code: -1, message } });
+    this.server.feed(this.encoder.encode(line + "\n"));
   }
 
   taken(): string[] {
@@ -250,6 +323,26 @@ const main = async (): Promise<void> => {
     rig.close();
   }
 
+  // A tool's execute has the session's UI: its dialog goes to the client.
+  {
+    const rig = new Rig(['{"match":"asktool","text":"Asking.","tools":[{"name":"pick","input":{}}]}', '{"match":"result","text":"Picked."}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.registerTool({ name: "pick", label: "Pick", description: "Ask the user", parameters: { type: "object" }, execute: async (id, params, signal, onUpdate, ctx) => ({ content: [{ type: "text", text: String(ctx.hasUI) + ":" + String(await ctx.ui.select("Which?", ["a", "b"])) }] }) });',
+      "}",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    const prompted = rig.prompt(sid, "asktool");
+    const asked = await rig.uiRequest("select");
+    ok("the tool's select names its session", asked.params["sessionId"] === sid);
+    rig.respond(asked.id, { value: "b" });
+    await prompted;
+    eq("and the tool gets the answer", toolText(rig.taken()), "true:b");
+    rig.close();
+  }
+
   // A command handler awaiting the host answers the prompt afterwards.
   {
     const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
@@ -300,6 +393,169 @@ const main = async (): Promise<void> => {
     await rig.prompt(sid, "budget");
     eq("the turn goes on after the continuation was cut", text(rig.taken()), "Went on.");
     ok("the log says it was switched off for its time budget", readFileSync(logFile, "utf8").includes("switched off") && readFileSync(logFile, "utf8").includes("time budget"));
+    rig.close();
+  }
+
+  // A confirm over _widecode/ui: false blocks the call, true lets it run.
+  {
+    const rig = new Rig([
+      '{"match":"askno","text":"Running.","tools":[{"name":"Bash","input":{"command":"echo hi"}}]}',
+      '{"match":"result","text":"No done."}',
+      '{"match":"askyes","text":"Running.","tools":[{"name":"Bash","input":{"command":"echo hi"}}]}',
+      '{"match":"result","text":"Yes done."}',
+    ].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.on("tool_call", async (e, ctx) => {',
+      '    if (e.toolName !== "bash") return;',
+      '    const yes = await ctx.ui.confirm("Run it?", "really run it");',
+      '    return yes ? undefined : { block: true, reason: "said no" };',
+      "  });",
+      "}",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    const no = rig.prompt(sid, "askno");
+    const asked = await rig.uiRequest("confirm");
+    eq("the dialog carries the session, title and message", String(asked.params["sessionId"]) + "|" + String(asked.params["title"]) + "|" + String(asked.params["message"]), sid + "|Run it?|really run it");
+    rig.respond(asked.id, { confirmed: false });
+    await no;
+    const blocked = rig.taken();
+    ok("a false answer blocks the call", toolText(blocked).includes("blocked by") && toolText(blocked).includes("said no"));
+    const yes = rig.prompt(sid, "askyes");
+    const again = await rig.uiRequest("confirm");
+    rig.respond(again.id, { confirmed: true });
+    await yes;
+    ok("a true answer lets the call run", toolText(rig.taken()).includes("hi"));
+    rig.close();
+  }
+
+  // Select, a cancelled input and a timeout.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.registerCommand("askselect", { handler: async (a, ctx) => { const v = await ctx.ui.select("Pick", ["a", "b"]); ctx.ui.notify("sel:" + String(v)); } });',
+      '  pi.registerCommand("askinput", { handler: async (a, ctx) => { const v = await ctx.ui.input("Name"); ctx.ui.notify("in:" + String(v)); } });',
+      '  pi.registerCommand("asktimeout", { handler: async (a, ctx) => { const v = await ctx.ui.confirm("Wait", "nobody", { timeout: 50 }); ctx.ui.notify("to:" + String(v)); } });',
+      "}",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    const sel = rig.prompt(sid, "/askselect");
+    const req = await rig.uiRequest("select");
+    eq("a select sends its options", JSON.stringify(req.params["options"]), '["a","b"]');
+    rig.respond(req.id, { value: "b" });
+    await sel;
+    eq("the value reaches the extension and its prompt is answered", String((await rig.uiNotification("notify"))["message"]), "sel:b");
+    const inp = rig.prompt(sid, "/askinput");
+    const iq = await rig.uiRequest("input");
+    rig.respond(iq.id, { cancelled: true });
+    await inp;
+    eq("a cancelled input is undefined", String((await rig.uiNotification("notify"))["message"]), "in:undefined");
+    const to = rig.prompt(sid, "/asktimeout");
+    const tq = await rig.uiRequest("confirm");
+    eq("the timeout goes out with the dialog", String(tq.params["timeout"]), "50");
+    await to;
+    eq("the timeout resolves the default", String((await rig.uiNotification("notify"))["message"]), "to:false");
+    rig.close();
+  }
+
+  // The turn's cancel resolves an open dialog to its default.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.registerCommand("wait", { handler: async (a, ctx) => { const v = await ctx.ui.select("Pick", ["a"]); ctx.ui.notify("after:" + String(v)); } });',
+      "}",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    const p = rig.prompt(sid, "/wait");
+    await rig.uiRequest("select");
+    rig.send("session/cancel", { sessionId: sid });
+    await p;
+    eq("the cancel resolves the dialog to its default", String((await rig.uiNotification("notify"))["message"]), "after:undefined");
+    rig.close();
+  }
+
+  // Two dialogs open at once, answered out of order.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.registerCommand("ask", { handler: async (a, ctx) => { const v = await ctx.ui.select("Pick", ["x", "y"]); ctx.ui.notify("picked:" + String(v)); } });',
+      "}",
+    ].join("\n"));
+    rig.initialize(true);
+    const one = rig.session({ cwd: rig.folder, mcpServers: [] });
+    const two = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    const p1 = rig.prompt(one, "/ask");
+    const p2 = rig.prompt(two, "/ask");
+    const r1 = await rig.uiRequest("select");
+    const r2 = await rig.uiRequest("select");
+    eq("each request names its session", String(r1.params["sessionId"]) + "," + String(r2.params["sessionId"]), one + "," + two);
+    rig.respond(r2.id, { value: "Y" });
+    rig.respond(r1.id, { value: "X" });
+    await Promise.all([p1, p2]);
+    const messages = [String((await rig.uiNotification("notify"))["message"]), String((await rig.uiNotification("notify"))["message"])].sort().join(",");
+    eq("each session gets the answer sent for it", messages, "picked:X,picked:Y");
+    rig.close();
+  }
+
+  // Every ui notification carries the session, and statuses can be cleared.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.registerCommand("uiall", { handler: (a, ctx) => {',
+      '    ctx.ui.notify("hello", "warning");',
+      '    ctx.ui.setStatus("k", "busy");',
+      '    ctx.ui.setStatus("k", undefined);',
+      '    ctx.ui.setWidget("w", ["one", "two"], { placement: "belowEditor" });',
+      '    ctx.ui.setTitle("T");',
+      '    ctx.ui.setEditorText("typed");',
+      '    ctx.ui.pasteToEditor("pasted");',
+      '    ctx.ui.notify("ed:" + ctx.ui.getEditorText());',
+      "  } });",
+      "}",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "/uiall");
+    const notes = rig.uiNotifications("notify");
+    ok("notify carries the session, message and type", notes.some((p) => p["sessionId"] === sid && p["message"] === "hello" && p["notifyType"] === "warning"));
+    const statuses = rig.uiNotifications("setStatus");
+    ok("setStatus sets and clears", statuses.length === 2 && statuses[0]["sessionId"] === sid && statuses[0]["statusText"] === "busy" && statuses[1]["statusText"] === undefined);
+    const widgets = rig.uiNotifications("setWidget");
+    ok("setWidget sends its lines and placement", widgets.length === 1 && JSON.stringify(widgets[0]["widgetLines"]) === '["one","two"]' && widgets[0]["widgetPlacement"] === "belowEditor" && widgets[0]["sessionId"] === sid);
+    const titles = rig.uiNotifications("setTitle");
+    ok("setTitle carries the session and the title", titles.length === 1 && titles[0]["sessionId"] === sid && titles[0]["title"] === "T");
+    const edits = rig.uiNotifications("set_editor_text");
+    eq("both editor calls send set_editor_text", String(edits.length) + ":" + String(edits[0]["text"]) + "," + String(edits[1]["text"]), "2:typed,pasted");
+    ok("getEditorText answers empty and each notification names the session", notes.some((p) => p["message"] === "ed:") && notes.every((p) => p["sessionId"] === sid));
+    rig.close();
+  }
+
+  // Without the capability the dialogs answer pi's defaults and nothing goes out.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.registerCommand("askconfirm", { handler: async (a, ctx) => { const v = await ctx.ui.confirm("Sure?"); if (v === false) throw new Error("default confirm"); } });',
+      "}",
+    ].join("\n"));
+    rig.initialize(false);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "/askconfirm");
+    const turn = rig.taken();
+    ok("the confirm answered false without a request", text(turn).includes("default confirm") && !turn.some((line) => line.includes("_widecode/ui")));
     rig.close();
   }
 

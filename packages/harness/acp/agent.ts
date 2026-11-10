@@ -36,7 +36,7 @@ import { Tool, ToolOutcome, ToolSet } from "../tools/tool.ts";
 import { WebSettings } from "../tools/web.ts";
 import { parseRules, rulesIn } from "../tools/permissions.ts";
 import { ExtContext } from "../ext/context.ts";
-import { ExtCommand, Extensions, ExtensionsRegistry } from "../ext/extensions.ts";
+import { ExtCommand, Extensions, ExtensionsRegistry, ExtUiHost } from "../ext/extensions.ts";
 import { join } from "node:path";
 import { Choice, ConfigOptions } from "./options.ts";
 import { AcpServer, Incoming } from "./server.ts";
@@ -146,6 +146,8 @@ export class AcpAgent {
   readonly paths: HarnessPaths;
   /** What the web tools have (the browser, the search backends), set by the daemon. */
   web = new WebSettings();
+  /** Whether the client said it takes `_widecode/ui` (initialize's `clientCapabilities._meta.widecode.ui`). */
+  hasUI = false;
   private readonly sessions = new Map<string, HarnessSession>();
   private readonly extensions: ExtensionsRegistry;
 
@@ -158,7 +160,10 @@ export class AcpAgent {
     this.build = build;
     this.platform = platform;
     this.paths = paths;
-    this.extensions = new ExtensionsRegistry(paths);
+    const ui = new ExtUiHost();
+    ui.request = (paramsText: string) => this.server.sendRequest("_widecode/ui", paramsText);
+    ui.notify = (paramsText: string) => this.server.notify("_widecode/ui", paramsText);
+    this.extensions = new ExtensionsRegistry(paths, ui);
   }
 
   /** The folder's session files. */
@@ -179,6 +184,7 @@ export class AcpAgent {
   /** The context an extension callback gets. */
   private extContext(s: HarnessSession, abort: Abort | null): ExtContext {
     const c = new ExtContext();
+    c.sessionId = s.id;
     c.cwd = s.cwd;
     c.modelValue = s.loop.model;
     c.systemPrompt = s.loop.system.join("\n\n");
@@ -186,6 +192,7 @@ export class AcpAgent {
     c.window = s.window;
     c.aborted = abort !== null && abort.aborted;
     c.idle = !s.running;
+    c.hasUI = this.hasUI && s.id.length > 0;
     c.abort = () => {
       if (abort !== null) abort.fire();
     };
@@ -229,9 +236,13 @@ export class AcpAgent {
   receive(m: Incoming): void {
     const p = recordOf(m.params);
     switch (m.method) {
-      case "initialize":
+      case "initialize": {
+        const caps = p !== null ? recordOf(p["clientCapabilities"]) : null;
+        const meta = caps !== null ? recordOf(recordOf(caps["_meta"])?.["widecode"]) : null;
+        this.hasUI = meta !== null && meta["ui"] === true;
         this.server.answer(m.idText, '{"protocolVersion":1,"agentCapabilities":' + CAPABILITIES + ',"authMethods":[],"agentInfo":{"name":"widecode-harness","version":' + JSON.stringify(this.build) + "}}");
         return;
+      }
       case "session/new": {
         const made = this.make(p);
         this.announce(m.idText, made);
@@ -252,7 +263,10 @@ export class AcpAgent {
         return;
       case "session/cancel": {
         const s = this.sessionOf(p);
-        if (s !== null && s.running) s.abort.fire();
+        if (s !== null) {
+          if (s.running) s.abort.fire();
+          if (s.ext !== null) s.ext.cancelDialogs(s.id);
+        }
         return;
       }
       case "session/set_config_option":
@@ -338,6 +352,8 @@ export class AcpAgent {
   /** The session's options onto its loop: the model, effort, mode, window, folder. */
   private apply(s: HarnessSession): void {
     const m0 = this.registry.model(s.options.model);
+    s.loop.id = s.id;
+    s.loop.hasUI = this.hasUI;
     s.loop.model = s.options.model;
     s.loop.effort = s.options.effort;
     s.loop.mode = s.options.mode;

@@ -46,6 +46,10 @@ export class TurnEnd {
 
 /** What the loop keeps for one session: the messages, the system prompt's blocks, the model and effort, the folder and mode, ids, the queues. */
 export class LoopSession {
+  /** The session's id, what its extension dialogs go out with ("" for a subagent's). */
+  id = "";
+  /** Whether the client takes `_widecode/ui` (a session's extensions may ask it). */
+  hasUI = false;
   /** The context: the messages since the last compaction. */
   messages: Message[] = [];
   /** The last compaction's summary, standing for what came before `messages` ("" for none). */
@@ -319,6 +323,7 @@ export class AgentLoop {
   /** The context a session's extension callbacks get. */
   private extContext(s: LoopSession, abort: Abort, systemPrompt: string): ExtContext {
     const c = new ExtContext();
+    c.sessionId = s.id;
     c.cwd = s.cwd;
     c.modelValue = s.model;
     c.systemPrompt = systemPrompt;
@@ -326,6 +331,7 @@ export class AgentLoop {
     c.window = s.window;
     c.aborted = abort.aborted;
     c.idle = false;
+    c.hasUI = s.hasUI && s.id.length > 0;
     c.abort = () => abort.fire();
     return c;
   }
@@ -401,6 +407,8 @@ export class AgentLoop {
     ctx.systemPrompt = s.system.join("\n\n");
     ctx.tokens = s.contextEstimate();
     ctx.window = s.window;
+    ctx.sessionId = s.id;
+    ctx.hasUI = s.hasUI && s.id.length > 0;
     const sequential = calls.some((c) => {
       const t = tools.find(c.part.name);
       return t === null || t.mutating;

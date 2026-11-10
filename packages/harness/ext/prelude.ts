@@ -52,6 +52,38 @@ export const EXT_PRELUDE: string =
   const ctxOf = (c) => {
     const signal = signalOf(c.aborted);
     const ctxId = c.ctxId;
+    const dialog = (method, fields, opts) => {
+      const fallback = method === "confirm" ? false : undefined;
+      if (c.hasUI !== true) return Promise.resolve(fallback);
+      const answer = hostLater("extDialog", [ctxId, method, fields]).then(
+        (v) => {
+          if (method === "confirm") return v === true;
+          return v === null || v === undefined ? undefined : v;
+        },
+        () => fallback,
+      );
+      const sig = opts === undefined || opts === null ? undefined : opts.signal;
+      if (sig === undefined || sig === null) return answer;
+      return new Promise((resolve) => {
+        let done = false;
+        const finish = (v) => {
+          if (done) return;
+          done = true;
+          resolve(v);
+        };
+        if (sig.aborted === true) {
+          finish(fallback);
+          return;
+        }
+        if (typeof sig.addEventListener === "function") sig.addEventListener("abort", () => finish(fallback));
+        answer.then((v) => finish(v), () => finish(fallback));
+      });
+    };
+    const withTimeout = (fields, opts) => {
+      const t = opts === undefined || opts === null ? undefined : opts.timeout;
+      if (typeof t === "number" && t > 0) fields.timeout = t;
+      return fields;
+    };
     return {
     cwd: c.cwd,
     mode: c.mode,
@@ -66,22 +98,31 @@ export const EXT_PRELUDE: string =
     getContextUsage: () => parse(__host("extContextUsage", stringify([ctxId]))),
     getSystemPrompt: () => parse(__host("extSystemPrompt", stringify([ctxId]))),
     ui: {
-      select: () => Promise.resolve(undefined),
-      input: () => Promise.resolve(undefined),
-      editor: () => Promise.resolve(undefined),
-      confirm: () => Promise.resolve(false),
+      select: (title, options, opts) => dialog("select", withTimeout({ title: title, options: Array.isArray(options) ? options : [] }, opts), opts),
+      input: (title, placeholder, opts) => dialog("input", withTimeout({ title: title, placeholder: placeholder === undefined ? "" : placeholder }, opts), opts),
+      editor: (title, prefill) => dialog("editor", { title: title, prefill: prefill === undefined ? "" : prefill }, undefined),
+      confirm: (title, message, opts) => dialog("confirm", withTimeout({ title: title, message: message === undefined ? "" : message }, opts), opts),
       notify: (message, type) => {
         __host("extUi", stringify([ctxId, "notify", message, type === undefined ? "" : type]));
       },
       setStatus: (key, text) => {
         __host("extUi", stringify([ctxId, "setStatus", key, text === undefined ? null : text]));
       },
-      setWidget: (key, content) => {
-        __host("extUi", stringify([ctxId, "setWidget", key, Array.isArray(content) ? content : null]));
+      setWidget: (key, content, options) => {
+        const placement = typeof options === "string" ? options : options !== null && typeof options === "object" ? options.placement : undefined;
+        const kind = typeof content === "function" ? "function" : Array.isArray(content) ? "lines" : content === undefined ? "clear" : "invalid";
+        __host("extUi", stringify([ctxId, "setWidget", key, kind, Array.isArray(content) ? content : [], placement === undefined ? null : placement]));
       },
       setTitle: (title) => {
         __host("extUi", stringify([ctxId, "setTitle", title]));
       },
+      setEditorText: (text) => {
+        __host("extUi", stringify([ctxId, "set_editor_text", text]));
+      },
+      pasteToEditor: (text) => {
+        __host("extUi", stringify([ctxId, "set_editor_text", text]));
+      },
+      getEditorText: () => "",
     },
     };
   };

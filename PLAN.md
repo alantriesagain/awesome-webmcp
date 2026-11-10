@@ -460,7 +460,7 @@ answers only `session/request_permission`.
       onUpdate, ctx)` answering `{ content, details, isError }`), `registerCommand`, and `on` for
       `session_start`, `before_agent_start`, `context`, `tool_call` and `tool_result`. Tests with
       `// ffi: @light/plugins/native/ffi.json`.
-- [ ] **The UI over ACP.** First the engine's calls made asynchronous (done: a callback's promise
+- [x] **The UI over ACP.** First the engine's calls made asynchronous (done: a callback's promise
       settles when the host answers, `hostLater` and `settleHost` for host work, the hooks awaited
       in the loop, a context per call by id; the acp plugin's half is done too). Then `ctx.ui` as an ACP extension request from the harness (`_widecode/ui`,
       through `sendRequest`), answered by the acp plugin the way pi's RPC client answers
