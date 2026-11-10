@@ -409,6 +409,78 @@ Pending, roughly in order of value (October 2026):
 - [ ] **The native `fetch` behind `HttpStream`**, once a streaming probe passes.
 - [ ] **Prices refreshed** from the providers (most of Zen's are unknown, so its cost shows as none).
 
+## Milestone K: pi's extensions, as an agent and in the harness
+
+pi (badlogic/pi-mono, `@earendil-works/pi-coding-agent` 1.5.1 as of 2026-11-10) loads extensions
+as TypeScript modules through jiti in Node: `export default function (pi: ExtensionAPI)`, about
+forty events (`tool_call` may block or patch a call, `tool_result` replace its content, `context`
+rewrite the messages, `before_agent_start` the system prompt), tools with JSON Schema parameters,
+commands, `pi.exec`, `appendEntry`, and `ctx.ui` (dialogs, notify, status, widgets, pi-tui
+components). Every published package read (pi-web-access, pi-cmux, pi-subagents, plannotator)
+imports Node builtins and npm packages, so none runs in QuickJS. Three parts follow from that:
+
+1. pi itself as an agent of widecode, over its RPC mode, so every pi extension works as pi runs it.
+2. The formats both share without running code: skills (the same Agent Skills format) and prompt
+   templates.
+3. A plugin system of the harness's own on QuickJS, in pi's shape: the names and signatures of
+   pi's API where the harness has the thing, so an extension that needs no Node runs in both, and
+   the important ones written again for it.
+
+Where the harness's hooks go (read 2026-11-09): `before_agent_start` and `input` at
+`AcpAgent.prompt`/`startTurn`; `context` in `AgentLoop.request` before the `ModelRequest`;
+`tool_call` and `tool_result` around `ToolSet.run` in `AgentLoop.batch`; tools through
+`LoopSession.extraTools` as MCP's are; commands beside `/compact` and `/title`; session events at
+`make`, `restore`, `reopen` and the daemon's end (no per-session close exists); compaction at
+`compactContext` and `compactRequested`. Task subagents build a fresh `LoopSession`, so the
+registry is handed to them. `AcpServer.sendRequest` exists and nothing calls it; the acp plugin
+answers only `session/request_permission`.
+
+- [ ] **pi as an agent.** `plugins/pi.ts` over the user's `pi --mode rpc` (never bundled): the
+      prompt, steering and abort, the stream's events into `api.conversation.apply`, the models
+      and thinking levels as options, the commands, sessions listed and resumed from pi's files;
+      `extension_ui_request` mapped: select, confirm, input and editor to the request panel
+      (`extension_ui_response`, `cancelled` on a cancel), notify to a notice, setStatus to a
+      segment, setWidget's lines to a band strip, setTitle to the session's title. Tests against
+      `test/fake-pi.mjs`; a live check with `NATIVE_LIVE=1`.
+- [x] **Shared formats.** The harness's skills scan reads pi's folders too (a trusted folder's
+      `.pi/skills`, `~/.pi/agent/skills`); prompt templates in pi's format (frontmatter
+      `description`, `argument-hint`; `$1`, `$@`, `$ARGUMENTS`, `${1:-default}`, `${@:N}`,
+      `${@:N:L}`, shell-like quoting) from `.widecode/prompts`, `.pi/prompts` (trusted),
+      `~/.widecode/harness/prompts` and `~/.pi/agent/prompts`, offered as commands and expanded in
+      `prompt`. Tests: `prompts.test.ts`, `skills.test.ts`.
+- [ ] **The engine in the daemon.** `@light/plugins` as a dependency of `@widecode/harness`; an
+      extension is a `.js` file in pi's shape (`export default function (pi) {}`, no `import`: a
+      load error names the line), from `~/.widecode/harness/extensions/` and a trusted folder's
+      `.widecode/harness/extensions/` (the loader turns `export default` into an assignment the
+      prelude reads and drops `export` before a declaration); one engine per daemon, a prelude of the harness's own, the
+      250 ms budget per call, an extension that throws or runs over switched off with a log line.
+      The first API: `registerTool` (JSON Schema parameters, `execute(id, params, signal,
+      onUpdate, ctx)` answering `{ content, details, isError }`), `registerCommand`, and `on` for
+      `session_start`, `before_agent_start`, `context`, `tool_call` and `tool_result`. Tests with
+      `// ffi: @light/plugins/native/ffi.json`.
+- [ ] **The UI over ACP.** `ctx.ui` as an ACP extension request from the harness (`_widecode/ui`,
+      through `sendRequest`), answered by the acp plugin the way pi's RPC client answers
+      `extension_ui_request`: dialogs to the request panel, notify, setStatus, setWidget lines,
+      setTitle; `ctx.hasUI` false for a client that did not say it takes them.
+- [ ] **The rest of the API.** `pi.exec` over `proc.ts`; `appendEntry` as a `custom` entry kept on
+      load and `ctx.sessionManager` read-only over the branch; `sendMessage` and
+      `sendUserMessage` (steer, follow up); `getActiveTools`, `setActiveTools`, `getAllTools`;
+      `setModel` and the thinking level; `pi.events`; the turn, agent, model, input, compaction
+      and shutdown events; `/reload`. What the harness offers beyond pi (files without Node) is
+      a namespace of its own, never under pi's names.
+- [ ] **The important extensions, written again.** From pi's 78 examples, the ones a coding agent
+      uses daily that the harness lacks: `permission-gate` (a confirm before a dangerous Bash
+      command), `protected-paths` (writes to `.env`, `.git/`, `node_modules/` refused),
+      `git-checkpoint` (a stash ref per turn, restored on a fork), `todo` (a tool whose state
+      lives in its results' details, branch-aware), `inline-bash` (`!{command}` in a prompt
+      expanded), `tools` (`/tools` switching tools on and off, kept with `appendEntry`),
+      `dirty-repo-guard` (a fork refused while the tree is dirty), `claude-rules` (`.claude/rules`
+      into the system prompt). Left out because widecode has them: plan mode, question, subagent,
+      notify, session-name. Each is plain JS with JSON Schema parameters and no import, so the
+      same file loads in pi too; a test each, switched off in a test too.
+- [ ] **The docs.** The harness's README, PLUGINS.md's harness section, a `pi.d.ts` of the subset
+      for an extension's author.
+
 ## Deferred or skip
 
 - **Storage: files or models.** The durable state is split across file services (`Store`,

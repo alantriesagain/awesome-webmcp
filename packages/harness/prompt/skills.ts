@@ -1,10 +1,11 @@
 // The skills the harness offers, in the Agent Skills format: a folder holding a SKILL.md whose
-// frontmatter names it and says what it is for. They are found in the folder's `.agents/skills`
-// and `.claude/skills` (a trusted folder's), then the user's `~/.agents/skills`, `~/.claude/skills`
-// and its synced folders, and the harness's own under the store; a name found twice is the first
-// one's. The system prompt lists the names and descriptions, and the Skill tool gives the body
-// when the model asks for one; a skill whose frontmatter says `disable-model-invocation: true` is
-// not listed for the model.
+// frontmatter names it and says what it is for. They are found in the folder's `.agents/skills`,
+// `.claude/skills` and `.pi/skills` (a trusted folder's), then the user's `~/.agents/skills`,
+// `~/.claude/skills` and its synced folders, pi's agent folder and the harness's own under the
+// store; a name found twice is the first one's. pi's agent folder is `PI_CODING_AGENT_DIR` when
+// set, else `~/.pi/agent`. The system prompt lists the names and descriptions, and the Skill tool
+// gives the body when the model asks for one; a skill whose frontmatter says
+// `disable-model-invocation: true` is not listed for the model.
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { listText, objectText } from "@light/lib/json.ts";
@@ -56,6 +57,13 @@ export const frontmatter = (text: string): { fields: Map<string, string>; body: 
   return { fields, body };
 };
 
+/** pi's agent folder: `PI_CODING_AGENT_DIR` when it is set, else `~/.pi/agent` ("" with no home). */
+export const piAgentDir = (home: string): string => {
+  const given = (process.env["PI_CODING_AGENT_DIR"] ?? "").trim();
+  if (given.length > 0) return given;
+  return home.length > 0 ? join(home, ".pi", "agent") : "";
+};
+
 const isDir = (path: string): boolean => {
   try {
     return statSync(path).isDirectory();
@@ -94,6 +102,7 @@ export const scanSkills = (cwd: string, trusted: boolean, home: string, harnessR
   if (trusted && cwd.length > 0) {
     scanDir(join(cwd, ".agents", "skills"), "project", "", out);
     scanDir(join(cwd, ".claude", "skills"), "project", "", out);
+    scanDir(join(cwd, ".pi", "skills"), "project", "", out);
   }
   if (home.length > 0) {
     scanDir(join(home, ".agents", "skills"), "user", "", out);
@@ -101,6 +110,8 @@ export const scanSkills = (cwd: string, trusted: boolean, home: string, harnessR
     scanDir(claude, "user", "", out);
     for (const id of names(join(claude, "synced"))) scanDir(join(claude, "synced", id), "user", SYNCED_PREFIX, out);
   }
+  const pi = piAgentDir(home);
+  if (pi.length > 0) scanDir(join(pi, "skills"), "user", "", out);
   if (harnessRoot.length > 0) scanDir(join(harnessRoot, "skills"), "harness", "", out);
   return out;
 };

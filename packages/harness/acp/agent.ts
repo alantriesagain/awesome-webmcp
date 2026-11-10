@@ -11,7 +11,9 @@
 // the branch into a file of its own; the list is the folder's files. After the first turn a cheap
 // model names the session; `/title` asks again, or takes the words after it. `/compact [hint]`
 // summarizes the conversation so far into the loop's context, as the loop does on its own past the
-// threshold; the file keeps the compaction, and a load starts the context from it.
+// threshold; the file keeps the compaction, and a load starts the context from it. A prompt
+// template of the session's, `/name words`, is expanded as the user's message (the built-in
+// commands win).
 import { errorMessage, listOf, recordOf, str } from "@light/lib/json.ts";
 import { log } from "@light/lib/log.ts";
 import { HarnessConfig } from "../config.ts";
@@ -24,6 +26,7 @@ import { CANCELLED, FAILED, IMAGE, Message, Part, TOOL_RESULT, Usage } from "../
 import { ModelInfo, ModelRegistry, costUsd } from "../model/registry.ts";
 import { HarnessPaths } from "../paths.ts";
 import { SystemFacts, systemBlocks } from "../prompt/system.ts";
+import { scanTemplates, expandTemplate, TemplateInfo } from "../prompt/templates.ts";
 import { COMPACTION, Entry, MESSAGE, MODE, MODEL, TITLE } from "../session/entries.ts";
 import { replayPaced, replayUpdates } from "../session/replay.ts";
 import { SessionFile, SessionStore, sessionsJson } from "../session/store.ts";
@@ -74,6 +77,8 @@ export class HarnessSession {
   title = "";
   /** Whether a title was asked for already (once, after the first turn). */
   titled = false;
+  /** The prompt templates the session offers, scanned when it opens. */
+  templates: TemplateInfo[] = [];
 
   constructor(id: string, options: ConfigOptions) {
     this.id = id;
@@ -302,9 +307,15 @@ export class AcpAgent {
 
   /** A session's answer to new, load, resume and fork: its id and options; then what it offers. */
   private announce(idText: string, s: HarnessSession): void {
+    s.templates = scanTemplates(s.cwd, s.trusted, this.paths.userHome, this.paths.root());
     s.loop.system = this.blocksFor(s);
     this.server.answer(idText, '{"sessionId":' + JSON.stringify(s.id) + ',"configOptions":' + s.options.text() + "}");
-    this.server.notify("session/update", commandsUpdate(s.id, COMMANDS));
+    const commands = COMMANDS.slice();
+    for (const t of s.templates) {
+      if (COMMANDS.some((c) => c[0] === t.name)) continue;
+      commands.push([t.name, t.description, t.argumentHint]);
+    }
+    this.server.notify("session/update", commandsUpdate(s.id, commands));
     this.server.notify("session/update", usageUpdate(s.id, s.used, s.window, s.costUsd));
   }
 
@@ -483,9 +494,11 @@ export class AcpAgent {
       this.compactRequested(s, idText, words.slice("/compact".length).trim());
       return;
     }
+    // A prompt template of the session's, expanded as the user's message; the built-in commands above win.
+    const expanded = expandTemplate(text, s.templates);
     if (s.running) {
       // A steering message: into the turn after its current request, answered with it.
-      s.loop.steering.push(text);
+      s.loop.steering.push(expanded);
       s.promptIds.push(idText);
       return;
     }
@@ -493,11 +506,11 @@ export class AcpAgent {
     const images = promptImages(p["prompt"]);
     const model = this.registry.model(s.options.model);
     if (images.length > 0 && !(model !== null && model.vision)) {
-      this.startTurn(s, text + "\n\n[" + String(images.length) + (images.length === 1 ? " image was" : " images were") + " attached; this model does not read images, so they were left out]", [idText]);
+      this.startTurn(s, expanded + "\n\n[" + String(images.length) + (images.length === 1 ? " image was" : " images were") + " attached; this model does not read images, so they were left out]", [idText]);
       return;
     }
     s.loop.pendingImages = images;
-    this.startTurn(s, text, [idText]);
+    this.startTurn(s, expanded, [idText]);
   }
 
   /** A turn: the model asked with `text`, its events to the client, the prompts `ids` answered at its end. */

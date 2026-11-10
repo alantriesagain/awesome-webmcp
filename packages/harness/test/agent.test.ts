@@ -6,8 +6,9 @@
 // `cancelled`; an option set, a mode's update, plan mode's tools; a fork carrying the messages;
 // an unknown method and session refused; the session's file, its title, /title, a load in another
 // process showing the turns again, a resume, a batch cut off by its process's end given results;
-// /compact and the loop's own compaction, the file's entries, the context after a load.
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+// /compact and the loop's own compaction, the file's entries, the context after a load; a prompt
+// template announced as a command and expanded as the user's message.
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AcpAgent } from "../acp/agent.ts";
@@ -44,6 +45,8 @@ const until = (what: () => boolean): Promise<void> =>
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "harness-agent-"));
   writeFileSync(join(folder, "a.txt"), "one\ntwo\n");
+  mkdirSync(join(folder, ".widecode", "prompts"), { recursive: true });
+  writeFileSync(join(folder, ".widecode", "prompts", "greet.md"), "---\ndescription: Greet someone\nargument-hint: <name>\n---\nGreet $1 and $@.\n");
   const server = new AcpServer();
   const out: string[] = [];
   server.sink = (line: string) => out.push(line);
@@ -69,6 +72,7 @@ const main = async (): Promise<void> => {
   ok("and its options: the models grouped by provider, the fake first, Anthropic's and DeepSeek's after", made[0].includes('"configOptions":[{"id":"model","name":"Model","category":"model","type":"select","currentValue":"fake/fake","options":[{"group":"Fake","name":"Fake","options":[{"value":"fake/fake","name":"Fake"}]},{"group":"Anthropic","name":"Anthropic","options":[{"value":"anthropic/claude-opus-5","name":"Claude Opus 5"}') && made[0].includes('{"value":"deepseek/deepseek-v4-pro","name":"DeepSeek V4 Pro"}'));
   ok("the model's efforts and the modes", made[0].includes('{"id":"effort","name":"Effort","category":"thought_level","type":"select","currentValue":"high","options":[{"value":"low","name":"low"},{"value":"medium","name":"medium"},{"value":"high","name":"high"}]},{"id":"mode","name":"Mode","category":"mode","type":"select","currentValue":"build","options":[{"value":"build","name":"Build"},{"value":"plan","name":"Plan"}]}]'));
   ok("then the commands and the usage", made[1].includes('"availableCommands":[{"name":"compact"') && made[2].includes('"sessionUpdate":"usage_update","used":0,"size":200000}'));
+  ok("a prompt template announced beside them with its description and argument hint", made[1].includes('{"name":"greet","description":"Greet someone","input":{"type":"text","hint":"<name>"}}'));
 
   const first = send("session/prompt", { sessionId: sid, prompt: [{ type: "text", text: "hello there" }] });
   await until(() => out.some((l) => l.includes('"id":' + first)));
@@ -213,6 +217,14 @@ const main = async (): Promise<void> => {
   eq("a resume shows nothing again", out2.filter((l) => l.includes("session/update")).map((l) => /"sessionUpdate":"([^"]+)"/.exec(l)?.[1] ?? "?").join(","), "available_commands_update,usage_update");
   const cut = readFileSync(store.pathOf("h-cut"), "utf8").split("\n").filter((l) => l.length > 0);
   eq("the batch cut off by its process's end has its results, as errors", String(cut.length) + " " + (Entry.parse(cut[4])?.message().parts.map((p) => p.kind + ":" + p.callId + ":" + p.text + ":" + String(p.isError)).join(",") ?? "?"), "5 tool_result:call_9:interrupted:true");
+
+  // A prompt template: `/greet words` is the template's body with the words put in.
+  send("session/new", { cwd: folder, mcpServers: [], _meta: { widecode: { trusted: true } } });
+  const fresh = taken();
+  const tsid = /"sessionId":"([^"]+)"/.exec(fresh[0])?.[1] ?? "";
+  const greeted = send("session/prompt", { sessionId: tsid, prompt: [{ type: "text", text: '/greet Alice "and Bob"' }] });
+  await until(() => out.some((l) => l.includes('"id":' + greeted)));
+  eq("a prompt naming a template is sent as its expanded text", taken().filter((l) => l.includes("agent_message_chunk")).map((l) => /"text":"([^"]*)"/.exec(l)?.[1] ?? "").join(""), "You said: Greet Alice and Alice and Bob.");
 
   rmSync(folder, { recursive: true, force: true });
   done();

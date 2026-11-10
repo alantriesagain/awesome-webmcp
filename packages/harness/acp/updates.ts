@@ -21,7 +21,15 @@ export const usageUpdate = (sessionId: string, used: number, size: number, costU
 };
 
 export const commandsUpdate = (sessionId: string, commands: string[][]): string =>
-  update(sessionId, ["sessionUpdate", "availableCommands"], ['"available_commands_update"', listText(commands.map((c) => objectText(["name", "description"], [JSON.stringify(c[0]), JSON.stringify(c[1])])))]);
+  update(sessionId, ["sessionUpdate", "availableCommands"], ['"available_commands_update"', listText(commands.map((c) => {
+    const fields = ["name", "description"];
+    const values = [JSON.stringify(c[0]), JSON.stringify(c[1])];
+    if (c.length > 2 && c[2].length > 0) {
+      fields.push("input");
+      values.push(objectText(["type", "hint"], ['"text"', JSON.stringify(c[2])]));
+    }
+    return objectText(fields, values);
+  }))]);
 
 export const optionsUpdate = (sessionId: string, optionsText: string): string => update(sessionId, ["sessionUpdate", "configOptions"], ['"config_option_update"', optionsText]);
 
