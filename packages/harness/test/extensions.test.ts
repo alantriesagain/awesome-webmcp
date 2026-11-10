@@ -217,6 +217,92 @@ const main = async (): Promise<void> => {
     rig.close();
   }
 
+  // A tool_call handler that sleeps in its promise still decides before the call runs.
+  {
+    const rig = new Rig(['{"match":"sleepblock","text":"Running.","tools":[{"name":"Bash","input":{"command":"echo hi"}}]}', '{"match":"result","text":"Blocked after sleep."}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.on("tool_call", async () => { await globalThis.__harnessTest.sleep(30); return { block: true, reason: "slept first" }; });',
+      "}",
+    ].join("\n"));
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    await rig.prompt(sid, "sleepblock");
+    const turn = rig.taken();
+    ok("a slept tool_call handler still blocks the call", toolText(turn).includes("blocked by") && toolText(turn).includes("slept first"));
+    eq("the turn goes on after the block", text(turn), "Running.Blocked after sleep.");
+    rig.close();
+  }
+
+  // A tool's execute awaits the host and its answer reaches the model.
+  {
+    const rig = new Rig(['{"match":"slowtool","text":"Calling.","tools":[{"name":"slow","input":{}}]}', '{"match":"result","text":"Slow done."}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.registerTool({ name: "slow", label: "Slow", description: "Answer later", parameters: { type: "object" }, execute: async () => { await globalThis.__harnessTest.sleep(30); return { content: [{ type: "text", text: "after sleep" }] }; } });',
+      "}",
+    ].join("\n"));
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    await rig.prompt(sid, "slowtool");
+    const turn = rig.taken();
+    eq("the tool's answer after its sleep is the result", toolText(turn), "after sleep");
+    const asks = rig.asks();
+    ok("and the next request carries it", asks[asks.length - 1].messages.some((m) => m.parts.some((p) => p.kind === "tool_result" && p.text === "after sleep")));
+    rig.close();
+  }
+
+  // A command handler awaiting the host answers the prompt afterwards.
+  {
+    const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
+    const logFile = rig.logFile();
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.registerCommand("slowcmd", { description: "Answer later", handler: async (args, ctx) => { await globalThis.__harnessTest.sleep(30); ctx.ui.notify("command slept"); } });',
+      "}",
+    ].join("\n"));
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    const before = rig.asks().length;
+    await rig.prompt(sid, "/slowcmd now");
+    const command = rig.taken();
+    ok("the command is answered after its sleep, without a turn", command.some((line) => line.includes('"stopReason":"end_turn"')) && rig.asks().length === before);
+    ok("its continuation ran", readFileSync(logFile, "utf8").includes("command slept"));
+    rig.close();
+  }
+
+  // Two sessions of one folder with handlers sleeping at once both answer.
+  {
+    const rig = new Rig(['{"match":"first","text":"First answer."}', '{"match":"second","text":"Second answer."}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.on("before_agent_start", async () => { await globalThis.__harnessTest.sleep(40); });',
+      "}",
+    ].join("\n"));
+    const one = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    const two = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await Promise.all([rig.prompt(one, "first"), rig.prompt(two, "second")]);
+    const both = rig.taken();
+    ok("both sleeping sessions are answered", text(both).includes("First answer.") && text(both).includes("Second answer."));
+    rig.close();
+  }
+
+  // A continuation that runs past the budget is switched off and the turn goes on.
+  {
+    const rig = new Rig(['{"match":"budget","text":"Went on."}'].join("\n"));
+    const logFile = rig.logFile();
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.on("before_agent_start", async () => { await globalThis.__harnessTest.sleep(20); while (true) {} });',
+      "}",
+    ].join("\n"));
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    await rig.prompt(sid, "budget");
+    eq("the turn goes on after the continuation was cut", text(rig.taken()), "Went on.");
+    ok("the log says it was switched off for its time budget", readFileSync(logFile, "utf8").includes("switched off") && readFileSync(logFile, "utf8").includes("time budget"));
+    rig.close();
+  }
+
   // No file, no engine; the same pair shares the instance.
   {
     const folder = mkdtempSync(join(tmpdir(), "harness-ext-empty-"));

@@ -2,6 +2,8 @@
 // the context's size and the system prompt. `mode` is rpc and `hasUI` false until the UI slice
 // routes dialogs to the client; the ui calls now answer pi's no-UI defaults and log.
 export class ExtContext {
+  /** The id the host gave this call's context (0 before a call). */
+  ctxId = 0;
   cwd = "";
   mode = "rpc";
   hasUI = false;

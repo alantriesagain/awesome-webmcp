@@ -331,7 +331,7 @@ export class AgentLoop {
   }
 
   /** One request: the stream into `assistant`'s parts and the listener. */
-  private request(s: LoopSession, assistant: Message, tools: ToolSet, listener: LoopListener, abort: Abort): Promise<StreamEnd> {
+  private async request(s: LoopSession, assistant: Message, tools: ToolSet, listener: LoopListener, abort: Abort): Promise<StreamEnd> {
     let textAt: Part | null = null;
     let thoughtAt: Part | null = null;
     const calls = new Map<string, Part>();
@@ -377,7 +377,7 @@ export class AgentLoop {
     let messages = withSummary(s.summary, s.messages);
     const ext = s.ext;
     if (ext !== null) {
-      const replaced = ext.context(messages, this.extContext(s, abort, system.join("\n\n")));
+      const replaced = await ext.context(messages, this.extContext(s, abort, system.join("\n\n")));
       if (replaced !== null) messages = replaced;
     }
     const req = new ModelRequest(s.model, system, messages);
@@ -417,7 +417,7 @@ export class AgentLoop {
       const ext = s.ext;
       const extCtx = ext !== null ? this.extContext(s, abort, s.system.join("\n\n")) : null;
       if (why.length === 0 && ext !== null && extCtx !== null) {
-        const decision = ext.toolCall(p.callId, p.name, inputJson, extCtx);
+        const decision = await ext.toolCall(p.callId, p.name, inputJson, extCtx);
         if (decision.block) blocked = decision.reason;
         else inputJson = decision.inputJson;
       }
@@ -435,7 +435,7 @@ export class AgentLoop {
           outcome = ToolOutcome.failed(err instanceof Error ? err.message : "the tool failed");
         }
       }
-      if (ran && ext !== null && extCtx !== null) ext.toolResult(p.callId, p.name, inputJson, outcome, extCtx);
+      if (ran && ext !== null && extCtx !== null) await ext.toolResult(p.callId, p.name, inputJson, outcome, extCtx);
       c.outcome = outcome;
       const onEnd = listener.onToolEnd;
       if (onEnd !== null) onEnd(p.callId, outcome);

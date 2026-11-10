@@ -83,6 +83,8 @@ export class HarnessSession {
   templates: TemplateInfo[] = [];
   /** The extensions of the session's folder and trust (null until the session opens). */
   ext: Extensions | null = null;
+  /** Settles once the session's extensions had their session_start (a turn starts after). */
+  started: Promise<void> = new Promise<void>((settle) => settle());
 
   constructor(id: string, options: ConfigOptions) {
     this.id = id;
@@ -192,7 +194,13 @@ export class AcpAgent {
 
   /** A session_start event to the session's extensions. */
   private sessionStarted(s: HarnessSession, reason: string): void {
-    this.extFor(s).sessionStart(reason, this.extContext(s, null));
+    const run = this.extFor(s).sessionStart(reason, this.extContext(s, null));
+    s.started = run.then(
+      () => {},
+      (err: unknown) => {
+        log("extension session_start " + s.id + ": " + errorMessage(err, "failed"));
+      },
+    );
   }
 
   /** The options a new session starts with: every model by provider, the chosen model's efforts, the config's choices. */
@@ -587,29 +595,43 @@ export class AcpAgent {
     this.apply(s);
     s.loop.system = this.blocksFor(s);
     const ext = s.ext;
-    if (ext !== null) {
-      const attached: Record<string, unknown>[] = [];
-      for (const image of images) attached.push({ type: "image", data: image.data, mimeType: image.mediaType });
-      const answer = ext.beforeAgentStart(text, attached, s.loop.system.join("\n\n"), this.extContext(s, s.abort));
-      if (answer.systemPrompt.length > 0) s.loop.system = [answer.systemPrompt];
-      for (const message of answer.messages) s.loop.pendingNotes.push(message);
+    if (ext === null || ext.engine === null) {
+      this.runTurn(s, text);
+      return;
     }
+    s.started.then(
+      () => this.beforeTurn(s, text, images, ext).then(() => this.runTurn(s, text), (err: unknown) => this.turnFailed(s, err)),
+      (err: unknown) => this.turnFailed(s, err),
+    );
+  }
+
+  /** The extension's before_agent_start before the turn's first request. */
+  private async beforeTurn(s: HarnessSession, text: string, images: Part[], ext: Extensions): Promise<void> {
+    const attached: Record<string, unknown>[] = [];
+    for (const image of images) attached.push({ type: "image", data: image.data, mimeType: image.mediaType });
+    const answer = await ext.beforeAgentStart(text, attached, s.loop.system.join("\n\n"), this.extContext(s, s.abort));
+    if (answer.systemPrompt.length > 0) s.loop.system = [answer.systemPrompt];
+    for (const message of answer.messages) s.loop.pendingNotes.push(message);
+  }
+
+  private turnFailed(s: HarnessSession, err: unknown): void {
+    const end = new TurnEnd();
+    end.stopReason = FAILED;
+    end.error = err instanceof Error ? err.message : "the turn failed";
+    this.turnEnded(s, end);
+  }
+
+  private runTurn(s: HarnessSession, text: string): void {
     const listener = this.listenerFor(s);
-    const failed = (err: unknown): void => {
-      const end = new TurnEnd();
-      end.stopReason = FAILED;
-      end.error = err instanceof Error ? err.message : "the turn failed";
-      this.turnEnded(s, end);
-    };
     // The session's MCP tools first, when they are still being listed.
     s.toolsReady.then(
-      () => this.loop.run(s.loop, text, listener, s.abort).then((end: TurnEnd) => this.turnEnded(s, end), failed),
-      failed,
+      () => this.loop.run(s.loop, text, listener, s.abort).then((end: TurnEnd) => this.turnEnded(s, end), (err: unknown) => this.turnFailed(s, err)),
+      (err: unknown) => this.turnFailed(s, err),
     );
   }
 
   /** `/name args` for an extension's command: the handler runs instead of a turn, the prompt answered when it settles. */
-  private runExtensionCommand(s: HarnessSession, idText: string, command: ExtCommand, args: string): void {
+  private async runExtensionCommand(s: HarnessSession, idText: string, command: ExtCommand, args: string): Promise<void> {
     if (s.running) {
       this.said(s, idText, "A turn is running: try the command when it ends.");
       return;
@@ -619,7 +641,8 @@ export class AcpAgent {
     s.abort = new Abort();
     this.apply(s);
     const ext = s.ext;
-    const error = ext !== null ? ext.runCommand(command, args, this.extContext(s, s.abort)) : "the extension is not loaded";
+    if (ext !== null && ext.engine !== null) await s.started;
+    const error = ext !== null ? await ext.runCommand(command, args, this.extContext(s, s.abort)) : "the extension is not loaded";
     s.running = false;
     s.promptIds = [];
     if (error.length > 0) this.said(s, idText, error);

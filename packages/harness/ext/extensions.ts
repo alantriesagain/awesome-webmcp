@@ -8,7 +8,7 @@
 import { join } from "node:path";
 import { listOf, num, parseJson, recordOf, str } from "@light/lib/json.ts";
 import { log, trail } from "@light/lib/log.ts";
-import { FAILED, HostAnswer, HostHandler, JsEngine, OVER_BUDGET, OK } from "@light/plugins/engine.ts";
+import { FAILED, HostAnswer, HostHandler, JsEngine, JsResult, OVER_BUDGET, OK } from "@light/plugins/engine.ts";
 import { PluginSource, sourcesIn } from "@light/plugins/sources.ts";
 import { Abort } from "../loop/abort.ts";
 import { Message } from "../model/message.ts";
@@ -40,6 +40,10 @@ class CallResult {
 class Pending {
   failed = false;
   text = "null";
+}
+
+class Waiter {
+  resolve: ((r: CallResult) => void) | null = null;
 }
 
 export class ExtEntry {
@@ -120,9 +124,15 @@ export class Extensions extends HostHandler {
   readonly toolDefs: ExtToolDef[] = [];
   readonly commandDefs: ExtCommand[] = [];
   private currentFile = "";
-  private runningFile = "";
-  private readonly stack: ExtContext[] = [];
-  private readonly pending = new Map<number, Pending>();
+  private readonly contexts = new Map<number, ExtContext>();
+  private readonly ctxEntries = new Map<number, ExtEntry>();
+  private ctxSeq = 0;
+  private readonly settled = new Map<number, Pending>();
+  private readonly waiters = new Map<number, Waiter>();
+  private readonly waiterEntries = new Map<number, ExtEntry>();
+  private hostSettleId = -1;
+  private activeEntry: ExtEntry | null = null;
+  private ready: Promise<void> = new Promise<void>((settle) => settle());
   private toolSeq = 0;
 
   constructor(paths: HarnessPaths, folder: string, trusted: boolean) {
@@ -165,6 +175,9 @@ export class Extensions extends HostHandler {
       this.engine = null;
       return;
     }
+    const settleId = engine.eval("JSON.stringify(__hostSettleId)", "harness:ext-prelude");
+    if (settleId.status === OK) this.hostSettleId = num(parseJson(settleId.text), -1);
+    const starts: Promise<void>[] = [];
     for (const source of sources) {
       const entry = new ExtEntry(source.file);
       this.entries.push(entry);
@@ -183,12 +196,21 @@ export class Extensions extends HostHandler {
         log("extension " + source.file + ": " + evaluated.message());
         continue;
       }
-      const started = this.call(entry, 0, "[]", "start", null);
-      if (!started.ok) {
-        entry.enabled = false;
-        log("extension " + source.file + ": " + started.error);
-      }
+      starts.push(this.startEntry(entry));
     }
+    this.ready = this.settleStarts(starts);
+  }
+
+  private async startEntry(entry: ExtEntry): Promise<void> {
+    const started = await this.call(entry, 0, "[]", "start", null);
+    if (!started.ok) {
+      entry.enabled = false;
+      log("extension " + entry.file + ": " + started.error);
+    }
+  }
+
+  private async settleStarts(starts: Promise<void>[]): Promise<void> {
+    for (const p of starts) await p;
   }
 
   /** The handlers of `event` whose extension still runs. */
@@ -200,6 +222,13 @@ export class Extensions extends HostHandler {
     if (!entry.enabled) return;
     entry.enabled = false;
     log("extension " + entry.file + " switched off: " + why);
+    this.waiterEntries.forEach((e: ExtEntry, cid: number) => {
+      if (e !== entry) return;
+      this.waiterEntries.delete(cid);
+      const waiter = this.waiters.get(cid);
+      this.waiters.delete(cid);
+      if (waiter !== undefined && waiter.resolve !== null) waiter.resolve(CallResult.failed("the extension is switched off"));
+    });
   }
 
   private failedCall(entry: ExtEntry, event: string, why: string): void {
@@ -208,25 +237,37 @@ export class Extensions extends HostHandler {
 
   private ctxObject(ctx: ExtContext | null): Record<string, unknown> {
     const out: Record<string, unknown> = { cwd: ctx !== null ? ctx.cwd : "", mode: "rpc", hasUI: false, model: null, aborted: ctx !== null && ctx.aborted };
+    if (ctx !== null) {
+      ctx.ctxId = ++this.ctxSeq;
+      out["ctxId"] = ctx.ctxId;
+    }
     if (ctx !== null && ctx.modelValue.length > 0) out["model"] = { provider: ctx.provider(), id: ctx.modelId() };
     return out;
   }
 
-  /** One call into the engine, its promise jobs run, the budget and errors handled; `text` the value as JSON. */
-  private call(entry: ExtEntry, id: number, args: string, event: string, ctx: ExtContext | null): CallResult {
+  private pendingResult(entry: ExtEntry, event: string, p: Pending): CallResult {
+    if (p.failed) {
+      this.failedCall(entry, event, p.text);
+      return CallResult.failed(p.text);
+    }
+    const out = new CallResult();
+    out.text = p.text;
+    return out;
+  }
+
+  /** The invocation and the promise jobs it left, the budget, the trail and the switch-off; `text` the value as JSON. */
+  private invokeAndPump(entry: ExtEntry, event: string, invoke: () => JsResult): CallResult {
     const engine = this.engine;
     if (engine === null) return CallResult.failed("no extension context");
     if (!entry.enabled) return CallResult.failed("the extension is switched off");
-    this.pending.clear();
-    this.stack.push(ctx ?? new ExtContext());
-    const wasFile = this.runningFile;
-    this.runningFile = entry.file;
+    const wasEntry = this.activeEntry;
+    this.activeEntry = entry;
     const at = trail.enter("extension", entry.file);
     let result = FAILED;
     let text = "";
     let over = false;
     try {
-      const r = engine.invoke(id, args);
+      const r = invoke();
       result = r.status;
       text = r.text;
       for (const job of engine.jobs()) {
@@ -234,8 +275,7 @@ export class Extensions extends HostHandler {
         else if (job.status !== OK) this.failedCall(entry, event, job.message());
       }
     } finally {
-      this.runningFile = wasFile;
-      this.stack.pop();
+      this.activeEntry = wasEntry;
       trail.leave(at);
     }
     if (result === OVER_BUDGET) over = true;
@@ -247,26 +287,55 @@ export class Extensions extends HostHandler {
       this.failedCall(entry, event, text.length > 0 ? (text.indexOf("\n") >= 0 ? text.slice(0, text.indexOf("\n")) : text) : "the call failed");
       return CallResult.failed(text);
     }
-    const marked = recordOf(parseJson(text));
-    if (marked !== null && marked["__pending"] !== undefined) {
-      const cid = num(marked["__pending"], -1);
-      const p = this.pending.get(cid);
-      this.pending.delete(cid);
-      if (p === undefined) {
-        this.failedCall(entry, event, "the callback did not answer");
-        return CallResult.failed("the callback did not answer");
-      }
-      if (p.failed) {
-        this.failedCall(entry, event, p.text);
-        return CallResult.failed(p.text);
-      }
-      const out = new CallResult();
-      out.text = p.text;
-      return out;
-    }
     const out = new CallResult();
     out.text = text.length > 0 ? text : "null";
     return out;
+  }
+
+  /** One call into the engine, its answer awaited when a promise settles later; `text` the value as JSON. */
+  async call(entry: ExtEntry, id: number, args: string, event: string, ctx: ExtContext | null): Promise<CallResult> {
+    const engine = this.engine;
+    if (engine === null) return CallResult.failed("no extension context");
+    if (!entry.enabled) return CallResult.failed("the extension is switched off");
+    const ctxId = ctx !== null ? ctx.ctxId : 0;
+    if (ctx !== null) {
+      this.contexts.set(ctxId, ctx);
+      this.ctxEntries.set(ctxId, entry);
+    }
+    try {
+      const r = this.invokeAndPump(entry, event, () => engine.invoke(id, args));
+      if (!r.ok) return r;
+      const marked = recordOf(parseJson(r.text));
+      if (marked === null || marked["__pending"] === undefined) return r;
+      const cid = num(marked["__pending"], -1);
+      const done = this.settled.get(cid);
+      if (done !== undefined) {
+        this.settled.delete(cid);
+        return this.pendingResult(entry, event, done);
+      }
+      const waiter = new Waiter();
+      this.waiters.set(cid, waiter);
+      this.waiterEntries.set(cid, entry);
+      const result = await new Promise<CallResult>((resolve) => {
+        waiter.resolve = resolve;
+      });
+      if (!result.ok) this.failedCall(entry, event, result.error);
+      return result;
+    } finally {
+      if (ctx !== null) {
+        this.contexts.delete(ctxId);
+        this.ctxEntries.delete(ctxId);
+      }
+    }
+  }
+
+  /** The host's answer to a call it kept `hostLater`: invoke the prelude's settle function and pump its jobs. */
+  settleHost(entry: ExtEntry, id: number, error: string, valueJson: string): void {
+    const engine = this.engine;
+    if (engine === null || this.hostSettleId < 0) return;
+    const value = parseJson(valueJson.length > 0 ? valueJson : "null");
+    const args = JSON.stringify([id, error.length > 0 ? error : null, value]);
+    this.invokeAndPump(entry, "host", () => engine.invoke(this.hostSettleId, args));
   }
 
   override answer(name: string, argsJson: string): HostAnswer {
@@ -289,37 +358,55 @@ export class Extensions extends HostHandler {
       }
       case "extSettle": {
         const cid = num(args[0], -1);
-        let p = this.pending.get(cid);
-        if (p === undefined) {
-          p = new Pending();
-          this.pending.set(cid, p);
-        }
         const failed = args[2] === true;
+        const p = new Pending();
         p.failed = failed;
         p.text = failed ? str(args[1]) : JSON.stringify(args[2] === undefined ? null : args[2]);
+        const waiter = this.waiters.get(cid);
+        if (waiter !== undefined) {
+          this.waiters.delete(cid);
+          this.waiterEntries.delete(cid);
+          if (waiter.resolve !== null) {
+            const out = new CallResult();
+            out.ok = !failed;
+            out.text = p.text;
+            out.error = failed ? p.text : "";
+            waiter.resolve(out);
+          }
+        } else {
+          this.settled.set(cid, p);
+        }
+        return new HostAnswer(OK, "null");
+      }
+      case "extSleep": {
+        const id = num(args[0], -1);
+        const ms = num(args[1], 0);
+        const entry = this.activeEntry;
+        if (entry !== null) setTimeout(() => this.settleHost(entry, id, "", "null"), ms);
         return new HostAnswer(OK, "null");
       }
       case "extAbort": {
-        const ctx = this.stack.length > 0 ? this.stack[this.stack.length - 1] : null;
-        if (ctx !== null && ctx.abort !== null) ctx.abort();
+        const ctx = this.contexts.get(num(args[0], -1));
+        if (ctx !== undefined && ctx.abort !== null) ctx.abort();
         return new HostAnswer(OK, "null");
       }
       case "extIsIdle": {
-        const ctx = this.stack.length > 0 ? this.stack[this.stack.length - 1] : null;
-        return new HostAnswer(OK, ctx !== null && ctx.idle ? "true" : "false");
+        const ctx = this.contexts.get(num(args[0], -1));
+        return new HostAnswer(OK, ctx !== undefined && ctx.idle ? "true" : "false");
       }
       case "extContextUsage": {
-        const ctx = this.stack.length > 0 ? this.stack[this.stack.length - 1] : null;
-        const tokens = ctx !== null ? ctx.tokens : 0;
-        const window = ctx !== null ? ctx.window : 0;
+        const ctx = this.contexts.get(num(args[0], -1));
+        const tokens = ctx !== undefined ? ctx.tokens : 0;
+        const window = ctx !== undefined ? ctx.window : 0;
         return new HostAnswer(OK, JSON.stringify({ tokens, contextWindow: window, percent: window > 0 ? (tokens / window) * 100 : null }));
       }
       case "extSystemPrompt": {
-        const ctx = this.stack.length > 0 ? this.stack[this.stack.length - 1] : null;
-        return new HostAnswer(OK, JSON.stringify(ctx !== null ? ctx.systemPrompt : ""));
+        const ctx = this.contexts.get(num(args[0], -1));
+        return new HostAnswer(OK, JSON.stringify(ctx !== undefined ? ctx.systemPrompt : ""));
       }
       case "extUi": {
-        log("extension " + (this.runningFile.length > 0 ? this.runningFile : "?") + ": ui." + str(args[0]) + " " + JSON.stringify(args.slice(1)));
+        const entry = this.ctxEntries.get(num(args[0], -1));
+        log("extension " + (entry !== undefined ? entry.file : "?") + ": ui." + str(args[1]) + " " + JSON.stringify(args.slice(2)));
         return new HostAnswer(OK, "null");
       }
       default:
@@ -334,21 +421,22 @@ export class Extensions extends HostHandler {
   }
 
   /** session_start, after the files loaded: startup for a new session of this pair first, then new; resume and fork as asked. */
-  sessionStart(reason: string, ctx: ExtContext): void {
+  async sessionStart(reason: string, ctx: ExtContext): Promise<void> {
     this.ensure();
+    await this.ready;
     if (this.engine === null) return;
     const actual = reason === "new" && !this.started ? "startup" : reason;
     this.started = true;
-    for (const h of this.forEvent("session_start")) this.call(h.entry, h.id, JSON.stringify([{ type: "session_start", reason: actual }, this.ctxObject(ctx)]), "session_start", ctx);
+    for (const h of this.forEvent("session_start")) await this.call(h.entry, h.id, JSON.stringify([{ type: "session_start", reason: actual }, this.ctxObject(ctx)]), "session_start", ctx);
   }
 
   /** before_agent_start: a system prompt replacement and custom messages from the handlers. */
-  beforeAgentStart(prompt: string, images: Record<string, unknown>[], systemPrompt: string, ctx: ExtContext): BeforeStartAnswer {
+  async beforeAgentStart(prompt: string, images: Record<string, unknown>[], systemPrompt: string, ctx: ExtContext): Promise<BeforeStartAnswer> {
     const out = new BeforeStartAnswer();
     let current = systemPrompt;
     for (const h of this.forEvent("before_agent_start")) {
       const event: Record<string, unknown> = { type: "before_agent_start", prompt, images, systemPrompt: current };
-      const r = this.call(h.entry, h.id, JSON.stringify([event, this.ctxObject(ctx)]), "before_agent_start", ctx);
+      const r = await this.call(h.entry, h.id, JSON.stringify([event, this.ctxObject(ctx)]), "before_agent_start", ctx);
       if (!r.ok) continue;
       const value = recordOf(parseJson(r.text));
       const answer = value !== null ? recordOf(value["result"]) : null;
@@ -368,13 +456,13 @@ export class Extensions extends HostHandler {
   }
 
   /** context: the messages one request sends, replaced when a handler answers with others. */
-  context(messages: Message[], ctx: ExtContext): Message[] | null {
+  async context(messages: Message[], ctx: ExtContext): Promise<Message[] | null> {
     if (this.forEvent("context").length === 0) return null;
     let current = messagesToPi(messages);
     let replacement: Message[] | null = null;
     for (const h of this.forEvent("context")) {
       const event: Record<string, unknown> = { type: "context", messages: parseJson(current) };
-      const r = this.call(h.entry, h.id, JSON.stringify([event, this.ctxObject(ctx)]), "context", ctx);
+      const r = await this.call(h.entry, h.id, JSON.stringify([event, this.ctxObject(ctx)]), "context", ctx);
       if (!r.ok) continue;
       const value = recordOf(parseJson(r.text));
       const answer = value !== null ? recordOf(value["result"]) : null;
@@ -388,7 +476,7 @@ export class Extensions extends HostHandler {
   }
 
   /** tool_call: a call may be blocked or its input changed in place, in pi's names and arguments. */
-  toolCall(toolCallId: string, toolName: string, inputJson: string, ctx: ExtContext): ToolCallAnswer {
+  async toolCall(toolCallId: string, toolName: string, inputJson: string, ctx: ExtContext): Promise<ToolCallAnswer> {
     const out = new ToolCallAnswer();
     out.inputJson = inputJson;
     const handlers = this.forEvent("tool_call");
@@ -397,7 +485,7 @@ export class Extensions extends HostHandler {
     let input = toPiInput(toolName, recordOf(parseJson(inputJson.length > 0 ? inputJson : "{}")) ?? {});
     for (const h of handlers) {
       const event: Record<string, unknown> = { type: "tool_call", toolCallId, toolName: piName, input };
-      const r = this.call(h.entry, h.id, JSON.stringify([event, this.ctxObject(ctx)]), "tool_call", ctx);
+      const r = await this.call(h.entry, h.id, JSON.stringify([event, this.ctxObject(ctx)]), "tool_call", ctx);
       if (!r.ok) {
         out.block = true;
         out.reason = "blocked by " + h.entry.file + ": " + (r.error.length > 0 ? r.error : "the extension failed");
@@ -419,7 +507,7 @@ export class Extensions extends HostHandler {
   }
 
   /** tool_result: the content, details and error flag a handler replaces. */
-  toolResult(toolCallId: string, toolName: string, inputJson: string, outcome: ToolOutcome, ctx: ExtContext): void {
+  async toolResult(toolCallId: string, toolName: string, inputJson: string, outcome: ToolOutcome, ctx: ExtContext): Promise<void> {
     const handlers = this.forEvent("tool_result");
     if (handlers.length === 0) return;
     const piName = piNameOf(toolName);
@@ -429,7 +517,7 @@ export class Extensions extends HostHandler {
     let isError = outcome.isError;
     for (const h of handlers) {
       const event: Record<string, unknown> = { type: "tool_result", toolCallId, toolName: piName, input: piInput, content: parseJson(content), details, isError };
-      const r = this.call(h.entry, h.id, JSON.stringify([event, this.ctxObject(ctx)]), "tool_result", ctx);
+      const r = await this.call(h.entry, h.id, JSON.stringify([event, this.ctxObject(ctx)]), "tool_result", ctx);
       if (!r.ok) continue;
       const value = recordOf(parseJson(r.text));
       const answer = value !== null ? recordOf(value["result"]) : null;
@@ -454,8 +542,8 @@ export class Extensions extends HostHandler {
   }
 
   /** Run a command's handler; `error` says why it failed ("" when it ran). */
-  runCommand(command: ExtCommand, args: string, ctx: ExtContext): string {
-    const r = this.call(command.entry, command.handlerId, JSON.stringify([args, this.ctxObject(ctx)]), "command " + command.name, ctx);
+  async runCommand(command: ExtCommand, args: string, ctx: ExtContext): Promise<string> {
+    const r = await this.call(command.entry, command.handlerId, JSON.stringify([args, this.ctxObject(ctx)]), "command " + command.name, ctx);
     return r.ok ? "" : r.error;
   }
 
@@ -487,7 +575,7 @@ export class Extensions extends HostHandler {
     ctx.idle = false;
     const callId = "ext_" + String(++this.toolSeq);
     const args = JSON.stringify([callId, recordOf(parseJson(inputJson.length > 0 ? inputJson : "{}")) ?? {}, this.ctxObject(ctx)]);
-    const r = this.call(def.entry, def.executeId, args, "tool " + def.name, ctx);
+    const r = await this.call(def.entry, def.executeId, args, "tool " + def.name, ctx);
     if (!r.ok) return ToolOutcome.failed("the extension " + def.entry.file + " failed: " + r.error);
     return outcomeOf(parseJson(r.text));
   }

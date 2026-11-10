@@ -16,6 +16,20 @@ export const EXT_PRELUDE: string =
     return fns.length - 1;
   };
   const messageOf = (e) => (e !== null && typeof e === "object" && typeof e.message === "string" ? e.message : String(e));
+  const waiting = {};
+  let hostSeq = 0;
+  const hostLater = (name, args) => new Promise((resolve, reject) => {
+    const id = ++hostSeq;
+    waiting[id] = { resolve, reject };
+    __host(name, stringify([id, ...args]));
+  });
+  const hostSettle = (id, error, value) => {
+    const w = waiting[id];
+    if (w === undefined) return;
+    delete waiting[id];
+    if (error === null || error === undefined) w.resolve(value);
+    else w.reject(new Error(String(error)));
+  };
   const signalOf = (aborted) => {
     const listeners = [];
     const s = {
@@ -37,6 +51,7 @@ export const EXT_PRELUDE: string =
   };
   const ctxOf = (c) => {
     const signal = signalOf(c.aborted);
+    const ctxId = c.ctxId;
     return {
     cwd: c.cwd,
     mode: c.mode,
@@ -45,27 +60,27 @@ export const EXT_PRELUDE: string =
     signal,
     abort: () => {
       signal.__fire();
-      __host("extAbort", "[]");
+      __host("extAbort", stringify([ctxId]));
     },
-    isIdle: () => parse(__host("extIsIdle", "[]")),
-    getContextUsage: () => parse(__host("extContextUsage", "[]")),
-    getSystemPrompt: () => parse(__host("extSystemPrompt", "[]")),
+    isIdle: () => parse(__host("extIsIdle", stringify([ctxId]))),
+    getContextUsage: () => parse(__host("extContextUsage", stringify([ctxId]))),
+    getSystemPrompt: () => parse(__host("extSystemPrompt", stringify([ctxId]))),
     ui: {
       select: () => Promise.resolve(undefined),
       input: () => Promise.resolve(undefined),
       editor: () => Promise.resolve(undefined),
       confirm: () => Promise.resolve(false),
       notify: (message, type) => {
-        __host("extUi", stringify(["notify", message, type === undefined ? "" : type]));
+        __host("extUi", stringify([ctxId, "notify", message, type === undefined ? "" : type]));
       },
       setStatus: (key, text) => {
-        __host("extUi", stringify(["setStatus", key, text === undefined ? null : text]));
+        __host("extUi", stringify([ctxId, "setStatus", key, text === undefined ? null : text]));
       },
       setWidget: (key, content) => {
-        __host("extUi", stringify(["setWidget", key, Array.isArray(content) ? content : null]));
+        __host("extUi", stringify([ctxId, "setWidget", key, Array.isArray(content) ? content : null]));
       },
       setTitle: (title) => {
-        __host("extUi", stringify(["setTitle", title]));
+        __host("extUi", stringify([ctxId, "setTitle", title]));
       },
     },
     };
@@ -108,6 +123,11 @@ export const EXT_PRELUDE: string =
   };
   const start = fn(() => __ext.start());
   globalThis.__startId = start;
+  const hostSettleId = fn((id, error, value) => hostSettle(id, error, value));
+  globalThis.__hostSettleId = hostSettleId;
+  globalThis.__harnessTest = {
+    sleep: (ms) => hostLater("extSleep", [ms]),
+  };
   globalThis.__invoke = (id, json) => {
     const f = fns[id];
     if (typeof f !== "function") throw new Error("extension: no function " + String(id));
