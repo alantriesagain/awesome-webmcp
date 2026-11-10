@@ -269,6 +269,31 @@ plan mode when the agent has one), which the entry's `forget` command deletes af
 default is `["opencode", "session", "delete", "{session}"]`). An agent that speaks something else
 is a plugin of its own over the same `api.agents.register`.
 
+`plugins/pi.ts` brings pi (`@earendil-works/pi-coding-agent`), the coding agent the harness follows,
+over its own RPC mode: `pi --mode rpc` in the session's folder, one process per session, JSONL on
+its stdin and stdout. It registers the agent `pi` only when the program is on PATH, and never
+bundles it. Its section names the command when it is another:
+
+```json
+{ "agent": "pi", "plugins": { "pi": { "command": ["pi", "--mode", "rpc"] } } }
+```
+
+A prompt becomes pi's `prompt`, and a message while a turn runs goes into it with
+`"streamingBehavior": "steer"`; Esc sends `abort`, and a run ends at `agent_settled`. Text and
+thinking deltas, calls with their input and output, an edit's or a write's diff, usage and cost,
+errors, retries and compaction all reach the conversation as the events above. Its models are the
+model choices and its thinking levels the efforts (`set_model` and `set_thinking_level`); its
+`get_commands` are the session's slash commands (skill commands keep pi's `skill:` prefix). The
+Sessions tab reads pi's folder (`~/.pi/agent/sessions/--<cwd>--/`), a session's name from its latest
+`session_info` entry or else its first user message, and a resume opens the file with `--session`.
+An extension's `extension_ui_request` becomes: `select`, `confirm`, `input` and `editor` a question
+in the request panel (a cancelled answer or an aborted turn answers `cancelled: true`, a timeout
+withdraws it); `notify` a status message or a notice; `setStatus` a segment keyed by `statusKey`
+(no text clears it); `setWidget` a band strip keyed by `widgetKey`; `setTitle` the session's title;
+and `set_editor_text` the composer's text. An `extension_error` is logged and shown as a notice.
+pi takes MCP servers only through an extension, so widecode's own tools (`plugins/ask.ts`) do not
+reach it.
+
 The section's `tasks` makes Claude Code's subagents run on an ACP agent and model. It adds a
 `Task` tool (Claude sees `mcp__widecode__Task`) whose `subagent_type` is one of the configured
 targets:

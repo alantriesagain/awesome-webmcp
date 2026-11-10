@@ -435,7 +435,7 @@ Where the harness's hooks go (read 2026-11-09): `before_agent_start` and `input`
 registry is handed to them. `AcpServer.sendRequest` exists and nothing calls it; the acp plugin
 answers only `session/request_permission`.
 
-- [ ] **pi as an agent.** `plugins/pi.ts` over the user's `pi --mode rpc` (never bundled): the
+- [x] **pi as an agent.** `plugins/pi.ts` over the user's `pi --mode rpc` (never bundled): the
       prompt, steering and abort, the stream's events into `api.conversation.apply`, the models
       and thinking levels as options, the commands, sessions listed and resumed from pi's files;
       `extension_ui_request` mapped: select, confirm, input and editor to the request panel
@@ -450,10 +450,12 @@ answers only `session/request_permission`.
       `prompt`. Tests: `prompts.test.ts`, `skills.test.ts`.
 - [ ] **The engine in the daemon.** `@light/plugins` as a dependency of `@widecode/harness`; an
       extension is a `.js` file in pi's shape (`export default function (pi) {}`, no `import`: a
-      load error names the line), from `~/.widecode/harness/extensions/` and a trusted folder's
-      `.widecode/harness/extensions/` (the loader turns `export default` into an assignment the
-      prelude reads and drops `export` before a declaration); one engine per daemon, a prelude of the harness's own, the
-      250 ms budget per call, an extension that throws or runs over switched off with a log line.
+      load error names the line), from the store's `extensions/` (`~/.widecode/extensions/`, or
+      `$WIDECODE_HOME/extensions`) and a trusted folder's `.widecode/extensions/`, beside the
+      app's `plugins/` in both (the loader turns `export default` into an assignment the prelude
+      reads and drops `export` before a declaration); an engine per folder the sessions use, a
+      prelude of the harness's own, the 250 ms budget per call, an extension that throws or runs
+      over switched off with a log line.
       The first API: `registerTool` (JSON Schema parameters, `execute(id, params, signal,
       onUpdate, ctx)` answering `{ content, details, isError }`), `registerCommand`, and `on` for
       `session_start`, `before_agent_start`, `context`, `tool_call` and `tool_result`. Tests with
@@ -468,6 +470,11 @@ answers only `session/request_permission`.
       `setModel` and the thinking level; `pi.events`; the turn, agent, model, input, compaction
       and shutdown events; `/reload`. What the harness offers beyond pi (files without Node) is
       a namespace of its own, never under pi's names.
+- [ ] **Extensions live as plugins do.** A saved file in an extensions folder reloads that file
+      alone (its `session_shutdown`, then its source again and `session_start` with `reload`), the
+      other extensions and the turn going on; a removed file takes its tools and commands away; a
+      switch per extension in config.json (`harness.extensions`, by file name) as the app's
+      plugins have, the user's and a trusted project's.
 - [ ] **The important extensions, written again.** From pi's 78 examples, the ones a coding agent
       uses daily that the harness lacks: `permission-gate` (a confirm before a dangerous Bash
       command), `protected-paths` (writes to `.env`, `.git/`, `node_modules/` refused),
@@ -477,7 +484,10 @@ answers only `session/request_permission`.
       `dirty-repo-guard` (a fork refused while the tree is dirty), `claude-rules` (`.claude/rules`
       into the system prompt). Left out because widecode has them: plan mode, question, subagent,
       notify, session-name. Each is plain JS with JSON Schema parameters and no import, so the
-      same file loads in pi too; a test each, switched off in a test too.
+      same file loads in pi too. The built-in ones are `packages/harness/extensions/*.ts`,
+      type-checked against the `pi.d.ts` subset and stripped into the binary at build as the
+      app's built-in plugins are; a user's or project's file of the same name replaces one. A test
+      each, switched off in a test too.
 - [ ] **The docs.** The harness's README, PLUGINS.md's harness section, a `pi.d.ts` of the subset
       for an extension's author.
 
@@ -502,6 +512,8 @@ answers only `session/request_permission`.
 
 ## Log
 
+- `b71864a` Milestone K, shared formats: pi's skills folders, prompt templates in pi's format as
+  the harness's session commands. Tests: `prompts`, `skills` (natively too), `agent`.
 - `8af5202` Folder switch, `--trust`, retired-agent fallback, hook removal, prelude cycle. Tests:
   `folder-switch`, `trust-run`, `agent-removal`, `agent-folder`, kernel hook case.
 - `3a8cce3` Milestone A: unique write temp with cleanup, guarded log, capped stderr and timeout
