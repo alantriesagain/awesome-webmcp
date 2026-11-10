@@ -751,6 +751,13 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
   let seq = 0;
   const waiting = new Map<number, (result: unknown, error: string) => void>();
   const asked = new Map<string, { rpc: unknown; options: Option[] }>();
+  /** The extension UI dialogs open (request id -> its JSON-RPC id and method, and the select's options), the statuses and widgets set, and the segments and strips they draw. */
+  const dialogs = new Map<string, { rpc: unknown; method: string; options: string[]; answered: boolean }>();
+  const statuses = new Map<string, string>();
+  const widgets = new Map<string, string[]>();
+  const uiSegments = new Set<string>();
+  const uiBands = new Set<string>();
+  let uiSeq = 0;
   /** Events of the batch being read, applied in one call. */
   let out: Ev[] = [];
   /** Counts the processes started: the current one's number (a killed one's lines and end come too late). */
@@ -1347,10 +1354,14 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
     });
   };
 
-  /** A request from the agent: a permission asked, else not something widecode offers. */
+  /** A request from the agent: a permission asked, an extension UI dialog, else not something widecode offers. */
   const request = (m: Msg): void => {
     const method = str(m.method);
     const p = obj(m.params);
+    if (method === "_widecode/ui" && p !== null) {
+      uiDialog(m, p);
+      return;
+    }
     if (method !== "session/request_permission" || p === null) {
       send({ jsonrpc: "2.0", id: m.id, error: { code: -32601, message: "widecode does not offer " + method } });
       return;
@@ -1393,6 +1404,137 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
     send({ jsonrpc: "2.0", id: a.rpc, result: { outcome: optionId.length > 0 ? { outcome: "selected", optionId } : { outcome: "cancelled" } } });
   };
 
+  /** Withdraw dialog `rid`: its panel entry is cancelled and the agent hears cancelled. */
+  const withdrawUi = (rid: string): void => {
+    const d = dialogs.get(rid);
+    if (d === undefined || d.answered) return;
+    d.answered = true;
+    dialogs.delete(rid);
+    send({ jsonrpc: "2.0", id: d.rpc, result: { cancelled: true } });
+    emit({ type: "cancelRequest", id: rid });
+    flush();
+  };
+
+  /** Clear what the agent put on the screen: its segments and strips draw nothing until it sets them again. */
+  const clearUi = (): void => {
+    for (const key of statuses.keys()) statuses.set(key, "");
+    for (const key of widgets.keys()) widgets.set(key, []);
+  };
+
+  /** A `_widecode/ui` request: a select, confirm, input or editor dialog in the request panel. */
+  const uiDialog = (m: Msg, p: Msg): void => {
+    const method = str(p.method);
+    // A side question's session asks for nothing: it answers from what it knows.
+    if (sides.has(str(p.sessionId))) {
+      send({ jsonrpc: "2.0", id: m.id, result: { cancelled: true } });
+      return;
+    }
+    const title = str(p.title);
+    const message = str(p.message);
+    let header = "ACP";
+    let question = title;
+    let options: { label: string; description: string }[] = [];
+    let selected: string[] = [];
+    if (method === "select") {
+      selected = list(p.options).map((o) => str(o));
+      options = selected.map((o) => ({ label: o, description: "" }));
+      header = "Select";
+    } else if (method === "confirm") {
+      options = [{ label: "Yes", description: "confirm" }, { label: "No", description: "do not" }];
+      question = title + (message.length > 0 ? "\n\n" + message : "");
+      header = "Confirm";
+    } else if (method === "input") {
+      const placeholder = str(p.placeholder);
+      question = title + (placeholder.length > 0 ? "\n\n" + placeholder : "");
+      header = "Input";
+    } else if (method === "editor") {
+      const prefill = str(p.prefill);
+      question = title + (prefill.length > 0 ? "\n\n" + prefill : "");
+      header = "Editor";
+    } else {
+      send({ jsonrpc: "2.0", id: m.id, error: { code: -32601, message: "widecode does not offer _widecode/ui " + method } });
+      return;
+    }
+    const rid = "acp" + String(++uiSeq);
+    dialogs.set(rid, { rpc: m.id, method, options: selected, answered: false });
+    emit({ type: "request", id: rid, category: "question", name: entry.name, questions: [{ question, header, options }] });
+    const timeout = typeof p.timeout === "number" ? p.timeout : 0;
+    if (timeout > 0)
+      api.after(timeout, () => {
+        if (dialogs.has(rid)) withdrawUi(rid);
+      });
+  };
+
+  /** Answer dialog `rid` with the user's reply: a value, a confirmation, or cancelled. */
+  const answerUi = (rid: string, reply: widecode.AgentReply): void => {
+    const d = dialogs.get(rid);
+    if (d === undefined || d.answered) return;
+    d.answered = true;
+    dialogs.delete(rid);
+    const answer = reply.answers.length > 0 ? reply.answers[0] : null;
+    const label = answer !== null && answer.labels.length > 0 ? answer.labels[0] : "";
+    const text = answer !== null && answer.text.length > 0 ? answer.text : label;
+    if (reply.state !== "answered") send({ jsonrpc: "2.0", id: d.rpc, result: { cancelled: true } });
+    else if (d.method === "confirm") send({ jsonrpc: "2.0", id: d.rpc, result: { confirmed: /^y/i.test(label) } });
+    else send({ jsonrpc: "2.0", id: d.rpc, result: { value: text } });
+    emit({ type: "cancelRequest", id: rid, ...(reply.state === "answered" ? { state: "answered" } : {}) });
+  };
+
+  /** A `_widecode/ui` notification: what the screen shows. */
+  const uiNotification = (p: Msg): void => {
+    const method = str(p.method);
+    if (method === "notify") {
+      const message = str(p.message);
+      const kind = str(p.notifyType);
+      if (kind === "error" || kind === "warning") api.ui.notice(entry.name + ": " + message);
+      else api.tell(message);
+      return;
+    }
+    if (method === "setStatus") {
+      const key = str(p.statusKey);
+      const text = str(p.statusText);
+      statuses.set(key, text);
+      const name = "acp:" + key;
+      if (!uiSegments.has(name)) {
+        uiSegments.add(name);
+        api.ui.segment({
+          name,
+          draw: () => {
+            const t = statuses.get(key) ?? "";
+            return t.length > 0 ? [{ text: t, fg: widecode.theme.dim }] : [];
+          },
+        });
+      }
+      return;
+    }
+    if (method === "setWidget") {
+      const key = str(p.widgetKey);
+      const lines = list(p.widgetLines).map((l) => str(l)).filter((l) => l.length > 0);
+      widgets.set(key, lines);
+      const name = "acp:" + key;
+      if (!uiBands.has(name)) {
+        uiBands.add(name);
+        api.ui.band({
+          id: name,
+          under: "chat",
+          lines: () => {
+            const current = widgets.get(key) ?? [];
+            return current.map((l) => ({ runs: [{ text: l, fg: widecode.theme.dim }] }));
+          },
+        });
+      }
+      return;
+    }
+    if (method === "setTitle") {
+      api.agent.setTitle(str(p.title));
+      return;
+    }
+    if (method === "set_editor_text") {
+      const text = str(p.text);
+      api.composer.set(text.split("\n"), Math.max(0, text.split("\n").length - 1), widecode.util.graphemes(text.split("\n")[text.split("\n").length - 1] ?? "").length);
+    }
+  };
+
   const lines = (ls: string[]): void => {
     for (const l of ls) {
       let m: Msg | null;
@@ -1419,6 +1561,12 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
             emit({ type: "aside", id: side.id, text: side.text });
           }
         } else if (u !== null && !dead.has(sid) && (sid === session || session.length === 0)) update(u);
+      } else if (m.method === "_widecode/ui") {
+        const p = obj(m.params);
+        if (p !== null) {
+          const sid = str(p.sessionId);
+          if (!sides.has(sid) && !dead.has(sid) && (sid === session || session.length === 0)) uiNotification(p);
+        }
       }
     }
     flush();
@@ -1437,6 +1585,10 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
     waiting.clear();
     asked.clear();
     for (const answer of answers) answer(null, "the agent's process ended");
+    // Its dialogs are gone and what it put on the screen goes with it.
+    for (const rid of [...dialogs.keys()]) emit({ type: "cancelRequest", id: rid });
+    dialogs.clear();
+    clearUi();
     if (code !== 0 && code !== -1) notice(entry.name + " ended (exit code " + String(code) + ")", "error");
     emit({ type: "process", state: "ended" });
     flush();
@@ -1462,7 +1614,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
     if (!p.started) return "cannot start " + command.join(" ");
     proc = p;
     emit({ type: "process", state: "running" });
-    rpc("initialize", { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: "widecode", version: String(widecode.version) } }, (result, error) => {
+    rpc("initialize", { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false, _meta: { widecode: { ui: true } } }, clientInfo: { name: "widecode", version: String(widecode.version) } }, (result, error) => {
       if (error.length > 0) {
         notice(entry.name + " did not start", "error", error);
         failQueue();
@@ -1612,12 +1764,13 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
     return "";
   };
 
-  /** Cancel the turn: permissions still asked are withdrawn first, as ACP asks. */
+  /** Cancel the turn: permissions and dialogs still asked are withdrawn first, as ACP asks. */
   const cancel = (): void => {
     for (const rid of [...asked.keys()]) {
       answerPermission(rid, "");
       emit({ type: "cancelRequest", id: rid });
     }
+    for (const rid of [...dialogs.keys()]) withdrawUi(rid);
     if (inTurn && session.length > 0) {
       cancelled = true;
       notify("session/cancel", { sessionId: session });
@@ -1674,6 +1827,11 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
       flush();
     },
     respond(req, reply) {
+      if (dialogs.has(req.id)) {
+        answerUi(req.id, reply);
+        flush();
+        return;
+      }
       const a = asked.get(req.id);
       if (a === undefined) return;
       const label = reply.state === "answered" && reply.answers.length > 0 && reply.answers[0].labels.length > 0 ? reply.answers[0].labels[0] : "";
@@ -1690,6 +1848,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
       return askAside(question);
     },
     resume(sid) {
+      clearUi();
       if (proc !== null && initialized) {
         if (!canLoad && !canResume) notice(entry.name + " cannot reopen a past session", "error");
         else reopen(sid);
@@ -1702,6 +1861,7 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
     },
     reset() {
       cancel();
+      clearUi();
       generation++;
       // One made and never written to is not worth keeping.
       if (fresh.length > 0 && fresh === session) forgetFresh();
@@ -2203,6 +2363,11 @@ class SubagentRun {
     }
     if (method === "session/request_permission" && params !== null) {
       this.permission(m, params);
+      return;
+    }
+    // A run hears no user: its dialogs are answered cancelled and the rest of the UI is ignored.
+    if (method === "_widecode/ui") {
+      if (m.id !== undefined && m.id !== null && this.proc !== null) this.proc.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, result: { cancelled: true } }));
       return;
     }
     if (m.id !== undefined && m.id !== null && this.proc !== null) {

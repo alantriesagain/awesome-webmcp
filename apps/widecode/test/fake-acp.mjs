@@ -182,6 +182,7 @@ const answers = new Map();
 
 const write = (m) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", ...m }) + "\n");
 const update = (sessionId, u) => write({ method: "session/update", params: { sessionId, update: u } });
+const ui = (sessionId, fields) => write({ method: "_widecode/ui", params: { sessionId, ...fields } });
 const text = (t) => ({ type: "text", text: t });
 const ask = (method, params, then) => {
   const id = nextId++;
@@ -377,6 +378,60 @@ const prompt = (id, sessionId, params) => {
       update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Unknown request: " + String(e.code ?? "none") + " " + String(e.message ?? "")) });
       end("end_turn");
     });
+  } else if (first === "select") {
+    ask("_widecode/ui", { sessionId, method: "select", title: "Pick one", options: ["Allow", "Block"] }, (result) => {
+      update(sessionId, { sessionUpdate: "agent_message_chunk", content: text(result.cancelled ? "Select cancelled" : "Selected: " + result.value) });
+      end(result.cancelled ? "cancelled" : "end_turn");
+    });
+  } else if (first === "confirm") {
+    ask("_widecode/ui", { sessionId, method: "confirm", title: "Clear it?", message: "All messages will be lost." }, (result) => {
+      update(sessionId, { sessionUpdate: "agent_message_chunk", content: text(result.cancelled ? "Confirm cancelled" : "Confirmed: " + String(result.confirmed)) });
+      end(result.cancelled ? "cancelled" : "end_turn");
+    });
+  } else if (first === "input") {
+    ask("_widecode/ui", { sessionId, method: "input", title: "Enter a value", placeholder: "type something" }, (result) => {
+      update(sessionId, { sessionUpdate: "agent_message_chunk", content: text(result.cancelled ? "Input cancelled" : "Input: " + result.value) });
+      end(result.cancelled ? "cancelled" : "end_turn");
+    });
+  } else if (first === "editor") {
+    ask("_widecode/ui", { sessionId, method: "editor", title: "Edit some text", prefill: "Line 1\nLine 2" }, (result) => {
+      update(sessionId, { sessionUpdate: "agent_message_chunk", content: text(result.cancelled ? "Editor cancelled" : "Editor: " + result.value) });
+      end(result.cancelled ? "cancelled" : "end_turn");
+    });
+  } else if (first === "timeout") {
+    ask("_widecode/ui", { sessionId, method: "input", title: "Enter a value", placeholder: "quickly", timeout: 100 }, (result) => {
+      update(sessionId, { sessionUpdate: "agent_message_chunk", content: text(result.cancelled ? "Input timed out" : "Input: " + result.value) });
+      end(result.cancelled ? "cancelled" : "end_turn");
+    });
+  } else if (first === "notify") {
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Notified.") });
+    ui(sessionId, { method: "notify", message: "fake says hi", notifyType: "info" });
+    ui(sessionId, { method: "notify", message: "things went wrong", notifyType: "error" });
+    end("end_turn");
+  } else if (first === "status") {
+    ui(sessionId, { method: "setStatus", statusKey: "test", statusText: "busy" });
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Status set.") });
+    end("end_turn");
+  } else if (first === "status-clear") {
+    ui(sessionId, { method: "setStatus", statusKey: "test" });
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Status cleared.") });
+    end("end_turn");
+  } else if (first === "widget") {
+    ui(sessionId, { method: "setWidget", widgetKey: "widget", widgetLines: ["line one", "line two"], widgetPlacement: "aboveEditor" });
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Widget set.") });
+    end("end_turn");
+  } else if (first === "widget-clear") {
+    ui(sessionId, { method: "setWidget", widgetKey: "widget" });
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Widget cleared.") });
+    end("end_turn");
+  } else if (first === "title") {
+    ui(sessionId, { method: "setTitle", title: "fake session" });
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Title set.") });
+    end("end_turn");
+  } else if (first === "editor-text") {
+    ui(sessionId, { method: "set_editor_text", text: "draft from fake" });
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Editor text set.") });
+    end("end_turn");
   } else if (first === "slow") {
     update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Working…") });
     slow = { id, session: sessionId };

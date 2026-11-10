@@ -269,6 +269,20 @@ plan mode when the agent has one), which the entry's `forget` command deletes af
 default is `["opencode", "session", "delete", "{session}"]`). An agent that speaks something else
 is a plugin of its own over the same `api.agents.register`.
 
+An agent's extensions reach the screen through `_widecode/ui`, an ACP extension method in the
+shape of pi's RPC extension UI; the harness sends it for its extensions' `ctx.ui`. The plugin says
+it takes them in `initialize` (`clientCapabilities._meta.widecode.ui: true`). A dialog is a request
+with `{ sessionId, method, title }` and `options` (select), `message` (confirm), `placeholder`
+(input) or `prefill` (editor), and an optional `timeout` in milliseconds: it opens a question in
+the request panel and is answered `{ value }`, `{ confirmed }` for a confirm, or `{ cancelled: true }`
+when the user cancels, the turn is cancelled or the timeout passes. The rest are notifications:
+`notify` (`message`, `notifyType`) is a status message for info and a notice for a warning or an
+error, `setStatus` (`statusKey`, `statusText`) a segment named `acp:<key>` that no text clears,
+`setWidget` (`widgetKey`, `widgetLines`) a band strip named `acp:<key>`, `setTitle` the session's
+title and `set_editor_text` (`text`) the composer's text. The segments and strips are cleared when
+the session ends or the agent stops. A Task run on an ACP target answers its dialogs cancelled and
+ignores the rest.
+
 `plugins/pi.ts` brings pi (`@earendil-works/pi-coding-agent`), the coding agent the harness follows,
 over its own RPC mode: `pi --mode rpc` in the session's folder, one process per session, JSONL on
 its stdin and stdout. It registers the agent `pi` only when the program is on PATH, and never
