@@ -43,7 +43,7 @@ import { piEntries, piEntry, piHeader } from "../ext/session-view.ts";
 import { join } from "node:path";
 import { Choice, ConfigOptions } from "./options.ts";
 import { AcpServer, Incoming } from "./server.ts";
-import { DiffBlock, chunkUpdate, commandsUpdate, modeUpdate, sessionInfoUpdate, toolCallEnd, toolCallUpdate, usageUpdate, userChunkUpdate } from "./updates.ts";
+import { DiffBlock, chunkUpdate, commandsUpdate, modeUpdate, optionsUpdate, sessionInfoUpdate, toolCallEnd, toolCallUpdate, usageUpdate, userChunkUpdate } from "./updates.ts";
 
 /** The context window the usage is reported against while no model says otherwise. */
 const DEFAULT_WINDOW = 200000;
@@ -224,6 +224,57 @@ export class AcpAgent {
     ext.onGetSessionName = () => s.title;
     ext.onRegistered = (kind: string) => this.afterRegistration(s, kind);
     ext.onReloaded = () => this.afterRegistration(s, "reload");
+    ext.onAllTools = () => this.allToolsJson(s);
+    ext.onActiveTools = () => JSON.stringify(this.activeTools(s).tools.map((t) => t.name));
+    ext.onSetActiveTools = (namesJson: string) => this.setActiveTools(s, namesJson);
+    ext.onSetModel = (value: string) => this.setOptionFromPlugin(s, "model", value);
+    ext.onSetEffort = (value: string) => this.setOptionFromPlugin(s, "effort", value);
+    ext.onGetEffort = () => s.options.effort;
+  }
+
+  /** Every tool the session has, as JSON: the built-ins of its mode, its MCP tools and its plugins' tools. */
+  private allToolsJson(s: HarnessSession): string {
+    const base = this.loop.tools.forMode(s.loop.mode).plus(s.loop.extraTools);
+    const mcpNames: string[] = [];
+    for (const t of s.mcpTools) mcpNames.push(t.name);
+    const pluginNames: string[] = [];
+    if (s.ext !== null) for (const d of s.ext.toolDefs) if (d.entry.enabled) pluginNames.push(d.name);
+    const parts: string[] = [];
+    for (const t of base.tools) {
+      const source = pluginNames.includes(t.name) ? "plugin" : mcpNames.includes(t.name) ? "mcp" : "builtin";
+      const parameters = t.schemaJson.length > 0 ? t.schemaJson : '{"type":"object"}';
+      parts.push('{"name":' + JSON.stringify(t.name) + ',"description":' + JSON.stringify(t.description) + ',"parameters":' + parameters + ',"source":' + JSON.stringify(source) + "}");
+    }
+    return "[" + parts.join(",") + "]";
+  }
+
+  /** The tools the next request offers: the mode's and the servers', filtered by a plugin's active set. */
+  private activeTools(s: HarnessSession): ToolSet {
+    return this.loop.tools.forMode(s.loop.mode).plus(s.loop.extraTools).only(s.loop.activeTools);
+  }
+
+  /** A plugin's active set: names of tools the session has, unknown ones left out; an empty list offers none. */
+  private setActiveTools(s: HarnessSession, namesJson: string): void {
+    const known: string[] = [];
+    for (const t of this.loop.tools.tools) known.push(t.name);
+    for (const t of s.loop.extraTools) if (!known.includes(t.name)) known.push(t.name);
+    const names: string[] = [];
+    for (const v of listOf(parseJson(namesJson))) {
+      const name = str(v);
+      if (known.includes(name) && !names.includes(name)) names.push(name);
+    }
+    s.loop.activeTools = names;
+  }
+
+  /** A model or effort set from a plugin, as set_config_option does it: "" when taken, else why not. */
+  private setOptionFromPlugin(s: HarnessSession, id: string, value: string): string {
+    const why = s.options.set(id, value);
+    if (why.length > 0) return why;
+    if (id === "model") this.effortsOf(s.options, this.registry.model(value));
+    this.apply(s);
+    if ((id === "model" || id === "mode") && s.file !== null && s.file.leaf.length > 0) this.note(s, id === "model" ? MODEL : MODE, value);
+    this.server.notify("session/update", optionsUpdate(s.id, s.options.text()));
+    return "";
   }
 
   /** Appending a custom entry through the store, outside the context. */
@@ -669,6 +720,7 @@ export class AcpAgent {
     if ((id === "model" || id === "mode") && s.file !== null && s.file.leaf.length > 0) this.note(s, id === "model" ? MODEL : MODE, value);
     this.server.answer(idText, '{"configOptions":' + s.options.text() + "}");
     if (id === "mode") this.server.notify("session/update", modeUpdate(s.id, value));
+    else if (id === "model" || id === "effort") this.server.notify("session/update", optionsUpdate(s.id, s.options.text()));
   }
 
   private prompt(idText: string, p: Record<string, unknown> | null): void {

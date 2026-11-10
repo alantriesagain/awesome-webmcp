@@ -156,9 +156,53 @@ const AGENT_RUNTIME: string = `"use strict";
     });
   // The definitions a file made: its plugin id, its file and its agent part, the latest per id.
   const defs = Object.create(null);
+  // A session instance's channels: its plugins' handlers, kept between the agent parts of one instance.
+  const channels = Object.create(null);
+  const handlersOn = (inst, channel) => {
+    const byChannel = channels[inst] || (channels[inst] = Object.create(null));
+    return byChannel[channel] || (byChannel[channel] = []);
+  };
   const agentFor = (key, inst) => ({
     on: (name, handler) => {
       call("extHandler", key, inst, name, handled(handler));
+    },
+    events: {
+      on: (channel, handler) => {
+        if (typeof handler !== "function") return () => {};
+        const list = handlersOn(inst, String(channel));
+        list.push(handler);
+        return () => {
+          const at = list.indexOf(handler);
+          if (at >= 0) list.splice(at, 1);
+        };
+      },
+      emit: (channel, data) => {
+        const list = handlersOn(inst, String(channel)).slice();
+        for (const f of list) {
+          try {
+            f(data);
+          } catch (e) {
+            __host("extLog", stringify([inst, "event " + String(channel), messageOf(e)]));
+          }
+        }
+      },
+    },
+    getAllTools: () => parse(__host("extAllTools", stringify([inst]))),
+    getActiveTools: () => parse(__host("extActiveTools", stringify([inst]))),
+    setActiveTools: (names) => {
+      __host("extSetActiveTools", stringify([inst, Array.isArray(names) ? names.map((n) => String(n)) : []]));
+    },
+    setModel: (value) => {
+      const ok = parse(__host("extSetModel", stringify([inst, String(value)])));
+      return Promise.resolve(ok === true);
+    },
+    getThinkingLevel: () => {
+      const v = parse(__host("extThinkingLevel", stringify([inst])));
+      return v === null || v === undefined ? "" : String(v);
+    },
+    setThinkingLevel: (level) => {
+      const ok = parse(__host("extSetEffort", stringify([inst, String(level)])));
+      return Promise.resolve(ok === true);
     },
     registerTool: (def) => {
       if (def === null || typeof def !== "object" || typeof def.name !== "string" || typeof def.execute !== "function") throw new Error("agent.registerTool: a tool needs a name and execute()");

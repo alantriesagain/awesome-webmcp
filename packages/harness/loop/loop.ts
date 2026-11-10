@@ -72,6 +72,8 @@ export class LoopSession {
   /** The session's MCP servers and their tools, offered beside the mode's. */
   servers: McpLink[] = [];
   extraTools: Tool[] = [];
+  /** The tools a plugin made active (`null`: every one the mode and the servers offer). */
+  activeTools: string[] | null = null;
   /** What the Skill tool reads: the folder's skills when trusted, the user's home, the harness's folder. */
   trusted = false;
   home = "";
@@ -188,8 +190,8 @@ export class AgentLoop {
       s.pendingNotes = [];
     }
     for (;;) {
-      // The mode's tools as it stands now (a plan approved mid-turn leaves plan mode).
-      const tools = this.tools.forMode(s.mode).plus(s.extraTools);
+      // The mode's tools as it stands now (a plan approved mid-turn leaves plan mode), then the plugin's active set.
+      const tools = this.tools.forMode(s.mode).plus(s.extraTools).only(s.activeTools);
       if (s.contextEstimate() > compactThreshold(s.window, this.compactAt)) {
         const c = await this.compactContext(s, this.keepTokens, "", abort);
         if (c !== null && c.error.length === 0) {

@@ -192,6 +192,12 @@ export class ToolSet {
     return new ToolSet(this.tools.filter((t) => t.name !== name));
   }
 
+  /** These tools whose names `names` lists (null: all of them). */
+  only(names: string[] | null): ToolSet {
+    if (names === null) return this;
+    return new ToolSet(this.tools.filter((t) => names.includes(t.name)));
+  }
+
   /** These tools and `more` (a session's MCP or extension tools), one of `more` replacing a tool of its name. */
   plus(more: Tool[]): ToolSet {
     if (more.length === 0) return this;

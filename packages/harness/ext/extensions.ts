@@ -865,6 +865,38 @@ export class Extensions extends HostHandler {
         const entry = this.entryOf(str(args[0]));
         return new HostAnswer(OK, entry !== null ? this.pluginSettings(entry.id) : "{}");
       }
+      case "extAllTools": {
+        const instance = this.instanceOf(num(args[0], -1));
+        return new HostAnswer(OK, instance !== null && instance.onAllTools !== null ? instance.onAllTools() : "[]");
+      }
+      case "extActiveTools": {
+        const instance = this.instanceOf(num(args[0], -1));
+        return new HostAnswer(OK, instance !== null && instance.onActiveTools !== null ? instance.onActiveTools() : "[]");
+      }
+      case "extSetActiveTools": {
+        const instance = this.instanceOf(num(args[0], -1));
+        if (instance !== null && instance.onSetActiveTools !== null) instance.onSetActiveTools(JSON.stringify(args[1] === undefined ? [] : args[1]));
+        return new HostAnswer(OK, "null");
+      }
+      case "extSetModel": {
+        const instance = this.instanceOf(num(args[0], -1));
+        const why = instance !== null && instance.onSetModel !== null ? instance.onSetModel(str(args[1])) : "no plugin session";
+        return new HostAnswer(OK, why.length === 0 ? "true" : "false");
+      }
+      case "extSetEffort": {
+        const instance = this.instanceOf(num(args[0], -1));
+        const why = instance !== null && instance.onSetEffort !== null ? instance.onSetEffort(str(args[1])) : "no plugin session";
+        return new HostAnswer(OK, why.length === 0 ? "true" : "false");
+      }
+      case "extThinkingLevel": {
+        const instance = this.instanceOf(num(args[0], -1));
+        return new HostAnswer(OK, JSON.stringify(instance !== null && instance.onGetEffort !== null ? instance.onGetEffort() : ""));
+      }
+      case "extLog": {
+        const instance = this.instanceOf(num(args[0], -1));
+        log("plugin " + (instance !== null ? "session " + instance.sessionId : "?") + " " + str(args[1]) + ": " + str(args[2]));
+        return new HostAnswer(OK, "null");
+      }
       default:
         return new HostAnswer(FAILED, "plugins: no host call " + name);
     }
@@ -902,6 +934,14 @@ export class ExtSession {
   onRegistered: ((kind: string) => void) | null = null;
   /** One of the session's files was reloaded or removed (its commands and tools are offered again). */
   onReloaded: (() => void) | null = null;
+  /** The session's tools as JSON, every one and the active set, and the active set a plugin asks for. */
+  onAllTools: (() => string) | null = null;
+  onActiveTools: (() => string) | null = null;
+  onSetActiveTools: ((namesJson: string) => void) | null = null;
+  /** The session's model and effort set from a plugin ("" when taken, else why not); the effort read. */
+  onSetModel: ((value: string) => string) | null = null;
+  onSetEffort: ((value: string) => string) | null = null;
+  onGetEffort: (() => string) | null = null;
   private toolSeq = 0;
 
   constructor(owner: Extensions, id: number, sessionId: string, cwd: string) {

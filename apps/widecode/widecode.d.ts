@@ -1190,6 +1190,35 @@ declare namespace widecode {
     getSessionName(): string | undefined;
     settings(): Record<string, unknown>;
     exec(command: string, args?: string[], options?: { signal?: AgentSignal; timeout?: number; cwd?: string }): Promise<ExecResult>;
+    /** Every tool the session has, with the source it came from. */
+    getAllTools(): AgentToolInfo[];
+    /** The names of the tools offered to the model now. */
+    getActiveTools(): string[];
+    /** Offer only these tools from the next request on; unknown names are left out. */
+    setActiveTools(names: string[]): void;
+    /** The session's model, a value its model option names; false when no model is that value. */
+    setModel(value: string): Promise<boolean>;
+    /** The session's effort, as its effort option names it ("" when the model takes none). */
+    getThinkingLevel(): string;
+    /** The session's effort; false when the model does not take it. */
+    setThinkingLevel(level: string): Promise<boolean>;
+    /** The channels the plugins of this session's instance share. */
+    events: AgentEvents;
+  }
+
+  /** A tool of the session: its name, what it does, its input schema and where it came from. */
+  interface AgentToolInfo {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+    source: "builtin" | "mcp" | "plugin";
+  }
+
+  /** The channels between the plugins of one session: a handler per channel, called in the engine as the event is emitted. */
+  interface AgentEvents {
+    /** Answer a function that removes the handler. */
+    on(channel: string, handler: (data: unknown) => void): () => void;
+    emit(channel: string, data?: unknown): void;
   }
 
   interface Plugin {

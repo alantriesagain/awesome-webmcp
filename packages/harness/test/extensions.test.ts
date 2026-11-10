@@ -18,6 +18,7 @@ import { registryFor } from "../cli.ts";
 import { HarnessConfig } from "../config.ts";
 import { ExtensionsRegistry } from "../ext/extensions.ts";
 import { ModelClient, ModelRequest } from "../model/client.ts";
+import { ModelInfo } from "../model/registry.ts";
 import { PluginSource } from "@light/plugins/sources.ts";
 import { FakeClient } from "../model/fake.ts";
 import { HarnessPaths } from "../paths.ts";
@@ -1097,6 +1098,109 @@ const main = async (): Promise<void> => {
     ok("the watcher reloads the changed file", reloaded);
     await rig.prompt(sid, "/hello");
     eq("the watcher's reload answers the new code", await notifyStarting(rig, "watch:"), "watch:v2");
+    rig.close();
+  }
+
+  // The tools a plugin sees and sets: the active set narrows the next request, plan mode narrows it further.
+  {
+    const rig = new Rig(['{"match":"hello","text":"Hi."}', '{"match":"again","text":"Again."}'].join("\n"));
+    rig.extension([
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("onlyread", { handler: (a, ctx) => { agent.setActiveTools(["Read", "Nope"]); ctx.ui.notify("active:" + JSON.stringify(agent.getActiveTools())); } });',
+      '  agent.registerCommand("readbash", { handler: () => { agent.setActiveTools(["Read", "Bash"]); } });',
+      "} });",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "/onlyread");
+    const active = await rig.uiNotification("notify");
+    eq("setActiveTools keeps the known names and getActiveTools answers them", String(active["message"]), 'active:["Read"]');
+    await rig.prompt(sid, "hello");
+    const names = (JSON.parse(rig.asks()[rig.asks().length - 1].toolsJson) as { name: string }[]).map((t) => t.name);
+    eq("the next request offers only Read", names.join(","), "Read");
+    await rig.prompt(sid, "/readbash");
+    const set = rig.send("session/set_config_option", { sessionId: sid, configId: "mode", value: "plan" });
+    await until(() => rig.out.some((line) => line.includes('"id":' + set + ",")));
+    await rig.prompt(sid, "again");
+    const plan = (JSON.parse(rig.asks()[rig.asks().length - 1].toolsJson) as { name: string }[]).map((t) => t.name);
+    eq("plan mode's read-only set still applies over it", plan.join(","), "Read");
+    rig.close();
+  }
+
+  // getAllTools lists a plugin's tool with its source.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    rig.extension([
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerTool({ name: "echo", label: "Echo", description: "Echo the text", parameters: { type: "object", properties: { text: { type: "string" } } }, execute: async () => ({ content: [] }) });',
+      '  agent.registerCommand("list", { handler: (a, ctx) => { ctx.ui.notify("tools:" + JSON.stringify(agent.getAllTools().filter((t) => t.source !== "builtin"))); } });',
+      "} });",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "/list");
+    const assert = JSON.parse(String((await rig.uiNotification("notify"))["message"]).slice("tools:".length)) as { name: string; source: string; description: string }[];
+    eq("the plugin's tool is listed with its source", assert.map((t) => t.name + ":" + t.source + ":" + t.description).join(","), "echo:plugin:Echo the text");
+    rig.close();
+  }
+
+  // setModel and setThinkingLevel change the session's options, tell the client and answer false for what the model lacks.
+  {
+    const rig = new Rig(['{"match":"hello","text":"Hi."}', '{"match":"again","text":"Again."}'].join("\n"));
+    const other = new ModelInfo("fake", "other", "Fake Other");
+    other.efforts = ["low", "medium", "high"];
+    rig.agent!.registry.models.push(other);
+    rig.extension([
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("setmodel", { handler: async (a, ctx) => { ctx.ui.notify("model:" + String(await agent.setModel("fake/other"))); } });',
+      '  agent.registerCommand("badmodel", { handler: async (a, ctx) => { ctx.ui.notify("bad:" + String(await agent.setModel("nope/nope"))); } });',
+      '  agent.registerCommand("seteffort", { handler: async (a, ctx) => { ctx.ui.notify("effort:" + String(await agent.setThinkingLevel("low")) + ":" + agent.getThinkingLevel()); } });',
+      '  agent.registerCommand("badeffort", { handler: async (a, ctx) => { ctx.ui.notify("bad:" + String(await agent.setThinkingLevel("max"))); } });',
+      "} });",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "/setmodel");
+    eq("setModel answers true", String((await rig.uiNotification("notify"))["message"]), "model:true");
+    ok("and the client gets the config_option_update", rig.taken().some((line) => line.includes('"sessionUpdate":"config_option_update"') && line.includes('"currentValue":"fake/other"')));
+    await rig.prompt(sid, "hello");
+    eq("the next request uses the new model", rig.asks()[rig.asks().length - 1].model, "fake/other");
+    await rig.prompt(sid, "/badmodel");
+    eq("an unknown model answers false", String((await rig.uiNotification("notify"))["message"]), "bad:false");
+    await rig.prompt(sid, "/seteffort");
+    eq("setThinkingLevel answers true and getThinkingLevel reads it", String((await rig.uiNotification("notify"))["message"]), "effort:true:low");
+    ok("the effort change is sent as a config_option_update", rig.taken().some((line) => line.includes('"sessionUpdate":"config_option_update"') && line.includes('"currentValue":"low"')));
+    await rig.prompt(sid, "again");
+    eq("the next request uses the new effort", rig.asks()[rig.asks().length - 1].effort, "low");
+    await rig.prompt(sid, "/badeffort");
+    eq("an effort the model lacks answers false", String((await rig.uiNotification("notify"))["message"]), "bad:false");
+    rig.close();
+  }
+
+  // Events go between the plugins of one session's instance, never to another session's.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    rig.extensionFile("a.js", 'widecode.plugin({ id: "a", agent(agent) { agent.registerCommand("emit", { handler: () => { agent.events.emit("ping", { n: 1 }); } }); } });');
+    rig.extensionFile("b.js", [
+      'widecode.plugin({ id: "b", agent(agent) {',
+      "  const got = [];",
+      '  agent.events.on("ping", (d) => { got.push(d.n); });',
+      '  agent.registerCommand("seen", { handler: (a, ctx) => { ctx.ui.notify("seen:" + JSON.stringify(got)); } });',
+      "} });",
+    ].join("\n"));
+    rig.initialize(true);
+    const one = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    const two = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(one, "/emit");
+    await rig.prompt(one, "/seen");
+    eq("a sibling plugin in the same session gets the event", String((await rig.uiNotification("notify"))["message"]), "seen:[1]");
+    await rig.prompt(two, "/seen");
+    eq("another session's instance does not", String((await rig.uiNotification("notify"))["message"]), "seen:[]");
     rig.close();
   }
 
