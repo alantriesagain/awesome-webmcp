@@ -1,5 +1,5 @@
 // ffi: @light/plugins/native/ffi.json
-// The skills the agent has, in the Skills tab of the files column (plugins/skills.ts): Claude
+// The skills the agent has, in the Skills tab of the files column (plugins/skills/index.ts): Claude
 // Code's from disk before it starts (the project's, with its SKILL.md's description), then from its
 // init record (a plugin's under the plugin's path, a bundled one by name alone), each a command the
 // composer completes; a Skill call

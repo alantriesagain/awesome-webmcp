@@ -1,7 +1,7 @@
 # ACP, as the `acp` plugin uses it
 
 ACP, the Agent Client Protocol (agentclientprotocol.com), is JSON-RPC 2.0 over the agent's stdin
-and stdout, one message per line. widecode is the client; `plugins/acp.ts` speaks it.
+and stdout, one message per line. widecode is the client; `plugins/acp/index.ts` speaks it.
 
 Measured on opencode 1.19.2 with `apps/widecode/test/probe/acp.mjs` (`WIDECODE_LIVE=1`, on
 opencode's free `big-pickle` model, in a temporary repository): a reply, a bash call, a read and an

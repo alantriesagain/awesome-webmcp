@@ -182,7 +182,7 @@ own `.widecode/plugins/` run once the folder is trusted. Saving a plugin reloads
 `/reload` does. `apps/widecode/PLUGINS.md` has the API and how to write one, and `widecode.d.ts`
 types it.
 
-The conversation talks to an agent a plugin brings, Claude Code's by default (`plugins/claude.ts`,
+The conversation talks to an agent a plugin brings, Claude Code's by default (`plugins/claude/index.ts`,
 its CLI over stream-json); config.json's `"agent"` or `--agent <id>` picks another. The `acp` plugin brings the agents that speak ACP, the Agent
 Client Protocol, opencode among its defaults (`opencode acp`); another one is an entry in its
 section with the command that starts it (`"gemini": {"command": ["gemini", "--experimental-acp"]}`).
@@ -191,7 +191,7 @@ sessions show as Claude Code's do; titles Claude writes are for Claude Code's se
 agent's session starts with widecode, so its models and efforts can be chosen before the first
 message; a session made and never written to is deleted (the entry's `forget` command) when it is
 left. An ACP
-agent that takes MCP servers over HTTP gets widecode's own tools (`plugins/ask.ts`): `AskUser`
+agent that takes MCP servers over HTTP gets widecode's own tools (`plugins/ask/index.ts`): `AskUser`
 puts its questions in the request panel and `PresentPlan` its plan, which approved in plan mode
 switches the agent out of it and asks it to carry the plan out. Claude Code keeps its own tools for
 these.
@@ -327,7 +327,7 @@ The Peers tab (beside Git) lists this machine with its shares (◆ marks this fo
 |---|---|
 | `light/packages/native/*`, `light/packages/tui/*` | light's packages: `@light/cli` (`light-native`, the tooling: `prepare`, `build`, `run`, `selftest`, `test`, `coverage`, `typecheck`, `check`, `probes`, `install`, `desktop`), and `lib`, `highlight`, `plugins`, `workspace`, `test`, `kernel`, `ui`, `markdown`: what the core's modules share; the tokenizers; the embedded JavaScript; a folder's files and git; the tests' helpers; the plugin kernel; the palette and the windowed list; Markdown as lines (light's `packages/README.md`) |
 | `packages/agent`, `conversation`, `harness`, `screen`, `code`, `chat` | the `@widecode/*` packages, each with its README: the `claude -p` sidecar and the MCP server; the conversation with an agent; widecode's own agent (`widecode --harness`); the screen plugins contribute to; the code column; the chat views |
-| `apps/widecode` | the Claude frontend, a native core and JS plugins (`PLUGINS.md`): `plugins/<id>.ts` (the built-in plugins: chat, code, tools, agents, files, sessions, git, changes, status, models, languages, and the agents' claude, acp and pi), `widecode.d.ts` (the plugin API's types), `src/` (controllers, views, the plugin runtime and the API's answers, the store and the harness folder), `test/` (its tests, fixtures, fakes and goldens) |
+| `apps/widecode` | the Claude frontend, a native core and JS plugins (`PLUGINS.md`): `plugins/<id>/index.ts` (the built-in plugins: chat, code, tools, agents, files, sessions, git, changes, status, models, languages, and the agents' claude, acp and pi), `widecode.d.ts` (the plugin API's types), `src/` (controllers, views, the plugin runtime and the API's answers, the store and the harness folder), `test/` (its tests, fixtures, fakes and goldens) |
 | `apps/desktop` | the desktop app: `contract.ts` (the bridge's methods and events, imported by both sides), `src/main.ts` (the backend: a `DesktopApp` on light's desktop host with the Claude sidecar as `AgentService`, `--selftest`), `web/` (the page: one light component, its importmap) |
 | `probes/` | the proof of concept's scriptc experiments and the rules they produced (`probes/README.md`), `p0-workspace/` the probe of the workspace's import route; light's `native/probes/` continues them |
 

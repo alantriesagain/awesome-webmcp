@@ -1,5 +1,5 @@
 // ffi: @light/plugins/native/ffi.json
-// An agent over ACP (plugins/acp.ts), here the fake (test/fake-acp.mjs) from the
+// An agent over ACP (plugins/acp/index.ts), here the fake (test/fake-acp.mjs) from the
 // plugin's section, speaking as opencode 1.19 does: its session, started with widecode, its model,
 // effort, mode and commands (config options); a reply and its thinking, two messages as two blocks; a run call with its
 // output; an edit with its diff, followed by the code column; a permission allowed and one

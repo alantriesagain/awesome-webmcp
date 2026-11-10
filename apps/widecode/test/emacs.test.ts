@@ -1,5 +1,5 @@
 // ffi: @light/plugins/native/ffi.json
-// The emacs keymap (plugins/emacs.ts), the default: Ctrl+F/B and Ctrl+P/N move, Alt+D deletes the
+// The emacs keymap (plugins/emacs/index.ts), the default: Ctrl+F/B and Ctrl+P/N move, Alt+D deletes the
 // word after the caret (and joins at a line's end), Alt+< and Alt+> go to the chat's start and end;
 // readline's keys as before, Enter sends; the hints say the layer's keys; /keymap default turns it
 // off, and back on. Runs under node and natively.

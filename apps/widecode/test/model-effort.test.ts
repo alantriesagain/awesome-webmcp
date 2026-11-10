@@ -1,6 +1,6 @@
 // ffi: @light/plugins/native/ffi.json
-// The model and effort chosen are kept (plugins/models.ts), and an ACP agent's session starts with
-// widecode (plugins/acp.ts), through the fake ACP agent and a store: the session made at the start,
+// The model and effort chosen are kept (plugins/models/index.ts), and an ACP agent's session starts with
+// widecode (plugins/acp/index.ts), through the fake ACP agent and a store: the session made at the start,
 // its model and efforts known before any message; /effort kept for the model, its provider and
 // overall; /model kept as the agent's default; a model switched to gets the effort kept for it, else
 // its provider's, else the last chosen, with config.json's efforts under those chosen; the next

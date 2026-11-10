@@ -1,5 +1,5 @@
 // What the tests that replay Claude Code's recorded traffic read from a record (the plugin that
-// reads them for the app is plugins/claude.ts): its fields, a message's text and
+// reads them for the app is plugins/claude/index.ts): its fields, a message's text and
 // images, and where a folder's sessions are kept under a projects folder.
 
 /** A record or nested object, every field `unknown`. */

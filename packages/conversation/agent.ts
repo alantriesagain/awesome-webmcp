@@ -1,4 +1,4 @@
-// An agent widecode talks to, behind one role: Claude Code (widecode's plugins/claude.ts), or one a
+// An agent widecode talks to, behind one role: Claude Code (widecode's plugins/claude/index.ts), or one a
 // plugin brings. The conversation (conversation/conversation.ts) holds what is the same for every
 // agent (the model, the status, the session's title and record) and hands the agent what the user
 // does; the agent starts its process, writes what the user sends as its agent expects, reads its

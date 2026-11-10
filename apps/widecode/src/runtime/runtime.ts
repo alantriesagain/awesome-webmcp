@@ -13,7 +13,7 @@
 import { trail } from "@light/lib/log.ts";
 import { errorMessage } from "@light/lib/json.ts";
 import { existsSync, readFileSync, statSync, watch } from "node:fs";
-import { basename, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { Host } from "../controllers/host.ts";
 import { Agent } from "@widecode/conversation/agent.ts";
 import { Plugin } from "@light/kernel/plugin.ts";
@@ -43,6 +43,9 @@ const RELOAD_MS = 300;
 const ERRORS_KEPT = 100;
 
 /** A plugin a JS source registered, run through the runtime; `reg` is its registration in the prelude (the functions it made), `gen` the instance started last. */
+/** A plugin source as the status bar names it: a file's name, a folder plugin's folder (`notes/`). */
+const shownName = (file: string): string => (basename(file) === "index.js" ? basename(dirname(file)) + "/" : basename(file));
+
 export class JsPlugin extends Plugin {
   readonly runtime: JsRuntime;
   readonly activateFn: number;
@@ -412,7 +415,7 @@ export class JsRuntime extends Bridge {
     this.host.statusLoaded.fire();
     this.host.conversationChanged.fire();
     this.flushToolsChanged();
-    this.host.screen.tell(source === null ? "removed " + basename(file) + (retired.length > 0 ? ": " + retired.join(", ") : "") : "reloaded " + basename(file) + (ids.length > 0 ? ": " + ids.join(", ") : ""));
+    this.host.screen.tell(source === null ? "removed " + shownName(file) + (retired.length > 0 ? ": " + retired.join(", ") : "") : "reloaded " + shownName(file) + (ids.length > 0 ? ": " + ids.join(", ") : ""));
   }
 
   /** Read folder `dir` again and reload the files that differ from what was evaluated last: changed, added, removed. */
@@ -536,17 +539,23 @@ export class JsRuntime extends Bridge {
     return p.id;
   }
 
-  /** Reload the files that changed when a plugin folder changes (after its events settle); folders made later are not watched. */
+  /** Reload the files that changed when a plugin folder or a plugin's own folder in it changes (after its events settle); plugin folders made later are not watched, a plugin's folder made later is once a change syncs. */
   watchFolders(): void {
     this.stopWatching();
     for (const d of this.dirs) {
       if (!existsSync(d)) continue;
-      try {
-        const w = watch(d, () => this.changed());
-        this.closers.push(new Closer(() => w.close()));
-      } catch {
-        continue;
-      }
+      this.watchOne(d);
+      // A plugin of its own folder: its index.js changes inside it, which the folder's watch does not hear.
+      for (const s of sourcesIn(d)) if (s.file.endsWith("/index.js") && dirname(dirname(s.file)) === d) this.watchOne(dirname(s.file));
+    }
+  }
+
+  private watchOne(dir: string): void {
+    try {
+      const w = watch(dir, () => this.changed());
+      this.closers.push(new Closer(() => w.close()));
+    } catch {
+      return;
     }
   }
 
@@ -560,6 +569,8 @@ export class JsRuntime extends Bridge {
     setTimeout(() => {
       if (!this.reloads.is(ticket)) return;
       for (const d of this.dirs) this.syncFolder(d);
+      // A plugin's folder added or removed: its own watch comes or goes.
+      if (this.closers.length > 0) this.watchFolders();
     }, RELOAD_MS);
   }
 

@@ -507,7 +507,8 @@ file in its own engine and runs `agent`. A plugin lives in a folder of its own (
       `file_path`). Identifiers lose `pi` (`piFor`, `messagesToPi`); the agent API's types go in
       `widecode.d.ts` (`widecode.AgentApi`, `AgentContext`, the events), `test/api.test.ts`
       checking them as it checks the app's.
-- [ ] **Plugin folders.** `plugins/<id>/index.js` beside `plugins/<id>.js`, in the store, a trusted
+- [ ] **Plugin folders.** (The app's half is done: light's `sourcesIn`, the built-ins moved, the
+      watcher following a plugin's folder. Left: the harness's half below.) `plugins/<id>/index.js` beside `plugins/<id>.js`, in the store, a trusted
       folder and the built-ins (`apps/widecode/plugins/<id>/index.ts`, `scripts/builtin-plugins.mjs`
       walking folders). A folder's `skills/` are the harness's skills and its `prompts/` its
       prompt templates (listed with their plugin as the source); its README is what the Plugins
@@ -549,6 +550,8 @@ file in its own engine and runs `agent`. A plugin lives in a folder of its own (
 
 ## Log
 
+- `b609283` Milestone K, session entries and messages. `8ca2f9a` the harness runs widecode
+  plugins' agent part. `c6bcc82` (light `78d683b`) an agent-only plugin, the agent API's types.
 - `819dd73` Milestone K, an instance per session and `pi.exec`. Test: `extensions`.
 - `e23ebd0`, `767b9c4` Milestone K, the UI over ACP: calls settle when their promise does,
   `ctx.ui` as `_widecode/ui` requests and notifications. Test: `extensions`.

@@ -1,7 +1,8 @@
 // ffi: @light/plugins/native/ffi.json
 // A plugin file saved while the agent runs: the file's plugins are replaced and the agent's process
 // goes on (its session, its turn), the tools the new version adds are served; the folder watcher
-// picks the save up on its own; /reload, the full one, restarts the agent, which resumes the
+// picks the save up on its own; a plugin of its own folder is added, saved and removed, the watcher
+// following its folder; /reload, the full one, restarts the agent, which resumes the
 // session on the next message. Against the fake Claude Code CLI replaying one turn.
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -58,6 +59,17 @@ const main = async (): Promise<void> => {
   ok("the folder watcher picks a save up on its own", await until(() => (w.host.roles.chat.submit("/v"), w.host.screen.message.peek() === "v3"), 3000));
   eq("and the tools follow", names(), "echo3");
   ok("the agent still went on", c.started && !logs.some((l) => l.includes("claude exited")));
+
+  const notes = join(dir, "notes");
+  const folderPlugin = (version: string): string => `widecode.plugin({ id: "notes", activate(api) { api.commands.add({ name: "/n", run: () => api.tell("${version}") }); } });`;
+  mkdirSync(notes);
+  writeFileSync(join(notes, "README.md"), "Notes.");
+  writeFileSync(join(notes, "index.js"), folderPlugin("n1"));
+  ok("a plugin folder added: its index.js loads", await until(() => (w.host.roles.chat.submit("/n"), w.host.screen.message.peek() === "n1"), 3000));
+  writeFileSync(join(notes, "index.js"), folderPlugin("n2"));
+  ok("a save inside the folder reloads it", await until(() => (w.host.roles.chat.submit("/n"), w.host.screen.message.peek() === "n2"), 3000));
+  rmSync(notes, { recursive: true, force: true });
+  ok("the folder removed takes its plugin away", await until(() => !w.host.kernel.has("notes"), 3000));
 
   w.js.reload();
   ok("/reload, the full one, restarts the agent and keeps the session to resume", await until(() => !c.started, 3000) && c.resumeId === sid);

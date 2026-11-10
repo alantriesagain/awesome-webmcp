@@ -1,5 +1,5 @@
 // ffi: @light/plugins/native/ffi.json
-// The DeepSeek Harness (`dsh`, --agent dsh) as an ACP agent (plugins/acp.ts), here the fake
+// The DeepSeek Harness (`dsh`, --agent dsh) as an ACP agent (plugins/acp/index.ts), here the fake
 // (test/fake-acp.mjs --dsh): it advertises session/list and session/resume but no session/load, no
 // fork and no modes, and its session's config options are `model` (category `model`, opaque
 // ["provider","model"] values) and `reasoning_effort` (category `thought_level`). widecode's own

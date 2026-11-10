@@ -10,7 +10,7 @@ and the agents: Claude Code, and the ones that speak ACP (opencode, the DeepSeek
 
 ```
 apps/widecode/
-  plugins/        the built-in plugins, one <id>.ts each (TypeScript checked against widecode.d.ts)
+  plugins/        the built-in plugins, a folder each: <id>/index.ts (TypeScript checked against widecode.d.ts)
   widecode.d.ts   the plugin API, for type checking and editors
   scripts/        builtin-plugins.mjs: the plugins and the docs stripped into the binary (a prepare step)
   src/
@@ -33,20 +33,22 @@ packages/         what the core builds on: @light/kernel, @light/plugins (the Qu
 
 ## Where plugins come from
 
-1. The built-in plugins, `apps/widecode/plugins/*.ts`. The build strips their types
+1. The built-in plugins, `apps/widecode/plugins/<id>/index.ts`. The build strips their types
    (`scripts/builtin-plugins.mjs`, node's `stripTypeScriptTypes`) into the binary.
-2. The user's, `~/.widecode/plugins/*.js` (or `$WIDECODE_HOME/plugins`).
-3. The project's, `<folder>/.widecode/plugins/*.js`, once the folder is trusted (the question on
+2. The user's, in `~/.widecode/plugins/` (or `$WIDECODE_HOME/plugins`).
+3. The project's, in `<folder>/.widecode/plugins/`, once the folder is trusted (the question on
    the first launch there, or `/trust`). A cloned repository could carry one, so until then widecode
    only says what the files register. The folder is the project's harness ("The harness", below).
 
-They load in that order, each file in name order. A plugin with the id of an earlier one replaces
+A plugin is a file, `plugins/<name>.js`, or a folder, `plugins/<name>/` with its `index.js` and
+what else the plugin keeps beside it (a README, its skills, its prompts). They load in that order,
+each in name order. A plugin with the id of an earlier one replaces
 it, so a file named for a built-in plugin's id (`status`, `git`) overrides it. Saving a file in a
-plugin folder reloads that file alone: its new source is evaluated first (a file that fails to
+plugin folder, or a plugin folder's `index.js`, reloads that file alone: its new source is evaluated first (a file that fails to
 evaluate keeps its previous plugins running and says why), then the plugins it defined are stopped,
 what they registered dropped and their functions freed, and the new ones started; the other plugins,
 the agent and its conversation go on, so a plugin the agent writes takes effect while its turn runs.
-A file that defined several plugins replaces them all; a file removed takes its plugins away, and a
+A file that defined several plugins replaces them all; a file or a plugin's folder removed takes its plugins away, and a
 built-in a removed file had replaced comes back. `/reload` is the full reload: it stops every
 plugin, the agent included, evaluates the sources again in a fresh context and starts them, then
 fires the hooks so they catch up; the conversation keeps its session, which the agent resumes on
@@ -178,7 +180,7 @@ activate and on the `keymapChanged` hook: `"keymap": "vi"` in config.json choose
 `/keymap <name>` switches and keeps the choice in state.json, which comes first on the next start;
 emacs is in use when neither says.
 
-The vi keymap (`plugins/vi.ts`) shows how a mode is made: a layer with `{ input: { "*":
+The vi keymap (`plugins/vi/index.ts`) shows how a mode is made: a layer with `{ input: { "*":
 "vi.normal" } }` turned on in normal mode, whose action keeps the count, the operator and the
 register in the plugin and edits the composer through `api.composer`; a layer on while the keymap
 is in use, with Esc in the chat scope chained after the suggestion strip's and the request panel's
@@ -191,7 +193,7 @@ code columns), a segment, or data the core holds.
 
 ## Agents
 
-The conversation talks to one agent, which a plugin brings: Claude Code's (`plugins/claude.ts`,
+The conversation talks to one agent, which a plugin brings: Claude Code's (`plugins/claude/index.ts`,
 the default) or another. `"agent"` in config.json or `--agent <id>` picks it by id; a plugin's agent
 is taken up when the plugin registers it, and an id no plugin registered is reported with the ids
 there are.
@@ -226,7 +228,7 @@ touches (`paths`), a command whole, a todo list, the tool it is of when its name
 A batch happens when it is applied, unless an `at` event says when. Events from an agent the
 conversation no longer talks to are dropped.
 
-`plugins/acp.ts` is the one built in: an agent per entry of its section, each spoken to over ACP,
+`plugins/acp/index.ts` is the one built in: an agent per entry of its section, each spoken to over ACP,
 the Agent Client Protocol (JSON-RPC on the agent's stdin and stdout). Another ACP agent is one more
 entry, with the command that starts it in ACP mode:
 
@@ -283,7 +285,7 @@ title and `set_editor_text` (`text`) the composer's text. The segments and strip
 the session ends or the agent stops. A Task run on an ACP target answers its dialogs cancelled and
 ignores the rest.
 
-`plugins/pi.ts` brings pi (`@earendil-works/pi-coding-agent`), the coding agent the harness follows,
+`plugins/pi/index.ts` brings pi (`@earendil-works/pi-coding-agent`), the coding agent the harness follows,
 over its own RPC mode: `pi --mode rpc` in the session's folder, one process per session, JSONL on
 its stdin and stdout. It registers the agent `pi` only when the program is on PATH, and never
 bundles it. Its section names the command when it is another:
@@ -305,7 +307,7 @@ in the request panel (a cancelled answer or an aborted turn answers `cancelled: 
 withdraws it); `notify` a status message or a notice; `setStatus` a segment keyed by `statusKey`
 (no text clears it); `setWidget` a band strip keyed by `widgetKey`; `setTitle` the session's title;
 and `set_editor_text` the composer's text. An `extension_error` is logged and shown as a notice.
-pi takes MCP servers only through an extension, so widecode's own tools (`plugins/ask.ts`) do not
+pi takes MCP servers only through an extension, so widecode's own tools (`plugins/ask/index.ts`) do not
 reach it.
 
 The section's `tasks` makes Claude Code's subagents run on an ACP agent and model. It adds a
@@ -414,21 +416,21 @@ request panel shows it as it shows an agent's, and the promise settles with the 
 Which agent sees a tool is decided where the tool is, by one rule: an agent keeps its own tool for a
 need, and gets widecode's where it has none. The ask plugin's two carry `except: ["claude"]`, since
 Claude Code has AskUserQuestion and ExitPlanMode; every other tool reaches every agent.
-`plugins/claude.ts` passes the server's config file with `--mcp-config` when its agent sees a tool,
+`plugins/claude/index.ts` passes the server's config file with `--mcp-config` when its agent sees a tool,
 and a tool added or dropped while the CLI runs (a plugin saved, a reload) is picked up at the end of
 the turn, when the CLI stops and the next message starts it again on the same session (Claude Code
-reads the tool list once, at start). `plugins/acp.ts` offers the server to an ACP agent that takes
+reads the tool list once, at start). `plugins/acp/index.ts` offers the server to an ACP agent that takes
 MCP servers over HTTP (`mcpCapabilities.http`), in `session/new` and `session/load`, and draws a
 call of a question or plan tool as its request rather than as a call (in the Tools tab, Ask with
 its first question, Plan with its plan's first line).
 
-`plugins/ask.ts` brings two: `AskUser` (questions with 2 to 4 choices each, as AskUserQuestion
+`plugins/ask/index.ts` brings two: `AskUser` (questions with 2 to 4 choices each, as AskUserQuestion
 takes them; the user picks or answers in their own words) and `PresentPlan` (a plan in markdown;
 approved while the agent is in plan mode, the agent is switched to its first other mode and a
 message asks it to carry the plan out once its turn ends, since an ACP agent's mode holds from its
 next prompt). Its section names them: `{ "names": { "question": "AskUser", "plan": "PresentPlan" } }`.
 
-`plugins/box.ts` brings `HostAction`: an agent asks the host to run one of the commands a project
+`plugins/box/index.ts` brings `HostAction`: an agent asks the host to run one of the commands a project
 configures, the request panel shows the command and the agent's reason under the call, and the user
 approves each run. Only the user's or a trusted project's `config.json` defines them, so an agent
 cannot add one, and the agent's reason is shown, never run. Its section is
@@ -448,7 +450,7 @@ with the code, trusted as one with `/trust` (`src/services/harness.ts`). Its par
   paragraph: that the agent runs inside widecode, what `.widecode/` holds, the tools the server
   `widecode` offers it (by their names for that agent, `mcp__widecode__<name>` for Claude Code) and,
   while the folder is not trusted, that its parts wait for `/trust`. An agent plugin gets the text
-  as `AgentStart.systemPrompt`; `plugins/claude.ts` passes it with `--append-system-prompt` and
+  as `AgentStart.systemPrompt`; `plugins/claude/index.ts` passes it with `--append-system-prompt` and
   `--system-prompt-snapshot off` (Claude Code records the prompt once per session and a resumed
   session would keep the first; off, the prompt the CLI starts with is the one in use).
 - `config.json`: the same shape as the user's `~/.widecode/config.json` (`plugins`, `columns`,
@@ -480,7 +482,7 @@ turn's end, if no message was written during the turn, and the next message star
 same session with the new prompt. So an agent asked to change the harness writes the files with its
 own tools and sees each take effect while its turn runs, the prompt from its next turn.
 
-The harness plugin (`plugins/harness.ts`) gives the agent seven tools over widecode's MCP server,
+The harness plugin (`plugins/harness/index.ts`) gives the agent seven tools over widecode's MCP server,
 `mcp__widecode__<name>` for Claude Code, `widecode_<name>` for opencode: `screen` (the screen as
 drawn, every column but the chat unless named, since the chat holds the agent's own text), `state`
 (the columns, the tabs, every plugin with its state, the last plugin errors, the harness folder),
@@ -639,7 +641,7 @@ line of the status section.
 
 ## Writing a built-in plugin
 
-A built-in plugin is `apps/widecode/plugins/<id>.ts`, ending with `export {};`, typed against
+A built-in plugin is `apps/widecode/plugins/<id>/index.ts`, ending with `export {};`, typed against
 `widecode.d.ts` (`npm run check`). What it needs from the core is a call in the prelude
 (`src/runtime/prelude.ts`), its answer in its namespace's `src/api/<file>.ts` and its type in
 `widecode.d.ts` (`test/api.test.ts` checks the three agree). Its tests

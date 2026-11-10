@@ -1,5 +1,5 @@
 // ffi: @light/plugins/native/ffi.json
-// The vi keymap (plugins/vi.ts), chosen at start, through the fake ACP agent: insert mode after a
+// The vi keymap (plugins/vi/index.ts), chosen at start, through the fake ACP agent: insert mode after a
 // message, Esc to normal mode (the composer's border says which); in normal mode the motions
 // h j k l w b e 0 ^ $ gg G with counts, the operators d c y with motions and doubled, x X D C s S
 // J ~ r p P, u and Ctrl+R over the composer's undo, i a I A o O into insert mode, Enter sending;

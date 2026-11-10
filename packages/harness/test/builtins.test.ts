@@ -37,7 +37,10 @@ const main = async (): Promise<void> => {
   if (existsSync(generated)) {
     for (const name of readdirSync(generated).filter((n) => n.endsWith(".js.txt")).sort()) sources.push(new BuiltinSource(name, readFileSync(join(generated, name), "utf8")));
   } else {
-    for (const name of readdirSync(plugins).filter((n) => n.endsWith(".ts")).sort()) sources.push(new BuiltinSource(name, stripTypeScriptTypes(readFileSync(join(plugins, name), "utf8")).replace(/^export \{\};\s*$/m, "")));
+    for (const name of readdirSync(plugins).sort()) {
+      const path = name.endsWith(".ts") ? join(plugins, name) : join(plugins, name, "index.ts");
+      if (existsSync(path)) sources.push(new BuiltinSource(name, stripTypeScriptTypes(readFileSync(path, "utf8")).replace(/^export \{\};\s*$/m, "")));
+    }
   }
   const engine = new JsEngine(new Quiet(), 32, 1000);
   const built = engine.eval(EXT_PRELUDE, "harness:plugin-prelude");

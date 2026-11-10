@@ -1,5 +1,5 @@
 // ffi: @light/plugins/native/ffi.json
-// An agent over pi's RPC mode (plugins/pi.ts), here the fake (test/fake-pi.mjs) from the plugin's
+// An agent over pi's RPC mode (plugins/pi/index.ts), here the fake (test/fake-pi.mjs) from the plugin's
 // section: its session, its model and thinking levels as the model and effort, its commands as the
 // session's slash commands; a reply and its thinking; a bash call with its output; an edit with its
 // diff, followed by the code column; steering a message into a turn that runs; abort; an error; its

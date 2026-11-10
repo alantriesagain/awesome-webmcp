@@ -118,14 +118,14 @@ widecode is a native core and JS plugins (`apps/widecode/PLUGINS.md`). The core 
 packages above, and in the app its controllers, views, the plugin runtime (`src/runtime/`: the
 `JsRuntime` over `@light/plugins`' engine, the JS-drawn views, the agents plugins bring, the prelude)
 and the API's answers (`src/api/`, a file per namespace). Every feature is a plugin running in
-QuickJS: the built-in ones are `apps/widecode/plugins/<id>.ts`, type-checked against
+QuickJS: the built-in ones are `apps/widecode/plugins/<id>/index.ts`, type-checked against
 `widecode.d.ts` and stripped into the binary by `scripts/builtin-plugins.mjs` (the app's prepare
 step); the user's and a trusted project's are `.js` files that reload on save, each file alone,
 the agent and the other plugins untouched.
 
 - A feature goes in a plugin. What a key does is an action (`api.keys.action`), what a key is
   bound to a keymap (`api.keys.layer`, the user's `keys.json`); a keymap such as emacs or vi is a
-  plugin of layers (`plugins/vi.ts`). What a plugin needs from the core is one call per need: the
+  plugin of layers (`plugins/vi/index.ts`). What a plugin needs from the core is one call per need: the
   prelude (`src/runtime/prelude.ts`, the namespaces `@light/plugins` builds the prelude around), its
   answer in its namespace's `src/api/<file>.ts` (`src/runtime/runtime.ts` dispatches to them), its
   type in `widecode.d.ts`; `test/api.test.ts` checks the three agree. Heavy work (git, the tree,
@@ -152,7 +152,7 @@ the agent and the other plugins untouched.
   may change about widecode goes in this folder, never in the compiled core. Tool permissions are
   Claude Code's rules (`permissions` in either config.json), handed to the CLI with `--settings` and
   enforced by it; a `can_use_tool` that is not a question or a plan is a permission the request
-  panel puts to the user. The harness plugin (`plugins/harness.ts`) is how the agent probes: the
+  panel puts to the user. The harness plugin (`plugins/harness/index.ts`) is how the agent probes: the
   tools `screen`, `state`, `log`, `api`, `check`, `reload` and `config` over `api.plugins`,
   `api.harness` and `api.state`; `scripts/builtin-plugins.mjs` embeds PLUGINS.md and
   `widecode.d.ts` into `src/runtime/docs.ts` (generated, ignored) for `api`, and writes the build's version and time into `src/runtime/build-info.ts` (generated, ignored), which `--version`, the log's first line and the status bar's first message say.
@@ -198,9 +198,9 @@ rules the code follows today:
   `stream-json`, an ACP agent (`opencode acp`) over stdio. Never bundle an agent's binary or embed
   an SDK that wraps it (the Agent SDK is a wrapper around Claude Code's binary).
 - The conversation is agent-neutral (`@widecode/conversation`) and every agent is a plugin of the app:
-  Claude Code's is widecode's `plugins/claude.ts`, ACP agents' `plugins/acp.ts`, over `api.agents`,
+  Claude Code's is widecode's `plugins/claude/index.ts`, ACP agents' `plugins/acp/index.ts`, over `api.agents`,
   `api.process.spawn`, `api.fs` and `api.conversation.apply`.
-- widecode's own tools for an agent (`plugins/ask.ts`: a question, a plan to approve, both in the
+- widecode's own tools for an agent (`plugins/ask/index.ts`: a question, a plan to approve, both in the
   request panel) are plugins over `api.tools`, served by `@widecode/agent`'s MCP server (127.0.0.1, a
   token per agent plugin, no library), named by the app. A tool names the agent plugins whose
   agents do not see it (`except`): the ask plugin's except Claude Code, which keeps AskUserQuestion

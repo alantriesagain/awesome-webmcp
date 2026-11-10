@@ -1,5 +1,5 @@
 // ffi: @light/plugins/native/ffi.json
-// The extension UI of an agent over ACP (plugins/acp.ts), `_widecode/ui` as widecode and the fake
+// The extension UI of an agent over ACP (plugins/acp/index.ts), `_widecode/ui` as widecode and the fake
 // (test/fake-acp.mjs) agree it: the capability in initialize; a select, a confirm, an input and an
 // editor in the request panel, the answers the agent hears, a dialog withdrawn by Esc and one that
 // times out; notify as a status message and a notice; setStatus as a segment keyed by its key and

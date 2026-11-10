@@ -1,5 +1,5 @@
 // ffi: @light/plugins/native/ffi.json
-// The chat against recorded CLI traffic, read by Claude Code's plugin (plugins/claude.ts) into the
+// The chat against recorded CLI traffic, read by Claude Code's plugin (plugins/claude/index.ts) into the
 // conversation: each fixture's stdout lines received by the agent (and the messages the user sent,
 // queued as the app queues them), the turns rendered at 80 columns and compared with
 // test/golden/<fixture>.txt (UPDATE_GOLDEN=1 rewrites them). A transcript with a

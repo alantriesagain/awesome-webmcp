@@ -1,5 +1,5 @@
 // ffi: @light/plugins/native/ffi.json
-// Claude Code's CLI as its plugin runs it (plugins/claude.ts), against a fake CLI replaying recorded
+// Claude Code's CLI as its plugin runs it (plugins/claude/index.ts), against a fake CLI replaying recorded
 // traffic that checks what it is sent: a message starts it, a permission prompt goes to the request
 // panel and the user's allow reaches the CLI with the tool's own input (byte for byte, the fake's
 // --strict), AskUserQuestion is left to the request panel and the user's answer reaches the CLI, the session id comes from init

@@ -2,7 +2,7 @@
 // (text, thinking, tool calls, notices, prompts sent while the agent worked, requests for the
 // user); a tool call that ran a subagent holds the subagent's items as its children. Messages the
 // user sent wait in a queue until the agent takes them up. An agent's adapter turns its messages
-// into the calls below (apps/widecode/plugins/claude.ts for Claude Code); the views read the result.
+// into the calls below (apps/widecode/plugins/claude/index.ts for Claude Code); the views read the result.
 //
 // Natively every item is one `Item` class told apart by `kind`, since a subclass would lose its
 // identity through base-typed collections.

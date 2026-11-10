@@ -2,7 +2,7 @@
 // adds what it knows. The fields follow Claude Code's status line input
 // (https://code.claude.com/docs/en/statusline.md), so `json()` is what a Claude Code status line
 // script expects on stdin, with widecode's extras under "widecode": tool counts, calls, the running
-// tool. Claude Code's adapter (plugins/claude.ts) fills it from its records:
+// tool. Claude Code's adapter (plugins/claude/index.ts) fills it from its records:
 //   context  the latest main-thread request's input (prompt + cache read + cache written) over the
 //            window the result reports (before one: the window stored for the session, else 1M
 //            when the model or the alias widecode started it with carries "[1m]", else 200k)

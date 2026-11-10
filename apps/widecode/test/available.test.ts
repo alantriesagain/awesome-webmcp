@@ -1,5 +1,5 @@
 // ffi: @light/plugins/native/ffi.json
-// The tools the agent has, in the Available tab of the tools column (plugins/tools.ts): Claude
+// The tools the agent has, in the Available tab of the tools column (plugins/tools/index.ts): Claude
 // Code's from its init record (its own, then each MCP server's by its name, a server that failed
 // with no tools, a tool of a server it did not list), each with its calls this session; an ACP
 // agent's from its entry's tools command (test/fake-acp.mjs --tools, as opencode's
