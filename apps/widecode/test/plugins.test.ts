@@ -200,7 +200,7 @@ const main = async (): Promise<void> => {
   end(w);
 
   const defaults = composeWidecode(ws, new Conversation(ws.folder)).defaults();
-  eq("every built-in plugin answers its defaults", defaults.map((d) => d.id + (d.value === true ? "" : "*")).join(" "), "acp* agents alerts* ask* box changes chat claude* code emacs files git harness languages models* peers* permission-gate* pi* protected-paths* sessions* skills status* tools vi");
+  eq("every built-in plugin answers its defaults", defaults.map((d) => d.id + (d.value === true ? "" : "*")).join(" "), "acp* agents alerts* ask* box changes chat claude* code emacs files git harness languages models* peers* permission-gate* pi* protected-paths* sessions* skills status* todo tools tools-switch vi");
   ws.close();
   rmSync(repo, { recursive: true, force: true });
   done();

@@ -102,6 +102,23 @@ export class AgentRig {
     writeFileSync(join(this.home, "config.json"), JSON.stringify(value));
   }
 
+  /** A fresh agent over the same store and folder, as a session loaded again in a new process. */
+  reopen(ids: string[], fixture: string): void {
+    if (this.agent !== null) this.agent.stop();
+    const server = new AcpServer();
+    this.server = server;
+    server.sink = (line: string) => this.out.push(line);
+    const config = new HarnessConfig();
+    const registry = registryFor(config, true);
+    this.client = FakeClient.fromText(fixture);
+    this.agent = new AcpAgent(server, new ModelClient(registry, new Auth(join(this.folder, "auth.json")), "node", this.client), new ToolSet(builtInTools()), registry, config, "test", "linux", this.paths!, builtinSources(ids));
+  }
+
+  /** Load session `sessionId` into this agent, as a reopened session; the test waits for the answer. */
+  load(sessionId: string): string {
+    return this.send("session/load", { sessionId: sessionId, cwd: this.folder, mcpServers: [] });
+  }
+
   send(method: string, params: unknown): string {
     const id = String(++this.n);
     this.agent!.receive(new Incoming(method, params, id));

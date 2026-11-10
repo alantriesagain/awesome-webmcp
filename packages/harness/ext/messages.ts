@@ -4,6 +4,7 @@
 // harness's Message/Part and sent in that one request, never written to the session file.
 import { listOf, objectText, parseJson, recordOf, str } from "@light/lib/json.ts";
 import { IMAGE, Message, Part, TEXT, THINKING, TOOL_CALL, TOOL_RESULT } from "../model/message.ts";
+import { ToolOutcome } from "../tools/tool.ts";
 
 const json = (value: unknown): string => JSON.stringify(value);
 
@@ -39,7 +40,15 @@ export const messagesToAgent = (messages: Message[]): string => {
       else if (p.kind === TOOL_RESULT) {
         const name = names.get(p.callId) ?? p.name;
         const inner = p.data.length > 0 ? imageContent(p.data, p.mediaType) : textContent(p.text);
-        results.push(objectText(["role", "toolCallId", "toolName", "content", "isError"], [json("toolResult"), json(p.callId), json(name), "[" + inner + "]", p.isError ? "true" : "false"]));
+        const fields = ["role", "toolCallId", "toolName", "content", "isError"];
+        const values = [json("toolResult"), json(p.callId), json(name), "[" + inner + "]", p.isError ? "true" : "false"];
+        // A plugin tool's details, kept in the outcome the session file holds.
+        const kept = p.acpJson.includes('"detailsJson":"') && !p.acpJson.includes('"detailsJson":""') ? ToolOutcome.parse(p.acpJson) : null;
+        if (kept !== null && kept.outcome.detailsJson.length > 0) {
+          fields.push("details");
+          values.push(kept.outcome.detailsJson);
+        }
+        results.push(objectText(fields, values));
       }
     }
     if (content.length > 0) out.push(objectText(["role", "content"], [json("user"), "[" + content.join(",") + "]"]));

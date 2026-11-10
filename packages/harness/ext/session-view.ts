@@ -1,9 +1,9 @@
 // A session's entries as pi's SessionManager shows them: the header, a message entry with its
 // AgentMessage (a custom one as `custom_message`), a model change, a compaction, the title as
 // `session_info`, a custom entry with its data, and anything else with its own fields.
-import { recordOf } from "@light/lib/json.ts";
+import { listOf, parseJson, recordOf } from "@light/lib/json.ts";
 import { COMPACTION, CUSTOM, Entry, MESSAGE, MODEL, SESSION, TITLE } from "../session/entries.ts";
-import { messageToAgent } from "./messages.ts";
+import { messageToAgent, messagesToAgent } from "./messages.ts";
 
 const iso = (at: number): string => new Date(at).toISOString();
 
@@ -63,5 +63,37 @@ export const piEntry = (e: Entry): string => {
   return "{" + fields.join(",") + "}";
 };
 
+/** One entry as pi's SessionEntries, JSON texts: a message holding a batch's tool results is one
+ * entry per result (the first keeps the entry's id, the next `<id>:<n>`, each the previous one's
+ * child), as pi keeps a tool result a message of its own. */
+export const piEntryList = (e: Entry): string[] => {
+  if (e.kind !== MESSAGE || e.customType.length > 0) return [piEntry(e)];
+  const messages = listOf(parseJson(messagesToAgent([e.message()])));
+  if (messages.length <= 1) return [piEntry(e)];
+  const out: string[] = [];
+  let parent = e.parentId;
+  for (let i = 0; i < messages.length; i++) {
+    const id = i === 0 ? e.id : e.id + ":" + String(i);
+    out.push("{" + ['"type":"message"', '"id":' + JSON.stringify(id), '"parentId":' + (parent.length > 0 ? JSON.stringify(parent) : "null"), '"timestamp":' + JSON.stringify(iso(e.at)), '"message":' + JSON.stringify(messages[i])].join(",") + "}");
+    parent = id;
+  }
+  return out;
+};
+
 /** Entries as one JSON array. */
-export const piEntries = (entries: Entry[]): string => "[" + entries.map(piEntry).join(",") + "]";
+export const piEntries = (entries: Entry[]): string => {
+  const out: string[] = [];
+  for (const e of entries) for (const text of piEntryList(e)) out.push(text);
+  return "[" + out.join(",") + "]";
+};
+
+/** The entry of `id` among `entries` as pi's SessionEntry ("null" for none), a batch's later results included. */
+export const piEntryById = (entries: Entry[], id: string): string => {
+  for (const e of entries)
+    if (e.id === id || id.startsWith(e.id + ":"))
+      for (const text of piEntryList(e)) {
+        const r = recordOf(parseJson(text));
+        if (r !== null && r["id"] === id) return text;
+      }
+  return "null";
+};

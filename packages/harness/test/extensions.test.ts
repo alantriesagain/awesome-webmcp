@@ -609,6 +609,25 @@ const main = async (): Promise<void> => {
     rig.close();
   }
 
+  // A batch's tool results are entries of their own on the branch, each with its tool's name and details.
+  {
+    const rig = new Rig(['{"match":"twice","text":"Twice.","tools":[{"name":"mark","input":{"n":1}},{"name":"mark","input":{"n":2}}]}', '{"match":"result","text":"Marked."}'].join("\n"));
+    rig.extension([
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerTool({ name: "mark", label: "Mark", description: "Mark n", parameters: { type: "object", properties: { n: { type: "number" } } }, execute: async (id, params) => ({ content: [{ type: "text", text: "marked " + params.n }], details: { n: params.n } }) });',
+      '  agent.registerCommand("results", { handler: (a, ctx) => { const got = ctx.sessionManager.getBranch().filter((e) => e.type === "message" && e.message.role === "toolResult").map((e) => e.message.toolName + ":" + e.message.details.n); ctx.ui.notify(got.join(",") + "|" + String(ctx.sessionManager.getEntry(ctx.sessionManager.getBranch().filter((e) => e.type === "message" && e.message.role === "toolResult")[1].id) !== null)); } });',
+      "} });",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "twice");
+    rig.taken();
+    await rig.prompt(sid, "/results");
+    eq("each result an entry with its name and details, the second found by its id", String((await rig.uiNotification("notify"))["message"]), "mark:1,mark:2|true");
+    rig.close();
+  }
+
   // What an instance registers later is its own, though another session's instance began after it.
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));

@@ -39,7 +39,7 @@ import { parseRules, rulesIn } from "../tools/permissions.ts";
 import { ExtContext } from "../ext/context.ts";
 import { ExtCommand, ExtSession, ExtensionsRegistry, ExtUiHost } from "../ext/extensions.ts";
 import { PluginSource } from "@light/plugins/sources.ts";
-import { piEntries, piEntry, piHeader } from "../ext/session-view.ts";
+import { piEntries, piEntryById, piHeader } from "../ext/session-view.ts";
 import { join } from "node:path";
 import { Choice, ConfigOptions } from "./options.ts";
 import { AcpServer, Incoming } from "./server.ts";
@@ -350,9 +350,7 @@ export class AcpAgent {
     }
     if (query === "getEntry") {
       const got = store.read(s.id);
-      if (got !== null)
-        for (const e of got.entries) if (e.id === arg) return piEntry(e);
-      return "null";
+      return got !== null ? piEntryById(got.entries, arg) : "null";
     }
     return "null";
   }

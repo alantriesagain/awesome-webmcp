@@ -138,6 +138,7 @@ export const danglingResults = (s: LoopSession): Message | null => {
     if (p.kind !== TOOL_CALL) continue;
     const r = new Part(TOOL_RESULT);
     r.callId = p.callId;
+    r.name = p.name;
     r.text = "interrupted";
     r.isError = true;
     r.acpJson = ToolOutcome.failed("interrupted").json("other", p.name);
@@ -523,6 +524,7 @@ export class AgentLoop {
     for (const c of calls) {
       const r = new Part(TOOL_RESULT);
       r.callId = c.part.callId;
+      r.name = c.part.name;
       const o = c.outcome !== null ? c.outcome : ToolOutcome.failed(missing);
       r.text = o.text.length > RESULT_MAX ? o.text.slice(0, RESULT_MAX) + "\n[… cut at " + String(RESULT_MAX) + " characters]" : o.text;
       r.isError = o.isError;
