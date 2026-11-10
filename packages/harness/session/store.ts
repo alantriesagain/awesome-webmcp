@@ -94,6 +94,29 @@ export class SessionStore {
     return new SessionFile(this, id, cwd);
   }
 
+  /** Every entry of session `id`'s file with its header, in file order; null when there is no such file. */
+  read(id: string): { header: Entry | null; entries: Entry[] } | null {
+    const path = this.pathOf(id);
+    if (!existsSync(path)) return null;
+    let text = "";
+    try {
+      text = readFileSync(path, "utf8");
+    } catch {
+      return null;
+    }
+    if (text.length > LOAD_MAX) text = text.slice(text.length - LOAD_MAX);
+    let header: Entry | null = null;
+    const entries: Entry[] = [];
+    for (const line of text.split("\n")) {
+      if (line.length === 0) continue;
+      const e = Entry.parse(line);
+      if (e === null) continue;
+      if (e.kind === SESSION) header = e;
+      else entries.push(e);
+    }
+    return { header, entries };
+  }
+
   /** The entries of session `id`'s active branch, oldest first, the header left out; null when there is no such file. The file's object is set to continue it. */
   load(id: string): { file: SessionFile; entries: Entry[] } | null {
     const path = this.pathOf(id);

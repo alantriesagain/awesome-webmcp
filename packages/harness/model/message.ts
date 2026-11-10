@@ -53,6 +53,10 @@ export class Message {
   readonly role: string;
   readonly id: string;
   readonly parts: Part[] = [];
+  /** An extension's custom message: its type, whether it is shown, and its details as JSON text. */
+  customType = "";
+  display = true;
+  detailsJson = "";
 
   constructor(role: string, id: string) {
     this.role = role;

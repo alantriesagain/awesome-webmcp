@@ -435,13 +435,19 @@ export class Extensions extends HostHandler {
       case "extTool": {
         const entry = this.entryOf(str(args[0]));
         const instance = this.instanceOf(num(args[1], -1));
-        if (entry !== null && instance !== null) instance.toolDefs.push(new ExtToolDef(entry, str(args[2]), str(args[3]), str(args[4]), args[5], num(args[6], -1)));
+        if (entry !== null && instance !== null) {
+          instance.toolDefs.push(new ExtToolDef(entry, str(args[2]), str(args[3]), str(args[4]), args[5], num(args[6], -1)));
+          if (instance.onRegistered !== null) instance.onRegistered("tool");
+        }
         return new HostAnswer(OK, "null");
       }
       case "extCommand": {
         const entry = this.entryOf(str(args[0]));
         const instance = this.instanceOf(num(args[1], -1));
-        if (entry !== null && instance !== null) instance.commandDefs.push(new ExtCommand(entry, str(args[2]), str(args[3]), num(args[4], -1)));
+        if (entry !== null && instance !== null) {
+          instance.commandDefs.push(new ExtCommand(entry, str(args[2]), str(args[3]), num(args[4], -1)));
+          if (instance.onRegistered !== null) instance.onRegistered("command");
+        }
         return new HostAnswer(OK, "null");
       }
       case "extSettle": {
@@ -561,6 +567,37 @@ export class Extensions extends HostHandler {
         }
         return new HostAnswer(OK, "null");
       }
+      case "extAppendEntry": {
+        const instance = this.instanceOf(num(args[1], -1));
+        if (instance !== null && instance.onAppendEntry !== null) instance.onAppendEntry(str(args[2]), args[3] === null || args[3] === undefined ? "" : JSON.stringify(args[3]));
+        return new HostAnswer(OK, "null");
+      }
+      case "extSession": {
+        const ctx = this.contexts.get(num(args[0], -1));
+        const instance = ctx !== undefined ? this.instanceOf(ctx.instanceId) : null;
+        if (instance !== null && instance.onSessionQuery !== null) return new HostAnswer(OK, instance.onSessionQuery(str(args[1]), str(args[2])));
+        return new HostAnswer(OK, "null");
+      }
+      case "extSendUserMessage": {
+        const instance = this.instanceOf(num(args[1], -1));
+        if (instance !== null && instance.onSendUserMessage !== null) instance.onSendUserMessage(JSON.stringify(args[2] === undefined ? null : args[2]), JSON.stringify(args[3] === undefined ? null : args[3]));
+        return new HostAnswer(OK, "null");
+      }
+      case "extSendMessage": {
+        const instance = this.instanceOf(num(args[1], -1));
+        if (instance !== null && instance.onSendMessage !== null) instance.onSendMessage(JSON.stringify(args[2] === undefined ? null : args[2]), JSON.stringify(args[3] === undefined ? null : args[3]));
+        return new HostAnswer(OK, "null");
+      }
+      case "extSetSessionName": {
+        const instance = this.instanceOf(num(args[1], -1));
+        if (instance !== null && instance.onSetSessionName !== null) instance.onSetSessionName(str(args[2]));
+        return new HostAnswer(OK, "null");
+      }
+      case "extGetSessionName": {
+        const instance = this.instanceOf(num(args[1], -1));
+        const name = instance !== null && instance.onGetSessionName !== null ? instance.onGetSessionName() : "";
+        return new HostAnswer(OK, JSON.stringify(name.length > 0 ? name : null));
+      }
       default:
         return new HostAnswer(FAILED, "extensions: no host call " + name);
     }
@@ -585,6 +622,18 @@ export class ExtSession {
   readonly toolDefs: ExtToolDef[] = [];
   readonly commandDefs: ExtCommand[] = [];
   ready: Promise<void> = new Promise<void>((settle) => settle());
+  /** Appending a custom entry to the session's file. */
+  onAppendEntry: ((customType: string, dataJson: string) => void) | null = null;
+  /** A read-only session manager query, its answer as JSON text. */
+  onSessionQuery: ((query: string, arg: string) => string) | null = null;
+  /** Sending a user message or a custom one. */
+  onSendUserMessage: ((contentJson: string, optionsJson: string) => void) | null = null;
+  onSendMessage: ((messageJson: string, optionsJson: string) => void) | null = null;
+  /** The session's title set or read. */
+  onSetSessionName: ((name: string) => void) | null = null;
+  onGetSessionName: (() => string) | null = null;
+  /** A tool or command was registered after the session opened. */
+  onRegistered: ((kind: string) => void) | null = null;
   private toolSeq = 0;
 
   constructor(owner: Extensions, id: number, sessionId: string, cwd: string) {
@@ -795,6 +844,7 @@ export class ExtSession {
     ctx.idle = false;
     ctx.sessionId = toolCtx.sessionId;
     ctx.hasUI = toolCtx.hasUI;
+    ctx.instanceId = this.id;
     const callId = "ext_" + String(++this.toolSeq);
     const args = JSON.stringify([callId, recordOf(parseJson(inputJson.length > 0 ? inputJson : "{}")) ?? {}, this.owner.ctxObject(ctx)]);
     const r = await this.owner.call(def.entry, def.executeId, args, "tool " + def.name, ctx);

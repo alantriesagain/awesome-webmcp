@@ -5,6 +5,8 @@
 export class ExtContext {
   /** The id the host gave this call's context (0 before a call). */
   ctxId = 0;
+  /** The extension instance the call belongs to (0 for none). */
+  instanceId = 0;
   /** The session the call belongs to ("" when none, which keeps `hasUI` false). */
   sessionId = "";
   cwd = "";

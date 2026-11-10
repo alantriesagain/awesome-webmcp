@@ -20,6 +20,9 @@ export const usageUpdate = (sessionId: string, used: number, size: number, costU
   return update(sessionId, fields, values);
 };
 
+/** The session's name as it changed. */
+export const sessionInfoUpdate = (sessionId: string, name: string): string => update(sessionId, ["sessionUpdate", "name"], ['"session_info_update"', JSON.stringify(name)]);
+
 export const commandsUpdate = (sessionId: string, commands: string[][]): string =>
   update(sessionId, ["sessionUpdate", "availableCommands"], ['"available_commands_update"', listText(commands.map((c) => {
     const fields = ["name", "description"];

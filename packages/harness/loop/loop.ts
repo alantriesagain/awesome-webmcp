@@ -61,6 +61,10 @@ export class LoopSession {
   mode = "build";
   /** Messages sent while a turn ran, taken up after the current request. */
   steering: string[] = [];
+  /** Custom messages steered in while a turn ran, added at the same point. */
+  steeringMessages: Message[] = [];
+  /** Custom messages kept for the next turn, before its prompt. */
+  pendingBefore: Message[] = [];
   /** The files read in the session (absolute paths): what Edit and Write may change. */
   readonly reads = new Set<string>();
   /** The model's window, what the compaction threshold is cut from. */
@@ -165,20 +169,24 @@ export class AgentLoop {
     this.tools = tools;
   }
 
-  /** One turn: the user's `text`, then requests until the model stops, the steering queue drained between them. */
-  async run(s: LoopSession, text: string, listener: LoopListener, abort: Abort): Promise<TurnEnd> {
+  /** One turn: the user's `text`, then requests until the model stops, the steering queue drained between them. `skipUser` starts from messages already kept (a custom message with `triggerTurn`). */
+  async run(s: LoopSession, text: string, listener: LoopListener, abort: Abort, skipUser = false): Promise<TurnEnd> {
     const end = new TurnEnd();
-    const user = new Message("user", s.nextUserId());
-    user.parts.push(textPart(text));
-    for (const img of s.pendingImages) user.parts.push(img);
-    s.pendingImages = [];
-    this.add(s, user, listener);
-    for (const note of s.pendingNotes) {
-      const m = new Message("user", s.nextUserId());
-      m.parts.push(textPart(note));
-      this.add(s, m, listener);
+    for (const before of s.pendingBefore) this.add(s, before, listener);
+    s.pendingBefore = [];
+    if (!skipUser) {
+      const user = new Message("user", s.nextUserId());
+      user.parts.push(textPart(text));
+      for (const img of s.pendingImages) user.parts.push(img);
+      s.pendingImages = [];
+      this.add(s, user, listener);
+      for (const note of s.pendingNotes) {
+        const m = new Message("user", s.nextUserId());
+        m.parts.push(textPart(note));
+        this.add(s, m, listener);
+      }
+      s.pendingNotes = [];
     }
-    s.pendingNotes = [];
     for (;;) {
       // The mode's tools as it stands now (a plan approved mid-turn leaves plan mode).
       const tools = this.tools.forMode(s.mode).plus(s.extraTools);
@@ -227,7 +235,7 @@ export class AgentLoop {
         this.steer(s, listener);
         continue;
       }
-      if (s.steering.length > 0) {
+      if (s.steering.length > 0 || s.steeringMessages.length > 0) {
         this.steer(s, listener);
         continue;
       }
@@ -311,19 +319,26 @@ export class AgentLoop {
     return o;
   }
 
-  /** The steering messages queued, as one user message. */
+  /** The steering messages queued, as one user message, and the custom ones kept beside them. */
   private steer(s: LoopSession, listener: LoopListener): void {
-    if (s.steering.length === 0) return;
-    const next = new Message("user", s.nextUserId());
-    next.parts.push(textPart(s.steering.join("\n")));
-    s.steering = [];
-    this.add(s, next, listener);
+    if (s.steering.length > 0) {
+      const next = new Message("user", s.nextUserId());
+      next.parts.push(textPart(s.steering.join("\n")));
+      s.steering = [];
+      this.add(s, next, listener);
+    }
+    if (s.steeringMessages.length > 0) {
+      const kept = s.steeringMessages;
+      s.steeringMessages = [];
+      for (const m of kept) this.add(s, m, listener);
+    }
   }
 
   /** The context a session's extension callbacks get. */
   private extContext(s: LoopSession, abort: Abort, systemPrompt: string): ExtContext {
     const c = new ExtContext();
     c.sessionId = s.id;
+    c.instanceId = s.ext !== null ? s.ext.id : 0;
     c.cwd = s.cwd;
     c.modelValue = s.model;
     c.systemPrompt = systemPrompt;

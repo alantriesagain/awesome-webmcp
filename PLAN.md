@@ -409,7 +409,7 @@ Pending, roughly in order of value (October 2026):
 - [ ] **The native `fetch` behind `HttpStream`**, once a streaming probe passes.
 - [ ] **Prices refreshed** from the providers (most of Zen's are unknown, so its cost shows as none).
 
-## Milestone K: pi's extensions, as an agent and in the harness
+## Milestone K: pi as an agent, and plugins that reach the harness's loop
 
 pi (badlogic/pi-mono, `@earendil-works/pi-coding-agent` 1.5.1 as of 2026-11-10) loads extensions
 as TypeScript modules through jiti in Node: `export default function (pi: ExtensionAPI)`, about
@@ -472,33 +472,61 @@ answers only `session/request_permission`.
       the session's; a Task subagent uses its parent's). `pi.exec(command, args, { signal,
       timeout, cwd })` over `proc.ts` answering `{ stdout, stderr, code, killed, truncated }`;
       the test-only sleep replaced by it.
-- [ ] **The rest of the API.** `appendEntry` as a `custom` entry kept on
-      load and `ctx.sessionManager` read-only over the branch; `sendMessage` and
-      `sendUserMessage` (steer, follow up); `getActiveTools`, `setActiveTools`, `getAllTools`;
-      `setModel` and the thinking level; `pi.events`; the turn, agent, model, input, compaction
-      and shutdown events; `/reload`; a command or tool registered after the session opened
-      announced again (available_commands, the tool set). What the harness offers beyond pi
-      (files without Node) is a namespace of its own, never under pi's names.
-- [ ] **Extensions live as plugins do.** A saved file in an extensions folder reloads that file
-      alone (its `session_shutdown`, then its source again and `session_start` with `reload`), the
-      other extensions and the turn going on; a removed file takes its tools and commands away; a
-      switch per extension in config.json (`harness.extensions`, by file name) as the app's
-      plugins have, the user's and a trusted project's.
-- [ ] **The important extensions, written again.** From pi's 78 examples, the ones a coding agent
-      uses daily that the harness lacks: `permission-gate` (a confirm before a dangerous Bash
-      command), `protected-paths` (writes to `.env`, `.git/`, `node_modules/` refused),
-      `git-checkpoint` (a stash ref per turn, restored on a fork), `todo` (a tool whose state
-      lives in its results' details, branch-aware), `inline-bash` (`!{command}` in a prompt
-      expanded), `tools` (`/tools` switching tools on and off, kept with `appendEntry`),
-      `dirty-repo-guard` (a fork refused while the tree is dirty), `claude-rules` (`.claude/rules`
-      into the system prompt). Left out because widecode has them: plan mode, question, subagent,
-      notify, session-name. Each is plain JS with JSON Schema parameters and no import, so the
-      same file loads in pi too. The built-in ones are `packages/harness/extensions/*.ts`,
-      type-checked against the `pi.d.ts` subset and stripped into the binary at build as the
-      app's built-in plugins are; a user's or project's file of the same name replaces one. A test
-      each, switched off in a test too.
-- [ ] **The docs.** The harness's README, PLUGINS.md's harness section, a `pi.d.ts` of the subset
-      for an extension's author.
+- [x] **Session entries and messages.** `appendEntry` as a `custom` entry kept on load and outside
+      the context; `ctx.sessionManager` read-only over the file (pi's entry shapes);
+      `setSessionName` and `getSessionName` over the title; `sendUserMessage` and `sendMessage`
+      (steer, follow up, next turn, `triggerTurn`); a command or tool registered after the
+      session opened announced again.
+
+The direction changed on 2026-11-10. No published pi extension loads here (each imports typebox,
+pi's modules or Node), so the harness's API stops calling itself pi's: it keeps pi's design (the
+events, what a handler may answer, the tool shape) under widecode's names, and it becomes a part of
+a widecode plugin rather than a file kind of its own. A plugin is one definition with two parts:
+
+```js
+widecode.plugin({
+  id: "permission-gate",
+  activate(api) { /* the app: keys, columns, segments, commands, MCP tools for every agent */ },
+  agent(agent) { /* the harness's loop: agent.on("tool_call", ...), agent.registerTool(...) */ },
+});
+```
+
+The app's runtime evaluates the file and runs `activate`; the harness daemon evaluates the same
+file in its own engine and runs `agent`. A plugin lives in a folder of its own (`plugins/<id>/`:
+`index.js`, its `skills/` and `prompts/`, a README), a single `plugins/<id>.js` still loading.
+
+- [ ] **One plugin, two parts.** The harness loads widecode's plugins: the built-in ones (the app
+      hands the daemon their sources; the daemon is the same binary), the store's `plugins/` and a
+      trusted folder's `.widecode/plugins/`, in the app's order and override rule (an id defined
+      again replaces the earlier). Its prelude defines `widecode.plugin`, `widecode.util` and a
+      plain `widecode.theme`, runs a definition's `agent(agent)` and ignores the rest; the app's
+      prelude ignores `agent`. `plugins.<id>: false` in config.json switches both parts off; the
+      agent part reads its section (`agent.settings()`). The `extensions/` folders, the
+      `export default` pass (`ext/source.ts`) and the tool-name mapping (`ext/names.ts`) go:
+      events carry the harness's own names and inputs (`Bash` with `command`, `Read` with
+      `file_path`). Identifiers lose `pi` (`piFor`, `messagesToPi`); the agent API's types go in
+      `widecode.d.ts` (`widecode.AgentApi`, `AgentContext`, the events), `test/api.test.ts`
+      checking them as it checks the app's.
+- [ ] **Plugin folders.** `plugins/<id>/index.js` beside `plugins/<id>.js`, in the store, a trusted
+      folder and the built-ins (`apps/widecode/plugins/<id>/index.ts`, `scripts/builtin-plugins.mjs`
+      walking folders). A folder's `skills/` are the harness's skills and its `prompts/` its
+      prompt templates (listed with their plugin as the source); its README is what the Plugins
+      view shows. A save anywhere in a folder reloads that plugin alone, in the app and in the
+      daemon (its `session_shutdown`, its source again, `session_start` with `reload`), the turn
+      going on; a removed folder takes its tools and commands away.
+- [ ] **The rest of the agent API.** `getActiveTools`, `setActiveTools`, `getAllTools`;
+      `setModel` and the thinking level; `agent.events` between a plugin's handlers; the turn,
+      agent, model, input, compaction (`session_before_compact` answering a summary),
+      `session_before_fork` and shutdown events; `/reload`.
+- [ ] **The two parts talk.** `agent.send(type, data)` and `api.agent.on(type, f)` (and back) over
+      an ACP notification of the plugin's id, so a plugin's agent part can feed its own view (a
+      todo tool and a Todo tab).
+- [ ] **The important plugins.** Built-in plugins with an agent part, written from pi's examples:
+      `permission-gate`, `protected-paths`, `git-checkpoint`, `todo` (its tab too, once the parts
+      talk), `inline-bash`, `tools`, `dirty-repo-guard`, `claude-rules`. A test each, switched off
+      in a test too.
+- [ ] **The docs.** PLUGINS.md's plugin shape and folder, the agent part's API and events, the
+      harness README.
 
 ## Deferred or skip
 
@@ -521,6 +549,7 @@ answers only `session/request_permission`.
 
 ## Log
 
+- `819dd73` Milestone K, an instance per session and `pi.exec`. Test: `extensions`.
 - `e23ebd0`, `767b9c4` Milestone K, the UI over ACP: calls settle when their promise does,
   `ctx.ui` as `_widecode/ui` requests and notifications. Test: `extensions`.
 - `cc701b1` Milestone K, the engine: extensions in pi's shape, tools, commands, five events.

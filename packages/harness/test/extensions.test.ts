@@ -647,6 +647,225 @@ const main = async (): Promise<void> => {
     rmSync(folder, { recursive: true, force: true });
   }
 
+  // pi.appendEntry: a custom entry in the file, outside the context, still there after a load elsewhere.
+  {
+    const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.registerCommand("save", { handler: (a, ctx) => { pi.appendEntry("note", { count: 3, marker: "custom-marker" }); ctx.ui.notify("saved"); } });',
+      "}",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "hello");
+    rig.taken();
+    await rig.prompt(sid, "/save");
+    await rig.uiNotification("notify");
+    const store = new SessionStore(rig.paths!.sessionsDir(rig.folder));
+    const file = store.pathOf(sid);
+    const kept = readFileSync(file, "utf8");
+    ok("appendEntry writes a custom entry with its data", kept.includes('"kind":"custom"') && kept.includes('"customType":"note"') && kept.includes('"data":{"count":3,"marker":"custom-marker"}'));
+    ok("and the model never got it", rig.asks().every((r) => r.messages.every((m) => !m.text().includes("custom-marker"))));
+    const out2: string[] = [];
+    const server2 = new AcpServer();
+    server2.sink = (line: string) => out2.push(line);
+    const config = new HarnessConfig();
+    const registry = registryFor(config, true);
+    const agent2 = new AcpAgent(server2, new ModelClient(registry, new Auth(join(rig.folder, "auth.json")), "node", FakeClient.fromText('{"match":"hello","text":"Again."}')), new ToolSet(builtInTools()), registry, config, "test", "linux", rig.paths!);
+    agent2.receive(new Incoming("session/load", { sessionId: sid, cwd: rig.folder, mcpServers: [] }, "1"));
+    await until(() => out2.some((line) => line.includes('"id":1,')));
+    ok("a load in a fresh agent keeps the custom entry", readFileSync(file, "utf8").includes('"customType":"note"') && readFileSync(file, "utf8").includes("custom-marker"));
+    rig.close();
+  }
+
+  // ctx.sessionManager: the session's ids, header and every entry on the branch, in pi's shapes.
+  {
+    const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.registerCommand("save", { handler: () => { pi.appendEntry("note", { count: 3 }); } });',
+      '  pi.registerCommand("inspect", { handler: (a, ctx) => {',
+      "    const sm = ctx.sessionManager;",
+      '    const entries = sm.getEntries();',
+      '    const custom = entries.filter((e) => e.type === "custom")[0];',
+      '    ctx.ui.notify("inspect:" + JSON.stringify({ id: sm.getSessionId(), file: sm.getSessionFile(), cwd: sm.getCwd(), leaf: sm.getLeafId(), header: sm.getHeader(), entries: entries.length, branch: sm.getBranch().map((e) => e.type), custom: custom === undefined ? null : sm.getEntry(custom.id) }));',
+      "  } });",
+      "}",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "hello");
+    const store = new SessionStore(rig.paths!.sessionsDir(rig.folder));
+    await until(() => readFileSync(store.pathOf(sid), "utf8").includes('"kind":"title"'));
+    await rig.prompt(sid, "/save");
+    await rig.prompt(sid, "/inspect");
+    const params = await rig.uiNotification("notify");
+    const got = JSON.parse(String(params["message"]).slice("inspect:".length)) as Record<string, unknown>;
+    ok("the manager names the session, its file, folder and leaf", got["id"] === sid && String(got["file"]).endsWith(sid + ".jsonl") && got["cwd"] === rig.folder && String(got["leaf"]).length > 0);
+    eq("the header is pi's session header", String((got["header"] as Record<string, unknown>)["type"]) + ":" + String((got["header"] as Record<string, unknown>)["cwd"]), "session:" + rig.folder);
+    eq("the branch's types in order", (got["branch"] as string[]).join(","), "model_change,message,message,session_info,custom");
+    eq("every entry is there", String(got["entries"]), "5");
+    const custom = got["custom"] as Record<string, unknown>;
+    ok("getEntry of the custom one keeps its type and data", custom !== null && custom["type"] === "custom" && custom["customType"] === "note" && JSON.stringify(custom["data"]) === '{"count":3}');
+    ok("the messages are pi message entries", (got["branch"] as string[]).length === 5);
+    rig.close();
+  }
+
+  // pi.setSessionName and getSessionName: the title entry and the session_info_update.
+  {
+    const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.registerCommand("rename", { handler: (a, ctx) => { pi.setSessionName("Fresh name"); ctx.ui.notify("name:" + String(pi.getSessionName())); } });',
+      "}",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "hello");
+    await rig.prompt(sid, "/rename");
+    const named = await rig.uiNotification("notify");
+    const lines = rig.taken();
+    ok("the session_info_update names it", lines.some((line) => line.includes('"sessionUpdate":"session_info_update","name":"Fresh name"')));
+    eq("getSessionName reads it back", String(named["message"]), "name:Fresh name");
+    ok("the title entry is written", readFileSync(new SessionStore(rig.paths!.sessionsDir(rig.folder)).pathOf(sid), "utf8").includes('"kind":"title"') && rig.agent !== null && rig.agent.titleOf(sid) === "Fresh name");
+    rig.close();
+  }
+
+  // pi.sendUserMessage while idle: a turn at once, the client told the user's message.
+  {
+    const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.registerCommand("sendnow", { handler: () => { pi.sendUserMessage("hello now"); } });',
+      "}",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    const before = rig.asks().length;
+    const prompted = rig.prompt(sid, "/sendnow");
+    await until(() => rig.asks().length > before);
+    await prompted;
+    const asks = rig.asks();
+    ok("the message is the request's user turn", asks[asks.length - 1].messages.some((m) => m.role === "user" && m.text() === "hello now"));
+    ok("a user_message_chunk marks it as the user's", rig.out.some((line) => line.includes('"sessionUpdate":"user_message_chunk"') && line.includes('"text":"hello now"')));
+    rig.close();
+  }
+
+  // pi.sendUserMessage steered and followed up while a turn runs.
+  {
+    const rig = new Rig(['{"match":"slow","text":"First answer."}', '{"match":"steer","text":"Steered answer."}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.on("before_agent_start", (e) => { if (e.prompt === "slow") pi.sendUserMessage("steer words", { deliverAs: "steer" }); });',
+      "}",
+    ].join("\n"));
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "slow");
+    await until(() => rig.asks().length >= 2);
+    const asks = rig.asks();
+    ok("a steered message is the next request's user turn", asks[1].messages.some((m) => m.role === "user" && m.text() === "steer words"));
+    eq("both replies stream", text(rig.taken()), "First answer.Steered answer.");
+    rig.close();
+  }
+  {
+    const rig = new Rig(['{"match":"slow","text":"First answer."}', '{"match":"follow","text":"Followed answer."}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.on("before_agent_start", (e) => { if (e.prompt === "slow") pi.sendUserMessage("follow after", { deliverAs: "followUp" }); });',
+      "}",
+    ].join("\n"));
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "slow");
+    await until(() => rig.asks().length >= 2);
+    const asks = rig.asks();
+    ok("a follow-up starts a turn after the first", asks[1].messages.some((m) => m.role === "user" && m.text() === "follow after"));
+    await until(() => text(rig.out).includes("Followed answer."));
+    eq("both replies stream", text(rig.taken()), "First answer.Followed answer.");
+    rig.close();
+  }
+
+  // pi.sendMessage with triggerTurn while idle, and steered into a running turn.
+  {
+    const rig = new Rig(['{"match":"custom","text":"Saw custom."}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.registerCommand("sendcustom", { handler: () => { pi.sendMessage({ customType: "note", content: "custom words", display: true, details: { a: 1 } }, { triggerTurn: true }); } });',
+      "}",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    const before = rig.asks().length;
+    const prompted = rig.prompt(sid, "/sendcustom");
+    await until(() => rig.asks().length > before);
+    await prompted;
+    const asks = rig.asks();
+    ok("the custom message is what the model reads", asks[asks.length - 1].messages.some((m) => m.role === "user" && m.text() === "custom words"));
+    ok("it is written with its type and details", readFileSync(new SessionStore(rig.paths!.sessionsDir(rig.folder)).pathOf(sid), "utf8").includes('"customType":"note"') && readFileSync(new SessionStore(rig.paths!.sessionsDir(rig.folder)).pathOf(sid), "utf8").includes('"details":{"a":1}'));
+    rig.close();
+  }
+  {
+    const rig = new Rig(['{"match":"slow","text":"First answer."}', '{"match":"injected","text":"Injected answer."}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.on("before_agent_start", (e) => { if (e.prompt === "slow") pi.sendMessage({ customType: "inject", content: "injected words", display: true }, { deliverAs: "steer" }); });',
+      "}",
+    ].join("\n"));
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "slow");
+    await until(() => rig.asks().length >= 2);
+    const asks = rig.asks();
+    ok("a steered custom message is the next request's user turn", asks[1].messages.some((m) => m.role === "user" && m.text() === "injected words"));
+    ok("it is kept with its custom type", readFileSync(new SessionStore(rig.paths!.sessionsDir(rig.folder)).pathOf(sid), "utf8").includes('"customType":"inject"'));
+    eq("both replies stream", text(rig.taken()), "First answer.Injected answer.");
+    rig.close();
+  }
+
+  // pi.sendMessage nextTurn: kept and added before the next turn's prompt.
+  {
+    const rig = new Rig(['{"match":"slow","text":"First answer."}', '{"match":"after","text":"After answer."}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.on("before_agent_start", (e) => { if (e.prompt === "slow") pi.sendMessage({ customType: "later", content: "next words", display: true }, { deliverAs: "nextTurn" }); });',
+      "}",
+    ].join("\n"));
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "slow");
+    await rig.prompt(sid, "after");
+    await until(() => rig.asks().length >= 2);
+    const asks = rig.asks();
+    const texts = asks[1].messages.map((m) => m.text());
+    ok("the next turn carries the custom message before its prompt", texts.includes("next words") && texts.indexOf("next words") < texts.indexOf("after"));
+    ok("it is kept with its custom type", readFileSync(new SessionStore(rig.paths!.sessionsDir(rig.folder)).pathOf(sid), "utf8").includes('"customType":"later"'));
+    rig.close();
+  }
+
+  // A command registered from another command's handler is announced again.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    rig.extension([
+      "export default function (pi) {",
+      '  pi.registerCommand("reg", { handler: () => { pi.registerCommand("late", { handler: (b, c) => { c.ui.notify("late"); } }); } });',
+      "}",
+    ].join("\n"));
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    const initial = rig.taken();
+    eq("the first announcement lists only the known command", String(initial.filter((line) => line.includes("available_commands_update")).length), "1");
+    await rig.prompt(sid, "/reg");
+    const lines = rig.taken();
+    ok("a late command is announced again", lines.some((line) => line.includes("available_commands_update") && line.includes('"name":"late"')));
+    rig.close();
+  }
+
   done();
 };
 

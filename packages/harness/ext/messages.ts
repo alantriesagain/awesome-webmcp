@@ -2,7 +2,7 @@
 // assistant one text, thinking with its signature and tool calls, and every tool result is a
 // message of its own. The `context` event gets this text; a replacement is converted back to the
 // harness's Message/Part and sent in that one request, never written to the session file.
-import { listOf, objectText, recordOf, str } from "@light/lib/json.ts";
+import { listOf, objectText, parseJson, recordOf, str } from "@light/lib/json.ts";
 import { IMAGE, Message, Part, TEXT, THINKING, TOOL_CALL, TOOL_RESULT } from "../model/message.ts";
 
 const json = (value: unknown): string => JSON.stringify(value);
@@ -37,7 +37,7 @@ export const messagesToPi = (messages: Message[]): string => {
       if (p.kind === TEXT) content.push(textContent(p.text));
       else if (p.kind === IMAGE) content.push(imageContent(p.data, p.mediaType));
       else if (p.kind === TOOL_RESULT) {
-        const name = names.get(p.callId) ?? "";
+        const name = names.get(p.callId) ?? p.name;
         const inner = p.data.length > 0 ? imageContent(p.data, p.mediaType) : textContent(p.text);
         results.push(objectText(["role", "toolCallId", "toolName", "content", "isError"], [json("toolResult"), json(p.callId), json(name), "[" + inner + "]", p.isError ? "true" : "false"]));
       }
@@ -46,6 +46,12 @@ export const messagesToPi = (messages: Message[]): string => {
     for (const r of results) out.push(r);
   }
   return "[" + out.join(",") + "]";
+};
+
+/** One message as pi's AgentMessage, null when it has none. */
+export const messageToPi = (m: Message): unknown => {
+  const list = listOf(parseJson(messagesToPi([m])));
+  return list.length > 0 ? list[0] : null;
 };
 
 const partsOfContent = (content: unknown): Part[] => {

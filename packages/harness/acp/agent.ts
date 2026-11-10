@@ -14,20 +14,21 @@
 // threshold; the file keeps the compaction, and a load starts the context from it. A prompt
 // template of the session's, `/name words`, is expanded as the user's message (the built-in
 // commands win).
-import { errorMessage, listOf, recordOf, str } from "@light/lib/json.ts";
+import { errorMessage, listOf, parseJson, recordOf, str } from "@light/lib/json.ts";
 import { log } from "@light/lib/log.ts";
+import { existsSync } from "node:fs";
 import { HarnessConfig } from "../config.ts";
 import { Abort } from "../loop/abort.ts";
 import { LoopListener } from "../loop/listener.ts";
 import { CompactionResult } from "../loop/compact.ts";
 import { AgentLoop, LoopSession, TurnEnd, danglingResults } from "../loop/loop.ts";
 import { ModelClient } from "../model/client.ts";
-import { CANCELLED, FAILED, IMAGE, Message, Part, TOOL_RESULT, Usage } from "../model/message.ts";
+import { CANCELLED, FAILED, IMAGE, Message, Part, TOOL_RESULT, Usage, textPart } from "../model/message.ts";
 import { ModelInfo, ModelRegistry, costUsd } from "../model/registry.ts";
 import { HarnessPaths } from "../paths.ts";
 import { SystemFacts, systemBlocks } from "../prompt/system.ts";
 import { scanTemplates, expandTemplate, TemplateInfo } from "../prompt/templates.ts";
-import { COMPACTION, Entry, MESSAGE, MODE, MODEL, TITLE } from "../session/entries.ts";
+import { COMPACTION, CUSTOM, Entry, MESSAGE, MODE, MODEL, TITLE } from "../session/entries.ts";
 import { replayPaced, replayUpdates } from "../session/replay.ts";
 import { SessionFile, SessionStore, sessionsJson } from "../session/store.ts";
 import { titleFor } from "../session/title.ts";
@@ -37,10 +38,11 @@ import { WebSettings } from "../tools/web.ts";
 import { parseRules, rulesIn } from "../tools/permissions.ts";
 import { ExtContext } from "../ext/context.ts";
 import { ExtCommand, ExtSession, ExtensionsRegistry, ExtUiHost } from "../ext/extensions.ts";
+import { piEntries, piEntry, piHeader } from "../ext/session-view.ts";
 import { join } from "node:path";
 import { Choice, ConfigOptions } from "./options.ts";
 import { AcpServer, Incoming } from "./server.ts";
-import { DiffBlock, chunkUpdate, commandsUpdate, modeUpdate, toolCallEnd, toolCallUpdate, usageUpdate } from "./updates.ts";
+import { DiffBlock, chunkUpdate, commandsUpdate, modeUpdate, sessionInfoUpdate, toolCallEnd, toolCallUpdate, usageUpdate, userChunkUpdate } from "./updates.ts";
 
 /** The context window the usage is reported against while no model says otherwise. */
 const DEFAULT_WINDOW = 200000;
@@ -49,6 +51,17 @@ const COMMANDS = [
   ["compact", "summarize the conversation so far, freeing context"],
   ["title", "give the session a title"],
 ];
+
+/** A user message an extension sent, waiting for a turn to start. */
+class QueuedMessage {
+  readonly text: string;
+  readonly images: Part[];
+
+  constructor(text: string, images: Part[]) {
+    this.text = text;
+    this.images = images;
+  }
+}
 
 export class HarnessSession {
   readonly id: string;
@@ -85,6 +98,18 @@ export class HarnessSession {
   ext: ExtSession | null = null;
   /** Settles once the session's extensions had their session_start (a turn starts after). */
   started: Promise<void> = new Promise<void>((settle) => settle());
+  /** Whether the session's commands were announced (a late registration announces them again). */
+  announced = false;
+  /** Whether a loop turn is in progress (a command or a compaction is not one). */
+  turnActive = false;
+  /** The MCP tools last listed, beside the extension tools. */
+  mcpTools: Tool[] = [];
+  /** User messages a running turn's extension asked to run after it, and ones waiting for an idle session. */
+  followUps: QueuedMessage[] = [];
+  pendingTurns: QueuedMessage[] = [];
+  /** Custom messages whose triggerTurn waits for an idle session, and the user chunks' ids. */
+  pendingCustomStarts: Message[] = [];
+  sentSeq = 0;
 
   constructor(id: string, options: ConfigOptions) {
     this.id = id;
@@ -178,14 +203,71 @@ export class AcpAgent {
       // A closed session's instance stays in the engine until the daemon ends (the agent has no per-session close).
       s.ext = this.extensions.forSession(s.cwd, s.trusted).instance(s.id, s.cwd);
       s.loop.ext = s.ext;
+      this.wire(s, s.ext);
     }
     return s.ext;
+  }
+
+  /** The session's callbacks: what an extension's pi appends, reads, sends and names. */
+  private wire(s: HarnessSession, ext: ExtSession): void {
+    ext.onAppendEntry = (customType: string, dataJson: string) => this.appendCustom(s, customType, dataJson);
+    ext.onSessionQuery = (query: string, arg: string) => this.sessionQuery(s, query, arg);
+    ext.onSendUserMessage = (contentJson: string, optionsJson: string) => this.sendUserMessage(s, contentJson, optionsJson);
+    ext.onSendMessage = (messageJson: string, optionsJson: string) => this.sendMessage(s, messageJson, optionsJson);
+    ext.onSetSessionName = (name: string) => this.setSessionName(s, name);
+    ext.onGetSessionName = () => s.title;
+    ext.onRegistered = (kind: string) => this.afterRegistration(s, kind);
+  }
+
+  /** Appending a custom entry through the store, outside the context. */
+  private appendCustom(s: HarnessSession, customType: string, dataJson: string): void {
+    const e = new Entry(CUSTOM);
+    e.customType = customType;
+    e.dataJson = dataJson;
+    this.write(s, e);
+  }
+
+  /** A read-only session manager query, its answer as JSON text. */
+  private sessionQuery(s: HarnessSession, query: string, arg: string): string {
+    if (query === "getSessionId") return JSON.stringify(s.id);
+    if (query === "getCwd") return JSON.stringify(s.cwd);
+    if (query === "getSessionName") return JSON.stringify(s.title.length > 0 ? s.title : null);
+    if (query === "getLeafId") return JSON.stringify(s.file !== null && s.file.leaf.length > 0 ? s.file.leaf : null);
+    if (query === "getSessionFile") {
+      if (s.file === null) return "null";
+      try {
+        return JSON.stringify(existsSync(s.file.path()) ? s.file.path() : null);
+      } catch {
+        return "null";
+      }
+    }
+    const store = this.storeFor(s.cwd);
+    if (query === "getHeader") {
+      const got = store.read(s.id);
+      return got !== null && got.header !== null ? piHeader(got.header) : "null";
+    }
+    if (query === "getEntries") {
+      const got = store.read(s.id);
+      return got !== null ? piEntries(got.entries) : "[]";
+    }
+    if (query === "getBranch") {
+      const got = store.load(s.id);
+      return got !== null ? piEntries(got.entries) : "[]";
+    }
+    if (query === "getEntry") {
+      const got = store.read(s.id);
+      if (got !== null)
+        for (const e of got.entries) if (e.id === arg) return piEntry(e);
+      return "null";
+    }
+    return "null";
   }
 
   /** The context an extension callback gets. */
   private extContext(s: HarnessSession, abort: Abort | null): ExtContext {
     const c = new ExtContext();
     c.sessionId = s.id;
+    c.instanceId = s.ext !== null ? s.ext.id : 0;
     c.cwd = s.cwd;
     c.modelValue = s.loop.model;
     c.systemPrompt = s.loop.system.join("\n\n");
@@ -318,8 +400,8 @@ export class AcpAgent {
     const links = McpLink.fromSession(s.mcpServersText);
     for (const l of links) l.httpKind = this.config.http;
     s.loop.servers = links;
-    const extTools = s.ext !== null ? s.ext.tools() : [];
-    s.loop.extraTools = extTools;
+    s.mcpTools = [];
+    s.loop.extraTools = s.ext !== null ? s.ext.tools() : [];
     if (links.length === 0) {
       s.toolsReady = new Promise<void>((settle) => settle());
       return;
@@ -334,8 +416,41 @@ export class AcpAgent {
           tools.push(t);
         }
       }
-      s.loop.extraTools = extTools.concat(tools);
+      s.mcpTools = tools;
+      this.refreshTools(s);
     });
+  }
+
+  /** The extension tools as they stand plus the MCP ones last listed (a late registration). */
+  private refreshTools(s: HarnessSession): void {
+    const extTools = s.ext !== null ? s.ext.tools() : [];
+    s.loop.extraTools = extTools.concat(s.mcpTools);
+  }
+
+  /** A tool or command registered after the session opened: its commands and tools offered again. */
+  private afterRegistration(s: HarnessSession, _kind: string): void {
+    if (!s.announced) return;
+    this.refreshTools(s);
+    this.announceCommands(s);
+  }
+
+  /** The session's commands: the built-ins, its prompt templates, its extensions'. */
+  private commandsFor(s: HarnessSession): string[][] {
+    const commands = COMMANDS.slice();
+    for (const t of s.templates) {
+      if (commands.some((c) => c[0] === t.name)) continue;
+      commands.push([t.name, t.description, t.argumentHint]);
+    }
+    if (s.ext !== null)
+      for (const c of s.ext.commands()) {
+        if (commands.some((known) => known[0] === c.name)) continue;
+        commands.push([c.name, c.description, ""]);
+      }
+    return commands;
+  }
+
+  private announceCommands(s: HarnessSession): void {
+    this.server.notify("session/update", commandsUpdate(s.id, this.commandsFor(s)));
   }
 
   /** The stable blocks of the session's system prompt. */
@@ -378,17 +493,8 @@ export class AcpAgent {
     s.templates = scanTemplates(s.cwd, s.trusted, this.paths.userHome, this.paths.root());
     s.loop.system = this.blocksFor(s);
     this.server.answer(idText, '{"sessionId":' + JSON.stringify(s.id) + ',"configOptions":' + s.options.text() + "}");
-    const commands = COMMANDS.slice();
-    for (const t of s.templates) {
-      if (commands.some((c) => c[0] === t.name)) continue;
-      commands.push([t.name, t.description, t.argumentHint]);
-    }
-    if (s.ext !== null)
-      for (const c of s.ext.commands()) {
-        if (commands.some((known) => known[0] === c.name)) continue;
-        commands.push([c.name, c.description, ""]);
-      }
-    this.server.notify("session/update", commandsUpdate(s.id, commands));
+    this.announceCommands(s);
+    s.announced = true;
     this.server.notify("session/update", usageUpdate(s.id, s.used, s.window, s.costUsd));
   }
 
@@ -604,20 +710,146 @@ export class AcpAgent {
     this.startTurn(s, expanded, [idText], images);
   }
 
+  /** A user message's content as text and images (pi's string or text/image blocks). */
+  private contentOf(content: unknown): QueuedMessage {
+    if (typeof content === "string") return new QueuedMessage(content, []);
+    const texts: string[] = [];
+    const images: Part[] = [];
+    for (const v of listOf(content)) {
+      const b = recordOf(v);
+      if (b === null) continue;
+      if (str(b["type"]) === "text") texts.push(str(b["text"]));
+      else if (str(b["type"]) === "image") {
+        const p = new Part(IMAGE);
+        p.mediaType = str(b["mimeType"]).length > 0 ? str(b["mimeType"]) : "image/png";
+        p.data = str(b["data"]);
+        if (p.data.length > 0) images.push(p);
+      }
+    }
+    return new QueuedMessage(texts.join("\n"), images);
+  }
+
+  /** The client's user chunk for a message an extension sent. */
+  private notifyUser(s: HarnessSession, q: QueuedMessage): void {
+    if (q.text.length === 0) return;
+    this.server.notify("session/update", userChunkUpdate(s.id, "ext" + String(++s.sentSeq), q.text));
+  }
+
+  private userMessage(s: HarnessSession, q: QueuedMessage): Message {
+    const m = new Message("user", s.loop.nextUserId());
+    if (q.text.length > 0) m.parts.push(textPart(q.text));
+    for (const image of q.images) m.parts.push(image);
+    return m;
+  }
+
+  /** An extension's user message started as a turn, as a prompt is. */
+  private beginUserTurn(s: HarnessSession, q: QueuedMessage): void {
+    this.notifyUser(s, q);
+    this.startTurn(s, q.text, [], q.images);
+  }
+
+  /** An extension's user message steered into the turn that runs. */
+  private steerUser(s: HarnessSession, q: QueuedMessage): void {
+    this.notifyUser(s, q);
+    s.loop.steeringMessages.push(this.userMessage(s, q));
+  }
+
+  /** pi.sendUserMessage: a turn at once when idle, steered or followed up when one runs. */
+  private sendUserMessage(s: HarnessSession, contentJson: string, optionsJson: string): void {
+    const q = this.contentOf(parseJson(contentJson));
+    const opts = recordOf(parseJson(optionsJson));
+    const deliver = opts !== null ? str(opts["deliverAs"]) : "";
+    if (s.turnActive) {
+      if (deliver === "followUp") s.followUps.push(q);
+      else this.steerUser(s, q);
+      return;
+    }
+    if (s.running) {
+      s.pendingTurns.push(q);
+      return;
+    }
+    this.beginUserTurn(s, q);
+  }
+
+  /** A custom message as the harness's user message, its type and details kept. */
+  private customMessageOf(s: HarnessSession, value: Record<string, unknown>): Message {
+    const q = this.contentOf(value["content"] === undefined ? "" : value["content"]);
+    const m = this.userMessage(s, q);
+    m.customType = str(value["customType"]);
+    m.display = value["display"] !== false;
+    m.detailsJson = value["details"] === undefined ? "" : JSON.stringify(value["details"]);
+    return m;
+  }
+
+  /** pi.sendMessage: a custom message the model reads as a user message, steered or kept for the next turn. */
+  private sendMessage(s: HarnessSession, messageJson: string, optionsJson: string): void {
+    const value = recordOf(parseJson(messageJson));
+    if (value === null) return;
+    const opts = recordOf(parseJson(optionsJson));
+    const deliver = opts !== null ? str(opts["deliverAs"]) : "";
+    const trigger = opts !== null && opts["triggerTurn"] === true;
+    const m = this.customMessageOf(s, value);
+    if (deliver === "nextTurn") {
+      s.loop.pendingBefore.push(m);
+      return;
+    }
+    if (s.turnActive) {
+      s.loop.steeringMessages.push(m);
+      return;
+    }
+    if (trigger) {
+      if (s.running) {
+        s.pendingCustomStarts.push(m);
+        return;
+      }
+      s.loop.pendingBefore.push(m);
+      this.startTurn(s, "", [], [], true);
+      return;
+    }
+    this.kept(s, m);
+    s.loop.messages.push(m);
+  }
+
+  /** A turn waiting for the session to be idle: a queued user message, else a custom one's trigger. */
+  private pumpPending(s: HarnessSession): void {
+    if (s.running || s.turnActive) return;
+    if (s.pendingCustomStarts.length > 0) {
+      const m = s.pendingCustomStarts[0];
+      s.pendingCustomStarts.splice(0, 1);
+      s.loop.pendingBefore.push(m);
+      this.startTurn(s, "", [], [], true);
+      return;
+    }
+    if (s.pendingTurns.length > 0) {
+      const q = s.pendingTurns[0];
+      s.pendingTurns.splice(0, 1);
+      this.beginUserTurn(s, q);
+    }
+  }
+
+  /** A follow-up an extension sent while a turn ran starts after it. */
+  private pumpFollowUps(s: HarnessSession): void {
+    if (s.running || s.turnActive || s.followUps.length === 0) return;
+    const q = s.followUps[0];
+    s.followUps.splice(0, 1);
+    this.beginUserTurn(s, q);
+  }
+
   /** A turn: the model asked with `text`, its events to the client, the prompts `ids` answered at its end. */
-  private startTurn(s: HarnessSession, text: string, ids: string[], images: Part[]): void {
+  private startTurn(s: HarnessSession, text: string, ids: string[], images: Part[], skipUser = false): void {
     s.running = true;
+    s.turnActive = true;
     s.promptIds = ids;
     s.abort = new Abort();
     this.apply(s);
     s.loop.system = this.blocksFor(s);
     const ext = s.ext;
     if (ext === null || ext.engine === null) {
-      this.runTurn(s, text);
+      this.runTurn(s, text, skipUser);
       return;
     }
     s.started.then(
-      () => this.beforeTurn(s, text, images, ext).then(() => this.runTurn(s, text), (err: unknown) => this.turnFailed(s, err)),
+      () => this.beforeTurn(s, text, images, ext).then(() => this.runTurn(s, text, skipUser), (err: unknown) => this.turnFailed(s, err)),
       (err: unknown) => this.turnFailed(s, err),
     );
   }
@@ -638,11 +870,11 @@ export class AcpAgent {
     this.turnEnded(s, end);
   }
 
-  private runTurn(s: HarnessSession, text: string): void {
+  private runTurn(s: HarnessSession, text: string, skipUser = false): void {
     const listener = this.listenerFor(s);
     // The session's MCP tools first, when they are still being listed.
     s.toolsReady.then(
-      () => this.loop.run(s.loop, text, listener, s.abort).then((end: TurnEnd) => this.turnEnded(s, end), (err: unknown) => this.turnFailed(s, err)),
+      () => this.loop.run(s.loop, text, listener, s.abort, skipUser).then((end: TurnEnd) => this.turnEnded(s, end), (err: unknown) => this.turnFailed(s, err)),
       (err: unknown) => this.turnFailed(s, err),
     );
   }
@@ -664,6 +896,7 @@ export class AcpAgent {
     s.promptIds = [];
     if (error.length > 0) this.said(s, idText, error);
     else this.server.answer(idText, '{"stopReason":"end_turn","usage":{"inputTokens":0,"outputTokens":0}}');
+    this.pumpPending(s);
   }
 
   /** The loop's events to the client and the session's file. */
@@ -740,9 +973,11 @@ export class AcpAgent {
   /** The turn is over: every prompt of it is answered with how it ended; the first turn that ended well names the session. */
   private turnEnded(s: HarnessSession, end: TurnEnd): void {
     s.running = false;
+    s.turnActive = false;
     const ids = s.promptIds;
     s.promptIds = [];
     s.loop.steering = [];
+    s.loop.steeringMessages = [];
     const stop = end.stopReason === CANCELLED ? "cancelled" : end.stopReason === FAILED ? "end_turn" : end.stopReason;
     const result = '{"stopReason":' + JSON.stringify(stop) + ',"usage":{"inputTokens":' + String(end.usage.input + end.usage.cacheRead + end.usage.cacheWrite) + ',"outputTokens":' + String(end.usage.output) + "}}";
     for (const id of ids) {
@@ -753,6 +988,8 @@ export class AcpAgent {
       s.titled = true;
       this.entitle(s, null);
     }
+    this.pumpFollowUps(s);
+    this.pumpPending(s);
   }
 
   /** The session's title from the model, from its opening; `idText` is a `/title` prompt to answer with the outcome. */
@@ -778,6 +1015,13 @@ export class AcpAgent {
     s.title = title;
     s.titled = true;
     this.note(s, TITLE, title);
+  }
+
+  /** pi.setSessionName: the title entry `/title words` writes, and a session_info_update for the client. */
+  private setSessionName(s: HarnessSession, name: string): void {
+    const title = name.replace(/[\r\n]+/g, " ").trim();
+    this.setTitle(s, title);
+    this.server.notify("session/update", sessionInfoUpdate(s.id, title));
   }
 
   /** `/title <words>` names the session so; `/title` alone asks the model again. */

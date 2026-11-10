@@ -85,9 +85,22 @@ export const EXT_PRELUDE: string =
       if (typeof t === "number" && t > 0) fields.timeout = t;
       return fields;
     };
+    const maybe = (v) => (v === null || v === undefined ? undefined : v);
+    const sessionManager = {
+      getSessionId: () => parse(__host("extSession", stringify([ctxId, "getSessionId", ""]))),
+      getSessionFile: () => maybe(parse(__host("extSession", stringify([ctxId, "getSessionFile", ""])))),
+      getCwd: () => parse(__host("extSession", stringify([ctxId, "getCwd", ""]))),
+      getSessionName: () => maybe(parse(__host("extSession", stringify([ctxId, "getSessionName", ""])))),
+      getLeafId: () => parse(__host("extSession", stringify([ctxId, "getLeafId", ""]))),
+      getHeader: () => parse(__host("extSession", stringify([ctxId, "getHeader", ""]))),
+      getEntries: () => parse(__host("extSession", stringify([ctxId, "getEntries", ""]))),
+      getBranch: () => parse(__host("extSession", stringify([ctxId, "getBranch", ""]))),
+      getEntry: (id) => maybe(parse(__host("extSession", stringify([ctxId, "getEntry", String(id)])))),
+    };
     return {
     cwd: c.cwd,
     mode: c.mode,
+    sessionManager,
     hasUI: c.hasUI === true,
     model: c.model === undefined ? null : c.model,
     signal,
@@ -150,6 +163,22 @@ export const EXT_PRELUDE: string =
       if (typeof name !== "string" || def === null || typeof def !== "object" || typeof def.handler !== "function") throw new Error("pi.registerCommand: a command needs a name and handler()");
       const id = fn((args, ctx) => def.handler(args, ctxOf(ctx)));
       call("extCommand", file, instance, name, def.description === undefined ? "" : String(def.description), id);
+    },
+    appendEntry: (customType, data) => {
+      call("extAppendEntry", file, instance, String(customType), data === undefined ? null : data);
+    },
+    setSessionName: (name) => {
+      call("extSetSessionName", file, instance, String(name));
+    },
+    getSessionName: () => {
+      const v = parse(__host("extGetSessionName", stringify([file, instance])));
+      return v === null || v === undefined ? undefined : v;
+    },
+    sendUserMessage: (content, options) => {
+      call("extSendUserMessage", file, instance, content, options === undefined ? null : options);
+    },
+    sendMessage: (message, options) => {
+      call("extSendMessage", file, instance, message, options === undefined ? null : options);
     },
     exec: (command, args, options) => {
       const o = options === null || typeof options !== "object" ? {} : options;
