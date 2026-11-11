@@ -41,8 +41,9 @@ packages/         what the core builds on: @light/kernel, @light/plugins (the Qu
    only says what the files register. The folder is the project's harness ("The harness", below).
 
 A plugin is a file, `plugins/<name>.js`, or a folder, `plugins/<name>/` with its `index.js` and
-what else the plugin keeps beside it (a README, its skills, its prompts). They load in that order,
-each in name order. A plugin with the id of an earlier one replaces
+what else the plugin keeps beside it (a README, its `skills/`, its `prompts/`): the harness offers
+the folder's skills as skills and its prompts as prompt templates. They load in that order, each in
+name order. A plugin with the id of an earlier one replaces
 it, so a file named for a built-in plugin's id (`status`, `git`) overrides it. Saving a file in a
 plugin folder, or a plugin folder's `index.js`, reloads that file alone: its new source is evaluated first (a file that fails to
 evaluate keeps its previous plugins running and says why), then the plugins it defined are stopped,
@@ -80,6 +81,152 @@ config.json (`true` when it has no settings). In `activate(api)` a plugin regist
 contributes and listens to hooks; `api` is its own, so what it registers is its and goes when it
 stops.
 
+## The agent part
+
+A plugin has an app part, `activate(api)`, an agent part, `agent(agent)`, or both. `activate` runs
+in the app and registers what the user sees and does (The life of a plugin). `agent` runs in the
+harness's loop, in the daemon `widecode --harness`: the harness loads the same files (the built-ins,
+the store's `plugins/` and a trusted folder's `.widecode/plugins/`) and runs `agent` in its own
+QuickJS engine, once per live session, so a plugin's module state is that session's. A plugin's agent
+part runs only when the harness is the agent; the app ignores it, and the two parts share no memory.
+They reach each other only by messages: `agent.app.send` and `agent.app.on` in the harness,
+`api.agentPart.send` and `api.agentPart.on` in the app. config.json's `plugins.<id>: false` switches
+both off. `agent.settings()` reads the plugin's section of config.json, the user's with a trusted
+project's over it.
+
+The engine is one per (folder, trusted) pair, and it evaluates every file once to learn which ids
+have an agent part; a session evaluates the files of its agent parts again with an agent object of
+its own. A file saved reloads its agent part in every live session: its handlers get
+`session_shutdown` with reason `reload`, its registrations are dropped, its source is evaluated
+again, and its new handlers get `session_start` with reason `reload`, the running turn going on.
+`/reload` does the same for every plugin of the session's folder and trust. A call into an agent
+part has the app's 250 ms budget: one that throws is logged and the turn goes on, and one over
+budget is switched off for the daemon's life.
+
+The API follows pi's extension API (badlogic/pi-mono): pi's event names, what a handler may answer
+and the tool shape, under widecode's names. pi's own extensions do not load here, since they import
+Node and npm modules; pi itself runs as an agent through `plugins/pi/index.ts` (Agents, above).
+
+### The agent object
+
+| Member | What it does |
+|---|---|
+| `on(event, handler)` | listens for an event (below); a handler may be async |
+| `registerTool(def)` | offers the model a tool (below) |
+| `registerCommand(name, def)` | adds a slash command; `def.handler(args, ctx)` |
+| `appendEntry(customType, data)` | keeps a custom entry on the session's branch, outside the context |
+| `sendUserMessage(content, options)` | sends a prompt as the composer would (`options.deliverAs` `steer` or `followUp`) |
+| `sendMessage(message, options)` | sends a custom or displayed message (`steer`, `followUp`, `nextTurn`, `triggerTurn`) |
+| `setSessionName(name)`, `getSessionName()` | the session's title |
+| `settings()` | the plugin's section of config.json |
+| `exec(command, args, options)` | runs a process without a shell; answers `{ stdout, stderr, code, killed, truncated }`; `options` has `signal`, `timeout` and `cwd` |
+| `getAllTools()` | every tool the session has, with its `source` (`builtin`, `mcp`, `plugin`) |
+| `getActiveTools()`, `setActiveTools(names)` | the tool names offered to the model now, and the set to offer from the next request |
+| `setModel(value)`, `getThinkingLevel()`, `setThinkingLevel(level)` | the session's model and effort; the setters answer a promise of whether the option took it |
+| `events` | channels between the plugins of one session's instance: `on(channel, handler)` answers an unsubscribe, `emit(channel, data)` calls the handlers now |
+| `app` | the link to the plugin's app part: `send(type, data)` and `on(type, handler)`, which answers a function that stops it |
+| `reload()` | reloads the session's plugins as `/reload` does |
+
+### The events
+
+pi's turn is one request and the tool calls it made; widecode's `turn_start` and `turn_end` are
+that request, and `agent_start` and `agent_end` its prompt's run.
+
+| Event | When | Payload | An answer may |
+|---|---|---|---|
+| `session_start` | after a session's files loaded: `startup` (the pair's first), `new`, `resume`, `fork` or `reload` | `reason` | nothing |
+| `session_shutdown` | a live session ends, for the daemon (`quit`) or a reload (`reload`) | `reason` | nothing |
+| `before_agent_start` | a prompt is about to start a run | `prompt`, `images`, `systemPrompt` | a `systemPrompt` for the run, and a `message` to add |
+| `agent_start` | the run's first request begins | none | nothing |
+| `agent_end` | the run's requests are done | `messages` the run added | nothing |
+| `agent_settled` | the prompt is answered | `aborted` | nothing |
+| `turn_start` | one request is about to start | `turnIndex`, `timestamp` | nothing |
+| `turn_end` | the request's tool batch is done | `turnIndex`, `message`, `toolResults` | nothing |
+| `context` | the messages one request sends are ready | `messages` | the `messages` to send instead |
+| `input` | a prompt arrives from the client or a plugin | `text`, `images`, `source` | `action` `continue`, `transform` (with `text` and `images`, reaching the next handler) or `handled` (no turn) |
+| `tool_call` | a tool call is about to run | `toolCallId`, `toolName`, `input` | `block` with a `reason`; an `input` left in the event is the call's input |
+| `tool_result` | a tool call ended | `toolCallId`, `toolName`, `input`, `content`, `details`, `isError` | the `content`, `details` and `isError` to keep instead |
+| `model_select` | the model option changed, from the client or `setModel` | `model`, `previousModel`, `source` | nothing |
+| `thinking_level_select` | the effort changed | `level`, `previousLevel` | nothing |
+| `session_before_compact` | a compaction is about to happen | `reason` (`manual` or `threshold`), `customInstructions` | `cancel`, or a `compaction.summary` instead of the model's |
+| `session_compact` | a compaction happened | `summary`, `fromPlugin` | nothing |
+| `session_before_fork` | a session fork is about to happen | none | `cancel` |
+
+### The handler's context
+
+Every handler gets the event and a `ctx`: `cwd` and `mode`; `model` (`{ provider, id }` or null);
+`signal`, the turn's abort (`aborted`, `addEventListener("abort", f)`); `abort()`; `isIdle()`;
+`getContextUsage()` (`tokens`, `contextWindow`, `percent`); `getSystemPrompt()`; `sessionManager`
+(below); `hasUI`; and `ui`.
+
+`ctx.ui` reaches the client over `_widecode/ui` (Agents, above): `select`, `input`, `editor` and
+`confirm` open a question in the request panel and answer its value, `undefined` or `false` when it
+is cancelled or its `timeout` passes; `notify` is a status message for info and a notice for a
+warning or an error; `setStatus` a segment named `acp:<key>`, `setWidget` a band strip named
+`acp:<key>`, `setTitle` the session's title, and `setEditorText` (and `pasteToEditor`) the composer's
+text. `hasUI` is false when the client did not say it takes the extension (`initialize`'s
+`_meta.widecode.ui`): then a dialog answers its default (`false` for a confirm, `undefined`
+otherwise), and the other calls are written to the log. `getEditorText` answers `""`, since the
+client's composer is not read.
+
+### Tools, commands and entries
+
+```js
+agent.registerTool({
+  name: "todo",
+  label: "Todo",
+  description: "Keep a list of the work.",
+  parameters: {
+    type: "object",
+    properties: { action: { type: "string", enum: ["list", "add", "clear"] }, text: { type: "string" } },
+    required: ["action"],
+  },
+  execute(toolCallId, params, signal, onUpdate, ctx) {
+    return { content: [{ type: "text", text: "[ ] 1 write the docs" }], details: { todos: [], nextId: 1 } };
+  },
+});
+```
+
+`parameters` is the tool's JSON Schema. `execute` answers `{ content, details, isError }` or a
+promise of one: `content` the parts the model reads (text, or an image as `{ type: "image", data,
+mimeType }`), `isError` that the call failed, and `details` what a view keeps and what the session
+file keeps with the result, so a session loaded again rebuilds state from its branch, as `todo` does.
+`toolCallId` names the call, `signal` is the turn's abort, and `onUpdate` is accepted for pi's shape
+and does nothing. A command's `handler(args, ctx)` gets the words after the command. `appendEntry`
+writes an entry of the plugin's `customType`, outside the context, which
+`ctx.sessionManager.getBranch()` reads back; `git-checkpoint` keeps its checkpoints that way.
+
+### The session manager
+
+`ctx.sessionManager` reads the session's file, read-only: `getSessionId()`, `getSessionFile()`
+(`undefined` before the first entry), `getCwd()`, `getSessionName()`, `getLeafId()`, `getHeader()`,
+`getEntries()`, `getBranch()` (the entries from the root to the leaf) and `getEntry(id)`. Entries
+follow pi's shape: a header, then entries with `id` and `parentId` (a message with its parts, a
+model or mode change, a title, a compaction, a plugin's custom entry). A plugin rebuilds its state
+from `getBranch()` when a session starts; `todo` and `git-checkpoint` do.
+
+```js
+widecode.plugin({
+  id: "gate",
+  agent(agent) {
+    agent.on("tool_call", async (event, ctx) => {
+      if (event.toolName !== "Bash") return;
+      const command = typeof event.input["command"] === "string" ? String(event.input["command"]) : "";
+      if (!command.includes("rm -rf")) return;
+      if (!ctx.hasUI) return { block: true, reason: "no UI to confirm this command" };
+      const yes = await ctx.ui.confirm("Run this command?", command);
+      if (!yes) return { block: true, reason: "the user refused" };
+    });
+  },
+});
+```
+
+The built-in plugins with an agent part are the examples: `permission-gate` (this gate, with
+settings), `protected-paths` (a rule on Write and Edit), `inline-bash` (`input`), `claude-rules`
+(`before_agent_start`), `dirty-repo-guard` (`session_before_fork`), `git-checkpoint`
+(`agent_start`, entries and a command), `todo` (a tool whose `details` rebuild it) and
+`tools-switch` (the active tools and a command).
+
 ## The API
 
 `widecode.d.ts` types all of it; this is the map.
@@ -97,6 +244,7 @@ stops.
 | `state` | `folder()` (branch, marks, counts), `changes()` (newest first), `paths()`, `base()`, `active()`, `panels()`, `columns()`, `commands()`, `batch()` (the watcher's latest), `info()` (Claude Code's status line input), `note()`, `screen(columns)` (the screen as drawn, the named columns cropped to their cells), `log(n)` (the last lines of the log) |
 | `actions` | `focus`, `showPanel`, `quit`, `openFolder`, `setBase`, `relative`; `loadFiles`, `loadStatus` (promises) |
 | `agent` | the conversation with the agent: `info` (which agent), `send`, `interrupt`, `reset`, `resume`, the model, effort and mode, its id and title, its first exchange, the agent's edits, its subagents (`agents()`), the tools it has (`tools()`), the skills it has and the session's skill runs (`skills()`) |
+| `agentPart` | the messages between this plugin's app part and its agent part in the harness: `send(type, data)` (false when the agent has no such channel), `on(type, listener)` (answers a stop function) |
 | `state.keymap`, `keys.keymap` | the keymap in use (`"default"`, or a plugin's id); a keymap a plugin brings, for /keymap and config.json's `"keymap"` (hook `keymapChanged`) |
 | `agents`, `conversation` | `register({ id, name, start, send, … })` an agent the conversation can talk to; `apply(events)` its messages, as the conversation's changes (see Agents below); `ask(request)` a question or plan for the user from one of widecode's tools, a promise of the reply |
 | `tools` | `add({ name, description, input, call(args) })` one of widecode's own tools, which agents call over MCP; `server()` where widecode's MCP server listens, for an agent's plugin to offer it (see widecode's own tools below) |
@@ -584,14 +732,14 @@ phase, the agent's events) and the screen as it was.
 | `sessions` | the Sessions tab, a chosen session's details in the code column, Enter opening it here and t in a new terminal; `/resume /rename /title`, F4; the title policy | `titles`, `titleModel`, `terminal` | |
 | `git` | the Git tab; `b` and the compare base; a session's starting commit | | |
 | `peers` | the Peers tab and segment: this machine's shared repositories, each paired machine with every repository it offers and how this machine's copy stands against it (↓ commits to fetch, ↑, level, not here), the machines nearby (mDNS through avahi or dns-sd), pairing, fetch, clone, hosted bare repositories peers push into, a page in the code column with a repository's commits to fetch, `/peers` | `autoFetch`, `refreshMs` | the daemon it starts |
-| `permission-gate` | a confirm before a Bash command matching a dangerous pattern, and a block with the pattern named when the answer is no or there is no UI | `patterns` (the command fragments that ask: `rm -rf`, `sudo `, `git push --force` and the other defaults) | |
-| `protected-paths` | blocks a Write or Edit into `.env`, `.env.*`, `.git/` or `node_modules/`, and a Bash redirect into or `rm` of one, the reason naming the rule | `paths` (gitignore-style simple globs, `*` and `**`, a trailing `/` for a folder) | |
-| `inline-bash` | a prompt's `!{command}` replaced by the command's output before the model reads it (stdout without its last newline; a failure as `[exit <code>: <stderr>]`) | | |
-| `claude-rules` | the Markdown files of the folder's `.claude/rules/` appended to each turn's system prompt, a heading per file | | |
-| `dirty-repo-guard` | a fork of a session whose repository has uncommitted changes asks first, and is refused on no or without a UI | | |
-| `git-checkpoint` | a checkpoint of the working tree at each turn's start in a repository (`git stash create`, a commit no ref points at, which git prunes with its unreachable objects); `/checkpoints` lists them, `/checkpoint restore <n>` brings back a confirmed one's tracked files, `/checkpoint clear` forgets the list | | the checkpoints, in the session |
-| `todo` | a `todo` tool for the agent: list, add, toggle and clear items, the list kept in the tool results' details so a loaded session rebuilds it; `/todos` shows the list | | |
-| `tools-switch` | which tools the model is offered: `/tools` lists them with their state, `/tools off <name>` and `/tools on <name>` switch one, `/tools reset` turns every one on; the choice is kept in the session | | |
+| `permission-gate` | runs in the harness's loop: a confirm before a Bash command matching a dangerous pattern, and a block with the pattern named when the answer is no or there is no UI | `patterns` (the command fragments that ask: `rm -rf`, `sudo `, `git push --force` and the other defaults) | |
+| `protected-paths` | runs in the harness's loop: blocks a Write or Edit into `.env`, `.env.*`, `.git/` or `node_modules/`, and a Bash redirect into or `rm` of one, the reason naming the rule | `paths` (gitignore-style simple globs, `*` and `**`, a trailing `/` for a folder) | |
+| `inline-bash` | runs in the harness's loop: a prompt's `!{command}` replaced by the command's output before the model reads it (stdout without its last newline; a failure as `[exit <code>: <stderr>]`) | | |
+| `claude-rules` | runs in the harness's loop: the Markdown files of the folder's `.claude/rules/` appended to each turn's system prompt, a heading per file | | |
+| `dirty-repo-guard` | runs in the harness's loop: a fork of a session whose repository has uncommitted changes asks first, and is refused on no or without a UI | | |
+| `git-checkpoint` | runs in the harness's loop: a checkpoint of the working tree at each turn's start in a repository (`git stash create`, a commit no ref points at, which git prunes with its unreachable objects); `/checkpoints` lists them, `/checkpoint restore <n>` brings back a confirmed one's tracked files, `/checkpoint clear` forgets the list | | the checkpoints, in the session |
+| `todo` | runs in the harness's loop: a `todo` tool for the agent: list, add, toggle and clear items, the list kept in the tool results' details so a loaded session rebuilds it; `/todos` shows the list | | |
+| `tools-switch` | runs in the harness's loop: which tools the model is offered: `/tools` lists them with their state, `/tools off <name>` and `/tools on <name>` switch one, `/tools reset` turns every one on; the choice is kept in the session | | |
 | `agents` | the Agents tab of the tools column: the session's subagents, one's steps shown in the code column | | |
 | `skills` | the Skills tab of the files column: the agent's skills by where each comes from, with what each is for and its runs this session; the session's skill runs above them, live; Enter or a press shows a skill's SKILL.md in the code column, rendered as markdown, and puts what calls it in the composer, `v` goes to the file; each skill called by a slash is a command, completed above the composer; `/skills` | | |
 | `changes` | the changes strip of the band, under the code column; `[ ]`, Alt+↑↓ | | |
@@ -650,8 +798,9 @@ line of the status section.
 ## Writing a built-in plugin
 
 A built-in plugin is `apps/widecode/plugins/<id>/index.ts`, ending with `export {};`, typed against
-`widecode.d.ts` (`npm run check`). What it needs from the core is a call in the prelude
+`widecode.d.ts` (`light-native check --all`). What it needs from the core is a call in the prelude
 (`src/runtime/prelude.ts`), its answer in its namespace's `src/api/<file>.ts` and its type in
 `widecode.d.ts` (`test/api.test.ts` checks the three agree). Its tests
-drive it through the app (`createWidecode`) and carry `// ffi: apps/widecode/native/ffi.json` on
-their first line, so they run natively with QuickJS and under node with the stand-in.
+drive it through the app (`createWidecode`) and carry `// ffi: @light/plugins/native/ffi.json` on
+their first line, so they run natively with QuickJS and under node with the stand-in. A plugin's
+agent part is tested through the harness (`packages/harness/test/extensions.test.ts`).

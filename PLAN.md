@@ -518,15 +518,21 @@ file in its own engine and runs `agent`. A plugin lives in a folder of its own (
       `setModel` and the thinking level; `agent.events` between a plugin's handlers; the turn,
       agent, model, input, compaction (`session_before_compact` answering a summary),
       `session_before_fork` and shutdown events; `/reload`.
-- [ ] **The two parts talk.** `agent.send(type, data)` and `api.agent.on(type, f)` (and back) over
+- [x] **The two parts talk.** `agent.send(type, data)` and `api.agent.on(type, f)` (and back) over
       an ACP notification of the plugin's id, so a plugin's agent part can feed its own view (a
       todo tool and a Todo tab).
 - [x] **The important plugins.** Built-in plugins with an agent part, written from pi's examples:
       `permission-gate`, `protected-paths`, `git-checkpoint`, `todo` (its tab too, once the parts
-      talk), `inline-bash`, `tools`, `dirty-repo-guard`, `claude-rules`. A test each, switched off
+      talk), `inline-bash`, `tools-switch`, `dirty-repo-guard`, `claude-rules`. A test each, switched off
       in a test too.
-- [ ] **The docs.** PLUGINS.md's plugin shape and folder, the agent part's API and events, the
+- [x] **The docs.** PLUGINS.md's plugin shape and folder, the agent part's API and events, the
       harness README.
+
+- [ ] **The todo tab.** The todo plugin's app part: a tab drawing the agent part's list, sent over
+      `agent.app.send` after each change and asked for again when the tab opens.
+- [ ] **A tool's progress.** `onUpdate` in an agent part's tool reaching the client as
+      `tool_call_update` content while the call runs (with the loop's `onToolOutput`, J's pending
+      box "A long call's progress").
 
 ## Deferred or skip
 

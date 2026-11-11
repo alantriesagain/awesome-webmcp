@@ -309,6 +309,12 @@ avoids that:
 }
 ```
 
+A widecode plugin may carry an agent part for the harness's loop: handlers for its events, tools,
+commands and settings. The built-in `permission-gate`, `protected-paths`, `inline-bash`,
+`claude-rules`, `dirty-repo-guard`, `git-checkpoint`, `todo` and `tools-switch` use it, so a plugin
+file changes what the harness does as it changes what widecode shows. PLUGINS.md's "The agent part"
+has the API.
+
 The package is `packages/harness` (its README has the files); PLAN.md's milestone J is its plan.
 
 ## Peers: the machines on your network

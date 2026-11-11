@@ -120,8 +120,10 @@ packages above, and in the app its controllers, views, the plugin runtime (`src/
 and the API's answers (`src/api/`, a file per namespace). Every feature is a plugin running in
 QuickJS: the built-in ones are `apps/widecode/plugins/<id>/index.ts`, type-checked against
 `widecode.d.ts` and stripped into the binary by `scripts/builtin-plugins.mjs` (the app's prepare
-step); the user's and a trusted project's are `.js` files that reload on save, each file alone,
-the agent and the other plugins untouched.
+step); the user's and a trusted project's are `.js` files or plugin folders (`plugins/<name>/index.js`
+beside its `skills/` and `prompts/`) that reload on save, each alone, the agent and the other plugins
+untouched. A plugin's `agent(agent)` part runs in the harness daemon's loop (PLUGINS.md, "The agent
+part").
 
 - A feature goes in a plugin. What a key does is an action (`api.keys.action`), what a key is
   bound to a keymap (`api.keys.layer`, the user's `keys.json`); a keymap such as emacs or vi is a
