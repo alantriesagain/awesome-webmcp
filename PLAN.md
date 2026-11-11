@@ -558,8 +558,11 @@ file in its own engine and runs `agent`. A plugin lives in a folder of its own (
 - `a2e1ca1` Milestone K, todo and tools-switch (the session view shows a tool result's name and
   details, a batch's results as entries of their own); `a4b18d0` inline-bash, claude-rules,
   dirty-repo-guard and git-checkpoint (no refs: a checkpoint is a commit kept in the session).
-  Tests: one per plugin. `coverage --apps` reported apps/widecode as not static at a4b18d0, the
-  sites all in light's model/ and html/ after light's TypeScript 7 commits and scriptc v0.4.11.
+  Tests: one per plugin. `coverage --apps` reported apps/widecode as not static from a4b18d0:
+  scriptc v0.4.11 (the fork rebased on 2026-11-10) reports SC6001, a conversion that copies
+  natively where node keeps one object, and found 40 sites in light's model/ and html/ and 7 in
+  `sse.test.ts`. Fixed in `00a2e75` and light `8beed99`; `pnpm verify` passes, every entry
+  static.
 - `9529f70` and the next commit, Milestone K, the rest of the agent API; `9ed9c07`
   permission-gate and protected-paths with `test/support/agent-rig.ts`.
 - `9557d66` (light `b5f449e`) Milestone K, plugin folders and the built-ins in them; `d1fcc56` a
