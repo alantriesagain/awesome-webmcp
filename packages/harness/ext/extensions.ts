@@ -125,6 +125,7 @@ export class ExtCommand {
 export class ExtUiHost {
   request: ((paramsText: string) => Promise<unknown>) | null = null;
   notify: ((paramsText: string) => void) | null = null;
+  app: ((paramsText: string) => void) | null = null;
 }
 
 /** One dialog waiting on the client: what settles it, and the default it falls back to. */
@@ -203,6 +204,7 @@ export class Extensions extends HostHandler {
   private readonly dialogs = new Map<number, ExtDialog>();
   private hostSettleId = -1;
   startId = -1;
+  pluginDispatchId = -1;
   private activeEntry: ExtEntry | null = null;
   private readonly closers: Closer[] = [];
   private watchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -346,6 +348,8 @@ export class Extensions extends HostHandler {
     if (settleId.status === OK) this.hostSettleId = num(parseJson(settleId.text), -1);
     const startId = engine.eval("JSON.stringify(__agentStartId)", "harness:plugin-prelude");
     if (startId.status === OK) this.startId = num(parseJson(startId.text), -1);
+    const pluginDispatchId = engine.eval("JSON.stringify(__extPluginId)", "harness:plugin-prelude");
+    if (pluginDispatchId.status === OK) this.pluginDispatchId = num(parseJson(pluginDispatchId.text), -1);
     engine.eval("__extReset()", "harness:plugin-prelude");
     for (const source of sources) {
       const code = "(function () {\n" + source.code + "\n})();";
@@ -863,6 +867,18 @@ export class Extensions extends HostHandler {
         }
         return new HostAnswer(OK, "null");
       }
+      case "extAppSend": {
+        const entry = this.entryOf(str(args[0]));
+        const instance = this.instanceOf(num(args[1], -1));
+        if (entry !== null && instance !== null && entry.enabled) {
+          const params: Record<string, unknown> = { sessionId: instance.sessionId, plugin: entry.id, type: str(args[2]), data: args[3] === undefined ? null : args[3] };
+          const text = JSON.stringify(params);
+          const host = this.ui;
+          if (host !== null && host.app !== null) host.app(text);
+          else log("plugin " + entry.id + " (" + entry.file + "): agent.app.send " + text);
+        }
+        return new HostAnswer(OK, "null");
+      }
       case "extAppendEntry": {
         const instance = this.instanceOf(num(args[1], -1));
         if (instance !== null && instance.onAppendEntry !== null) instance.onAppendEntry(str(args[2]), args[3] === null || args[3] === undefined ? "" : JSON.stringify(args[3]));
@@ -1329,6 +1345,21 @@ export class ExtSession {
   /** Dialogs this instance's session opened resolve to their defaults. */
   cancelDialogs(sessionId: string): void {
     this.owner.cancelDialogs(sessionId);
+  }
+
+  /** A `_widecode/plugin` message from the app to plugin `plugin`'s agent part in this instance. */
+  async receivePlugin(plugin: string, type: string, dataJson: string): Promise<void> {
+    const id = this.owner.pluginDispatchId;
+    if (id < 0) return;
+    let entry: ExtEntry | null = null;
+    for (const e of this.owner.entries) {
+      if (e.id !== plugin) continue;
+      entry = e;
+      break;
+    }
+    if (entry === null || !entry.enabled) return;
+    const data = parseJson(dataJson.length > 0 ? dataJson : "null");
+    await this.owner.call(entry, id, JSON.stringify([this.id, plugin, type, data]), "app " + type, null);
   }
 
   /** The tools to offer the model, one per registered tool, a disabled plugin's left out. */

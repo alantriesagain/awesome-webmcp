@@ -162,6 +162,11 @@ const AGENT_RUNTIME: string = `"use strict";
     const byChannel = channels[inst] || (channels[inst] = Object.create(null));
     return byChannel[channel] || (byChannel[channel] = []);
   };
+  const pluginIdOf = (key) => {
+    const at = key.indexOf("\\u0000");
+    return at < 0 ? key : key.slice(0, at);
+  };
+  const appHandlers = (inst, id, type) => handlersOn(inst, "app:" + id + ":" + type);
   const agentFor = (key, inst) => ({
     on: (name, handler) => {
       call("extHandler", key, inst, name, handled(handler));
@@ -185,6 +190,20 @@ const AGENT_RUNTIME: string = `"use strict";
             __host("extLog", stringify([inst, "event " + String(channel), messageOf(e)]));
           }
         }
+      },
+    },
+    app: {
+      send: (type, data) => {
+        call("extAppSend", key, inst, String(type), data === undefined ? null : data);
+      },
+      on: (type, handler) => {
+        if (typeof handler !== "function") return () => {};
+        const list = appHandlers(inst, pluginIdOf(key), String(type));
+        list.push(handler);
+        return () => {
+          const at = list.indexOf(handler);
+          if (at >= 0) list.splice(at, 1);
+        };
       },
     },
     getAllTools: () => parse(__host("extAllTools", stringify([inst]))),
@@ -297,6 +316,17 @@ const AGENT_RUNTIME: string = `"use strict";
   globalThis.__agentStartId = startAgent;
   const hostSettleId = fn((id, error, value) => hostSettle(id, error, value));
   globalThis.__hostSettleId = hostSettleId;
+  const pluginDispatch = fn((inst, id, type, data) => {
+    const list = appHandlers(inst, String(id), String(type)).slice();
+    for (const f of list) {
+      try {
+        f(data);
+      } catch (e) {
+        __host("extLog", stringify([inst, "app " + String(type), messageOf(e)]));
+      }
+    }
+  });
+  globalThis.__extPluginId = pluginDispatch;
   globalThis.__invoke = (id, json) => {
     const f = fns[id];
     if (typeof f !== "function") throw new Error("plugin: no function " + String(id));

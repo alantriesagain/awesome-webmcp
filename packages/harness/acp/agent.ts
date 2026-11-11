@@ -192,6 +192,9 @@ export class AcpAgent {
     const ui = new ExtUiHost();
     ui.request = (paramsText: string) => this.server.sendRequest("_widecode/ui", paramsText);
     ui.notify = (paramsText: string) => this.server.notify("_widecode/ui", paramsText);
+    ui.app = (paramsText: string) => {
+      if (this.hasUI) this.server.notify("_widecode/plugin", paramsText);
+    };
     this.extensions = new ExtensionsRegistry(paths, ui, builtins);
   }
 
@@ -447,6 +450,15 @@ export class AcpAgent {
       case "session/set_config_option":
         this.setOption(m.idText, p);
         return;
+      case "_widecode/plugin": {
+        const s = p !== null ? this.sessionOf(p) : null;
+        if (s === null || p === null || s.ext === null) return;
+        const data = p["data"] === undefined ? "null" : JSON.stringify(p["data"]);
+        s.ext.receivePlugin(str(p["plugin"]), str(p["type"]), data).catch((err: unknown) => {
+          log("extension app " + s.id + ": " + errorMessage(err, "failed"));
+        });
+        return;
+      }
       case "session/list": {
         const cwd = p !== null ? str(p["cwd"]) : "";
         this.server.answer(m.idText, '{"sessions":' + sessionsJson(this.storeFor(cwd).list(cwd)) + "}");

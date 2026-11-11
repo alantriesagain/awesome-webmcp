@@ -296,6 +296,8 @@ declare namespace widecode {
     /** `from` is "" for a message the user sent, else what sent it (a finished task's "task"). */
     send(text: string, images: { mediaType: string; data: string; path?: string }[], from?: string): string | void;
     interrupt?(): void;
+    /** A message from a plugin's app part to that plugin's agent part in the harness; false when the agent has no such channel. */
+    toAgentPart?(plugin: string, type: string, data: unknown): boolean;
     setMode?(mode: string): string | void;
     setModel?(name: string): void;
     setEffort?(level: string): void;
@@ -655,6 +657,8 @@ declare namespace widecode {
        * ended, the chat was cleared).
        */
       ask(request: { category: "question" | "plan"; name?: string; permission?: boolean; questions?: { question: string; header?: string; multi?: boolean; options: { label: string; description?: string }[] }[]; plan?: string }, parent?: string): Promise<AgentReply>;
+      /** A message from plugin `plugin`'s agent part in this session to its app part: the listeners it registered with agentPart.on of `type`. */
+      fromAgentPart(plugin: string, type: string, data?: unknown): number;
     };
     /**
      * widecode's own tools, which agents call over MCP (widecode's server listens on 127.0.0.1; each
@@ -947,6 +951,13 @@ declare namespace widecode {
        */
       skills(): { known: boolean; partial: boolean; skills: { name: string; description: string; source: string; path: string; command: string }[]; runs: { name: string; callId: string; state: string; startedMs: number; endedMs: number; calls: number }[] };
     };
+    /** The messages between this plugin's app part and its agent part in the harness. */
+    agentPart: {
+      /** A message of `type` from this plugin's agent part in the current session; answers a function that stops the listening. */
+      on(type: string, listener: (data: unknown) => void): () => void;
+      /** Send `data` to this plugin's agent part in the current session; false when the agent has no such channel. */
+      send(type: string, data?: unknown): boolean;
+    };
     settings: {
       /** The plugin's section of config.json, null when it has none. */
       section(): unknown;
@@ -1062,6 +1073,7 @@ declare namespace widecode {
     setTitle(title: string): void;
     setEditorText(text: string): void;
     pasteToEditor(text: string): void;
+    /** "" always: the client's composer is not read (as in pi's RPC mode). */
     getEditorText(): string;
   }
 
@@ -1247,6 +1259,7 @@ declare namespace widecode {
     label?: string;
     description?: string;
     parameters?: unknown;
+    /** Runs a call; `onUpdate` is pi's progress callback, a no-op here (a call's progress does not reach the client yet). */
     execute(toolCallId: string, params: Record<string, unknown>, signal: AgentSignal, onUpdate: () => void, ctx: AgentContext): AgentToolResult | Promise<AgentToolResult>;
   }
 
@@ -1270,6 +1283,14 @@ declare namespace widecode {
     code: number;
     killed: boolean;
     truncated: boolean;
+  }
+
+  /** The messages between a plugin's agent part and its app part, over ACP's `_widecode/plugin`. */
+  interface AgentAppLink {
+    /** Send `type` and `data` to the plugin's app part (nothing when the client did not say it takes them). */
+    send(type: string, data?: unknown): void;
+    /** A message of `type` from the plugin's app part; answers a function that stops the listening. */
+    on(type: string, handler: (data: unknown) => void): () => void;
   }
 
   /** The agent part: the harness daemon's loop, its handlers, tools and commands, its session and processes. */
@@ -1312,6 +1333,8 @@ declare namespace widecode {
     getThinkingLevel(): string;
     /** The session's effort; false when the model does not take it. */
     setThinkingLevel(level: string): Promise<boolean>;
+    /** The messages between this plugin's agent part and its app part. */
+    app: AgentAppLink;
     /** The channels the plugins of this session's instance share. */
     events: AgentEvents;
     /** Reload every plugin of the session's folder and trust, as `/reload` does. */

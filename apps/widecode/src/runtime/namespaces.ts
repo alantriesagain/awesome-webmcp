@@ -4,6 +4,7 @@
 // after) as text where they sit. @light/plugins builds the prelude around them.
 import { PreludePart } from "@light/plugins/prelude.ts";
 import { NAMESPACE_AGENTS, NAMESPACE_CONVERSATION, NAMESPACE_AGENT } from "../api/agent.ts";
+import { NAMESPACE_AGENT_PART } from "../api/agent-part.ts";
 import { NAMESPACE_FS } from "../api/fs.ts";
 import { NAMESPACE_GIT } from "../api/git.ts";
 import { NAMESPACE_PEERS } from "../api/peers.ts";
@@ -17,6 +18,7 @@ import { NAMESPACE_CODE, NAMESPACE_COMPOSER, NAMESPACE_CHAT, NAMESPACE_WIDGETS }
 import { HostAnswer } from "@light/plugins/engine.ts";
 import type { JsRuntime } from "./runtime.ts";
 import { answerAgent } from "../api/agent.ts";
+import { answerAgentPart } from "../api/agent-part.ts";
 import { answerSessions } from "../api/sessions.ts";
 import { answerWidgets } from "../api/widgets.ts";
 import { answerUi } from "../api/ui.ts";
@@ -74,6 +76,7 @@ export const PARTS: PreludePart[] = [
   NAMESPACE_STORE,
   NAMESPACE_TITLES,
   NAMESPACE_AGENT,
+  NAMESPACE_AGENT_PART,
 ];
 
 /** One namespace group and the file that answers it; a namespace not here is answered by the runtime itself. */
@@ -90,6 +93,7 @@ export class ApiNamespace {
 /** Every namespace a file answers; runtime.ts walks this instead of keeping its own prefix list. */
 export const API_ANSWERS: ApiNamespace[] = [
   new ApiNamespace(["agent", "agents", "conversation"], answerAgent),
+  new ApiNamespace(["agentPart"], answerAgentPart),
   new ApiNamespace(["sessions", "store", "titles"], answerSessions),
   new ApiNamespace(["code", "chat", "composer", "widgets"], answerWidgets),
   new ApiNamespace(["ui", "keys", "commands", "languages", "files", "clipboard"], answerUi),

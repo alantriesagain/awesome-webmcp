@@ -154,6 +154,20 @@ class Rig {
     return got as unknown as Record<string, unknown>;
   }
 
+  /** Every `_widecode/plugin` notification now in the output. */
+  pluginNotifications(): Record<string, unknown>[] {
+    const out: Record<string, unknown>[] = [];
+    for (let i = 0; i < this.out.length; i++) {
+      const line = this.out[i];
+      if (!/"method":"_widecode\/plugin"/.test(line) || /"id":\d+/.test(line)) continue;
+      const msg = JSON.parse(line) as { params: Record<string, unknown> };
+      out.push(msg.params);
+      this.out.splice(i, 1);
+      i--;
+    }
+    return out;
+  }
+
   /** Every `_widecode/ui` notification with `method` now in the output. */
   uiNotifications(method: string): Record<string, unknown>[] {
     const out: Record<string, unknown>[] = [];
@@ -1360,6 +1374,64 @@ const main = async (): Promise<void> => {
     ok("/reload shuts down and starts the plugins with reason reload", kept.includes("shutdown:reload") && kept.includes("start:reload"));
     await rig.agent!.shutdown();
     ok("the daemon's stop sends session_shutdown quit", readFileSync(logFile, "utf8").includes("shutdown:quit"));
+    rig.close();
+  }
+
+  // The agent part sends to the app as `_widecode/plugin`, only to a client that takes widecode's UI.
+  {
+    const code = [
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("appsend", { handler: () => { agent.app.send("ping", { n: 1, text: "hi" }); } });',
+      "} });",
+    ].join("\n");
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    rig.extension(code);
+    rig.initialize(true);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "/appsend");
+    const notes = rig.pluginNotifications();
+    eq("the message names the session, plugin, type and data", JSON.stringify(notes), JSON.stringify([{ sessionId: sid, plugin: "ext", type: "ping", data: { n: 1, text: "hi" } }]));
+    rig.close();
+  }
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    rig.extension([
+      'widecode.plugin({ id: "ext", agent(agent) {',
+      '  agent.registerCommand("appsend", { handler: () => { agent.app.send("ping", { n: 1 }); } });',
+      "} });",
+    ].join("\n"));
+    rig.initialize(false);
+    const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    await rig.prompt(sid, "/appsend");
+    eq("a client without the capability hears nothing", String(rig.pluginNotifications().length), "0");
+    rig.close();
+  }
+
+  // A `_widecode/plugin` message from the app reaches that plugin's listener in that session, and no other.
+  {
+    const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
+    rig.extensionFile(
+      "one.js",
+      ['widecode.plugin({ id: "one", agent(agent) {', '  agent.app.on("ping", (data) => { agent.setSessionName("one:" + data.name); });', "} });"].join("\n"),
+    );
+    rig.extensionFile(
+      "two.js",
+      ['widecode.plugin({ id: "two", agent(agent) {', '  agent.app.on("ping", (data) => { agent.setSessionName("two:" + data.name); });', "} });"].join("\n"),
+    );
+    rig.initialize(true);
+    const one = rig.session({ cwd: rig.folder, mcpServers: [] });
+    const two = rig.session({ cwd: rig.folder, mcpServers: [] });
+    rig.taken();
+    rig.send("_widecode/plugin", { sessionId: one, plugin: "one", type: "ping", data: { name: "a" } });
+    ok("the message reaches the plugin's listener", await waitUpTo(() => rig.agent!.titleOf(one) === "one:a", 1000));
+    rig.send("_widecode/plugin", { sessionId: one, plugin: "two", type: "ping", data: { name: "b" } });
+    ok("another plugin hears its own type and not the first", await waitUpTo(() => rig.agent!.titleOf(one) === "two:b", 1000));
+    eq("another session did not hear it", rig.agent!.titleOf(two), "");
+    rig.send("_widecode/plugin", { sessionId: two, plugin: "one", type: "ping", data: { name: "c" } });
+    ok("the same plugin in another session hears its own", await waitUpTo(() => rig.agent!.titleOf(two) === "one:c", 1000));
+    eq("the first session kept its own last message", rig.agent!.titleOf(one), "two:b");
     rig.close();
   }
 

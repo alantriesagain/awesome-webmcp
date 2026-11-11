@@ -1567,6 +1567,12 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
           const sid = str(p.sessionId);
           if (!sides.has(sid) && !dead.has(sid) && (sid === session || session.length === 0)) uiNotification(p);
         }
+      } else if (m.method === "_widecode/plugin") {
+        const p = obj(m.params);
+        if (p !== null) {
+          const sid = str(p.sessionId);
+          if (!sides.has(sid) && !dead.has(sid) && (sid === session || session.length === 0)) api.conversation.fromAgentPart(str(p.plugin), str(p.type), p.data === undefined ? null : p.data);
+        }
       }
     }
     flush();
@@ -1812,6 +1818,12 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
     interrupt() {
       cancel();
       flush();
+    },
+    toAgentPart(plugin, type, data) {
+      if (proc === null || session.length === 0) return false;
+      notify("_widecode/plugin", { sessionId: session, plugin: plugin, type: type, data: data === undefined ? null : data });
+      flush();
+      return true;
     },
     setMode(mode) {
       const r = setMode(mode);

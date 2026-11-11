@@ -29,6 +29,7 @@ const SESSIONS = slotOf(AGENT_SLOTS, "sessions");
 const LOAD_SUBAGENT = slotOf(AGENT_SLOTS, "loadSubagent");
 const WITHDRAW = slotOf(AGENT_SLOTS, "withdraw");
 const SIDE_QUESTION = slotOf(AGENT_SLOTS, "sideQuestion");
+const TO_AGENT_PART = slotOf(AGENT_SLOTS, "toAgentPart");
 export const FNS = AGENT_SLOTS.length;
 
 /** A session's history read into the conversation (a resume, the part before, a subagent's) may take this long. */
@@ -236,6 +237,12 @@ export class JsAgent extends Agent {
 
   override interrupt(): void {
     if (this.running) this.call(INTERRUPT, "[]");
+  }
+
+  override toAgentPart(plugin: string, type: string, data: unknown): boolean {
+    if (this.fns[TO_AGENT_PART] < 0) return false;
+    const r = this.runtime.invoke(this.owner, this.fns[TO_AGENT_PART], "[" + json(plugin) + "," + json(type) + "," + (data === undefined ? "null" : JSON.stringify(data)) + "]");
+    return r.status === OK && r.text === "true";
   }
 
   override setMode(mode: string): string {

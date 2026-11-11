@@ -15,6 +15,7 @@ import { FNS, JsAgent } from "../runtime/agent.ts";
 import { HostAnswer } from "@light/plugins/engine.ts";
 import { str, num, list, json, answer, answerText, objectText, listText } from "./values.ts";
 import { trail } from "@light/lib/log.ts";
+import { deliverAgentPart } from "./agent-part.ts";
 
 /** Plugin call `name` with its arguments `a`, answered; null for a call of another namespace. */
 export const answerAgent = (rt: JsRuntime, name: string, a: unknown[]): HostAnswer | null => {
@@ -51,6 +52,10 @@ export const answerAgent = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
       c.settleAsks(false);
       if (n > 0) c.changed();
       return answer(n);
+    }
+    case "conversation.fromAgentPart": {
+      // A message from plugin `a[1]`'s agent part to its app part in this session.
+      return answer(deliverAgentPart(rt, str(a[1]), str(a[2]), a[3]));
     }
     case "conversation.subagent": {
       // A run under a call of the open turn (or a transcript read back into a closed one): the
@@ -237,6 +242,7 @@ export const NAMESPACE_AGENTS = new PreludePart("agents", `        register: (a)
             opt(a.loadSubagent, (callId) => a.loadSubagent(callId) === true),
             opt(a.withdraw, () => a.withdraw() ?? ""),
             opt(a.sideQuestion, (question) => a.sideQuestion(question) ?? ""),
+            opt(a.toAgentPart, (plugin, type, data) => a.toAgentPart(plugin, type, data) === true),
           ], a.eager === true);
         },
 `);
@@ -245,6 +251,7 @@ export const NAMESPACE_AGENTS = new PreludePart("agents", `        register: (a)
 export const NAMESPACE_CONVERSATION = new PreludePart("conversation", `        apply: (events) => call("conversation.apply", id, Array.isArray(events) ? events : [events]),
         subagent: (callId, events, historical) => call("conversation.subagent", id, String(callId), Array.isArray(events) ? events : [events], historical === true),
         ask: (request, parent) => later("conversation.ask", id, request, String(parent ?? "")),
+        fromAgentPart: (plugin, type, data) => call("conversation.fromAgentPart", id, String(plugin), String(type), data === undefined ? null : data),
 `);
 
 /** The `agent` namespace of the plugin API, its JS side: the calls these answers take. */

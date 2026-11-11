@@ -19,6 +19,7 @@ export const AGENT_SLOTS = [
   "loadSubagent",
   "withdraw",
   "sideQuestion",
+  "toAgentPart",
 ];
 
 /** `name`'s place in `slots`. */

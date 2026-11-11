@@ -403,6 +403,11 @@ const prompt = (id, sessionId, params) => {
       update(sessionId, { sessionUpdate: "agent_message_chunk", content: text(result.cancelled ? "Input timed out" : "Input: " + result.value) });
       end(result.cancelled ? "cancelled" : "end_turn");
     });
+  } else if (first === "plugin") {
+    // A message to the plugin's app part, as the harness sends one: only plugin "demo" hears it.
+    write({ method: "_widecode/plugin", params: { sessionId, plugin: "demo", type: "ping", data: { name: "hello" } } });
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Plugin message sent.") });
+    end("end_turn");
   } else if (first === "notify") {
     update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Notified.") });
     ui(sessionId, { method: "notify", message: "fake says hi", notifyType: "info" });

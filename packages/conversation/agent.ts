@@ -107,6 +107,11 @@ export class Agent {
 
   interrupt(): void {}
 
+  /** A message from a plugin's app part to that plugin's agent part; false when the agent has no such channel. */
+  toAgentPart(_plugin: string, _type: string, _data: unknown): boolean {
+    return false;
+  }
+
   /** Switch the agent's mode ("plan", …); "" or why not. */
   setMode(_mode: string): string {
     return "no agent";
