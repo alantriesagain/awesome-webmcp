@@ -1,0 +1,13 @@
+{
+  "name": "scriptc",
+  "version": "0.4.12",
+  "private": true,
+  "description": "scriptc 0.4.12's compiler run under node: npm's native scriptc binary segfaults on widecode's app entry, while the same release's JavaScript compiles it.",
+  "type": "module",
+  "bin": {
+    "scriptc": "main.mjs"
+  },
+  "dependencies": {
+    "@scriptc/compiler": "0.4.12"
+  }
+}

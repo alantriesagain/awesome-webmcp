@@ -153,8 +153,8 @@ Costs, and what the box needs for it:
   40 GB.
 - bootstrapp's dev server ports (2100, 3400, 3500, ...) are forwarded to the host, so the browser
   works as before.
-- The image needs node 24 and pnpm for the builds, with the scriptc fork and light listed beside
-  the projects that build on them.
+- The image needs node 24 and pnpm for the builds, with light listed beside the projects that
+  build on it; scriptc is the release installed in the shared checkout's node_modules.
 
 Steps:
 

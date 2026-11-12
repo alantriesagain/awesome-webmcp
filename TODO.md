@@ -15,8 +15,6 @@ Open issues found along the way, each with what is known. The plans (`PLAN.md`, 
 - Alerts ring whether or not the terminal has focus: light's terminal host does not report focus
   (`CSI ?1004h`, then `ESC [ I` and `ESC [ O`). With it, the alerts plugin can alert only when the
   window is in the background.
-- The scriptc fork's `FORK.md` shows the `scriptc-dev` wrapper without the
-  `SCRIPTC_CACHE_MAX_MB=20480` line the installed wrapper now has (dbd309c explains why).
 - The full native run (`pnpm verify`) has not run since the `/subagents` commits (4c020af, ccdbd27)
   and the permission and alerts fixes (a8078e5, 6b908a1).
 - Reloading every plugin from the harness's `reload` tool fails the call that asked for it:

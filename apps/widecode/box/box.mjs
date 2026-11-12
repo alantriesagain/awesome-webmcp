@@ -19,8 +19,8 @@
  * `provision` boots once with the network open and builds base.qcow2: the
  * `agent` user (no sudo), git, ripgrep, curl, ca-certificates, the native build
  * toolchain (build-essential, clang), node 24 (the official tarball), pnpm,
- * Claude Code and opencode from their own installers, and scriptc's wrapper at
- * ~/.local/bin/scriptc-dev. `up` boots a fresh overlay on base with restrict=on.
+ * Claude Code and opencode from their own installers. `up` boots a fresh overlay on base with
+ * restrict=on.
  * A per-boot cloud-init seed mounts the shares and bind-mounts .widecode,
  * .claude and .git read-only, because the project paths change per boot.
  * A host folder, <state>/guest-cache, is shared the same way and mounted over
@@ -88,7 +88,7 @@ const VIRTIOFS_DIR = path.join(STATE, "virtiofs");
 const SCRIPT = fileURLToPath(import.meta.url);
 const HOST_HOME = os.homedir();
 const BWRAP = "/usr/bin/bwrap";
-const TOOL_NAMES = ["node", "pnpm", "opencode", "claude", "scriptc-dev"];
+const TOOL_NAMES = ["node", "pnpm", "opencode", "claude"];
 
 const ENV_DIR = "/home/agent/.config/widecode-box";
 const ENV_FILE = `${ENV_DIR}/env`;
@@ -673,18 +673,6 @@ write_files:
 
       install -d -o agent -g agent /home/agent/.local/bin
       chown -R agent:agent /home/agent/.local
-      cat > /home/agent/.local/bin/scriptc-dev <<'WRAPPER'
-      #!/usr/bin/env bash
-      fork=/home/alanleal/Projects/scriptc
-      id="$(git -C "$fork" rev-parse --short HEAD 2>/dev/null || echo nogit)-$(stat -c %Y "$fork/packages/compiler/dist/index.js" 2>/dev/null || echo 0)"
-      export SCRIPTC_CACHE_DIR="\${SCRIPTC_CACHE_DIR:-$HOME/.cache/scriptc-fork/$id}"
-      mkdir -p -m 700 "$SCRIPTC_CACHE_DIR" && chmod 700 "$SCRIPTC_CACHE_DIR"
-      unset SCRIPTC_NO_CACHE
-      export SCRIPTC_CACHE_MAX_MB="\${SCRIPTC_CACHE_MAX_MB:-20480}"
-      exec node "$fork/packages/cli/dist/main.js" "$@"
-      WRAPPER
-      chown agent:agent /home/agent/.local/bin/scriptc-dev
-      chmod 755 /home/agent/.local/bin/scriptc-dev
 
       runuser -l agent -c 'curl -fsSL https://claude.ai/install.sh | bash'
       runuser -l agent -c 'curl -fsSL https://opencode.ai/install | bash'
@@ -747,7 +735,6 @@ const agentProbe = [
   'echo "node: $(node --version)"',
   'echo "pnpm: $(pnpm --version)"',
   'echo "clang: $(clang --version 2>&1 | head -1)"',
-  'if [ -x "$HOME/.local/bin/scriptc-dev" ]; then echo "scriptc-dev: wrapper"; else echo "scriptc-dev: not found"; fi',
 ].join("\n");
 
 const provision = async () => {
@@ -1188,11 +1175,6 @@ const toolMounts = () => {
   for (const name of TOOL_NAMES) {
     const resolved = findExecutable(name);
     if (!resolved) continue;
-    if (name === "scriptc-dev") {
-      addMount(resolved);
-      addDir(path.dirname(resolved));
-      continue;
-    }
     if (name === "opencode") {
       const bin = path.join(HOST_HOME, ".opencode", "bin");
       const folder = existsSync(bin) ? realpathSync(bin) : path.dirname(resolved);

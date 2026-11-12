@@ -17,6 +17,12 @@
   "devDependencies": {
     "@light/cli": "workspace:*",
     "@types/node": "^26.6.5",
+    "scriptc": "file:tools/scriptc-node",
     "typescript": "^6.0.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "scriptc"
+    ]
   }
 }

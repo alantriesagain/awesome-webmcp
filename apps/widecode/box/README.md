@@ -36,12 +36,11 @@ once with the network open. Cloud-init creates the `agent` user (shell, the box'
 sudo), installs git, ripgrep, curl, ca-certificates, `linux-image-amd64`, `build-essential`,
 `clang`, `xz-utils` and `cloud-guest-utils`, installs node 24 from the official tarball
 (`https://nodejs.org/dist/latest-v24.x`, extracted into `/usr/local`), installs pnpm 10.11.0 from
-npm, writes scriptc's wrapper at `/home/agent/.local/bin/scriptc-dev`, and runs Claude Code's and
-opencode's own installers as `agent`. Node scripts in the guest therefore run under the same node 24
-the host's scriptc fork is built for, and clang is the linker scriptc's executable builds drive. It
-then reports the paths and versions over SSH and powers the guest down through the QEMU monitor,
-leaving `base.qcow2` provisioned. Cloud-init's growpart grows the guest's root to the 40 GB disk on
-boot; `df -h /` in the guest reported 40 GB.
+npm, and runs Claude Code's and opencode's own installers as `agent`. Node scripts in the guest
+therefore run under the same node 24 the compiler is built for, and clang is the linker scriptc's
+executable builds drive. It then reports the paths and versions over SSH and powers the guest down
+through the QEMU monitor, leaving `base.qcow2` provisioned. Cloud-init's growpart grows the guest's
+root to the 40 GB disk on boot; `df -h /` in the guest reported 40 GB.
 
 `up` creates a fresh `box.qcow2` overlay on `base.qcow2` and boots it with
 `-netdev user,id=n0,restrict=on,hostfwd=tcp:127.0.0.1:2223-:22`, 4096 MB and 4 CPUs by default
@@ -82,15 +81,15 @@ returns at once; with a different list it refuses and says to run `down`, then `
 
 ### scriptc and the build cache
 
-`/home/agent/.local/bin/scriptc-dev` is the host wrapper's script (`git -C
-/home/alanleal/Projects/scriptc rev-parse --short HEAD`, `stat` on
-`packages/compiler/dist/index.js`, `SCRIPTC_CACHE_MAX_MB=20480`) running the shared checkout's node
-CLI. Its cache is `~/.cache/scriptc-fork/<id>` (mode 700), which inside the guest is the host folder
+The guest uses the scriptc installed in the shared checkout's `node_modules`, which
+`light-native` resolves from the workspace root. The widecode checkout is shared at its own host
+path, so `/home/alanleal/Projects/widecode/node_modules/.bin/scriptc` exists in the guest. Its
+cache lives under the guest's `/home/agent/.cache`, which is the host folder
 `<state>/guest-cache`. A host-shared cache would let the box plant a build the host then runs, so
 the folder is the box's alone: only the guest has it, and the host's own scriptc cache lives
-elsewhere and never reads it. The shared projects are
-`/home/alanleal/Projects/{widecode,light,scriptc}`, so `widecode/light` (a symlink to `../light`)
-resolves inside the guest when light is shared at its own path.
+elsewhere and never reads it. The shared projects are `/home/alanleal/Projects/{widecode,light}`,
+so `widecode/light` (a symlink to `../light`) resolves inside the guest when light is shared at its
+own path.
 
 `proxy` is a host-side HTTP proxy on `127.0.0.1` (default port 8888, override with `--port` or
 `WIDECODE_BOX_PROXY_PORT`) and on `<state>/proxy.sock`. Both listeners use the same allow list and
@@ -133,14 +132,15 @@ read-only binds otherwise. It sees no host home beyond the jail home and the too
 `/run`, `/var`, `/media` or `/mnt`.
 
 The jail home is `<state>/jail-home` (mode 700). It is bound read-write at the host user's real home
-path, so absolute paths under home keep working. It holds the jail's own opencode data, the scriptc
-cache at `$HOME/.cache/scriptc-fork` and pnpm's store.
+path, so absolute paths under home keep working. It holds the jail's own opencode data, scriptc's
+cache and pnpm's store. scriptc itself comes from the workspace root's `node_modules`, which the
+jail binds read-write with the project.
 
-Each tool found on the host `PATH` among `node`, `pnpm`, `opencode`, `claude` and `scriptc-dev` is
-read-only at its host path, after resolving symlinks: the whole nvm version folder for node under
-nvm, `~/.opencode/bin` for opencode, and the file alone for scriptc-dev. `box.mjs` itself is
-read-only too. Each `--project` is read-write at its own path, with `.widecode/`, `.claude/` and
-`.git` read-only over it when they exist. The cwd must be inside a project.
+Each tool found on the host `PATH` among `node`, `pnpm`, `opencode` and `claude` is read-only at
+its host path, after resolving symlinks: the whole nvm version folder for node under nvm, and
+`~/.opencode/bin` for opencode. `box.mjs` itself is read-only too. Each `--project` is read-write
+at its own path, with `.widecode/`, `.claude/` and `.git` read-only over it when they exist. The
+cwd must be inside a project.
 
 `.git` is read-only whole because the host's git runs what it says: `config` (`core.fsmonitor`,
 `core.hooksPath`), a `commondir` file, which moves where git reads its config from, and the hooks.

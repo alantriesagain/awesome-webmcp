@@ -11,8 +11,8 @@ as `@lightstart/light`), and light's packages for native apps (`@light/<name>`, 
 (`@widecode/<dirname>`), `apps/*` the apps. What an app needs from the framework (a widget, a host
 capability, a fix in the renderer) goes into light, what any native app could use goes into light's
 packages, and what only these apps share goes into a package here; nothing is imported by relative
-path across members. The compiler is the scriptc fork at `../scriptc` (its `FORK.md` lists the
-patches light needs).
+path across members. The compiler is the scriptc release pinned in `package.json` (0.4.12),
+installed at the workspace root; `SCRIPTC` names another.
 
 | Path | What it is |
 |---|---|
@@ -164,12 +164,21 @@ part").
 
 ## The compiler (scriptc static mode)
 
-`light-native` compiles with `$SCRIPTC`, else the fork's `scriptc-dev` on PATH, else the scriptc
-installed at the root (upstream lacks the fork's patches and fails on light). The wrapper keys scriptc's
-cache (`SCRIPTC_CACHE_DIR`) by the fork's commit and build time, so unchanged programs and
-coverage verdicts come back from it (the fork's `FORK.md` has the wrapper). It sets
-`SCRIPTC_CACHE_MAX_MB=20480`: every test is an executable of its own, a full run's builds take
-about 14 GB, and under scriptc's default 4 GB cap each run evicts what the next one asks for. A compiler bug found here gets a
+`light-native` compiles with `$SCRIPTC` when it is set, else the scriptc release pinned in
+`package.json` (0.4.12), installed at the workspace root. The root's `scriptc` is
+`tools/scriptc-node`: the release's `@scriptc/compiler` run under node, since npm's native
+`scriptc` binary segfaults on `apps/widecode/src/main.ts` (vercel-labs/scriptc#3595); switch back to
+the npm `scriptc` package once a release fixes that. To move to another release before then,
+change the version in `tools/scriptc-node/package.json` (its own and `@scriptc/compiler`'s),
+port any change to upstream's `packages/cli/src/main.ts` between the two tags into
+`tools/scriptc-node/main.mjs`, and run `pnpm install`; once #3595 is fixed, replace the root's
+`file:tools/scriptc-node` with the release's version, delete `tools/scriptc-node`, run
+`pnpm install`, and build the app (`pnpm light-native build widecode`) to confirm the native binary
+no longer crashes. light pins its own `scriptc` (light's `packages/light/native/README.md` says how
+to move it). For a full test run, set
+`SCRIPTC_CACHE_MAX_MB=20480` in the environment: every test is an executable of its own, a full
+run's builds take about 14 GB, and under scriptc's default 4 GB cap each run evicts what the next
+one asks for. A compiler bug found here gets a
 probe in light's `native/probes/`, a one-file program that prints the same lines under node and
 natively, and a row in its `README.md`; prefer fixing scriptc over working around it when the fix is in reach. The
 rules the code follows today:
@@ -186,13 +195,12 @@ rules the code follows today:
   function in a class).
 - `JSON.stringify` refuses class instances: build literals typed `unknown`. Never depend on the key
   order of its output (literals with the same keys share a layout natively, p39).
-- A class field typed as an array of an interface is refused (use `unknown[]`); an
-  `unknown`-typed field needs the fork. An empty `[]` returned where a typed array is expected
-  needs a typed binding (`const none: Branch[] = []`).
+- A class field typed as an array of an interface is refused (use `unknown[]`). An empty `[]`
+  returned where a typed array is expected needs a typed binding (`const none: Branch[] = []`).
 - Parsed JSON stays short-lived (p37): keep records as text and parse one while applying it.
 - `spawnSync` takes no `cwd` natively: `git -C <dir>`, or `sh -c "cd <dir> && ..."`.
 - Erasable TypeScript only, so the same file runs under node for fast feedback.
-- `light-native coverage` stays static (`--fail-on=slow-paths`, no site compiling dynamically).
+- `light-native coverage` stays static (it fails on blockers, no site compiling dynamically).
 
 ## Agents
 

@@ -14,10 +14,9 @@ side over one folder, a native core and JavaScript plugins in an embedded QuickJ
 a desktop app on light's desktop shell. Claude is reached through the user's installed Claude Code
 CLI as a sidecar over `stream-json`, or any agent speaking ACP.
 
-Light's TypeScript core needs scriptc patches no release carries yet (`unknown`-typed class
-fields, native dispatch for generic classes, and more; the fork's `FORK.md` lists them), so
-`light-native` compiles with the scriptc named by `SCRIPTC`, else the fork's `scriptc-dev` on PATH, else the one
-installed at the root:
+The compiler is the scriptc release pinned in `package.json` (0.4.12), installed at the workspace
+root and run under node by `tools/scriptc-node` (npm's native `scriptc` binary segfaults on the app's
+entry, vercel-labs/scriptc#3595); `light-native` compiles with it, and `SCRIPTC` names another:
 
 ```
 SCRIPTC=/path/to/scriptc pnpm test
@@ -33,7 +32,7 @@ directory at `../light` on the `main` branch (`pnpm install` there once).
 pnpm install                    # links light, its packages and these; typescript and @types/node (dev only; zero runtime deps)
 pnpm typecheck                  # tsc per member (light-native typecheck --all)
 pnpm test                       # every member's tests under node AND as native binaries; outputs must match (light-native test)
-pnpm coverage                   # scriptc coverage gate: every app entry and test compiles statically (light-native coverage)
+pnpm coverage                   # scriptc coverage gate: every app entry and test compiles statically, failing on blockers (light-native coverage)
 scripts/lint.sh                 # no em dashes or any types in app/package text
 scripts/ci.sh                   # the CI gate: lint, verify, build, and the three widecode selftests
 pnpm light-native build widecode         # apps/widecode/dist/widecode (stripped)
