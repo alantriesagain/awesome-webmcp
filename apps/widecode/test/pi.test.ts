@@ -123,6 +123,15 @@ const main = async (): Promise<void> => {
   eq("its kind, name, command, output and no file", run === null || run.result === null ? "" : [run.category, run.name, run.summary, run.command, run.result.text, String(run.paths.length)].join(" | "), "run | Bash | ls -1 | ls -1 | a.txt\nb.txt | 0");
   eq("counted as a run", String(c.info.execs) + "/" + String(c.info.calls), "1/1");
 
+  ok("a write and a read back, as the live run had them", await turn("write"));
+  const write = c.model.tool("call_write");
+  eq("the write's card, its result and its content", write === null || write.result === null ? "" : [write.category, write.name, write.paths.join(","), write.result.text, write.written].join(" | "), "edit | Write | hello.txt | Successfully wrote to hello.txt | hi\n");
+  const read = c.model.tool("call_read");
+  eq("the read back: a read, its file and its text", read === null || read.result === null ? "" : [read.category, read.name, read.summary, read.result.text].join(" | "), "read | Read | hello.txt from line 1 | hi\n");
+  ok("the live run's reply", chat().some((l: string) => l.includes("done")));
+  eq("the code column follows the write", c.model.lastEdit, join(folder, "hello.txt"));
+  eq("each message's cost adds to the session's", c.info.costUsd.toFixed(3), "0.006");
+
   ok("an edit", await turn("edit"));
   const edit = c.model.tool("call_edit");
   const hunks = edit === null || edit.result === null ? "" : edit.result.patch.map((h) => String(h.oldStart) + "," + String(h.newStart) + ":" + h.lines.join("|")).join(" ");

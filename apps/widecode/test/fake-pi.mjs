@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
  * @file A stand-in for pi (`pi --mode rpc`) in tests: JSONL commands on stdin, responses and session
- * events on stdout, as @earendil-works/pi-coding-agent 1.5.1 speaks them. It keeps a session file in
+ * events on stdout, as @earendil-works/pi-coding-agent 1.5.2 speaks them. It keeps a session file in
  * pi's folder for the current directory (~/.pi/agent/sessions/--<cwd>--/), so the plugin can list and
  * resume it. A prompt's first word picks what it does:
  *
  * - `hello`: a thought, then "Hello, world." in two chunks;
  * - `run`: a bash call with its output, then a message;
+ * - `write`: a write of `hello.txt`, a read of it back, then "done" (the live run's two tools);
  * - `edit`: an edit of `a.txt` with a unified patch in its details, then a message;
  * - `work`: a bash call that runs a moment; a prompt sent while it runs is steered into the turn,
  *   and the reply says what was added ("Worked. Also: ...");
@@ -19,6 +20,11 @@
  * - `widget` and `widget-clear`: setWidget with and without lines;
  * - `title`: setTitle; `editor-text`: set_editor_text;
  * - anything else: "You said: <text>".
+ *
+ * The records follow the live wire shape: a session event per turn (turn_start, a message_start and
+ * message_end around system, user, assistant and toolResult messages, message_update deltas with
+ * text, thinking or tool call blocks, tool_execution_start and tool_execution_end), then agent_end
+ * and agent_settled.
  *
  * With `--log <path>` every message it reads is appended there, after a first line naming its own
  * arguments. With `--session <path>` it opens that session file instead of making one. A session
@@ -51,6 +57,13 @@ const state = {
   thinkingLevel: "default",
   sessionName: "",
   isStreaming: false,
+  userMessages: 0,
+  assistantMessages: 0,
+  toolCalls: 0,
+  toolResults: 0,
+  tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+  cost: 0,
+  contextTokens: 0,
 };
 
 const startSession = () => {
@@ -84,23 +97,113 @@ const respond = (id, command, data, error) => {
 };
 const event = (m) => out(m);
 const usage = () => ({ input: 10, output: 5, cacheRead: 0, cacheWrite: 0, totalTokens: 15, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0.001 } });
-const textEvent = (kind, text) => textChunks(kind, [text]);
+const zeroUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } });
+const addUsage = (u) => {
+  state.tokens.input += u.input;
+  state.tokens.output += u.output;
+  state.tokens.cacheRead += u.cacheRead;
+  state.tokens.cacheWrite += u.cacheWrite;
+  state.tokens.total += u.totalTokens;
+  state.cost += u.cost.total;
+  state.contextTokens = u.totalTokens;
+};
 const textChunks = (kind, chunks) => {
   const contentIndex = 0;
   out({ type: "message_update", usage: usage(), assistantMessageEvent: { type: kind + "_start", contentIndex } });
   for (const delta of chunks) out({ type: "message_update", usage: usage(), assistantMessageEvent: { type: kind + "_delta", contentIndex, delta } });
   out({ type: "message_update", usage: usage(), assistantMessageEvent: { type: kind + "_end", contentIndex, content: chunks.join("") } });
 };
-const message = (text) => event({ type: "message_start", message: { role: "assistant", content: [], usage: usage(), timestamp: Date.now() } }) || out({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text }], usage: usage(), timestamp: Date.now() } });
-const settle = (aborted = false) => {
+const textEvent = (kind, text) => textChunks(kind, [text]);
+
+const systemMessage = () => {
+  const message = {
+    role: "system",
+    content: "",
+    sections: {
+      preamble: "You are a coding assistant running inside pi, a coding agent harness.",
+      tools: "<tools>\n- read: Read file contents\n- bash: Execute bash commands\n- edit: Make precise file edits\n- write: Create or overwrite files\n</tools>",
+      rules: "<rules>\n- Be concise in your responses\n</rules>",
+      cwd: "<cwd>\n" + cwd + "\n</cwd>",
+    },
+    timestamp: Date.now(),
+  };
+  event({ type: "message_start", message });
+  event({ type: "message_end", message });
+  return message;
+};
+const userMessage = (text) => {
+  const message = { role: "user", content: [{ type: "text", text }], timestamp: Date.now() };
+  append(state.sessionFile, { type: "message", id: "u" + String(Date.now()), parentId: null, timestamp: new Date().toISOString(), message });
+  event({ type: "message_start", message });
+  event({ type: "message_end", message });
+  state.userMessages++;
+  return message;
+};
+const assistantStart = () => {
+  const message = { role: "assistant", content: [], api: "fake", provider: "fake", model: state.model.id, usage: zeroUsage(), stopReason: "pending", timestamp: Date.now() };
+  event({ type: "message_start", message });
+  return message;
+};
+const assistantEnd = (content, stopReason = "stop", errorMessage = "") => {
+  const u = usage();
+  addUsage(u);
+  state.assistantMessages++;
+  const message = { role: "assistant", content, api: "fake", provider: "fake", model: state.model.id, usage: u, stopReason, timestamp: Date.now(), ...(errorMessage.length > 0 ? { errorMessage } : {}) };
+  event({ type: "message_end", message });
+  return message;
+};
+
+/** Whether the next assistant message opens a turn of its own (one follows each tool turn). */
+let turnOpen = false;
+const startRun = () => {
+  event({ type: "agent_start" });
+  event({ type: "turn_start" });
+  turnOpen = false;
+};
+const assistantTurn = () => {
+  if (turnOpen) {
+    event({ type: "turn_start" });
+    turnOpen = false;
+  }
+  return assistantStart();
+};
+const turnEnd = (message, toolResults = []) => {
+  event({ type: "turn_end", message, toolResults });
+  turnOpen = true;
+};
+const endRun = (messages, aborted = false) => {
   state.isStreaming = false;
-  event({ type: "agent_end", messages: [], willRetry: false });
+  event({ type: "agent_end", messages, willRetry: false });
   event({ type: "agent_settled", aborted });
 };
-const userEntry = (text) => append(state.sessionFile, { type: "message", id: "u" + String(Date.now()), parentId: null, timestamp: new Date().toISOString(), message: { role: "user", content: text, timestamp: Date.now() } });
+const textTurn = (chunks, full) => {
+  assistantTurn();
+  textChunks("text", chunks);
+  const message = assistantEnd([{ type: "text", text: full }]);
+  turnEnd(message);
+  return message;
+};
+const toolTurn = (id, name, args, result, isError = false) => {
+  assistantTurn();
+  const json = JSON.stringify(args);
+  event({ type: "message_update", usage: zeroUsage(), assistantMessageEvent: { type: "toolcall_start", contentIndex: 0, id, toolName: name } });
+  event({ type: "message_update", usage: zeroUsage(), assistantMessageEvent: { type: "toolcall_delta", contentIndex: 0, delta: json } });
+  event({ type: "message_update", usage: usage(), assistantMessageEvent: { type: "toolcall_end", contentIndex: 0, toolCall: { type: "toolCall", id, name, arguments: args } } });
+  const message = assistantEnd([{ type: "toolCall", id, name, arguments: args }], "toolUse");
+  event({ type: "tool_execution_start", toolCallId: id, toolName: name, args });
+  event({ type: "tool_execution_end", toolCallId: id, toolName: name, result, isError, durationMs: 2 });
+  state.toolCalls++;
+  state.toolResults++;
+  const toolResult = { role: "toolResult", toolCallId: id, toolName: name, content: result.content, isError, durationMs: 2, timestamp: Date.now() };
+  event({ type: "message_start", message: toolResult });
+  event({ type: "message_end", message: toolResult });
+  turnEnd(message, [toolResult]);
+  return { message, toolResult };
+};
 
 const dialogs = new Map();
 let working = null;
+let pending = null;
 const askDialog = (request, then) => {
   dialogs.set(request.id, then);
   out(request);
@@ -109,93 +212,118 @@ const askDialog = (request, then) => {
 const run = (text) => {
   const words = text.trim();
   const first = words.split(/\s+/)[0];
-  event({ type: "agent_start" });
+  startRun();
+  const messages = [systemMessage(), userMessage(words)];
   if (first === "hello") {
+    assistantTurn();
     textEvent("thinking", "Thinking about it.");
     textChunks("text", ["Hello, ", "world."]);
-    message("Hello, world.");
-    settle();
+    const message = assistantEnd([{ type: "thinking", thinking: "Thinking about it." }, { type: "text", text: "Hello, world." }]);
+    turnEnd(message);
+    messages.push(message);
+    endRun(messages);
   } else if (first === "run") {
-    const args = { command: "ls -1" };
-    event({ type: "tool_execution_start", toolCallId: "call_run", toolName: "bash", args });
-    event({ type: "tool_execution_end", toolCallId: "call_run", toolName: "bash", result: { content: [{ type: "text", text: "a.txt\nb.txt" }], details: {} }, isError: false, durationMs: 5 });
-    textEvent("text", "Two files.");
-    message("Two files.");
-    settle();
+    const bash = toolTurn("call_run", "bash", { command: "ls -1" }, { content: [{ type: "text", text: "a.txt\nb.txt" }], details: {} });
+    messages.push(bash.message, bash.toolResult);
+    messages.push(textTurn(["Two files."], "Two files."));
+    endRun(messages);
+  } else if (first === "write") {
+    const writeArgs = { path: "hello.txt", content: "hi\n" };
+    const write = toolTurn("call_write", "write", writeArgs, { content: [{ type: "text", text: "Successfully wrote to hello.txt" }] });
+    writeFileSync(join(cwd, "hello.txt"), writeArgs.content);
+    messages.push(write.message, write.toolResult);
+    const readArgs = { path: "hello.txt", offset: 1, limit: 10 };
+    const read = toolTurn("call_read", "read", readArgs, { content: [{ type: "text", text: "hi\n" }], structuredContent: "hi\n" });
+    messages.push(read.message, read.toolResult);
+    messages.push(textTurn(["done"], "done"));
+    endRun(messages);
   } else if (first === "edit") {
     const args = { path: "a.txt", edits: [{ oldText: "one", newText: "one\ntwo" }] };
-    event({ type: "tool_execution_start", toolCallId: "call_edit", toolName: "edit", args });
     const patch = "@@ -1,1 +1,2 @@\n-one\n+one\n+two";
-    event({ type: "tool_execution_end", toolCallId: "call_edit", toolName: "edit", result: { content: [{ type: "text", text: "Successfully replaced 1 block(s) in a.txt." }], details: { diff: "-one\n+one\n+two", patch, firstChangedLine: 1 } }, isError: false, durationMs: 5 });
-    textEvent("text", "Edited.");
-    message("Edited.");
-    settle();
+    const edit = toolTurn("call_edit", "edit", args, { content: [{ type: "text", text: "Successfully replaced 1 block(s) in a.txt." }], details: { diff: "-one\n+one\n+two", patch, firstChangedLine: 1 } });
+    messages.push(edit.message, edit.toolResult);
+    messages.push(textTurn(["Edited."], "Edited."));
+    endRun(messages);
   } else if (first === "work") {
     working = { also: [], timer: null };
-    event({ type: "tool_execution_start", toolCallId: "call_work", toolName: "bash", args: { command: "sleep 1" } });
+    assistantTurn();
+    const args = { command: "sleep 1" };
+    event({ type: "message_update", usage: zeroUsage(), assistantMessageEvent: { type: "toolcall_start", contentIndex: 0, id: "call_work", toolName: "bash" } });
+    event({ type: "message_update", usage: usage(), assistantMessageEvent: { type: "toolcall_end", contentIndex: 0, toolCall: { type: "toolCall", id: "call_work", name: "bash", arguments: args } } });
+    const message = assistantEnd([{ type: "toolCall", id: "call_work", name: "bash", arguments: args }], "toolUse");
+    event({ type: "tool_execution_start", toolCallId: "call_work", toolName: "bash", args });
     working.timer = setTimeout(() => {
       const w = working;
       working = null;
       event({ type: "tool_execution_end", toolCallId: "call_work", toolName: "bash", result: { content: [{ type: "text", text: "" }], details: {} }, isError: false, durationMs: 400 });
-      textEvent("text", "Worked." + (w !== null && w.also.length > 0 ? " Also: " + w.also.join(" | ") : ""));
-      settle();
+      state.toolCalls++;
+      state.toolResults++;
+      const toolResult = { role: "toolResult", toolCallId: "call_work", toolName: "bash", content: [{ type: "text", text: "" }], isError: false, durationMs: 400, timestamp: Date.now() };
+      event({ type: "message_start", message: toolResult });
+      event({ type: "message_end", message: toolResult });
+      turnEnd(message, [toolResult]);
+      const said = "Worked." + (w !== null && w.also.length > 0 ? " Also: " + w.also.join(" | ") : "");
+      const reply = textTurn([said], said);
+      endRun([...messages, message, toolResult, reply]);
     }, 400);
   } else if (first === "slow") {
-    textEvent("text", "Working…");
+    pending = { messages, text: "Working…" };
+    assistantTurn();
+    textChunks("text", ["Working…"]);
   } else if (first === "fail") {
-    out({ type: "message_update", usage: usage(), assistantMessageEvent: { type: "error", reason: "error", error: { role: "assistant", content: [], usage: usage(), stopReason: "error", errorMessage: "model unavailable", timestamp: Date.now() } } });
-    settle();
+    assistantTurn();
+    out({ type: "message_update", usage: zeroUsage(), assistantMessageEvent: { type: "error", reason: "error", error: { role: "assistant", content: [], usage: zeroUsage(), stopReason: "error", errorMessage: "model unavailable", timestamp: Date.now() } } });
+    const message = assistantEnd([], "error", "model unavailable");
+    turnEnd(message);
+    messages.push(message);
+    endRun(messages);
   } else if (first === "select") {
     askDialog({ type: "extension_ui_request", id: "ui-select", method: "select", title: "Pick one", options: ["Allow", "Block"] }, (response) => {
-      textEvent("text", response.cancelled ? "Select cancelled" : "Selected: " + response.value);
-      settle();
+      const message = textTurn([response.cancelled ? "Select cancelled" : "Selected: " + response.value], response.cancelled ? "Select cancelled" : "Selected: " + response.value);
+      endRun([...messages, message]);
     });
   } else if (first === "confirm") {
     askDialog({ type: "extension_ui_request", id: "ui-confirm", method: "confirm", title: "Clear it?", message: "All messages will be lost." }, (response) => {
-      textEvent("text", response.cancelled ? "Confirm cancelled" : "Confirmed: " + String(response.confirmed));
-      settle();
+      const text = response.cancelled ? "Confirm cancelled" : "Confirmed: " + String(response.confirmed);
+      const message = textTurn([text], text);
+      endRun([...messages, message]);
     });
   } else if (first === "input") {
     askDialog({ type: "extension_ui_request", id: "ui-input", method: "input", title: "Enter a value", placeholder: "type something" }, (response) => {
-      textEvent("text", response.cancelled ? "Input cancelled" : "Input: " + response.value);
-      settle();
+      const text = response.cancelled ? "Input cancelled" : "Input: " + response.value;
+      const message = textTurn([text], text);
+      endRun([...messages, message]);
     });
   } else if (first === "editor") {
     askDialog({ type: "extension_ui_request", id: "ui-editor", method: "editor", title: "Edit some text", prefill: "Line 1\nLine 2" }, (response) => {
-      textEvent("text", response.cancelled ? "Editor cancelled" : "Editor: " + response.value);
-      settle();
+      const text = response.cancelled ? "Editor cancelled" : "Editor: " + response.value;
+      const message = textTurn([text], text);
+      endRun([...messages, message]);
     });
   } else if (first === "notify") {
     out({ type: "extension_ui_request", id: "ui-notify", method: "notify", message: "pi says hi", notifyType: "info" });
-    textEvent("text", "Notified.");
-    settle();
+    endRun([...messages, textTurn(["Notified."], "Notified.")]);
   } else if (first === "status") {
     out({ type: "extension_ui_request", id: "ui-status", method: "setStatus", statusKey: "pi-test", statusText: "busy" });
-    textEvent("text", "Status set.");
-    settle();
+    endRun([...messages, textTurn(["Status set."], "Status set.")]);
   } else if (first === "status-clear") {
     out({ type: "extension_ui_request", id: "ui-status-clear", method: "setStatus", statusKey: "pi-test", statusText: undefined });
-    textEvent("text", "Status cleared.");
-    settle();
+    endRun([...messages, textTurn(["Status cleared."], "Status cleared.")]);
   } else if (first === "widget") {
     out({ type: "extension_ui_request", id: "ui-widget", method: "setWidget", widgetKey: "pi-widget", widgetLines: ["line one", "line two"], widgetPlacement: "aboveEditor" });
-    textEvent("text", "Widget set.");
-    settle();
+    endRun([...messages, textTurn(["Widget set."], "Widget set.")]);
   } else if (first === "widget-clear") {
     out({ type: "extension_ui_request", id: "ui-widget-clear", method: "setWidget", widgetKey: "pi-widget", widgetLines: undefined });
-    textEvent("text", "Widget cleared.");
-    settle();
+    endRun([...messages, textTurn(["Widget cleared."], "Widget cleared.")]);
   } else if (first === "title") {
     out({ type: "extension_ui_request", id: "ui-title", method: "setTitle", title: "pi session" });
-    textEvent("text", "Title set.");
-    settle();
+    endRun([...messages, textTurn(["Title set."], "Title set.")]);
   } else if (first === "editor-text") {
     out({ type: "extension_ui_request", id: "ui-editor-text", method: "set_editor_text", text: "draft from pi" });
-    textEvent("text", "Editor text set.");
-    settle();
+    endRun([...messages, textTurn(["Editor text set."], "Editor text set.")]);
   } else {
-    textEvent("text", "You said: " + words);
-    settle();
+    const text = "You said: " + words;
+    endRun([...messages, textTurn([text], text)]);
   }
 };
 
@@ -206,7 +334,6 @@ const prompt = (id, p) => {
     return respond(id, "prompt", { disposition: "queued" });
   }
   state.isStreaming = true;
-  userEntry(p.message);
   respond(id, "prompt", { disposition: "started" });
   run(p.message);
 };
@@ -223,7 +350,7 @@ const handle = (m) => {
   }
   const id = m.id;
   if (m.type === "get_state") {
-    respond(id, "get_state", { model: state.model, thinkingLevel: state.thinkingLevel, isStreaming: state.isStreaming, isCompacting: false, steeringMode: "all", followUpMode: "all", sessionFile: state.sessionFile, sessionId: state.sessionId, sessionName: state.sessionName, autoCompactionEnabled: true, messageCount: 0, pendingMessageCount: 0 });
+    respond(id, "get_state", { model: state.model, thinkingLevel: state.thinkingLevel, isStreaming: state.isStreaming, isCompacting: false, steeringMode: "one-at-a-time", followUpMode: "one-at-a-time", sessionFile: state.sessionFile, sessionId: state.sessionId, ...(state.sessionName.length > 0 ? { sessionName: state.sessionName } : {}), autoCompactionEnabled: true, messageCount: state.userMessages + state.assistantMessages + state.toolResults, pendingMessageCount: 0 });
   } else if (m.type === "get_available_models") {
     respond(id, "get_available_models", { models: [model("small"), model("large")] });
   } else if (m.type === "get_available_thinking_levels") {
@@ -252,9 +379,11 @@ const handle = (m) => {
     }
     respond(id, "abort");
     if (state.isStreaming) {
-      state.isStreaming = false;
-      event({ type: "agent_end", messages: [], willRetry: false });
-      event({ type: "agent_settled", aborted: true });
+      const p = pending;
+      pending = null;
+      const message = assistantEnd(p !== null ? [{ type: "text", text: p.text }] : [], "aborted");
+      turnEnd(message);
+      endRun(p !== null ? [...p.messages, message] : [message], true);
     }
   } else if (m.type === "new_session") {
     state.sessionId = "";
@@ -278,7 +407,7 @@ const handle = (m) => {
   } else if (m.type === "get_messages") {
     respond(id, "get_messages", { messages: [] });
   } else if (m.type === "get_session_stats") {
-    respond(id, "get_session_stats", {});
+    respond(id, "get_session_stats", { sessionFile: state.sessionFile, sessionId: state.sessionId, userMessages: state.userMessages, assistantMessages: state.assistantMessages, toolCalls: state.toolCalls, toolResults: state.toolResults, totalMessages: state.userMessages + state.assistantMessages + state.toolResults, tokens: state.tokens, cost: state.cost, contextUsage: { tokens: state.contextTokens, contextWindow: state.model.contextWindow, percent: (state.contextTokens / state.model.contextWindow) * 100 } });
   } else {
     respond(id, m.type, undefined, "Unknown command: " + m.type);
   }

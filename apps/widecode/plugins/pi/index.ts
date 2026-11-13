@@ -254,6 +254,10 @@ const piAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAda
   let currentModel = "";
   let currentEffort = "";
   let contextWindow = 0;
+  /** The cost of the session so far, and the cost pi last reported for the message that streams
+   * (its usage carries that message's cost, not the session's). */
+  let spent = 0;
+  let messageCost = 0;
   let wantModel = "";
   let wantEffort = "";
   /** A session's listing, the folder it was for, and when it was read. */
@@ -327,7 +331,12 @@ const piAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAda
     const cacheRead = typeof u.cacheRead === "number" ? u.cacheRead : 0;
     const cacheWrite = typeof u.cacheWrite === "number" ? u.cacheWrite : 0;
     const cost = obj(u.cost);
-    emit({ type: "usage", contextUsed: input + cacheRead + cacheWrite, ...(contextWindow > 0 ? { contextSize: contextWindow } : {}), ...(cost !== null && typeof cost.total === "number" ? { costUsd: cost.total } : {}) });
+    const total = cost !== null && typeof cost.total === "number" ? cost.total : -1;
+    if (total >= 0 && total >= messageCost) {
+      spent += total - messageCost;
+      messageCost = total;
+    }
+    emit({ type: "usage", contextUsed: input + cacheRead + cacheWrite, ...(contextWindow > 0 ? { contextSize: contextWindow } : {}), ...(total >= 0 ? { costUsd: spent } : {}) });
   };
 
   /** The state pi answered: the session and the model it runs on. */
@@ -409,6 +418,8 @@ const piAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAda
       if (gen !== generation || error.length > 0) return;
       session = "";
       sessionFile = "";
+      spent = 0;
+      messageCost = 0;
       listedAt = 0;
       refresh();
     });
@@ -513,6 +524,12 @@ const piAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAda
   /** A session event from pi. */
   const event = (e: Rec): void => {
     const type = str(e.type);
+    if (type === "message_start" || type === "message_end") {
+      const message = obj(e.message);
+      if (type === "message_end") closeBlock();
+      else if (message !== null && message.role === "assistant") messageCost = 0;
+      return;
+    }
     if (type === "message_update") {
       usageOf(obj(e.usage));
       const inner = obj(e.assistantMessageEvent);
@@ -536,8 +553,10 @@ const piAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAda
       if (e.willRetry === true) notice(entry.name + " retries after an error", "info");
       return;
     }
-    if (type === "agent_settled") finishTurn(false);
-    else if (type === "tool_execution_start") callStart(e);
+    if (type === "agent_settled") {
+      if (e.aborted === true) cancelled = true;
+      finishTurn(false);
+    } else if (type === "tool_execution_start") callStart(e);
     else if (type === "tool_execution_end") callEnd(e);
     else if (type === "compaction_start") notice(entry.name + " compacts the conversation", "info");
     else if (type === "compaction_end") {
@@ -870,6 +889,8 @@ const piAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAda
       ready = false;
       inTurn = false;
       cancelled = false;
+      spent = 0;
+      messageCost = 0;
       queue.splice(0);
       closeBlock();
       requests.clear();
@@ -908,6 +929,8 @@ const piAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAda
       ready = false;
       session = "";
       sessionFile = "";
+      spent = 0;
+      messageCost = 0;
       closeBlock();
       requests.clear();
       if (proc !== null) {
