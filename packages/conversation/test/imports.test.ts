@@ -4,7 +4,7 @@ import { done, eq, ok } from "@light/test/assert.ts";
 import { packagesLine, reachOf } from "@light/test/imports.ts";
 
 const reach = reachOf(".");
-eq("it reaches " + "@light/highlight, @light/lib, @light/markdown, @light/ui, @lightstart/light, @widecode/agent", packagesLine(reach, "@widecode/conversation"), "@light/highlight, @light/lib, @light/markdown, @light/ui, @lightstart/light, @widecode/agent");
+eq("it reaches " + "@light/highlight, @light/lib, @light/markdown, @light/ui, @lightstart/light, @lightstart/markdown, @widecode/agent", packagesLine(reach, "@widecode/conversation"), "@light/highlight, @light/lib, @light/markdown, @light/ui, @lightstart/light, @lightstart/markdown, @widecode/agent");
 ok("and no app", !Array.from(reach.packages).some((p) => !p.startsWith("@")));
 ok("it does not reach @lightstart/light's html", !reach.reaches("@lightstart/light", "html"));
 ok("it does not reach @lightstart/light's native/tui/host.ts", !reach.reaches("@lightstart/light", "native/tui/host.ts"));
