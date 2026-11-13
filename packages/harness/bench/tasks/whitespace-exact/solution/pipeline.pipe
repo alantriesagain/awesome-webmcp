@@ -1,0 +1,13 @@
+build
+	compile
+	bundle
+test
+	unit
+	integration
+release
+	package
+		checksum
+	publish
+deploy
+	package
+	publish

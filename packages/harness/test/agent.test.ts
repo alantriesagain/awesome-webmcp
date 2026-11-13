@@ -80,7 +80,7 @@ const main = async (): Promise<void> => {
   eq("the thought, the text in chunks, the usage, then the answer", turn.map((l) => (l.includes("agent_thought_chunk") ? "thought" : l.includes("agent_message_chunk") ? "chunk" : l.includes("usage_update") ? "usage" : l.includes('"result"') ? "answer" : "?")).join(","), "thought,chunk,chunk,usage,answer");
   ok("the chunks share the message's id and carry the text", turn[1].includes('"messageId":"m1"') && turn[2].includes('"messageId":"m1"') && turn[1].includes('"text":"Hello, '));
   ok("the usage counts the request", turn[3].includes('"used":16,"size":200000'));
-  ok("the answer: the stop reason and the usage", turn[4].endsWith('"result":{"stopReason":"end_turn","usage":{"inputTokens":12,"outputTokens":4}}}'));
+  ok("the answer: the stop reason and the usage", turn[4].endsWith('"result":{"stopReason":"end_turn","usage":{"inputTokens":12,"cachedReadTokens":0,"cachedWriteTokens":0,"outputTokens":4}}}'));
 
   // A message mid-turn steers the turn: the fake's next reply echoes what it got.
   const slow = send("session/prompt", { sessionId: sid, prompt: [{ type: "text", text: "slow please" }] });

@@ -1,0 +1,9 @@
+{
+  "name": "worker-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/worker.mjs",
+    "test": "node src/worker.mjs"
+  }
+}

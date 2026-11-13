@@ -1,0 +1,9 @@
+{
+  "name": "pipeline-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/print.mjs",
+    "test": "node src/print.mjs"
+  }
+}

@@ -1,0 +1,9 @@
+build
+	compile
+	bundle
+test
+	unit
+	integration
+deploy
+	package
+	publish

@@ -1,0 +1,1 @@
+{ "prompt": "Change `formatMoney` in src/money.mjs to take an options object `{ currency, locale, decimals }`, defaulting to USD, en-US and 2 decimals, instead of a currency string. Update every call site to pass its currency through the new options object.", "timeoutMs": 420000 }

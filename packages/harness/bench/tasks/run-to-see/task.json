@@ -1,0 +1,1 @@
+{ "prompt": "`node src/main.mjs 2026 2` prints the February schedule but stops on the 27th; every day of the month should be there. Fix it, and make sure a leap February includes the 29th.", "timeoutMs": 300000 }

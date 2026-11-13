@@ -1,0 +1,1 @@
+{ "prompt": "The catalog crashes on startup with `TypeError: Currency code is required with currency style.` Find the cause and fix it so the prices render in euros.", "timeoutMs": 300000 }

@@ -23,7 +23,7 @@ Google refuses searches from a fresh headless profile as unusual traffic on some
 
 ## The benchmark
 
-`bench/` measures agents on real models: eight small tasks, two of them harder (an RFC 4180 parser, a concurrency limit) (`bench/tasks/<name>/`: a repository, a
+`bench/` measures agents on real models: sixteen tasks, eight small ones and eight that test what a harness does (a precise edit in a long file, a test's noisy output, a misleading stack, a change across six callers, a value traced through config, existing tests kept green, a tab-indented file, a bug seen only by running the program) (`bench/tasks/<name>/`: a repository, a
 prompt, a check the agent never sees, and a solution the test checks the check against), run over
 ACP, so the harness, opencode and the DeepSeek Harness are measured alike. A run copies the task
 into a temp git repository, starts the agent there, chooses the model and effort through the
@@ -32,13 +32,31 @@ check, and deletes the session. It records the time to the first token and in al
 tool and those that failed, the tokens, the context and the cost the agent reported; the records go
 to `bench/results/` (ignored by git) and a table is printed.
 
+The record also carries what the ACP stream shows about how a run went: the context the first
+usage update after the prompt reported, the number of requests (a usage update whose context
+changed; a compaction's update and one that only adds a subagent's cost not counted), whether the context was compacted (a smaller context after a larger one, or unknown
+when the agent reports none), and the peak context. A field an agent does not report is `-1`. The
+cost is computed from a price table of dollars per million tokens, `[input, output, cacheRead]`,
+applied to the input tokens with those the agent says it read from the cache
+(ACP's `cachedReadTokens`) at the cache's price, read from `--prices <file.json>` (`{ "<model>": [input, output, cacheRead] }`, under `models` or at
+the top) or by default from the `price` of the models in the harness's config.json. Both the
+computed cost and the agent-reported one are kept, and the table shows the computed one when a
+price is known.
+
 ```
 node packages/harness/bench/run.ts --model deepseek/deepseek-flash,opencode/kimi-k2.6 --repeat 2 --budget 1
 node packages/harness/bench/run.ts --agent opencode --model opencode/big-pickle --tasks fix-bug,edit-json
 node packages/harness/bench/run.ts --report packages/harness/bench/results/*.jsonl
 ```
 
-It talks to real models and spends real money; `--budget` stops starting runs once the reported
-cost passes it. `test/bench.test.ts` runs it on the fake model.
+The summary table has a row per agent and model, its passed runs and run count (`3/5` against
+`5/5`), the mean diagnosis fields, and the computed and reported costs, then a task matrix. For
+every model more than one agent ran, a paired table follows: one column per agent with its
+passed/runs per task, one column for each other agent's pass rate minus the baseline's (the agent
+named `harness`, else the first by name), and a total row. That is the parity view: where two agents
+on the same model diverge, task by task.
+
+It talks to real models and spends real money; `--budget` stops starting runs once the cost passes
+it. `test/bench.test.ts` runs it on the fake model.
 
 The entry in config.json is a default of the ACP plugin, chosen with `"agent": "harness"` or `--agent harness`. A key: `DEEPSEEK_API_KEY` or `ANTHROPIC_API_KEY` in the environment, or `widecode --harness-auth deepseek` with the key on stdin. Tests: `light-native test harness` (the ACP framing, the agent over the fake model with a tool batch, its session file, a load in another process and a resume, the Anthropic request and its events, the HTTP stream by both ways against `test/fake-model.mjs`, the tools over a temp folder, the session store and the replay, the registry, costs and keys); the app's `test/harness-agent.test.ts` drives the daemon under node as the fake agent is driven, the Sessions tab and a side question's fork included.

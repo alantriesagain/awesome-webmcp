@@ -3,13 +3,104 @@
 // chosen through its config options, the task's prompt sent and the turn followed to its end (or
 // cancelled past the task's time), then the task's check run against the folder: it passes or it
 // does not. What the run measured goes in one record: the time to the first token and in all, the
-// calls by tool and those that failed, the tokens, the context used, the cost the agent reported.
+// calls by tool and those that failed, the tokens, the context used, the cost the agent reported,
+// and the diagnosis the stream gives (the first request's input, the requests, a compaction, the
+// peak context), with the cost computed from a price table.
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { listOf, num, objectText, recordOf, str } from "@light/lib/json.ts";
+import { HarnessConfig } from "../config.ts";
 import { AcpClient, AgentNote, RpcReply } from "./acp-client.ts";
+
+/** A model's prices per million tokens (below 0: unknown). */
+export class ModelPrice {
+  input = -1;
+  output = -1;
+  cacheRead = -1;
+
+  constructor(input: number, output: number, cacheRead: number) {
+    this.input = input;
+    this.output = output;
+    this.cacheRead = cacheRead;
+  }
+}
+
+/** What a run costs on a model: its tokens applied to the model's prices. */
+export class PriceTable {
+  private readonly keys: string[] = [];
+  private readonly prices: ModelPrice[] = [];
+
+  /** The price of `key`, replacing one already there. */
+  add(key: string, price: ModelPrice): void {
+    const at = this.keys.indexOf(key);
+    if (at >= 0) this.prices[at] = price;
+    else {
+      this.keys.push(key);
+      this.prices.push(price);
+    }
+  }
+
+  of(model: string): ModelPrice | null {
+    const at = this.keys.indexOf(model);
+    return at >= 0 ? this.prices[at] : null;
+  }
+
+  /**
+   * The cost in dollars on `model` (below 0 when its price is unknown): `input` counts every input
+   * token, the cache's included, as ACP's `inputTokens` does; `cacheRead` of them are read from the
+   * cache at its price, the rest at the input's.
+   */
+  cost(model: string, input: number, cacheRead: number, output: number): number {
+    const p = this.of(model);
+    if (p === null || p.input < 0 || p.output < 0) return -1;
+    const read = Math.min(Math.max(cacheRead, 0), input);
+    return ((input - read) * p.input + read * (p.cacheRead >= 0 ? p.cacheRead : p.input) + output * p.output) / 1000000;
+  }
+}
+
+const priceOf = (value: unknown): ModelPrice | null => {
+  const list = listOf(value);
+  if (list.length >= 2) return new ModelPrice(num(list[0], -1), num(list[1], -1), list.length > 2 ? num(list[2], -1) : num(list[0], -1));
+  const r = recordOf(value);
+  if (r === null) return null;
+  const input = num(r["input"], -1);
+  return new ModelPrice(input, num(r["output"], -1), num(r["cacheRead"], input));
+};
+
+/** The prices in a JSON file: `{ "<model>": [input, output, cacheRead] }`, under `models` or at the top. */
+export const pricesFromFile = (path: string): PriceTable => {
+  const table = new PriceTable();
+  const root = recordOf(JSON.parse(readFileSync(path, "utf8")));
+  if (root === null) return table;
+  const models = recordOf(root["models"]) ?? root;
+  for (const key of Object.keys(models)) {
+    const price = priceOf(models[key]);
+    if (price !== null) table.add(key, price);
+  }
+  return table;
+};
+
+/** The prices of the models the harness's config adds, each as `provider/id`. */
+export const pricesFromConfig = (path: string): PriceTable => {
+  const table = new PriceTable();
+  const config = HarnessConfig.read(path);
+  const providers = recordOf(JSON.parse(config.providersJson.length > 0 ? config.providersJson : "{}"));
+  if (providers === null) return table;
+  for (const id of Object.keys(providers)) {
+    const p = recordOf(providers[id]);
+    if (p === null) continue;
+    for (const v of listOf(p["models"])) {
+      const m = recordOf(v);
+      if (m === null) continue;
+      const model = str(m["id"]);
+      const price = priceOf(m["price"]);
+      if (model.length > 0 && price !== null) table.add(id + "/" + model, price);
+    }
+  }
+  return table;
+};
 
 /** A task: its name, its prompt, the folder holding `repo/` and `check.mjs`, its time. */
 export class BenchTask {
@@ -60,6 +151,8 @@ export class RunSpec {
   effort = "";
   /** Keep the folder after the run, for a look at what the agent did. */
   keep = false;
+  /** The prices to compute a run's cost from (null: none). */
+  prices: PriceTable | null = null;
 }
 
 /** What one run measured. */
@@ -80,17 +173,31 @@ export class RunResult {
   /** Calls by tool, as "Name=n" pairs in the order first seen. */
   tools: string[] = [];
   inputTokens = 0;
+  /** Of the input, the tokens read from the cache, when the agent reports them (`cachedReadTokens`). */
+  cacheReadTokens = 0;
   outputTokens = 0;
   contextUsed = 0;
+  /** The context the first usage update reported (below 0: the agent reported none). */
+  firstInputTokens = -1;
+  /** The requests the agent reported usage after (below 0: it reported none). */
+  requests = -1;
+  /** Whether the context was compacted: 1 yes, 0 no, -1 the stream does not tell. */
+  compacted = -1;
+  /** The largest context the agent reported (below 0: it reported none). */
+  peakContext = -1;
   costUsd = -1;
+  /** The cost from the price table (below 0: no price or no tokens known). */
+  computedCostUsd = -1;
+  /** The last context an update reported, to count requests and spot a compaction. */
+  lastContext = -1;
   /** The agent's last words. */
   reply = "";
   folder = "";
 
   line(): string {
     return objectText(
-      ["task", "agent", "model", "effort", "passed", "checkOutput", "stopReason", "error", "ms", "firstTokenMs", "calls", "failedCalls", "tools", "inputTokens", "outputTokens", "contextUsed", "costUsd", "reply", "folder"],
-      [JSON.stringify(this.task), JSON.stringify(this.agent), JSON.stringify(this.model), JSON.stringify(this.effort), this.passed ? "true" : "false", JSON.stringify(this.checkOutput), JSON.stringify(this.stopReason), JSON.stringify(this.error), String(this.ms), String(this.firstTokenMs), String(this.calls), String(this.failedCalls), "[" + this.tools.map((t) => JSON.stringify(t)).join(",") + "]", String(this.inputTokens), String(this.outputTokens), String(this.contextUsed), String(this.costUsd), JSON.stringify(this.reply), JSON.stringify(this.folder)],
+      ["task", "agent", "model", "effort", "passed", "checkOutput", "stopReason", "error", "ms", "firstTokenMs", "calls", "failedCalls", "tools", "inputTokens", "cacheReadTokens", "outputTokens", "contextUsed", "firstInputTokens", "requests", "compacted", "peakContext", "costUsd", "computedCostUsd", "reply", "folder"],
+      [JSON.stringify(this.task), JSON.stringify(this.agent), JSON.stringify(this.model), JSON.stringify(this.effort), this.passed ? "true" : "false", JSON.stringify(this.checkOutput), JSON.stringify(this.stopReason), JSON.stringify(this.error), String(this.ms), String(this.firstTokenMs), String(this.calls), String(this.failedCalls), "[" + this.tools.map((t) => JSON.stringify(t)).join(",") + "]", String(this.inputTokens), String(this.cacheReadTokens), String(this.outputTokens), String(this.contextUsed), String(this.firstInputTokens), String(this.requests), String(this.compacted), String(this.peakContext), String(this.costUsd), String(this.computedCostUsd), JSON.stringify(this.reply), JSON.stringify(this.folder)],
     );
   }
 
@@ -118,9 +225,15 @@ export class RunResult {
     o.failedCalls = num(r["failedCalls"], 0);
     for (const t of listOf(r["tools"])) o.tools.push(str(t));
     o.inputTokens = num(r["inputTokens"], 0);
+    o.cacheReadTokens = num(r["cacheReadTokens"], 0);
     o.outputTokens = num(r["outputTokens"], 0);
     o.contextUsed = num(r["contextUsed"], 0);
+    o.firstInputTokens = num(r["firstInputTokens"], -1);
+    o.requests = num(r["requests"], -1);
+    o.compacted = num(r["compacted"], -1);
+    o.peakContext = num(r["peakContext"], -1);
     o.costUsd = num(r["costUsd"], -1);
+    o.computedCostUsd = num(r["computedCostUsd"], -1);
     o.reply = str(r["reply"]);
     o.folder = str(r["folder"]);
     return o;
@@ -192,6 +305,9 @@ export const runTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult
   const order: string[] = [];
   const replyParts: string[] = [];
   let sessionId = "";
+  // Usage updates count once the prompt is sent (an agent may report its empty context when the
+  // session is made).
+  let prompted = false;
   client.onNote = (n: AgentNote) => {
     if (n.method !== "session/update") return;
     const u = recordOf(n.params["update"]);
@@ -210,7 +326,20 @@ export const runTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult
     } else if (kind === "tool_call_update" && str(u["status"]) === "failed") result.failedCalls++;
     else if (kind === "usage_update") {
       const used = num(u["used"], -1);
-      if (used > 0) result.contextUsed = used;
+      // An update whose context did not change is no request of the session's (a subagent's cost).
+      if (used >= 0 && prompted && used !== result.lastContext) {
+        if (result.firstInputTokens < 0) result.firstInputTokens = used;
+        if (used > result.peakContext) result.peakContext = used;
+        // A usage update after each request: a smaller context than the last means the agent
+        // compacted it (the update reports the summary's size, not another request's).
+        if (result.lastContext < 0) {
+          result.requests = 1;
+          result.compacted = 0;
+        } else if (used < result.lastContext) result.compacted = 1;
+        else result.requests++;
+        result.lastContext = used;
+        result.contextUsed = used;
+      }
       const cost = recordOf(u["cost"]);
       if (cost !== null && typeof cost["amount"] === "number") result.costUsd = cost["amount"] as number;
     }
@@ -220,6 +349,7 @@ export const runTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult
     result.ms = Date.now() - started;
     result.tools = order.map((t) => t + "=" + String(seen.get(t) ?? 0));
     result.reply = replyParts.join("").trim().slice(-600);
+    if (spec.prices !== null && (result.inputTokens > 0 || result.outputTokens > 0)) result.computedCostUsd = spec.prices.cost(spec.model, result.inputTokens, result.cacheReadTokens, result.outputTokens);
     const check = spawnSync("node", [join(task.dir, "check.mjs")], { cwd: work, encoding: "utf8", timeout: 60000 });
     result.passed = check.status === 0;
     result.checkOutput = ((check.stdout ?? "") + (check.stderr ?? "")).trim().slice(0, 600);
@@ -261,6 +391,7 @@ export const runTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult
     result.error = modelError.length > 0 ? modelError : effortError;
     return finish();
   }
+  prompted = true;
   const turn = await within(client.request("session/prompt", '{"sessionId":' + JSON.stringify(sessionId) + ',"prompt":[{"type":"text","text":' + JSON.stringify(task.prompt) + "}]}"), task.timeoutMs);
   if (turn.error === "timed out") {
     client.notify("session/cancel", '{"sessionId":' + JSON.stringify(sessionId) + "}");
@@ -279,6 +410,7 @@ export const runTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult
   const usage = answer !== null ? recordOf(answer["usage"]) : null;
   if (usage !== null) {
     result.inputTokens = num(usage["inputTokens"], 0);
+    result.cacheReadTokens = num(usage["cachedReadTokens"], 0);
     result.outputTokens = num(usage["outputTokens"], 0);
   }
   return finish();

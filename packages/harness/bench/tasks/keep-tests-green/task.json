@@ -1,0 +1,1 @@
+{ "prompt": "Add support for day units and combined durations such as `1d12h` and `2h30m` to `parseInterval` in src/interval.mjs. Keep the existing tests passing and do not change them.", "timeoutMs": 360000 }

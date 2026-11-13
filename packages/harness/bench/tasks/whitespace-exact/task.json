@@ -1,0 +1,1 @@
+{ "prompt": "Add a `release` stage to pipeline.pipe after `test` and before `deploy`, with a `package` step (which has a `checksum` substep) and a `publish` step. Match the file's indentation.", "timeoutMs": 300000 }

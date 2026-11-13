@@ -1,0 +1,1 @@
+{ "prompt": "With no environment variables set, how many times does the worker retry a failed `billing` job before giving up? Write just the number into answer.txt.", "timeoutMs": 300000 }

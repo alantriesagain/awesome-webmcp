@@ -1,0 +1,9 @@
+{
+  "name": "schedule-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.mjs 2026 2",
+    "test": "node src/main.mjs 2026 2"
+  }
+}

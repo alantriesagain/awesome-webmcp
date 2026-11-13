@@ -1,0 +1,1 @@
+{ "prompt": "Our tier test prints thousands of progress lines and reports one failure somewhere in the middle. Find the bug in src/ and fix it, without changing the test.", "timeoutMs": 360000 }

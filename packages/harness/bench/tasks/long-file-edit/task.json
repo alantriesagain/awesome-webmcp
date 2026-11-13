@@ -1,0 +1,1 @@
+{ "prompt": "The score badge in src/report.mjs tops out at 100%, but scores carry up to 20 bonus points: a score of 110 should show 110%, and anything above 120 should show 120%. Gauges and progress bars stay capped at 100%.", "timeoutMs": 420000 }

@@ -1201,7 +1201,7 @@ export class AcpAgent {
       }
     }
     const stop = end.stopReason === CANCELLED ? "cancelled" : end.stopReason === FAILED ? "end_turn" : end.stopReason;
-    const result = '{"stopReason":' + JSON.stringify(stop) + ',"usage":{"inputTokens":' + String(end.usage.input + end.usage.cacheRead + end.usage.cacheWrite) + ',"outputTokens":' + String(end.usage.output) + "}}";
+    const result = '{"stopReason":' + JSON.stringify(stop) + ',"usage":{"inputTokens":' + String(end.usage.input + end.usage.cacheRead + end.usage.cacheWrite) + ',"cachedReadTokens":' + String(end.usage.cacheRead) + ',"cachedWriteTokens":' + String(end.usage.cacheWrite) + ',"outputTokens":' + String(end.usage.output) + "}}";
     for (const id of ids) {
       if (end.stopReason === FAILED) this.server.refuse(id, -32603, end.error);
       else this.server.answer(id, result);

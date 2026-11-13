@@ -1,0 +1,9 @@
+{
+  "name": "catalog-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.mjs",
+    "test": "node src/index.mjs"
+  }
+}

@@ -12,13 +12,15 @@
 //   --tasks <name>[,<name>...]           some of the tasks
 //   --repeat <n>                         runs of each task and model (1)
 //   --fake <fixture>                     the harness on its fake model (the runner's own test)
+//   --prices <file.json>                 model prices, per million tokens (`{ "<model>": [input, output, cacheRead] }`);
+//                                        by default the models in the harness's config.json
 //   --keep                               keep each run's folder
 //   --report <file.jsonl>...             print the table of earlier results, run nothing
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { reportText } from "./report.ts";
-import { BenchTask, RunResult, RunSpec, loadTasks, runTask } from "./runner.ts";
+import { BenchTask, RunResult, RunSpec, loadTasks, pricesFromConfig, pricesFromFile, runTask } from "./runner.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -76,6 +78,10 @@ const models = value("--model", "").split(",").filter((m) => m.length > 0);
 const only = value("--tasks", "").split(",").filter((t) => t.length > 0);
 const repeat = Math.max(1, Number(value("--repeat", "1")) || 1);
 const budget = Number(value("--budget", "-1"));
+const home = process.env["WIDECODE_HOME"] ?? "";
+const store = home.length > 0 ? home : join(process.env["HOME"] ?? "", ".widecode");
+const pricesFile = value("--prices", "");
+const prices = pricesFile.length > 0 ? pricesFromFile(pricesFile) : pricesFromConfig(join(store, "config.json"));
 const tasks: BenchTask[] = loadTasks(join(here, "tasks"), only);
 const out = value("--out", join(here, "results", stamp() + "-" + base.agent + ".jsonl"));
 mkdirSync(dirname(out), { recursive: true });
@@ -101,8 +107,10 @@ const run = async (): Promise<void> => {
         spec.effort = base.effort;
         spec.keep = base.keep;
         spec.model = model;
+        spec.prices = prices;
         const r = await runTask(task, spec);
-        if (r.costUsd > 0) spent += r.costUsd;
+        const cost = r.computedCostUsd >= 0 ? r.computedCostUsd : r.costUsd;
+        if (cost > 0) spent += cost;
         results.push(r);
         appendFileSync(out, r.line() + "\n");
         console.log((r.passed ? "pass " : "FAIL ") + task.name + " · " + base.agent + " " + (model.length > 0 ? model : "(default)") + " · " + (r.ms / 1000).toFixed(1) + " s · " + String(r.calls) + " calls" + (r.costUsd >= 0 ? " · $" + r.costUsd.toFixed(4) : "") + (r.error.length > 0 ? " · " + r.error.slice(0, 160) : ""));
