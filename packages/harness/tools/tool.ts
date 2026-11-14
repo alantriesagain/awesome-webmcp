@@ -146,31 +146,31 @@ export class Tool {
   }
 }
 
-const WRITE_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"The file to write, absolute or relative to the folder"},"content":{"type":"string","description":"The whole content"}},"required":["file_path","content"]}';
-const EDIT_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"The file to change"},"old_string":{"type":"string","description":"The exact text to replace (it must occur once, unless replace_all)"},"new_string":{"type":"string","description":"What replaces it"},"replace_all":{"type":"boolean","description":"Replace every occurrence"}},"required":["file_path","old_string","new_string"]}';
-const GREP_SCHEMA = '{"type":"object","properties":{"pattern":{"type":"string","description":"A regular expression"},"path":{"type":"string","description":"The folder or file to search, relative to the folder (the folder by default)"},"include":{"type":"string","description":"A glob the file names must match, such as *.ts"},"ignoreCase":{"type":"boolean"},"context":{"type":"integer","description":"Lines of context around each match"}},"required":["pattern"]}';
-const GLOB_SCHEMA = '{"type":"object","properties":{"pattern":{"type":"string","description":"A glob over relative paths, such as src/**/*.ts (a bare name matches at any depth)"},"path":{"type":"string","description":"The folder to search (the folder by default)"}},"required":["pattern"]}';
-const SKILL_SCHEMA = '{"type":"object","properties":{"name":{"type":"string","description":"The name of the skill, as the system prompt lists it"}},"required":["name"]}';
-const FETCH_SCHEMA = '{"type":"object","properties":{"url":{"type":"string","description":"The page, an http or https address"},"prompt":{"type":"string","description":"What you want from the page, in a few words"}},"required":["url"]}';
-const SEARCH_SCHEMA = '{"type":"object","properties":{"query":{"type":"string","description":"What to search for"},"limit":{"type":"integer","description":"How many results (8 by default, 20 at most)"}},"required":["query"]}';
-const TASK_SCHEMA = '{"type":"object","properties":{"description":{"type":"string","description":"The task in three to five words"},"prompt":{"type":"string","description":"The whole task for the subagent, with what it needs to know: it sees nothing of this conversation"},"subagent_type":{"type":"string","description":"general-purpose"}},"required":["description","prompt"]}';
-const LS_SCHEMA = '{"type":"object","properties":{"path":{"type":"string","description":"The folder to list (the folder by default)"}},"required":[]}';
-const READ_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"The file to read, absolute or relative to the folder"},"offset":{"type":"integer","description":"The line to start from, 1-based"},"limit":{"type":"integer","description":"How many lines to read (2000 by default)"}},"required":["file_path"]}';
-const BASH_SCHEMA = '{"type":"object","properties":{"command":{"type":"string","description":"The command, run by bash in the folder"},"timeout":{"type":"integer","description":"A timeout in milliseconds (120000 by default, 600000 at most)"},"description":{"type":"string","description":"What the command does, in a few words"}},"required":["command"]}';
+const WRITE_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"Absolute or relative path"},"content":{"type":"string","description":"The whole content"}},"required":["file_path","content"]}';
+const EDIT_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"The file to change"},"old_string":{"type":"string","description":"The exact text to replace"},"new_string":{"type":"string","description":"The replacement"},"replace_all":{"type":"boolean","description":"Replace every occurrence"}},"required":["file_path","old_string","new_string"]}';
+const GREP_SCHEMA = '{"type":"object","properties":{"pattern":{"type":"string"},"path":{"type":"string","description":"Folder or file to search (the folder by default)"},"include":{"type":"string","description":"Glob for file names, such as *.ts"},"ignoreCase":{"type":"boolean"},"context":{"type":"integer","description":"Context lines"}},"required":["pattern"]}';
+const GLOB_SCHEMA = '{"type":"object","properties":{"pattern":{"type":"string","description":"Glob over relative paths, such as src/**/*.ts; bare names match at any depth"},"path":{"type":"string","description":"Folder to search (the folder by default)"}},"required":["pattern"]}';
+const SKILL_SCHEMA = '{"type":"object","properties":{"name":{"type":"string","description":"Skill name, as the system prompt lists it"}},"required":["name"]}';
+const FETCH_SCHEMA = '{"type":"object","properties":{"url":{"type":"string","description":"An http or https address"},"prompt":{"type":"string","description":"What you want from the page"}},"required":["url"]}';
+const SEARCH_SCHEMA = '{"type":"object","properties":{"query":{"type":"string"},"limit":{"type":"integer","description":"How many results (8 default, 20 max)"}},"required":["query"]}';
+const TASK_SCHEMA = '{"type":"object","properties":{"description":{"type":"string"},"prompt":{"type":"string","description":"The whole task; the subagent sees nothing of this conversation"},"subagent_type":{"type":"string","description":"general-purpose"}},"required":["description","prompt"]}';
+const LS_SCHEMA = '{"type":"object","properties":{"path":{"type":"string","description":"Folder to list (the folder by default)"}},"required":[]}';
+const READ_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"Absolute or relative path"},"offset":{"type":"integer","description":"Line to start from, 1-based"},"limit":{"type":"integer","description":"How many lines (2000 by default)"}},"required":["file_path"]}';
+const BASH_SCHEMA = '{"type":"object","properties":{"command":{"type":"string"},"timeout":{"type":"integer","description":"Timeout in ms (120000 default, 600000 max)"},"description":{"type":"string","description":"What it does, in a few words"}},"required":["command"]}';
 
 /** The built-in tools. */
 export const builtInTools = (): Tool[] => [
-  new Tool("Read", "Read a file: its lines numbered, 2000 at a time, 2000 characters per line at most.", READ_SCHEMA, "read", false),
-  new Tool("Write", "Write a whole file (its folders made). For a file that exists, read it first; prefer Edit for a change to part of it.", WRITE_SCHEMA, "edit", true),
-  new Tool("Edit", "Replace an exact string in a file with another. old_string must occur exactly once (give enough context), unless replace_all in a file you have read.", EDIT_SCHEMA, "edit", true),
-  new Tool("Bash", "Run a shell command in the folder with bash and get its output (30 KB kept, the start and the end). No interactive commands; prefer Read, Grep and Glob for reading and searching files.", BASH_SCHEMA, "execute", true),
-  new Tool("Grep", "Search the folder's files for a regular expression: file, line number and line, 200 matches at most.", GREP_SCHEMA, "search", false),
-  new Tool("Glob", "Find files by a glob over their relative paths, newest first, 500 at most.", GLOB_SCHEMA, "search", false),
+  new Tool("Read", "Read a file, its lines numbered: 2000 lines at a time, 2000 characters per line.", READ_SCHEMA, "read", false),
+  new Tool("Write", "Write a whole file, its folders made. Read an existing file first; prefer Edit for part of it.", WRITE_SCHEMA, "edit", true),
+  new Tool("Edit", "Replace an exact string in a file; old_string must occur once (add context), unless replace_all in a file you have read.", EDIT_SCHEMA, "edit", true),
+  new Tool("Bash", "Run a bash command in the folder; 30 KB of output kept, its start and end. No interactive commands.", BASH_SCHEMA, "execute", true),
+  new Tool("Grep", "Search files for a regex: file, line number and line, 200 matches at most.", GREP_SCHEMA, "search", false),
+  new Tool("Glob", "Find files by a glob over relative paths, newest first, 500 at most.", GLOB_SCHEMA, "search", false),
   new Tool("LS", "List a folder's entries (folders end with a slash).", LS_SCHEMA, "read", false),
-  new Tool("Skill", "Load a skill's instructions by name (the system prompt lists the skills): follow them for the task.", SKILL_SCHEMA, "read", false),
-  new Tool("WebFetch", "Fetch a web page through a headless browser (its scripts run) and get its main content as markdown, 50,000 characters at most. http and https addresses only.", FETCH_SCHEMA, "fetch", false),
-  new Tool("Task", "Give a self-contained task to a subagent: a fresh session on the same model with the same tools (but Task), which works on it and replies with a report, the only part of its work this conversation sees. Use it for a search or a change whose steps the conversation does not need; several in one reply run together.", TASK_SCHEMA, "other", false),
-  new Tool("WebSearch", "Search the web: numbered results with their titles, addresses and snippets. Read a result with WebFetch.", SEARCH_SCHEMA, "fetch", false),
+  new Tool("Skill", "Load a skill by name (the system prompt lists them) and follow its instructions.", SKILL_SCHEMA, "read", false),
+  new Tool("WebFetch", "Fetch a page through a headless browser; its main content as markdown, 50,000 characters at most. http or https only.", FETCH_SCHEMA, "fetch", false),
+  new Tool("Task", "Give a self-contained task to a subagent (a fresh session, the same model and tools but Task): it replies with a report, all this conversation sees of its work. Use it when the steps need not appear here; several in one reply run together.", TASK_SCHEMA, "other", false),
+  new Tool("WebSearch", "Search the web: numbered results with titles, addresses and snippets; read one with WebFetch.", SEARCH_SCHEMA, "fetch", false),
 ];
 
 const READ_ONLY = ["Read", "Grep", "Glob", "LS", "Skill", "WebFetch", "WebSearch"];
