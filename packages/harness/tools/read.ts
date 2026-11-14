@@ -1,5 +1,6 @@
-// The Read tool: a file's lines numbered as `cat -n` writes them, from an offset, a limit of lines
-// (2000 by default) and of characters per line (2000), 256 KB of the file at most; a binary file
+// The Read tool: a file's lines, each after its number and a tab, from an offset, a limit of lines
+// (2000 at most; without one, as many as fit in 16 KB, so a long file comes in part with a note
+// saying where it goes on) and of characters per line (2000), 256 KB of the file at most; a binary file
 // or a folder is refused; a relative path is under the folder. An image file (png, jpeg, gif,
 // webp, 3 MB at most) is given to a model that reads images as an image.
 import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
@@ -10,6 +11,8 @@ import { ToolContext, ToolOutcome } from "./tool.ts";
 const MAX_BYTES = 262144;
 const MAX_LINES = 2000;
 const MAX_LINE = 2000;
+/** What a Read without a limit shows at most: a long file comes in part, the model asking for more. */
+const DEFAULT_BYTES = 16384;
 
 /** `path` under `cwd` unless absolute. */
 export const resolvePath = (cwd: string, path: string): string => (isAbsolute(path) ? path : join(cwd, path));
@@ -79,14 +82,19 @@ export const readTool = (input: Record<string, unknown>, ctx: ToolContext): Prom
   const lines = got.text.split("\n");
   if (lines.length > 0 && lines[lines.length - 1].length === 0 && got.text.endsWith("\n")) lines.pop();
   const offset = Math.max(1, Math.floor(num(input["offset"], 1)));
+  const limited = typeof input["limit"] === "number";
   const limit = Math.max(1, Math.min(MAX_LINES, Math.floor(num(input["limit"], MAX_LINES))));
   const shown: string[] = [];
+  let bytes = 0;
   for (let i = offset - 1; i < lines.length && shown.length < limit; i++) {
     const line = lines[i].length > MAX_LINE ? lines[i].slice(0, MAX_LINE) + "…" : lines[i];
-    shown.push(String(i + 1).padStart(6, " ") + "\t" + line);
+    const row = String(i + 1) + "\t" + line;
+    bytes += row.length + 1;
+    if (!limited && shown.length > 0 && bytes > DEFAULT_BYTES) break;
+    shown.push(row);
   }
   const notes: string[] = [];
-  if (offset - 1 + shown.length < lines.length) notes.push("(" + String(lines.length - (offset - 1 + shown.length)) + " more lines: read from line " + String(offset + shown.length) + ")");
+  if (offset - 1 + shown.length < lines.length) notes.push("(" + String(lines.length - (offset - 1 + shown.length)) + " more lines: read from line " + String(offset + shown.length) + (limited ? "" : ", or Grep for what you need") + ")");
   if (got.size > MAX_BYTES) notes.push("(the file is " + String(got.size) + " bytes; the first " + String(MAX_BYTES) + " were read)");
   out.text = (shown.length > 0 ? shown.join("\n") : "(empty file)") + (notes.length > 0 ? "\n" + notes.join("\n") : "");
   return done(out);

@@ -112,7 +112,7 @@ const main = async (): Promise<void> => {
   // A reply calling tools: the calls in the Tools tab with their output, counted in the Available tab.
   ok("a turn with tool calls", await turn("run it"));
   const calls = last().body.children.filter((i: Item) => i.kind === TOOL);
-  eq("the calls, their tool and line, their results", calls.map((i: Item) => i.name + " " + i.summary + " → " + (i.result !== null ? i.result.text.replace(/\n/g, "|") : "?")).join(" ; "), "Run ls -1 → a.txt ; Read a.txt →      1\tone");
+  eq("the calls, their tool and line, their results", calls.map((i: Item) => i.name + " " + i.summary + " → " + (i.result !== null ? i.result.text.replace(/\n/g, "|") : "?")).join(" ; "), "Run ls -1 → a.txt ; Read a.txt → 1\tone");
   eq("what the tools counted as: the tool's name, the first title", calls.map((i: Item) => i.tool).join(","), "Bash,Read");
   eq("the text after the results", last().body.children.filter((i: Item) => i.kind === TEXT).map((i: Item) => i.text).join("|"), "Listing.|One file, one line.");
 

@@ -99,7 +99,7 @@ const main = async (): Promise<void> => {
   const calls = batch.filter((l) => l.includes('"sessionUpdate":"tool_call"')).map((l) => (/"title":"([^"]+)","kind":"([^"]+)","status":"([^"]+)","rawInput":(\{[^}]*\})/.exec(l) ?? []).slice(1).join(" "));
   eq("the calls announced with their tool, kind and input, one after the other since Bash mutates", calls.join(" | "), 'Bash execute in_progress {"command":"echo hi; echo there"} | Read read in_progress {"file_path":"a.txt"}');
   const ends = batch.filter((l) => l.includes('"sessionUpdate":"tool_call_update"')).map((l) => (/"toolCallId":"([^"]+)","status":"([^"]+)","content":\[\{"type":"content","content":\{"type":"text","text":"([^"]*)"/.exec(l) ?? []).slice(1).join(" "));
-  eq("each ended with its text, the command's output and the file's numbered lines", ends.join(" | "), "call_1 completed hi\\nthere | call_2 completed      1\\tone\\n     2\\ttwo");
+  eq("each ended with its text, the command's output and the file's numbered lines", ends.join(" | "), "call_1 completed hi\\nthere | call_2 completed 1\\tone\\n2\\ttwo");
   ok("the command's raw output carries the exit code", batch.some((l) => l.includes('"rawOutput":{"output":"hi\\nthere\\n","exitCode":0,"timedOut":false}')));
   eq("then the reply to the results, and the turn's answer", batch.filter((l) => l.includes("agent_message_chunk")).map((l) => /"text":"([^"]*)"/.exec(l)?.[1] ?? "").join(""), "Running it.It said hi.");
 

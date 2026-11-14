@@ -275,7 +275,7 @@ const main = async (): Promise<void> => {
     await rig.prompt(sid, "hook it");
     const read = rig.taken();
     ok("before_agent_start's system prompt replaces the turn's", rig.asks()[0].system.join("\n").includes("EXTRA"));
-    eq("tool_call's changed input runs: a's read became b's", toolText(read), "     1\\tsecond");
+    eq("tool_call's changed input runs: a's read became b's", toolText(read), "1\\tsecond");
     await rig.prompt(sid, "block it");
     const blocked = rig.taken();
     ok("tool_call blocks bash and the call ends with the reason", toolText(blocked).includes("blocked by") && toolText(blocked).includes("not here"));

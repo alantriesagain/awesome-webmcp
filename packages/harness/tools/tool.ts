@@ -155,12 +155,12 @@ const FETCH_SCHEMA = '{"type":"object","properties":{"url":{"type":"string","des
 const SEARCH_SCHEMA = '{"type":"object","properties":{"query":{"type":"string"},"limit":{"type":"integer","description":"How many results (8 default, 20 max)"}},"required":["query"]}';
 const TASK_SCHEMA = '{"type":"object","properties":{"description":{"type":"string"},"prompt":{"type":"string","description":"The whole task; the subagent sees nothing of this conversation"},"subagent_type":{"type":"string","description":"general-purpose"}},"required":["description","prompt"]}';
 const LS_SCHEMA = '{"type":"object","properties":{"path":{"type":"string","description":"Folder to list (the folder by default)"}},"required":[]}';
-const READ_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"Absolute or relative path"},"offset":{"type":"integer","description":"Line to start from, 1-based"},"limit":{"type":"integer","description":"How many lines (2000 by default)"}},"required":["file_path"]}';
+const READ_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"Absolute or relative path"},"offset":{"type":"integer","description":"Line to start from, 1-based"},"limit":{"type":"integer","description":"How many lines (2000 at most)"}},"required":["file_path"]}';
 const BASH_SCHEMA = '{"type":"object","properties":{"command":{"type":"string"},"timeout":{"type":"integer","description":"Timeout in ms (120000 default, 600000 max)"},"description":{"type":"string","description":"What it does, in a few words"}},"required":["command"]}';
 
 /** The built-in tools. */
 export const builtInTools = (): Tool[] => [
-  new Tool("Read", "Read a file, its lines numbered: 2000 lines at a time, 2000 characters per line.", READ_SCHEMA, "read", false),
+  new Tool("Read", "Read a file, its lines numbered: 16 KB without a limit, 2000 lines at most with one, 2000 characters per line.", READ_SCHEMA, "read", false),
   new Tool("Write", "Write a whole file, its folders made. Read an existing file first; prefer Edit for part of it.", WRITE_SCHEMA, "edit", true),
   new Tool("Edit", "Replace an exact string in a file; old_string must occur once (add context), unless replace_all in a file you have read.", EDIT_SCHEMA, "edit", true),
   new Tool("Bash", "Run a bash command in the folder; 30 KB of output kept, its start and end. No interactive commands.", BASH_SCHEMA, "execute", true),
