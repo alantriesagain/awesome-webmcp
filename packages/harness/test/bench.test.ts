@@ -6,7 +6,7 @@
 // the first token, the stop reason) and its session forgotten after; the records read back; the
 // table.
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { reportText } from "../bench/report.ts";
@@ -63,6 +63,7 @@ const main = async (): Promise<void> => {
   const prices = new PriceTable();
   prices.add("fake/fake", new ModelPrice(1, 2, 0.1));
   spec.prices = prices;
+  spec.userStore = true;
   eq("a price: the cache's reads at their own", prices.cost("fake/fake", 1000000, 400000, 500000).toFixed(2) + " " + String(prices.cost("other/model", 1, 0, 1)), "1.64 -1");
   const task = tasks.filter((t) => t.name === "answer-from-code")[0];
   const good = await runTask(task, spec);
@@ -91,12 +92,50 @@ const main = async (): Promise<void> => {
   missing.model = "nowhere/model";
   const refused = await runTask(task, missing);
   ok("a model the agent does not offer: said, with those it does", !refused.passed && refused.error.startsWith("no model nowhere/model here; the agent offers fake/fake, anthropic/"));
+  // A clean run: a fresh store of its own, its auth.json a link to the user's, its session file there
+  // rather than in the store the test otherwise names.
+  const cleanSpec = new RunSpec();
+  cleanSpec.agent = "harness";
+  cleanSpec.command = ["node", daemon, "--harness", "--harness-fake", fixture];
+  cleanSpec.model = "fake/fake";
+  cleanSpec.effort = "low";
+  cleanSpec.keep = true;
+  const clean = await runTask(task, cleanSpec);
+  const cleanSessions = join(clean.store, "harness", "sessions");
+  const userStore = (process.env["WIDECODE_HOME"] ?? "").length > 0 ? (process.env["WIDECODE_HOME"] ?? "") : join(process.env["HOME"] ?? "", ".widecode");
+  ok(
+    "a clean run: its own store, the key linked not copied, its session there",
+    clean.store.length > 0 &&
+      clean.store !== home &&
+      lstatSync(join(clean.store, "auth.json")).isSymbolicLink() &&
+      readlinkSync(join(clean.store, "auth.json")) === join(userStore, "auth.json") &&
+      existsSync(cleanSessions) &&
+      readdirSync(cleanSessions).some((d) => readdirSync(join(cleanSessions, d)).length > 0),
+  );
+  ok("the clean run did not use the test's store", !existsSync(join(home, "harness", "sessions")) || readdirSync(join(home, "harness", "sessions")).every((d) => readdirSync(join(home, "harness", "sessions", d)).length === 0));
+  rmSync(clean.folder, { recursive: true, force: true });
+  rmSync(clean.store, { recursive: true, force: true });
+  // A command that exits at once never answers initialize: a setup failure, not a task failure.
+  const dead = new RunSpec();
+  dead.agent = "harness";
+  dead.command = ["node", "-e", "process.exit(3)"];
+  const setup = await runTask(task, dead);
+  ok("a command that exits at once is a setup failure", setup.setupFailed && !setup.passed && setup.error.startsWith("initialize: "));
+  const setupBack = RunResult.parse(setup.line());
+  ok("a setup failure recorded and read back", setupBack !== null && setupBack.setupFailed && !setupBack.passed);
 
   const back = RunResult.parse(good.line());
   eq("a record read back", back === null ? "none" : back.task + " " + String(back.passed) + " " + back.tools.join(",") + " " + back.reply, "answer-from-code true Write=1 Writing it.Done.");
   ok("the record keeps the diagnosis", back !== null && back.firstInputTokens === good.firstInputTokens && back.requests === good.requests && back.compacted === good.compacted && back.peakContext === good.peakContext && back.cacheReadTokens === good.cacheReadTokens && back.computedCostUsd === good.computedCostUsd);
   const table = reportText([good, bad, refused]);
-  ok("the table: a row per agent and model, the tasks passed, the failures", table.includes("| harness fake/fake low | 1/2 |") && table.includes("| answer-from-code | 1/2 | 0/1 |") && table.includes("- answer-from-code, harness fake/fake: answer.txt says \"8080\""));
+  ok(
+    "the table: a row per agent and model, the tasks passed, the setup failure apart from the failures",
+    table.includes("| harness fake/fake low | 1/2 | 0 |") &&
+      table.includes("| harness nowhere/model | 0/0 | 1 |") &&
+      table.includes("| answer-from-code | 1/2 |") &&
+      table.includes("- answer-from-code, harness fake/fake: answer.txt says \"8080\"") &&
+      table.includes("- answer-from-code, harness nowhere/model: setup failure: no model nowhere/model here;"),
+  );
   ok("the table shows the diagnosis columns", table.includes("| first input | requests | compacted | peak context |"));
   // Two agents on one model: the paired table with the harness as the baseline and each other's difference.
   const record = (agent: string, task: string, passed: boolean): RunResult => {
@@ -118,6 +157,17 @@ const main = async (): Promise<void> => {
   };
   const paired = reportText([record("opencode", "t1", true), record("harness", "t1", false), record("opencode", "t2", true), record("harness", "t2", true)]);
   ok("the paired table: each agent, its difference from the harness, the total", paired.includes("### fake/fake (baseline: harness)") && paired.includes("| t1 | 0/1 | 1/1 | +100.0% |") && paired.includes("| t2 | 1/1 | 1/1 | 0.0% |") && paired.includes("| total | 1/2 | 2/2 | +50.0% |"));
+  const setupFailure = record("opencode", "t3", false);
+  setupFailure.setupFailed = true;
+  setupFailure.error = "initialize: timed out";
+  const withSetup = reportText([record("harness", "t1", true), setupFailure]);
+  ok(
+    "setup failures: counted apart, out of passed/runs and every mean, named in the failures",
+    withSetup.includes("| harness fake/fake | 1/1 | 0 |") &&
+      withSetup.includes("| opencode fake/fake | 0/0 | 1 |") &&
+      withSetup.includes("- t3, opencode fake/fake: setup failure: initialize: timed out") &&
+      !withSetup.includes("- t3, opencode fake/fake: initialize: timed out"),
+  );
   rmSync(home, { recursive: true, force: true });
   done();
 };

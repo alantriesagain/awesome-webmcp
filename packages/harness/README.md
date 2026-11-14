@@ -28,11 +28,25 @@ prompt, a check the agent never sees, and a solution the test checks the check a
 harness, opencode and the DeepSeek Harness run over ACP and pi over its RPC mode. A run copies the
 task into a temp git repository, starts the agent there, chooses the model and effort (through the
 session's options over ACP, through pi's arguments), sends the prompt, follows the turn (cancelled
-past the task's time), runs the check, and deletes the session. pi starts with a folder of its own
-(`PI_CODING_AGENT_DIR`, so the user's settings and extensions do not load) and its key read from
-`~/.widecode/auth.json`. It records the time to the first token and in all, the calls by tool and
-those that failed, the tokens, the context and the cost the agent reported; the records go to
-`bench/results/` (ignored by git) and a table is printed.
+past the task's time), runs the check, and deletes the session.
+
+Each harness run gets a fresh temp store passed as `--harness-home`, so the user's skills, prompt
+templates, extensions, plugins, MCP servers and config.json never reach the agent. The temp store's
+`auth.json` is a symbolic link to `~/.widecode/auth.json`, so the key is linked rather than copied
+or read. When the user has skills or prompt templates under HOME (`~/.agents/skills`,
+`~/.claude/skills`, pi's agent folder), the daemon also runs with HOME set to an empty temp folder,
+PATH and the rest of the environment kept. The temp folders are deleted after the run.
+`--user-store` runs the harness over the user's store instead, for a comparison. pi starts with a
+folder of its own (`PI_CODING_AGENT_DIR`, so the user's settings and extensions do not load) and
+its key read from `~/.widecode/auth.json`.
+
+It records the time to the first token and in all, the calls by tool and those that failed, the
+tokens, the context and the cost the agent reported; the records go to `bench/results/` (ignored by
+git) and a table is printed. A run that never gets to send the prompt (the agent did not start,
+initialize or session/new failed or timed out, the model or effort could not be chosen, or pi
+exited or answered nothing before the prompt) is marked `setupFailed`: it is no task failure, so
+the table leaves it out of passed/runs and every mean and counts it in a setup failures column.
+`--retries <n>` (default 1) runs a setup-failed run again up to n times and keeps the last record.
 
 The record also carries what the agent's stream shows about how a run went: the context the first
 request reported, the number of requests (an ACP usage update whose context changed, a compaction's
@@ -53,11 +67,13 @@ table shows the computed one when a price is known.
 node packages/harness/bench/run.ts --model deepseek/deepseek-flash,opencode/kimi-k2.6 --repeat 2 --budget 1
 node packages/harness/bench/run.ts --agent opencode --model opencode/big-pickle --tasks fix-bug,edit-json
 node packages/harness/bench/run.ts --agent pi --model opencode/deepseek-v4.1-flash --tasks fix-bug,edit-json
+node packages/harness/bench/run.ts --user-store --model deepseek/deepseek-flash --tasks fix-bug
 node packages/harness/bench/run.ts --report packages/harness/bench/results/*.jsonl
 ```
 
 The summary table has a row per agent and model, its passed runs and run count (`3/5` against
-`5/5`), the mean diagnosis fields, and the computed and reported costs, then a task matrix. For
+`5/5`), its setup failures, the mean diagnosis fields, and the computed and reported costs, then a
+task matrix. For
 every model more than one agent ran, a paired table follows: one column per agent with its
 passed/runs per task, one column for each other agent's pass rate minus the baseline's (the agent
 named `harness`, else the first by name), and a total row. That is the parity view: where two agents

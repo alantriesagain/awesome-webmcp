@@ -17,6 +17,7 @@ export class PiClient {
   private child: ChildProcess | null = null;
   private buffer = "";
   private settled = false;
+  private closed = false;
   private readonly duties: Duty[] = [];
   private readonly answers = new Map<string, Answer>();
   /** The last of pi's stderr, for a failure's report. */
@@ -37,18 +38,26 @@ export class PiClient {
     child.stderr!.on("data", (c: Buffer) => {
       this.stderr = (this.stderr + c.toString("utf8")).slice(-4000);
     });
-    child.on("close", () => {
-      this.settled = true;
-      for (const d of this.duties.splice(0)) {
-        const fn = d.settle;
-        if (fn !== null) fn();
-      }
-      for (const a of this.answers.values()) {
-        const fn = a.settle;
-        if (fn !== null) fn(null);
-      }
-      this.answers.clear();
+    child.on("error", (err: Error) => {
+      this.stderr = (this.stderr + err.message).slice(-4000);
+      this.ended();
     });
+    child.on("close", () => this.ended());
+  }
+
+  private ended(): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.settled = true;
+    for (const d of this.duties.splice(0)) {
+      const fn = d.settle;
+      if (fn !== null) fn();
+    }
+    for (const a of this.answers.values()) {
+      const fn = a.settle;
+      if (fn !== null) fn(null);
+    }
+    this.answers.clear();
   }
 
   /** Write one command. */

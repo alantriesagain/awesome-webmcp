@@ -13,6 +13,8 @@ const label = (r: RunResult): string => (r.model.length > 0 ? r.model : "(defaul
 const points = (x: number): string => (x > 0 ? "+" : "") + (x * 100).toFixed(1) + "%";
 const rate = (passed: number, runs: number): number => (runs === 0 ? 0 : passed / runs);
 const ratio = (passed: number, runs: number): string => String(passed) + "/" + String(runs);
+/** The runs that got to the prompt: a setup failure is no result of the agent's. */
+const scored = (rs: RunResult[]): RunResult[] => rs.filter((r) => !r.setupFailed);
 
 /** The agents in a consistent order: the harness first when it ran, then the others by name. */
 const agentOrder = (agents: string[]): string[] => {
@@ -38,14 +40,15 @@ export const reportText = (results: RunResult[]): string => {
     return xs.length === rs.length && xs.length > 0 ? "$" + xs.reduce((a, b) => a + b, 0).toFixed(4) : "-";
   };
   const lines: string[] = [];
-  lines.push("| agent and model | passed | first token | time | calls | failed calls | tokens in | tokens out | first input | requests | compacted | peak context | cost | agent cost |");
-  lines.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+  lines.push("| agent and model | passed | setup failures | first token | time | calls | failed calls | tokens in | tokens out | first input | requests | compacted | peak context | cost | agent cost |");
+  lines.push("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|");
   for (const g of groups) {
     const rs = of(g);
-    const passed = rs.filter((r) => r.passed).length;
-    const first = rs.filter((r) => r.firstTokenMs >= 0).map((r) => r.firstTokenMs);
+    const real = scored(rs);
+    const passed = real.filter((r) => r.passed).length;
+    const first = real.filter((r) => r.firstTokenMs >= 0).map((r) => r.firstTokenMs);
     lines.push(
-      "| " + [g, ratio(passed, rs.length), first.length > 0 ? seconds(mean(first)) : "-", seconds(mean(rs.map((r) => r.ms))), mean(rs.map((r) => r.calls)).toFixed(1), mean(rs.map((r) => r.failedCalls)).toFixed(1), Math.round(mean(rs.map((r) => r.inputTokens))).toString(), Math.round(mean(rs.map((r) => r.outputTokens))).toString(), meanOf(rs, (r) => r.firstInputTokens), meanOf(rs, (r) => r.requests), meanOf(rs, (r) => r.compacted), meanOf(rs, (r) => r.peakContext), costOf(rs, (r) => r.computedCostUsd), costOf(rs, (r) => r.costUsd)].join(" | ") + " |",
+      "| " + [g, ratio(passed, real.length), String(rs.length - real.length), first.length > 0 ? seconds(mean(first)) : "-", seconds(mean(real.map((r) => r.ms))), mean(real.map((r) => r.calls)).toFixed(1), mean(real.map((r) => r.failedCalls)).toFixed(1), Math.round(mean(real.map((r) => r.inputTokens))).toString(), Math.round(mean(real.map((r) => r.outputTokens))).toString(), meanOf(real, (r) => r.firstInputTokens), meanOf(real, (r) => r.requests), meanOf(real, (r) => r.compacted), meanOf(real, (r) => r.peakContext), costOf(real, (r) => r.computedCostUsd), costOf(real, (r) => r.costUsd)].join(" | ") + " |",
     );
   }
   const tasks: string[] = [];
@@ -55,7 +58,7 @@ export const reportText = (results: RunResult[]): string => {
   lines.push("|---|" + groups.map(() => "---").join("|") + "|");
   for (const t of tasks) {
     const cells = groups.map((g) => {
-      const rs = of(g).filter((r) => r.task === t);
+      const rs = scored(of(g)).filter((r) => r.task === t);
       return rs.length === 0 ? "" : ratio(rs.filter((r) => r.passed).length, rs.length);
     });
     lines.push("| " + pad(t, 1) + " | " + cells.join(" | ") + " |");
@@ -64,7 +67,7 @@ export const reportText = (results: RunResult[]): string => {
   const models: string[] = [];
   for (const r of results) if (!models.includes(label(r))) models.push(label(r));
   for (const model of models) {
-    const runs = results.filter((r) => label(r) === model);
+    const runs = scored(results.filter((r) => label(r) === model));
     const agents = agentOrder(runs.map((r) => r.agent).filter((a, i, all) => all.indexOf(a) === i));
     if (agents.length < 2) continue;
     const baseline = agents[0];
@@ -103,7 +106,10 @@ export const reportText = (results: RunResult[]): string => {
   if (failures.length > 0) {
     lines.push("");
     lines.push("Failed runs:");
-    for (const r of failures) lines.push("- " + r.task + ", " + r.agent + " " + r.model + ": " + (r.error.length > 0 ? r.error : r.checkOutput.split("\n")[0] ?? "").slice(0, 200));
+    for (const r of failures) {
+      const why = (r.error.length > 0 ? r.error : r.checkOutput.split("\n")[0] ?? "").slice(0, 200);
+      lines.push("- " + r.task + ", " + r.agent + " " + r.model + ": " + (r.setupFailed ? "setup failure: " + why : why));
+    }
   }
   return lines.join("\n");
 };

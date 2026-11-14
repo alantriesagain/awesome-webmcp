@@ -12,6 +12,9 @@
 //   --effort <value>                     the effort, as its effort option names it
 //   --tasks <name>[,<name>...]           some of the tasks
 //   --repeat <n>                         runs of each task and model (1)
+//   --retries <n>                        runs again after a setup failure, keeping the last record (1)
+//   --user-store                         run the harness over the user's ~/.widecode, as it does for the app,
+//                                        rather than a fresh temp store for each run
 //   --fake <fixture>                     the harness on its fake model (the runner's own test)
 //   --prices <file.json>                 model prices, per million tokens (`{ "<model>": [input, output, cacheRead] }`);
 //                                        by default the harness's registry: its built-in models and those config.json adds
@@ -77,9 +80,11 @@ else {
 }
 base.effort = value("--effort", "");
 base.keep = args.includes("--keep");
+base.userStore = args.includes("--user-store");
 const models = value("--model", "").split(",").filter((m) => m.length > 0);
 const only = value("--tasks", "").split(",").filter((t) => t.length > 0);
 const repeat = Math.max(1, Number(value("--repeat", "1")) || 1);
+const retries = Math.max(0, Math.trunc(Number(value("--retries", "1"))) || 0);
 const budget = Number(value("--budget", "-1"));
 const home = process.env["WIDECODE_HOME"] ?? "";
 const store = home.length > 0 ? home : join(process.env["HOME"] ?? "", ".widecode");
@@ -110,14 +115,16 @@ const run = async (): Promise<void> => {
         spec.forget = base.forget;
         spec.effort = base.effort;
         spec.keep = base.keep;
+        spec.userStore = base.userStore;
         spec.model = model;
         spec.prices = prices;
-        const r = await runTask(task, spec);
+        let r = await runTask(task, spec);
+        for (let attempt = 0; attempt < retries && r.setupFailed; attempt++) r = await runTask(task, spec);
         const cost = r.computedCostUsd >= 0 ? r.computedCostUsd : r.costUsd;
         if (cost > 0) spent += cost;
         results.push(r);
         appendFileSync(out, r.line() + "\n");
-        console.log((r.passed ? "pass " : "FAIL ") + task.name + " · " + base.agent + " " + (model.length > 0 ? model : "(default)") + " · " + (r.ms / 1000).toFixed(1) + " s · " + String(r.calls) + " calls" + (r.costUsd >= 0 ? " · $" + r.costUsd.toFixed(4) : "") + (r.error.length > 0 ? " · " + r.error.slice(0, 160) : ""));
+        console.log((r.setupFailed ? "SETUP " : r.passed ? "pass " : "FAIL ") + task.name + " · " + base.agent + " " + (model.length > 0 ? model : "(default)") + " · " + (r.ms / 1000).toFixed(1) + " s · " + String(r.calls) + " calls" + (r.costUsd >= 0 ? " · $" + r.costUsd.toFixed(4) : "") + (r.error.length > 0 ? " · " + r.error.slice(0, 160) : ""));
       }
 };
 

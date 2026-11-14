@@ -7,7 +7,7 @@
 // and the diagnosis the stream gives (the first request's input, the requests, a compaction, the
 // peak context), with the cost computed from a price table.
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { listOf, num, objectText, recordOf, str } from "@light/lib/json.ts";
@@ -155,6 +155,8 @@ export class RunSpec {
   keep = false;
   /** The prices to compute a run's cost from (null: none). */
   prices: PriceTable | null = null;
+  /** Run the harness over the user's store rather than a fresh one (for a comparison with the benchmark's clean runs). */
+  userStore = false;
 }
 
 /** What one run measured. */
@@ -164,6 +166,8 @@ export class RunResult {
   model = "";
   effort = "";
   passed = false;
+  /** The run never got to send the prompt: the agent did not start, initialize or session/new failed, or the model and effort could not be chosen. */
+  setupFailed = false;
   /** The check's output, cut. */
   checkOutput = "";
   stopReason = "";
@@ -195,11 +199,13 @@ export class RunResult {
   /** The agent's last words. */
   reply = "";
   folder = "";
+  /** The temp store a clean harness run used ("" when the run used the user's). */
+  store = "";
 
   line(): string {
     return objectText(
-      ["task", "agent", "model", "effort", "passed", "checkOutput", "stopReason", "error", "ms", "firstTokenMs", "calls", "failedCalls", "tools", "inputTokens", "cacheReadTokens", "outputTokens", "contextUsed", "firstInputTokens", "requests", "compacted", "peakContext", "costUsd", "computedCostUsd", "reply", "folder"],
-      [JSON.stringify(this.task), JSON.stringify(this.agent), JSON.stringify(this.model), JSON.stringify(this.effort), this.passed ? "true" : "false", JSON.stringify(this.checkOutput), JSON.stringify(this.stopReason), JSON.stringify(this.error), String(this.ms), String(this.firstTokenMs), String(this.calls), String(this.failedCalls), "[" + this.tools.map((t) => JSON.stringify(t)).join(",") + "]", String(this.inputTokens), String(this.cacheReadTokens), String(this.outputTokens), String(this.contextUsed), String(this.firstInputTokens), String(this.requests), String(this.compacted), String(this.peakContext), String(this.costUsd), String(this.computedCostUsd), JSON.stringify(this.reply), JSON.stringify(this.folder)],
+      ["task", "agent", "model", "effort", "passed", "setupFailed", "checkOutput", "stopReason", "error", "ms", "firstTokenMs", "calls", "failedCalls", "tools", "inputTokens", "cacheReadTokens", "outputTokens", "contextUsed", "firstInputTokens", "requests", "compacted", "peakContext", "costUsd", "computedCostUsd", "reply", "folder"],
+      [JSON.stringify(this.task), JSON.stringify(this.agent), JSON.stringify(this.model), JSON.stringify(this.effort), this.passed ? "true" : "false", this.setupFailed ? "true" : "false", JSON.stringify(this.checkOutput), JSON.stringify(this.stopReason), JSON.stringify(this.error), String(this.ms), String(this.firstTokenMs), String(this.calls), String(this.failedCalls), "[" + this.tools.map((t) => JSON.stringify(t)).join(",") + "]", String(this.inputTokens), String(this.cacheReadTokens), String(this.outputTokens), String(this.contextUsed), String(this.firstInputTokens), String(this.requests), String(this.compacted), String(this.peakContext), String(this.costUsd), String(this.computedCostUsd), JSON.stringify(this.reply), JSON.stringify(this.folder)],
     );
   }
 
@@ -218,6 +224,7 @@ export class RunResult {
     o.model = str(r["model"]);
     o.effort = str(r["effort"]);
     o.passed = r["passed"] === true;
+    o.setupFailed = r["setupFailed"] === true;
     o.checkOutput = str(r["checkOutput"]);
     o.stopReason = str(r["stopReason"]);
     o.error = str(r["error"]);
@@ -358,6 +365,50 @@ const within = (p: Promise<RpcReply>, ms: number): Promise<RpcReply> =>
     });
   });
 
+/** The user's store: $WIDECODE_HOME, else ~/.widecode. */
+const userStoreRoot = (): string => {
+  const env = process.env["WIDECODE_HOME"] ?? "";
+  return env.length > 0 ? env : join(process.env["HOME"] ?? "", ".widecode");
+};
+
+/** Whether the user has skills or prompt templates under HOME (or pi's agent folder) that the harness would read. */
+const userFilesUnderHome = (home: string): boolean => {
+  if (home.length === 0) return false;
+  const pi = (process.env["PI_CODING_AGENT_DIR"] ?? "").trim();
+  const piDir = pi.length > 0 ? pi : join(home, ".pi", "agent");
+  return [join(home, ".agents", "skills"), join(home, ".claude", "skills"), join(piDir, "skills"), join(piDir, "prompts")].some((path) => existsSync(path));
+};
+
+/** `words` with the store `--harness-home` names set to `store` (appended when they name none). */
+const withStore = (words: string[], store: string): string[] => {
+  const out = words.slice();
+  const at = out.indexOf("--harness-home");
+  if (at >= 0 && at + 1 < out.length) out[at + 1] = store;
+  else out.push("--harness-home", store);
+  return out;
+};
+
+/** A fresh temp store for a clean harness run: its auth.json a link to the user's, and HOME empty when the user's would be read. */
+const cleanHarness = (spec: RunSpec): { command: string[]; forget: string[]; env: Record<string, string>; store: string; home: string } => {
+  const store = mkdtempSync(join(tmpdir(), "harness-bench-store-"));
+  symlinkSync(join(userStoreRoot(), "auth.json"), join(store, "auth.json"));
+  const env: Record<string, string> = {};
+  for (const k of Object.keys(spec.env)) env[k] = spec.env[k];
+  let home = "";
+  if (userFilesUnderHome(process.env["HOME"] ?? "")) {
+    home = mkdtempSync(join(tmpdir(), "harness-bench-home-"));
+    env["HOME"] = home;
+    env["PI_CODING_AGENT_DIR"] = "";
+  }
+  return {
+    command: withStore(spec.command, store),
+    forget: spec.forget.length > 0 ? withStore(spec.forget, store) : [],
+    env,
+    store,
+    home,
+  };
+};
+
 /** Finish a run: its exact usage, then its check and the session's end. */
 const finishRun = async (
   task: BenchTask,
@@ -367,6 +418,7 @@ const finishRun = async (
   started: number,
   sessionId: string,
   stop: () => void,
+  forget: string[],
 ): Promise<RunResult> => {
   result.ms = Date.now() - started;
   if (sessionId.length > 0 && spec.usage.length > 0) {
@@ -382,8 +434,8 @@ const finishRun = async (
   const check = spawnSync("node", [join(task.dir, "check.mjs")], { cwd: work, encoding: "utf8", timeout: 60000 });
   result.passed = check.status === 0;
   result.checkOutput = ((check.stdout ?? "") + (check.stderr ?? "")).trim().slice(0, 600);
-  if (sessionId.length > 0 && spec.forget.length > 0) {
-    const words = spec.forget.map((w) => w.split("{session}").join(sessionId));
+  if (sessionId.length > 0 && forget.length > 0) {
+    const words = forget.map((w) => w.split("{session}").join(sessionId));
     spawnSync(words[0], words.slice(1), { cwd: work, stdio: "ignore", timeout: 15000 });
   }
   stop();
@@ -429,9 +481,14 @@ const runPiTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult> => 
   const replyParts: string[] = [];
   let lastStop = "";
   let aborted = false;
+  let promptAnswered = false;
+  let promptRefused = false;
   client.onRecord = (r: Record<string, unknown>) => {
     const kind = str(r["type"]);
-    if (kind === "message_update") {
+    if (kind === "response" && str(r["id"]) === "p1") {
+      promptAnswered = true;
+      if (r["success"] === false) promptRefused = true;
+    } else if (kind === "message_update") {
       const event = recordOf(r["assistantMessageEvent"]);
       const type = event !== null ? str(event["type"]) : "";
       if ((type === "text_delta" || type === "thinking_delta") && result.firstTokenMs < 0) result.firstTokenMs = Date.now() - started;
@@ -468,7 +525,7 @@ const runPiTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult> => 
     result.tools = order.map((t) => t + "=" + String(seen.get(t) ?? 0));
     result.reply = replyParts.join("").trim().slice(-600);
     rmSync(agentDir, { recursive: true, force: true });
-    return finishRun(task, spec, result, work, started, "", () => client.stop());
+    return finishRun(task, spec, result, work, started, "", () => client.stop(), spec.forget);
   };
   client.start(command, work, env);
   const settled = client.waitSettled();
@@ -488,6 +545,10 @@ const runPiTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult> => 
     const cost = data !== null ? num(data["cost"], -1) : -1;
     if (cost >= 0) result.costUsd = cost;
   }
+  if (!promptAnswered || promptRefused) {
+    result.setupFailed = true;
+    if (result.error.length === 0) result.error = (promptRefused ? "pi refused the prompt" : "pi answered nothing before the prompt") + (client.stderr.length > 0 ? " | " + client.stderr.trim().slice(-300) : "");
+  }
   return finish();
 };
 
@@ -505,6 +566,22 @@ export const runTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult
   git(work, ["init", "-q", "-b", "main"]);
   git(work, ["add", "-A"]);
   git(work, ["-c", "user.email=bench@widecode", "-c", "user.name=bench", "commit", "-qm", "the task"]);
+  // A harness run gets a store of its own, so the user's skills, prompts, plugins, MCP servers and
+  // config never reach the agent; its auth.json is a link to the user's, so the key is never copied.
+  let command = spec.command;
+  let forget = spec.forget;
+  let env = spec.env;
+  let store = "";
+  let emptyHome = "";
+  if (spec.agent === "harness" && !spec.userStore) {
+    const clean = cleanHarness(spec);
+    command = clean.command;
+    forget = clean.forget;
+    env = clean.env;
+    store = clean.store;
+    emptyHome = clean.home;
+    result.store = store;
+  }
   const client = new AcpClient();
   const started = Date.now();
   const seen = new Map<string, number>();
@@ -550,20 +627,27 @@ export const runTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult
       if (cost !== null && typeof cost["amount"] === "number") result.costUsd = cost["amount"] as number;
     }
   };
-  client.start(spec.command, work, spec.env);
+  client.start(command, work, env);
   const finish = async (): Promise<RunResult> => {
     result.tools = order.map((t) => t + "=" + String(seen.get(t) ?? 0));
     result.reply = replyParts.join("").trim().slice(-600);
-    return finishRun(task, spec, result, work, started, sessionId, () => client.stop());
+    const done = await finishRun(task, spec, result, work, started, sessionId, () => client.stop(), forget);
+    if (!spec.keep) {
+      if (store.length > 0) rmSync(store, { recursive: true, force: true });
+      if (emptyHome.length > 0) rmSync(emptyHome, { recursive: true, force: true });
+    }
+    return done;
   };
   const init = await within(client.request("initialize", '{"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false}}'), 30000);
   if (init.error.length > 0) {
     result.error = "initialize: " + init.error + (client.stderr.length > 0 ? " | " + client.stderr.trim().slice(-300) : "");
+    result.setupFailed = true;
     return finish();
   }
   const made = await within(client.request("session/new", '{"cwd":' + JSON.stringify(work) + ',"mcpServers":[]}'), 30000);
   if (made.error.length > 0) {
     result.error = "session/new: " + made.error;
+    result.setupFailed = true;
     return finish();
   }
   sessionId = str(recordOf(JSON.parse(made.resultJson))?.["sessionId"]);
@@ -583,6 +667,7 @@ export const runTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult
   const effortError = modelError.length > 0 ? "" : await choose("thought_level", spec.effort);
   if (modelError.length > 0 || effortError.length > 0) {
     result.error = modelError.length > 0 ? modelError : effortError;
+    result.setupFailed = true;
     return finish();
   }
   prompted = true;

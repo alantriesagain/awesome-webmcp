@@ -32,6 +32,7 @@ export class AcpClient {
   private seq = 0;
   private readonly waiting = new Map<number, Waiting>();
   private buffer = "";
+  private ended = false;
   /** The agent's stderr, the last of it, for a failure's report. */
   stderr = "";
   onNote: ((n: AgentNote) => void) | null = null;
@@ -51,17 +52,25 @@ export class AcpClient {
     child.stderr!.on("data", (c: Buffer) => {
       this.stderr = (this.stderr + c.toString("utf8")).slice(-4000);
     });
-    child.on("close", (code: number | null) => {
-      for (const w of this.waiting.values()) {
-        const fn = w.settle;
-        const r = new RpcReply();
-        r.error = "the agent ended (" + String(code ?? -1) + ")";
-        if (fn !== null) fn(r);
-      }
-      this.waiting.clear();
-      const fn = this.onExit;
-      if (fn !== null) fn(code ?? -1);
+    child.on("error", (err: Error) => {
+      this.stderr = (this.stderr + err.message).slice(-4000);
+      this.endedWith(-1);
     });
+    child.on("close", (code: number | null) => this.endedWith(code ?? -1));
+  }
+
+  private endedWith(code: number): void {
+    if (this.ended) return;
+    this.ended = true;
+    for (const w of this.waiting.values()) {
+      const fn = w.settle;
+      const r = new RpcReply();
+      r.error = "the agent ended (" + String(code) + ")";
+      if (fn !== null) fn(r);
+    }
+    this.waiting.clear();
+    const fn = this.onExit;
+    if (fn !== null) fn(code);
   }
 
   private write(text: string): void {
