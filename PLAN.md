@@ -401,9 +401,35 @@ Pending, roughly in order of value (October 2026):
 - [ ] **A long call's progress to the client.** The loop hears a Bash call's output as it comes and a
       subagent's calls, but the agent does not forward `onToolOutput`: send them as
       `tool_call_update` content while the call runs.
-- [ ] **The benchmark, further.** Harder tasks (both DeepSeek models pass all eight), more repeats, a
-      Claude Code driver over stream-json (it runs on the user's subscription: the user's call),
-      opencode's cost from its `usage_update` since its prompt answer reports part of its usage.
+- [x] **Parity with opencode and pi.** The benchmark compares agents on one model, task by task
+      (a paired table with the harness as the baseline), drives pi over its RPC mode (an empty agent
+      folder of its own), reads opencode's usage from `opencode export` before its session is
+      deleted (its prompt answer leaves the cache out and covers part of a run), prices runs from
+      the harness's registry with cache reads at their own price, runs the harness on a clean store
+      (the user's skills had been in its system prompt), and sets apart runs that fail before the
+      prompt. Eight tasks joined the eight, aimed at what a harness does. On DeepSeek V4.1 Flash
+      (Zen), 16 tasks, three runs each (November 2026):
+
+      | | passed | requests | first input | peak context | cost |
+      |---|---|---|---|---|---|
+      | harness, before | 48/48 | 6.2 | 4,144 | 7,136 | $0.210 |
+      | harness, after | 47/48 | 6.3 | 1,692 | 4,908 | $0.176 |
+      | opencode 1.19.5 | 46/48 | 4.7 | 10,957 | 12,535 | $0.213 |
+      | pi 1.5.2 | 48/48 | 5.0 | 1,621 | 3,400 | $0.113 |
+
+      Every failure is the model adding 8080 + 363 by hand in answer-from-code. What changed in the
+      harness: Edit takes text found once in a file not read (the model had seen it through `cat`
+      and was refused), shorter prompt and tool descriptions (1,514 tokens to 1,199 measured
+      clean), and Read without padding and at 16 KB without a limit (long-file-edit's peak 17.7k to
+      9.8k, its cost down 39%; the table's "after" row predates this).
+- [ ] **The benchmark, further.** The harness still makes about one request more per task than pi
+      and its context grows faster: csv-quotes (9.7 requests against 4) and long-file-edit (a 9.8k
+      peak against 4.5k) are the widest; read both agents' transcripts there. The tasks no longer
+      separate the agents on DeepSeek Flash: a weaker model, or tasks replayed from this repository's
+      commits (the commit's parent, its message as the prompt, its tests as the check). Five runs
+      rather than three for the calls and requests, which vary run to run; time varies with the
+      provider more than with the agent. A Claude Code driver over stream-json (it runs on the
+      user's subscription: the user's call).
 - [ ] **Branching from an earlier entry** of a session (the file's tree has it; the UI has no way to
       ask for it yet).
 - [ ] **The native `fetch` behind `HttpStream`**, once a streaming probe passes.
