@@ -4,7 +4,8 @@
 // the end. It talks to real models and spends real money: `--budget <dollars>` stops starting
 // runs once the cost the agent reported passes it.
 //
-//   --agent harness | opencode | dsh     the agent (harness by default: this checkout's daemon under node)
+//   --agent harness | opencode | dsh | pi the agent (harness by default: this checkout's daemon under node;
+//                                        opencode and dsh over ACP, pi over its RPC mode)
 //   --binary                             the harness from the installed `widecode` instead
 //   --command "<words>"                  any other ACP agent, started in the task's folder
 //   --model <value>[,<value>...]         the models to compare, as the agent's model option names them
@@ -13,7 +14,7 @@
 //   --repeat <n>                         runs of each task and model (1)
 //   --fake <fixture>                     the harness on its fake model (the runner's own test)
 //   --prices <file.json>                 model prices, per million tokens (`{ "<model>": [input, output, cacheRead] }`);
-//                                        by default the models in the harness's config.json
+//                                        by default the harness's registry: its built-in models and those config.json adds
 //   --keep                               keep each run's folder
 //   --report <file.jsonl>...             print the table of earlier results, run nothing
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
@@ -66,10 +67,12 @@ if (args.includes("--command")) {
   }
 } else if (agent === "opencode") {
   base.command = ["opencode", "acp"];
+  base.usage = ["opencode", "export", "{session}"];
   base.forget = ["opencode", "session", "delete", "{session}"];
 } else if (agent === "dsh") base.command = ["dsh", "--profile", "acp"];
+else if (agent === "pi") base.command = ["pi"];
 else {
-  console.error("no agent " + agent + "; harness, opencode, dsh, or --command");
+  console.error("no agent " + agent + "; harness, opencode, dsh, pi, or --command");
   process.exit(2);
 }
 base.effort = value("--effort", "");
@@ -103,6 +106,7 @@ const run = async (): Promise<void> => {
         const spec = new RunSpec();
         spec.agent = base.agent;
         spec.command = base.command;
+        spec.usage = base.usage;
         spec.forget = base.forget;
         spec.effort = base.effort;
         spec.keep = base.keep;

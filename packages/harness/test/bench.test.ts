@@ -6,11 +6,11 @@
 // the first token, the stop reason) and its session forgotten after; the records read back; the
 // table.
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { reportText } from "../bench/report.ts";
-import { ModelPrice, PriceTable, RunResult, RunSpec, loadTasks, runTask } from "../bench/runner.ts";
+import { ModelPrice, PriceTable, RunResult, RunSpec, loadTasks, opencodeUsage, pricesFromConfig, runTask } from "../bench/runner.ts";
 import { done, eq, ok } from "@light/test/assert.ts";
 
 const main = async (): Promise<void> => {
@@ -28,7 +28,19 @@ const main = async (): Promise<void> => {
   }
   eq("each check fails as given and passes solved", verdicts.join(" "), tasks.map((t) => t.name + ":fails/passes").join(" "));
 
+  const exported = opencodeUsage(readFileSync(join(process.cwd(), "test", "fixtures", "opencode-export.json"), "utf8"));
+  eq(
+    "opencode's export: its assistant messages, the cache counted in the input",
+    exported === null ? "none" : [exported.requests, exported.inputTokens, exported.cacheReadTokens, exported.outputTokens, exported.firstInputTokens, exported.peakContext].join(","),
+    "6,68450,57732,323,10942,11830",
+  );
+  ok("the export's own cost", exported !== null && exported.costUsd.toFixed(6) === "0.003949");
+  eq("an export with no assistant message gives nothing", String(opencodeUsage('{"messages":[]}')), "null");
+
   const home = mkdtempSync(join(tmpdir(), "bench-home-"));
+  const registryPrices = pricesFromConfig(join(home, "missing-config.json"));
+  const zen = registryPrices.of("opencode/deepseek-v4.1-flash");
+  eq("the registry's prices, built in rather than config.json's", zen === null ? "none" : [zen.input, zen.output, zen.cacheRead].join(","), "0.3,1.2,0.006");
   const fixture = join(home, "model.jsonl");
   writeFileSync(
     fixture,
@@ -58,6 +70,18 @@ const main = async (): Promise<void> => {
   ok("measured: the first token, the time, the tokens, the reply", good.firstTokenMs >= 0 && good.ms >= good.firstTokenMs && good.outputTokens > 0 && good.reply === "Writing it.Done.");
   ok("diagnosed: the first request, the requests, no compaction, the peak context, the computed cost", good.firstInputTokens > 0 && good.requests === 2 && good.compacted === 0 && good.peakContext >= good.firstInputTokens && good.computedCostUsd > 0);
   ok("its folder removed, its session forgotten", !existsSync(good.folder) && readdirSync(join(home, "harness", "sessions")).every((d) => readdirSync(join(home, "harness", "sessions", d)).length === 0));
+  const pi = new RunSpec();
+  pi.agent = "pi";
+  pi.command = ["node", join(process.cwd(), "test", "fake-pi.mjs")];
+  pi.model = "opencode/deepseek-v4.1-flash";
+  pi.prices = registryPrices;
+  const piRun = await runTask(task, pi);
+  eq("pi over its RPC: the tool call, the stop, the check", String(piRun.passed) + " " + piRun.stopReason + " " + piRun.error + "|" + piRun.tools.join(",") + " " + String(piRun.calls) + " " + String(piRun.failedCalls) + " " + piRun.checkOutput, "true stop |write=1 1 0 ok");
+  ok(
+    "pi measured: the first token, the requests, the input with cache, the first input, the peak context, no compaction, its cost, the computed cost",
+    piRun.firstTokenMs >= 0 && piRun.requests === 2 && piRun.inputTokens === 200 && piRun.cacheReadTokens === 70 && piRun.outputTokens === 15 && piRun.firstInputTokens === 50 && piRun.peakContext === 150 && piRun.compacted === 0 && Math.abs(piRun.costUsd - 0.0015) < 1e-9 && piRun.computedCostUsd > 0,
+  );
+  eq("pi's reply", piRun.reply, "done");
   spec.command = ["node", daemon, "--harness", "--harness-fake", wrong, "--harness-home", home];
   const bad = await runTask(task, spec);
   eq("one that answers wrong fails, with the check's words", String(bad.passed) + " " + bad.checkOutput, 'false answer.txt says "8080"');

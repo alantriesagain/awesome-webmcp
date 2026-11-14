@@ -24,28 +24,35 @@ Google refuses searches from a fresh headless profile as unusual traffic on some
 ## The benchmark
 
 `bench/` measures agents on real models: sixteen tasks, eight small ones and eight that test what a harness does (a precise edit in a long file, a test's noisy output, a misleading stack, a change across six callers, a value traced through config, existing tests kept green, a tab-indented file, a bug seen only by running the program) (`bench/tasks/<name>/`: a repository, a
-prompt, a check the agent never sees, and a solution the test checks the check against), run over
-ACP, so the harness, opencode and the DeepSeek Harness are measured alike. A run copies the task
-into a temp git repository, starts the agent there, chooses the model and effort through the
-session's options, sends the prompt, follows the turn (cancelled past the task's time), runs the
-check, and deletes the session. It records the time to the first token and in all, the calls by
-tool and those that failed, the tokens, the context and the cost the agent reported; the records go
-to `bench/results/` (ignored by git) and a table is printed.
+prompt, a check the agent never sees, and a solution the test checks the check against), so the
+harness, opencode and the DeepSeek Harness run over ACP and pi over its RPC mode. A run copies the
+task into a temp git repository, starts the agent there, chooses the model and effort (through the
+session's options over ACP, through pi's arguments), sends the prompt, follows the turn (cancelled
+past the task's time), runs the check, and deletes the session. pi starts with a folder of its own
+(`PI_CODING_AGENT_DIR`, so the user's settings and extensions do not load) and its key read from
+`~/.widecode/auth.json`. It records the time to the first token and in all, the calls by tool and
+those that failed, the tokens, the context and the cost the agent reported; the records go to
+`bench/results/` (ignored by git) and a table is printed.
 
-The record also carries what the ACP stream shows about how a run went: the context the first
-usage update after the prompt reported, the number of requests (a usage update whose context
-changed; a compaction's update and one that only adds a subagent's cost not counted), whether the context was compacted (a smaller context after a larger one, or unknown
-when the agent reports none), and the peak context. A field an agent does not report is `-1`. The
-cost is computed from a price table of dollars per million tokens, `[input, output, cacheRead]`,
-applied to the input tokens with those the agent says it read from the cache
-(ACP's `cachedReadTokens`) at the cache's price, read from `--prices <file.json>` (`{ "<model>": [input, output, cacheRead] }`, under `models` or at
-the top) or by default from the `price` of the models in the harness's config.json. Both the
-computed cost and the agent-reported one are kept, and the table shows the computed one when a
-price is known.
+The record also carries what the agent's stream shows about how a run went: the context the first
+request reported, the number of requests (an ACP usage update whose context changed, a compaction's
+update and one that only adds a subagent's cost not counted), whether the context was compacted (a
+smaller context after a larger one, or unknown when the agent reports none), and the peak context.
+pi gives these in each assistant message's usage, then its `get_session_stats` answer gives the run's cost.
+opencode's ACP result carries only part of the run's usage, so before its session is deleted the
+runner runs `opencode export <session>` and takes the exact per-request tokens and costs from it
+(the input there includes the cache). A field an agent does not report is `-1`. The cost is computed
+from a price table of dollars per million tokens, `[input, output, cacheRead]`, applied to the input
+tokens with those the agent says it read from the cache (ACP's `cachedReadTokens` or a message's
+`cacheRead`) at the cache's price, read from `--prices <file.json>` (`{ "<model>": [input, output, cacheRead] }`, under `models` or at
+the top) or by default from the harness's model registry: its built-in models and those config.json
+adds, each keyed `provider/id`. Both the computed cost and the agent-reported one are kept, and the
+table shows the computed one when a price is known.
 
 ```
 node packages/harness/bench/run.ts --model deepseek/deepseek-flash,opencode/kimi-k2.6 --repeat 2 --budget 1
 node packages/harness/bench/run.ts --agent opencode --model opencode/big-pickle --tasks fix-bug,edit-json
+node packages/harness/bench/run.ts --agent pi --model opencode/deepseek-v4.1-flash --tasks fix-bug,edit-json
 node packages/harness/bench/run.ts --report packages/harness/bench/results/*.jsonl
 ```
 
