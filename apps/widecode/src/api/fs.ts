@@ -13,6 +13,11 @@ import { answer, answerText, json, listText, num, objectText, str, strs } from "
 /** The most of a file `text` reads. */
 const TEXT_MAX = 8 * 1024 * 1024;
 
+/** The most a window answers. Its lines are a JSON array, and a string past 4 MiB makes scriptc's
+ * runtime grow a run whose move fails when the run spans two mappings, leaving the copy's
+ * destination unmapped (SIGSEGV). 1.5 MiB leaves room for escaping that roughly doubles it. */
+const WINDOW_BYTES_MAX = 1536 * 1024;
+
 /** Plugin call `name` with its arguments `a`, answered; null for a call of another namespace. */
 export const answerFs = (_rt: JsRuntime, name: string, a: unknown[]): HostAnswer | null => {
   switch (name) {
@@ -71,7 +76,7 @@ export const answerFs = (_rt: JsRuntime, name: string, a: unknown[]): HostAnswer
         return answer(null);
       }
     case "fs.window": {
-      const w = readWindow(str(a[0]), num(a[1]), Math.max(1, num(a[2])), strs(a[3]));
+      const w = readWindow(str(a[0]), num(a[1]), Math.min(Math.max(1, num(a[2])), WINDOW_BYTES_MAX), strs(a[3]));
       return answerText(objectText(["lines", "start", "end", "size"], [json(w.lines), String(w.start), String(w.end), String(w.size)]));
     }
   }

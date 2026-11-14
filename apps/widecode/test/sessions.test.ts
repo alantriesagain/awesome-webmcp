@@ -193,6 +193,12 @@ ok("bookkeeping records are left out", !bookkeeping);
 ok("the line still being written is left out", firstEnd < size && size - firstEnd === Buffer.byteLength('{"parentUuid":"u-last","type":"assistant","message":{"content":[{"type":"text","text":"still being wri'));
 eqn("a file that is not there has no lines", readWindow(join(dir, "ffffffff-0000.jsonl"), -1, 1024, []).lines.length, 0);
 
+// The same file's window as the plugin asks for it, 4 MiB in one answer: the core caps it below
+// the size where scriptc's string growth crashed, and the latest records are the ones kept.
+const historyAnswer = w.js.answer("fs.window", JSON.stringify([big, -1, 4 * 1024 * 1024, SKIP]));
+ok("a 4 MiB history window is answered under the 4 MiB string limit", historyAnswer.text.length > 0 && historyAnswer.text.length < 4 * 1024 * 1024);
+ok("the window keeps the transcript's latest records", historyAnswer.text.includes("Parser work"));
+
 // A session resumed: its Agent call shows what its subagent did, from the subagent's own file.
 const subId = "ffffffff-0000-0000-0000-000000000006";
 writeFileSync(
