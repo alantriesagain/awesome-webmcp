@@ -1,5 +1,7 @@
 // The Edit tool: an exact string in a file replaced by another, once (the match must be unique)
-// or everywhere with `replace_all`; a file the model has not read first is refused; the file's
+// or everywhere with `replace_all`; a file the model has not read takes one replacement of text
+// found in it exactly once (the exact match shows the model knows that part, however it saw it:
+// a `cat` through Bash, a Grep), any other edit of it is refused until it is read; the file's
 // line ending (CRLF or LF), its BOM and its trailing newline are kept; the result is the change as
 // a patch with the file's line numbers, so the model sees what it did.
 import { str } from "@light/lib/json.ts";
@@ -31,12 +33,12 @@ export const editTool = (input: Record<string, unknown>, ctx: ToolContext): Prom
   const file = FileText.read(path);
   if (file.error.length > 0) return done(ToolOutcome.failed(file.error));
   if (!file.exists) return done(ToolOutcome.failed(given + " does not exist: use Write for a new file"));
-  if (!ctx.reads.has(path)) return done(ToolOutcome.failed(given + " was not read in this session: read it first"));
   const crlf = file.text.includes("\r\n");
   const from = crlf ? oldString.replace(/\r?\n/g, "\r\n") : oldString;
   const to = crlf ? newString.replace(/\r?\n/g, "\r\n") : newString;
   const found = positions(file.text, from, 3);
   if (found.length === 0) return done(ToolOutcome.failed("old_string not found in " + given + (crlf ? " (the file uses CRLF line endings)" : "")));
+  if (found.length > 1 && !ctx.reads.has(path)) return done(ToolOutcome.failed(given + " was not read in this session: read it first, or give an old_string that occurs once in it"));
   if (found.length > 1 && !all) return done(ToolOutcome.failed("old_string occurs " + (found.length >= 3 ? "3 or more" : String(found.length)) + " times in " + given + " (lines " + found.map((at) => String(lineOf(file.text, at))).join(", ") + "): make it unique with more context, or set replace_all"));
   const text = all ? file.text.split(from).join(to) : file.text.slice(0, found[0]) + to + file.text.slice(found[0] + from.length);
   const count = all ? positions(file.text, from, 1000000).length : 1;

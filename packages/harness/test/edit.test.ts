@@ -30,7 +30,10 @@ const main = async (): Promise<void> => {
   eq("a new file written, its folders made", made.text + " · " + readFileSync(join(folder, "new/b.txt"), "utf8").replace(/\n/g, "|"), "Created new/b.txt (2 lines) · x|y|");
   ok("shown as created with its patch", made.created && made.oldText === "" && made.newText === "x\ny\n" && made.patch === "--- a/new/b.txt\n+++ b/new/b.txt\n@@ -1,0 +1,2 @@\n+x\n+y\n" && made.rawOutputJson.includes('"additions":2,"deletions":0'));
   eq("a file that exists is refused until read", await text("Write", { file_path: "a.txt", content: "z\n" }), "ERR a.txt exists and was not read in this session: read it first, then write or edit it");
-  eq("an edit of a file not read first, too", await text("Edit", { file_path: "a.txt", old_string: "one", new_string: "two" }), "ERR a.txt was not read in this session: read it first");
+  writeFileSync(join(folder, "c.txt"), "alpha\nbeta\nalpha\n");
+  eq("a file not read: text found more than once is refused", await text("Edit", { file_path: "c.txt", old_string: "alpha", new_string: "x" }), "ERR c.txt was not read in this session: read it first, or give an old_string that occurs once in it");
+  eq("replace_all as well", await text("Edit", { file_path: "c.txt", old_string: "alpha", new_string: "x", replace_all: true }), "ERR c.txt was not read in this session: read it first, or give an old_string that occurs once in it");
+  eq("text found once is replaced", (await text("Edit", { file_path: "c.txt", old_string: "beta", new_string: "gamma" })).split("\n")[0] + " · " + readFileSync(join(folder, "c.txt"), "utf8").replace(/\n/g, "|"), "Edited c.txt (1 replacement) · alpha|gamma|alpha|");
   await run("Read", { file_path: "a.txt" });
   const edited = await run("Edit", { file_path: "a.txt", old_string: "one", new_string: "one\ntwo" });
   eq("an edit: the patch with the file's line numbers as the result", edited.text, "Edited a.txt (1 replacement)\n@@ -6,5 +6,6 @@\n l6\n l7\n one\n+two\n l9\n l10\n");

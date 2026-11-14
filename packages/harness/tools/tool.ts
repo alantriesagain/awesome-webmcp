@@ -160,9 +160,9 @@ const BASH_SCHEMA = '{"type":"object","properties":{"command":{"type":"string","
 
 /** The built-in tools. */
 export const builtInTools = (): Tool[] => [
-  new Tool("Read", "Read a file: its lines numbered, 2000 at a time, 2000 characters per line at most. Read a file before you edit it.", READ_SCHEMA, "read", false),
+  new Tool("Read", "Read a file: its lines numbered, 2000 at a time, 2000 characters per line at most.", READ_SCHEMA, "read", false),
   new Tool("Write", "Write a whole file (its folders made). For a file that exists, read it first; prefer Edit for a change to part of it.", WRITE_SCHEMA, "edit", true),
-  new Tool("Edit", "Replace an exact string in a file you have read with another. old_string must occur exactly once (give enough context), unless replace_all.", EDIT_SCHEMA, "edit", true),
+  new Tool("Edit", "Replace an exact string in a file with another. old_string must occur exactly once (give enough context), unless replace_all in a file you have read.", EDIT_SCHEMA, "edit", true),
   new Tool("Bash", "Run a shell command in the folder with bash and get its output (30 KB kept, the start and the end). No interactive commands; prefer Read, Grep and Glob for reading and searching files.", BASH_SCHEMA, "execute", true),
   new Tool("Grep", "Search the folder's files for a regular expression: file, line number and line, 200 matches at most.", GREP_SCHEMA, "search", false),
   new Tool("Glob", "Find files by a glob over their relative paths, newest first, 500 at most.", GLOB_SCHEMA, "search", false),
