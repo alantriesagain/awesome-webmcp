@@ -54,6 +54,18 @@ const calls = (file: string): Logged[] => {
     .map((line) => JSON.parse(line) as Logged);
 };
 
+const lastSessionCwd = (file: string): string => {
+  if (!existsSync(file)) return "";
+  const lines = readFileSync(file, "utf8")
+    .split("\n")
+    .filter((line) => line.trim().length > 0);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = JSON.parse(lines[i]) as { method?: unknown; params?: { cwd?: unknown } };
+    if (m.method === "session/new" && typeof m.params?.cwd === "string") return m.params.cwd;
+  }
+  return "";
+};
+
 const reads = (state: string): { running: boolean; projects: string[]; proxy: boolean } => {
   const parsed = JSON.parse(readFileSync(state, "utf8")) as { running?: unknown; projects?: unknown; proxy?: unknown };
   return { running: parsed.running === true, projects: Array.isArray(parsed.projects) ? parsed.projects.map(String) : [], proxy: parsed.proxy === true };
@@ -131,6 +143,20 @@ const main = async (): Promise<void> => {
   eq("the second run starts no proxy again", String(afterSecond.filter((x) => x.cmd === "proxy").length), "1");
   eq("and no box again", String(afterSecond.filter((x) => x.cmd === "up").length), "1");
   c.model.closeTurn(null);
+
+  const outside = mkdtempSync(join(tmpdir(), "widecode-task-box-outside-"));
+  c.model.openTurn("main", 0, true);
+  c.model.block("", "b4", TOOL, "toolu-b4", "Task", "");
+  const refusedWhere = await task("6", "deepseek", "hello", ',"cwd":"' + outside + '"');
+  ok("a boxed run outside the box's folders is refused", refusedWhere.includes("a boxed subagent runs in a folder its box shares"));
+  c.model.closeTurn(null);
+
+  c.model.openTurn("main", 0, true);
+  c.model.block("", "b5", TOOL, "toolu-b5", "Task", "");
+  const inProject = await task("7", "deepseek", "hello", ',"cwd":"' + other + '"');
+  ok("a boxed run in a folder the box shares is accepted", inProject.includes("Hello, world.") && lastSessionCwd(acpLog) === other);
+  c.model.closeTurn(null);
+  rmSync(outside, { recursive: true, force: true });
 
   c.model.openTurn("main", 0, true);
   const hostBlock = c.model.block("", "h1", TOOL, "toolu-h1", "Task", "");

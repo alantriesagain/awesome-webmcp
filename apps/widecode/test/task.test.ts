@@ -3,7 +3,7 @@
 // on a target's agent and model, its thought and words stream under the call, the call shows as a
 // subagent and the Agents tab follows it, and the MCP result is its last words. Cancelling the MCP
 // call stops the subagent and marks it stopped.
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { request, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
@@ -34,6 +34,18 @@ const send = (url: string, token: string, body: string): Promise<string> =>
     req.on("error", (e: Error) => resolve("error " + e.message));
     req.end(body);
   });
+
+const lastSessionCwd = (file: string): string => {
+  if (!existsSync(file)) return "";
+  const lines = readFileSync(file, "utf8")
+    .split("\n")
+    .filter((line) => line.trim().length > 0);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = JSON.parse(lines[i]) as { method?: unknown; params?: { cwd?: unknown } };
+    if (m.method === "session/new" && typeof m.params?.cwd === "string") return m.params.cwd;
+  }
+  return "";
+};
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-task-"));
@@ -74,6 +86,33 @@ const main = async (): Promise<void> => {
   if (slash === null) return;
   const slashReply = await post('{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"Task","arguments":{"description":"slash","prompt":"hello","subagent_type":"deepseek","cwd":"' + folder + '/"},"_meta":{"claudecode/toolUseId":"toolu-slash"}}}');
   ok("a folder with a trailing slash is the session's folder", slashReply.includes("Hello, world."));
+
+  c.model.closeTurn(null);
+  c.model.openTurn("main", 0, true);
+  const elsewhere = mkdtempSync(join(tmpdir(), "widecode-task-elsewhere-"));
+  c.model.block("", "tcexternal", TOOL, "toolu-external", "Task", "");
+  const externalReply = await post('{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"Task","arguments":{"description":"another folder","prompt":"hello","subagent_type":"deepseek","cwd":"' + elsewhere + '"},"_meta":{"claudecode/toolUseId":"toolu-external"}}}');
+  ok("a Task with cwd runs there", externalReply.includes("Hello, world.") && lastSessionCwd(log) === elsewhere);
+  rmSync(elsewhere, { recursive: true, force: true });
+
+  c.model.closeTurn(null);
+  c.model.openTurn("main", 0, true);
+  mkdirSync(join(folder, "sub"));
+  c.model.block("", "tcrelative", TOOL, "toolu-relative", "Task", "");
+  const relativeReply = await post('{"jsonrpc":"2.0","id":21,"method":"tools/call","params":{"name":"Task","arguments":{"description":"a relative folder","prompt":"hello","subagent_type":"deepseek","cwd":"sub"},"_meta":{"claudecode/toolUseId":"toolu-relative"}}}');
+  ok("a relative cwd is under the session's folder", relativeReply.includes("Hello, world.") && lastSessionCwd(log) === folder + "/sub");
+
+  c.model.closeTurn(null);
+  c.model.openTurn("main", 0, true);
+  c.model.block("", "tcdot", TOOL, "toolu-dot", "Task", "");
+  const dotReply = await post('{"jsonrpc":"2.0","id":23,"method":"tools/call","params":{"name":"Task","arguments":{"description":"this folder","prompt":"hello","subagent_type":"deepseek","cwd":"."},"_meta":{"claudecode/toolUseId":"toolu-dot"}}}');
+  ok("a cwd of . is the session's folder", dotReply.includes("Hello, world.") && lastSessionCwd(log) === folder);
+
+  c.model.closeTurn(null);
+  c.model.openTurn("main", 0, true);
+  c.model.block("", "tcdotdot", TOOL, "toolu-dotdot", "Task", "");
+  const dotdotReply = await post('{"jsonrpc":"2.0","id":22,"method":"tools/call","params":{"name":"Task","arguments":{"description":"a parent folder","prompt":"hello","subagent_type":"deepseek","cwd":"../outside"},"_meta":{"claudecode/toolUseId":"toolu-dotdot"}}}');
+  ok("a cwd with .. is refused", dotdotReply.includes("a subagent's folder is a path without .."));
 
   c.model.closeTurn(null);
   c.model.openTurn("main", 0, true);
@@ -282,6 +321,21 @@ const main = async (): Promise<void> => {
   const setupPath = (/\[worktree: (.+?) \(branch /.exec(withSetup) ?? [])[1] ?? "";
   ok("setup runs in the new worktree with both folders", setupPath.length > 0 && readFileSync(join(setupPath, "setup.txt"), "utf8") === folder3);
   rmSync(join(folder3, "setup"));
+  c3.model.closeTurn(null);
+
+  // A worktree of another repository lives under that repository's .worktrees/ and, since the
+  // setup lines are the session folder's, runs none of them there.
+  c3.model.openTurn("main", 0, true);
+  writeFileSync(join(folder3, "setup"), "");
+  const repo3 = mkdtempSync(join(tmpdir(), "widecode-task-other-repo-"));
+  execFileSync("git", ["init", "-q"], { cwd: repo3 });
+  execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-q", "--allow-empty", "-m", "start"], { cwd: repo3 });
+  const otherWorktree = await send(url3, acp, '{"jsonrpc":"2.0","id":17,"method":"tools/call","params":{"name":"Task","arguments":{"description":"another repository","prompt":"change","subagent_type":"deepseek","cwd":"' + repo3 + '","isolation":"worktree"}}}');
+  const otherPath = (/\[worktree: (.+?) \(branch /.exec(otherWorktree) ?? [])[1] ?? "";
+  ok("a worktree of another folder is under that folder's .worktrees", otherWorktree.includes("Changed.") && otherPath.startsWith(repo3 + "/.worktrees/") && existsSync(join(otherPath, "changed.txt")));
+  ok("and runs none of the session's setup lines", otherPath.length > 0 && !existsSync(join(otherPath, "setup.txt")));
+  rmSync(join(folder3, "setup"));
+  rmSync(repo3, { recursive: true, force: true });
   c3.model.closeTurn(null);
 
   // An ACP main announces widecode's Task call: the run goes under that call's card, not a new one.

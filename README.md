@@ -207,8 +207,11 @@ Claude's subagents can run on an ACP target instead: the acp section's `tasks.ta
 what it is for, streams the run under the call and answers with its last words. With
 `run_in_background` it starts and answers at once; `TaskStop` and `SendMessage` manage it by the id
 it returns, and its end comes back as a message to the main agent. A main agent that gives no
-tool-use id, such as an ACP agent, gets a card the tool makes itself. `isolation: "worktree"` runs
-it in a git worktree under `.widecode/worktrees/<id>` and answers with its path; the run's steps are
+tool-use id, such as an ACP agent, gets a card the tool makes itself. `cwd` names the folder it
+works in (absolute, or relative to the session's), the session's folder when left out; a boxed
+target works only in the session's folder, a folder in `tasks.box.projects` or one inside them.
+`isolation: "worktree"` runs it in a git worktree of that folder under `.worktrees/<id>` and
+answers with its path (`worktreeSetup` runs only for a worktree of the session's folder); the run's steps are
 kept under `.widecode/tasks/<session>/<call>.jsonl` and read back when a resumed session opens the
 call. `replaceClaudeSubagents` adds `--disallowedTools Task,Agent,TaskStop,SendMessage` to Claude's
 start, so its own subagent tools step aside; `plugins.claude.keepSubagents` keeps them.

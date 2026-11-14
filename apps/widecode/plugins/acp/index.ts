@@ -2587,9 +2587,9 @@ widecode.plugin({
     const names = tasks.targets.map((t) => t.name);
     api.tools.add({
       name: "Task",
-      description: "Run a subagent in another agent and model, in this folder. Targets: " + tasks.targets.map((t) => t.name + " (" + t.agent + (t.model.length > 0 ? " " + t.model : "") + ")").join(", ") + ". The subagent is not Claude: it runs on the target's model, its steps show under the call, and its final answer is the result. With run_in_background it starts and answers at once; the call id is its id for TaskStop and SendMessage, and its end comes back as a message.",
+      description: "Run a subagent in another agent and model, in this folder or the one `cwd` names (a boxed target only in a folder its box shares). Targets: " + tasks.targets.map((t) => t.name + " (" + t.agent + (t.model.length > 0 ? " " + t.model : "") + ")").join(", ") + ". The subagent is not Claude: it runs on the target's model, its steps show under the call, and its final answer is the result. With run_in_background it starts and answers at once; the call id is its id for TaskStop and SendMessage, and its end comes back as a message.",
       category: "agent",
-      input: { type: "object", properties: { description: { type: "string", description: "A short label for the call." }, prompt: { type: "string", description: "The whole task for the subagent." }, subagent_type: { type: "string", enum: names, description: "Which target to run." }, model: { type: "string", description: "A model for this call, overriding the target's." }, cwd: { type: "string", description: "The folder; the session's folder when left out." }, name: { type: "string", description: "A display name." }, isolation: { type: "string", enum: ["worktree"], description: "Run it in a git worktree of this folder." }, run_in_background: { type: "boolean", description: "Start it and answer at once; it goes on after this turn." } }, required: ["description", "prompt"] },
+      input: { type: "object", properties: { description: { type: "string", description: "A short label for the call." }, prompt: { type: "string", description: "The whole task for the subagent." }, subagent_type: { type: "string", enum: names, description: "Which target to run." }, model: { type: "string", description: "A model for this call, overriding the target's." }, cwd: { type: "string", description: "The folder it works in, absolute or relative to the session's; the session's folder when left out." }, name: { type: "string", description: "A display name." }, isolation: { type: "string", enum: ["worktree"], description: "Run it in a git worktree of its folder." }, run_in_background: { type: "boolean", description: "Start it and answer at once; it goes on after this turn." } }, required: ["description", "prompt"] },
       call: (args, ctx) => {
         const wanted = str(args.subagent_type).length > 0 ? str(args.subagent_type) : names[0] ?? "";
         const target = tasks.targets.find((t) => t.name === wanted);
@@ -2600,8 +2600,15 @@ widecode.plugin({
         if (prompt.length === 0) throw new Error("a subagent needs a prompt");
         const folder = api.state.active().folder;
         const bare = (path: string): string => (path.length > 1 ? path.replace(/\/+$/, "") : path);
-        const cwd = str(args.cwd);
-        if (cwd.length > 0 && bare(cwd) !== bare(folder)) throw new Error("a subagent runs in " + folder + ", not " + cwd);
+        const asked = bare(str(args.cwd));
+        // A relative folder is the session's; a boxed run works only in a folder its box shares.
+        const joined = asked.length === 0 ? bare(folder) : asked.startsWith("/") ? asked : bare(folder) + "/" + asked;
+        const where = bare(joined.split("/").filter((s) => s !== ".").join("/")) || "/";
+        if (where.split("/").includes("..")) throw new Error("a subagent's folder is a path without ..: " + asked);
+        if (target.box.length > 0 && box !== null) {
+          const shared = [bare(folder), ...box.config.projects.map(bare)];
+          if (!shared.some((p) => where === p || where.startsWith(p + "/"))) throw new Error("a boxed subagent runs in a folder its box shares (" + shared.join(", ") + "), not " + where + "; add the folder to the box's projects in config.json");
+        }
         const isolation = str(args.isolation);
         if (isolation.length > 0 && isolation !== "worktree") throw new Error("isolation is \"worktree\" or none");
         if (working() >= tasks.maxConcurrent) throw new Error("too many subagents run (" + String(tasks.maxConcurrent) + ")");
@@ -2621,9 +2628,9 @@ widecode.plugin({
           ctx.onCancel(() => run.cancel());
           return run.start(prompt);
         };
-        if (isolation !== "worktree") return startRun(folder, "", folder);
+        if (isolation !== "worktree") return startRun(where, "", folder);
         const part = id.replace(/[^A-Za-z0-9_.-]/g, "_");
-        const path = folder + "/.worktrees/" + part;
+        const path = where + "/.worktrees/" + part;
         const branch = "widecode/task-" + part;
         preparing++;
         const made = (): void => {
@@ -2639,7 +2646,7 @@ widecode.plugin({
         const removeWorktree = (): Promise<void> => {
           if (cleaned) return Promise.resolve();
           cleaned = true;
-          return api.process.run("git -C " + quote(folder) + " worktree remove --force " + quote(path), "", 15000).then(() => api.process.run("git -C " + quote(folder) + " branch -D " + quote(branch), "", 15000).then(() => {}));
+          return api.process.run("git -C " + quote(where) + " worktree remove --force " + quote(path), "", 15000).then(() => api.process.run("git -C " + quote(where) + " branch -D " + quote(branch), "", 15000).then(() => {}));
         };
         const worktreeOver = (): Promise<boolean> =>
           api.process.run("git -C " + quote(path) + " status --porcelain", "", 15000).then((s) =>
@@ -2658,15 +2665,16 @@ widecode.plugin({
         const background = args.run_in_background === true;
         const prepared = async (): Promise<string> => {
           try {
-            const gitDir = await api.process.run("git -C " + quote(folder) + " rev-parse --absolute-git-dir", "", 15000);
+            const gitDir = await api.process.run("git -C " + quote(where) + " rev-parse --absolute-git-dir", "", 15000);
             if (gitDir.code !== 0) throw new Error("cannot make a worktree: " + (gitDir.err.trim().length > 0 ? gitDir.err.trim() : gitDir.out.trim()));
             const exclude = quote(gitDir.out.trim() + "/info/exclude");
-            const ignoring = await api.process.run("mkdir -p " + quote(folder + "/.worktrees") + " && mkdir -p " + quote(gitDir.out.trim() + "/info") + " && (grep -qxF .worktrees/ " + exclude + " || printf '%s\\n' .worktrees/ >> " + exclude + ")", "", 15000);
+            const ignoring = await api.process.run("mkdir -p " + quote(where + "/.worktrees") + " && mkdir -p " + quote(gitDir.out.trim() + "/info") + " && (grep -qxF .worktrees/ " + exclude + " || printf '%s\\n' .worktrees/ >> " + exclude + ")", "", 15000);
             if (ignoring.code !== 0) throw new Error("cannot ignore .worktrees/: " + (ignoring.err.trim().length > 0 ? ignoring.err.trim() : ignoring.out.trim()));
-            const added = await api.process.run("git -C " + quote(folder) + " worktree add -b " + quote(branch) + " " + quote(path), "", 15000);
+            const added = await api.process.run("git -C " + quote(where) + " worktree add -b " + quote(branch) + " " + quote(path), "", 15000);
             if (cancelled) return "The subagent was stopped before it started.";
             if (added.code !== 0) throw new Error("cannot make a worktree: " + (added.err.trim().length > 0 ? added.err.trim() : added.out.trim()));
-            for (const setupLine of tasks.worktreeSetup) {
+            // The setup lines are the session folder's, so a worktree of another folder runs none.
+            for (const setupLine of where === bare(folder) ? tasks.worktreeSetup : []) {
               // In the worktree: process.run runs where widecode was started.
               const command = "cd " + quote(path) + " && env WIDECODE_FOLDER=" + quote(folder) + " WIDECODE_WORKTREE=" + quote(path) + " sh -c " + quote(setupLine);
               const done = await api.process.run(command, "", tasks.worktreeSetupTimeoutMs);
