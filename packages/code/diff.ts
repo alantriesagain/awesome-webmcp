@@ -9,7 +9,7 @@ import { insidePath, readFileCapped } from "@light/workspace/files.ts";
 import { GitRepo, isBinary } from "@light/workspace/git.ts";
 import { Commit } from "@light/workspace/git-log.ts";
 import { git } from "@light/workspace/git.read.ts";
-import { HlState, languageForPath, Token, tokenizeLine } from "@light/highlight";
+import { HlState, languageForPath, Token, tokenizeLine } from "@lightstart/highlight";
 import { expandTabs } from "@light/ui/text.ts";
 
 export const KEPT = 0;

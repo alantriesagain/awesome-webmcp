@@ -5,7 +5,7 @@
   "description": "The Claude Code frontend for wide terminals: chat, files and code side by side; a native core and JS plugins.",
   "dependencies": {
     "@lightstart/light": "workspace:*",
-    "@light/highlight": "workspace:*",
+    "@lightstart/highlight": "workspace:*",
     "@light/kernel": "workspace:*",
     "@light/lib": "workspace:*",
     "@light/markdown": "workspace:*",

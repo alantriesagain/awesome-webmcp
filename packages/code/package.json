@@ -11,7 +11,7 @@
   "dependencies": {
     "@lightstart/light": "workspace:*",
     "@widecode/conversation": "workspace:*",
-    "@light/highlight": "workspace:*",
+    "@lightstart/highlight": "workspace:*",
     "@light/ui": "workspace:*",
     "@light/workspace": "workspace:*"
   },

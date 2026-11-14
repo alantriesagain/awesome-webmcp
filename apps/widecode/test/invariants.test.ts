@@ -15,7 +15,7 @@ import { createWidecode } from "../src/compose.ts";
 import { done, eq, ok } from "@light/test/assert.ts";
 import { chatProblems } from "./support/chat-invariants.ts";
 import { contentText, rec, str } from "./support/claude-records.ts";
-import { registerLanguages } from "@light/highlight/languages.ts";
+import { registerLanguages } from "@lightstart/highlight/languages.ts";
 
 registerLanguages();
 

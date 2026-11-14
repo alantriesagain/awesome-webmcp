@@ -10,7 +10,7 @@ import { ADDED, CodeFile, CodeLine, expandTabs, hunkStarts, KEPT, loadCode, load
 import { openRepo } from "@light/workspace/git.ts";
 import { Commit } from "@light/workspace/git-log.ts";
 import { done, eq } from "@light/test/assert.ts";
-import { registerLanguages } from "@light/highlight/languages.ts";
+import { registerLanguages } from "@lightstart/highlight/languages.ts";
 
 registerLanguages();
 

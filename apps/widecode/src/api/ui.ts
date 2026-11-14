@@ -3,8 +3,8 @@
 // their keys and commands, languages, the tree's rows, the clipboard.
 import { PreludePart } from "@light/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
-import { Language, addLanguage } from "@light/highlight/registry.ts";
-import { TOKENIZERS, tokenizerFor } from "@light/highlight/tokenizers.ts";
+import { Language, addLanguage } from "@lightstart/highlight/registry.ts";
+import { TOKENIZERS, tokenizerFor } from "@lightstart/highlight/tokenizers.ts";
 import { BandPart, SegmentContext, SegmentDef } from "@widecode/screen/contributions.ts";
 import { Command, Suggestion } from "@light/kernel/commands.ts";
 import { Action } from "@light/kernel/actions.ts";

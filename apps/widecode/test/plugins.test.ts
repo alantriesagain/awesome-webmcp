@@ -11,7 +11,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "@widecode/conversation/conversation.ts";
-import { languageForFence, languageForPath } from "@light/highlight";
+import { languageForFence, languageForPath } from "@lightstart/highlight";
 import { Panel, SegmentContext, SegmentDef } from "@widecode/screen/contributions.ts";
 import { Host } from "../src/controllers/host.ts";
 import { Command } from "@light/kernel/commands.ts";
@@ -23,7 +23,7 @@ import { composeWidecode, createWidecode, Widecode } from "../src/compose.ts";
 import { Caret, Clip, DEFAULT_STYLE, KeyEvent, Screen, TRoot, frames, layout, mount, paint, unmount } from "@lightstart/light/native/tui";
 import { Line, LineSource, Run } from "@light/ui/line-view.ts";
 import { done, eq, ok } from "@light/test/assert.ts";
-import { LANGUAGES } from "@light/highlight/languages.ts";
+import { LANGUAGES } from "@lightstart/highlight/languages.ts";
 
 const W = 200;
 const H = 20;

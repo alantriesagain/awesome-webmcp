@@ -12,7 +12,7 @@ import { existsSync, statSync } from "node:fs";
 import { expandHome } from "@light/lib/paths.ts";
 import { resolve } from "node:path";
 import { Conversation } from "@widecode/conversation/conversation.ts";
-import { removeLanguages } from "@light/highlight/registry.ts";
+import { removeLanguages } from "@lightstart/highlight/registry.ts";
 import { Hook } from "@light/lib/hook.ts";
 import { KeymapController } from "./keymaps.ts";
 import { Roles } from "./roles.ts";

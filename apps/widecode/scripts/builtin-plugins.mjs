@@ -30,7 +30,7 @@ const files = (existsSync(dir) ? readdirSync(dir).sort() : [])
   .filter((f) => f !== null);
 /** The languages plugin's list, from the package's one table. */
 const languagesOf = (code) => {
-  const table = readFileSync("node_modules/@light/highlight/languages.ts", "utf8");
+  const table = readFileSync("node_modules/@lightstart/highlight/languages.ts", "utf8");
   const re = /new LanguageEntry\("([^"]+)", (\[[^\]]*\]), (\[[^\]]*\])\)/g;
   const lines = [];
   for (let m = re.exec(table); m !== null; m = re.exec(table)) lines.push("  { id: " + JSON.stringify(m[1]) + ", extensions: " + m[2] + ", fences: " + m[3] + ", tokenizer: " + JSON.stringify(m[1]) + " },");

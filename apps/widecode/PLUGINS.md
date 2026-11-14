@@ -28,7 +28,7 @@ apps/widecode/
     theme.ts      widecode's look: the palette's fields under the core's names, the plugins' theme
 packages/         what the core builds on: @light/kernel, @light/plugins (the QuickJS shim, its build
                   and FFI manifest, its node stand-in for tests), @widecode/conversation, @widecode/screen,
-                  @widecode/chat, @widecode/code, @light/workspace, @light/highlight, @light/ui, @widecode/agent, @light/lib
+                  @widecode/chat, @widecode/code, @light/workspace, @lightstart/highlight, @light/ui, @widecode/agent, @light/lib
 ```
 
 ## Where plugins come from

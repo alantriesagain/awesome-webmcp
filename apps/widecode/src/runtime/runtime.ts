@@ -18,7 +18,7 @@ import { Host } from "../controllers/host.ts";
 import { Agent } from "@widecode/conversation/agent.ts";
 import { Plugin } from "@light/kernel/plugin.ts";
 import { SegmentContext } from "@widecode/screen/contributions.ts";
-import { removeLanguages } from "@light/highlight/registry.ts";
+import { removeLanguages } from "@lightstart/highlight/registry.ts";
 import { ChatWidget } from "../views/chat-widget.ts";
 import { CodeWidget } from "../views/code-widget.ts";
 import { ToolsWidget } from "../views/tools-widget.ts";
