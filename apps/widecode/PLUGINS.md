@@ -150,7 +150,7 @@ that request, and `agent_start` and `agent_end` its prompt's run.
 | `thinking_level_select` | the effort changed | `level`, `previousLevel` | nothing |
 | `session_before_compact` | a compaction is about to happen | `reason` (`manual` or `threshold`), `customInstructions` | `cancel`, or a `compaction.summary` instead of the model's |
 | `session_compact` | a compaction happened | `summary`, `fromPlugin` | nothing |
-| `session_before_fork` | a session fork is about to happen | none | `cancel` |
+| `session_before_fork` | a session fork is about to happen | `reason`: `side` for a side question's fork, `fork` otherwise | `cancel` |
 
 ### The handler's context
 

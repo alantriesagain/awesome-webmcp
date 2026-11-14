@@ -1339,7 +1339,7 @@ const main = async (): Promise<void> => {
     const rig = new Rig(['{"match":"hello","text":"Hi."}'].join("\n"));
     rig.extension([
       'widecode.plugin({ id: "gate", agent(agent) {',
-      '  agent.on("session_before_fork", () => ({ cancel: true }));',
+      '  agent.on("session_before_fork", (event, ctx) => { ctx.ui.notify("fork:" + event.reason); return { cancel: true }; });',
       "} });",
     ].join("\n"));
     rig.initialize(true);
@@ -1349,6 +1349,10 @@ const main = async (): Promise<void> => {
     await until(() => rig.out.some((line) => line.includes('"id":' + id + ",")));
     const answer = rig.out.find((line) => line.includes('"id":' + id + ",")) ?? "";
     ok("the fork is refused with the plugin's name", answer.includes('"error"') && answer.includes("refused by plugin gate"));
+    eq("a fork the user asked for has reason fork", String((await rig.uiNotification("notify"))["message"]), "fork:fork");
+    const sideId = rig.send("session/fork", { sessionId: sid, cwd: rig.folder, mcpServers: [], _meta: { widecode: { side: true } } });
+    await until(() => rig.out.some((line) => line.includes('"id":' + sideId + ",")));
+    eq("a side question's has reason side", String((await rig.uiNotification("notify"))["message"]), "fork:side");
     rig.close();
   }
 

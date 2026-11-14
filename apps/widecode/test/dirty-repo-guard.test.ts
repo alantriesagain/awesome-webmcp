@@ -1,6 +1,7 @@
 // ffi: @light/plugins/native/ffi.json
 // The dirty-repo-guard plugin's agent part over the harness: a clean repository forks, a dirty one
-// asks and forks on yes, is refused on no, and a folder that is not a repository forks.
+// asks and forks on yes, is refused on no, a side question's fork does not ask, and a folder that
+// is not a repository forks.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -61,6 +62,12 @@ const main = async (): Promise<void> => {
   rig.respond(noDialog.id, { confirmed: false });
   const noAnswer = await answerOf(rig, noFork);
   ok("a dirty repository is refused on no", noAnswer.includes('"error"') && noAnswer.includes("refused by plugin dirty-repo-guard"));
+  rig.taken();
+
+  // A side question's fork changes no file: it forks without asking, the tree still dirty.
+  const sideFork = rig.send("session/fork", { sessionId: sid, cwd: repo, mcpServers: [], _meta: { widecode: { side: true } } });
+  const sideAnswer = await answerOf(rig, sideFork);
+  ok("a side question's fork forks without asking", sideAnswer.includes('"sessionId"') && !sideAnswer.includes('"error"') && !rig.out.some((line) => line.includes('"_widecode/ui"')));
   rig.taken();
 
   // A folder that is not a repository forks.

@@ -718,7 +718,8 @@ export class AcpAgent {
     }
     const fromExt = from.ext;
     if (fromExt !== null && fromExt.engine !== null) {
-      const answer = await fromExt.beforeFork(this.extContext(from, null));
+      const side = recordOf(recordOf(p !== null ? p["_meta"] : null)?.["widecode"])?.["side"] === true;
+      const answer = await fromExt.beforeFork(side ? "side" : "fork", this.extContext(from, null));
       if (answer.cancel) {
         this.server.refuse(idText, -32602, "the fork was refused by plugin " + answer.plugin);
         return;

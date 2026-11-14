@@ -1229,10 +1229,11 @@ export class ExtSession {
   }
 
   /** session_before_fork: a handler may refuse the fork. */
-  async beforeFork(ctx: ExtContext): Promise<ForkAnswer> {
+  /** session_before_fork: `reason` is "side" for a side question's fork, "fork" for one the user asked for; a handler may refuse it. */
+  async beforeFork(reason: string, ctx: ExtContext): Promise<ForkAnswer> {
     const out = new ForkAnswer();
     for (const h of this.forEvent("session_before_fork")) {
-      const r = await this.owner.call(h.entry, h.id, JSON.stringify([{ type: "session_before_fork" }, this.owner.ctxObject(ctx)]), "session_before_fork", ctx);
+      const r = await this.owner.call(h.entry, h.id, JSON.stringify([{ type: "session_before_fork", reason }, this.owner.ctxObject(ctx)]), "session_before_fork", ctx);
       if (!r.ok) continue;
       const value = recordOf(parseJson(r.text));
       const answer = value !== null ? recordOf(value["result"]) : null;

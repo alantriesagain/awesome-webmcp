@@ -1,6 +1,7 @@
 // Dirty repo guard: a fork of a session whose folder has uncommitted changes asks to go on, and
 // is refused when the answer is no or there is no UI to ask. A clean folder, or one that is not a
-// git repository, forks without a question.
+// git repository, forks without a question, and so does a side question's fork, which changes no
+// file.
 
 const SHOWN_LINES = 20;
 
@@ -10,7 +11,8 @@ const firstLines = (status: string): string => status.trim().split("\n").slice(0
 widecode.plugin({
   id: "dirty-repo-guard",
   agent(agent) {
-    agent.on("session_before_fork", async (_event, ctx) => {
+    agent.on("session_before_fork", async (event, ctx) => {
+      if (event.reason === "side") return;
       const result = await agent.exec("git", ["status", "--porcelain"], { timeout: 10000 });
       if (result.code !== 0) return;
       const status = result.stdout.trim();

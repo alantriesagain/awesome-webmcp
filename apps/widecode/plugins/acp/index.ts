@@ -691,7 +691,8 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
   let skillReads = 0;
   /** What the harness is told in `_meta.widecode` with each session and prompt: the project's prompt text and whether the folder is trusted (an entry with `own`). */
   let harnessPrompt = "";
-  const metaOf = (): Record<string, unknown> => (entry.own ? { _meta: { widecode: { systemPrompt: harnessPrompt, trusted: api.harness.info().trusted } } } : {});
+  /** widecode's _meta for its own agent: the project's prompt and trust, and `side` on a side question's fork. */
+  const metaOf = (side = false): Record<string, unknown> => (entry.own ? { _meta: { widecode: side ? { systemPrompt: harnessPrompt, trusted: api.harness.info().trusted, side: true } : { systemPrompt: harnessPrompt, trusted: api.harness.info().trusted } } } : {});
   /** The sessions listed last, the folder and when, and whether a listing is under way. */
   let listed: widecode.AgentSession[] = [];
   let listedFolder = "";
@@ -1748,7 +1749,8 @@ const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCa
     emit({ type: "aside", id: aside, question });
     const gen = generation;
     const failed = (why: string): void => emit({ type: "aside", id: aside, error: why });
-    rpc("session/fork", { sessionId: session, cwd, mcpServers: [], ...metaOf() }, (result, error) => {
+    // The fork says it is a side question's, so the agent's plugins can tell it from a fork the user asked for.
+    rpc("session/fork", { sessionId: session, cwd, mcpServers: [], ...metaOf(true) }, (result, error) => {
       if (gen !== generation) return;
       const fork = str(obj(result)?.sessionId);
       if (error.length > 0 || fork.length === 0) return failed(error.length > 0 ? error : entry.name + " made no fork");

@@ -1237,9 +1237,10 @@ declare namespace widecode {
     fromPlugin: boolean;
   }
 
-  /** A session/fork is about to happen. */
+  /** A session/fork is about to happen: `side` for a side question's fork (it changes no file), `fork` for one the user asked for. */
   interface SessionBeforeForkEvent {
     type: "session_before_fork";
+    reason: "side" | "fork";
   }
 
   /** What a session_before_fork handler may answer: refuse the fork. */
