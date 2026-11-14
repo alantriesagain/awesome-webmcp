@@ -35,7 +35,7 @@ pnpm test                       # every member's tests under node AND as native 
 pnpm coverage                   # scriptc coverage gate: every app entry and test compiles statically, failing on blockers (light-native coverage)
 scripts/lint.sh                 # no em dashes or any types in app/package text
 scripts/ci.sh                   # the CI gate: lint, verify, build, and the three widecode selftests
-pnpm light-native build widecode         # apps/widecode/dist/widecode (stripped)
+pnpm light-native build widecode         # apps/widecode/dist/widecode (symbols kept; --strip to drop them)
 pnpm light-native test widecode -- chat.test.ts   # one member, one test
 ```
 

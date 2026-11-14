@@ -20,8 +20,10 @@
 //                       --harness-skills, --harness-sessions and --harness-forget are its side commands
 // F12 writes the screen's text to the log, and /log says where it is. The log follows the run: its
 // start, sessions and turns, every few minutes that it is alive, how it ended (quit, a signal, the
-// exit code), and an uncaught error with the trail of what ran last and the screen as it was. The terminal's title is the session's, or the folder's
-// name while it has none, with "widecode" after it; the title the terminal had comes back on exit.
+// exit code), and an uncaught error with the trail of what ran last and the screen as it was. A native
+// crash (SIGSEGV and friends) writes that trail, a backtrace and its symbolized frames to the log,
+// puts the terminal back and names the log on stderr. The terminal's title is the session's, or the
+// folder's name while it has none, with "widecode" after it; the title the terminal had comes back on exit.
 //
 // This file is the entry: flags, the log, signals and the terminal checks. The app's startup pipeline
 // is in startup.ts.

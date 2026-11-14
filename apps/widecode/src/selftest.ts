@@ -19,8 +19,11 @@
 //   live-quit       quit while a 30 s Bash call runs (the script then checks no CLI is left)
 //   crash           an uncaught stack overflow once the screen is up: the log holds the error, the
 //                   trail with the entry it happened in, the screen, and the exit (code 1)
+//   segv            a native SIGSEGV once the screen is up: the crash report names what ran, the
+//                   backtrace and the log, and the terminal comes back
 import { appendFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { triggerCrash } from "@light/lib/crash.ts";
 import { log, trail } from "@light/lib/log.ts";
 import { Widecode } from "./compose.ts";
 import { AGENT, Item, NOTICE, RUN, TEXT, TOOL, Turn } from "@widecode/conversation/model.ts";
@@ -55,6 +58,14 @@ export class Selftest {
   }
 
   start(): void {
+    if (this.name === "segv") {
+      setTimeout(() => {
+        trail.enter("selftest", "segv");
+        log("selftest segv: crashing now");
+        triggerCrash(0);
+      }, 500);
+      return;
+    }
     if (this.name === "crash") {
       setTimeout(() => {
         trail.enter("selftest", "crash");

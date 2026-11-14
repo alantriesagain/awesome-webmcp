@@ -5,7 +5,8 @@ import { readFileSync } from "node:fs";
 import { errorMessage, isRecord } from "@light/lib/json.ts";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import { argValue, hasArg, log, openLogIn, trail } from "@light/lib/log.ts";
+import { argValue, hasArg, log, logPath, openLogIn, trail } from "@light/lib/log.ts";
+import { installCrash, noteCrash } from "@light/lib/crash.ts";
 import { composeWidecode } from "./compose.ts";
 import { NoStateFile } from "@light/kernel/settings.ts";
 import { checkSource } from "./api/plugins.ts";
@@ -58,6 +59,9 @@ export const startWidecode = async (term: Terminal, folder: string, selftest: st
     log(BUILD);
   }
   log("pid " + String(process.pid) + " · " + (process.argv.length > 2 ? process.argv.slice(2).join(" ") : "no flags") + " · store " + (store !== null ? store.root : "none"));
+  // A native crash reports itself to this log and puts the terminal back; before the TUI saves raw mode.
+  installCrash(logPath(), "widecode");
+  trail.onChange = (text: string) => noteCrash(text);
   await host.useStore(store);
   host.session.userPermissions = config !== null ? config.permissions : null;
   host.session.titler.executable = conversation.executable;
@@ -151,7 +155,7 @@ export const startWidecode = async (term: Terminal, folder: string, selftest: st
     }
   });
   setInterval(() => log("alive · " + where()), ALIVE_MS);
-  hooks.crashContext = () => "at the error: " + where() + "\nscreen at the error\n" + renderer.screenText() + "\nend screen";
+  hooks.crashContext = () => "\n" + trail.text() + "\nat the error: " + where() + "\nscreen at the error\n" + renderer.screenText() + "\nend screen";
   hooks.leaveScreen = () => renderer.stop();
   host.screen.onScreen = (columns: string[]) => w.screenText(renderer.back, columns);
   let quitting = false;

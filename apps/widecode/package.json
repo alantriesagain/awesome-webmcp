@@ -27,7 +27,10 @@
   "native": {
     "entry": "src/main.ts",
     "binary": "widecode",
-    "ffi": "@light/plugins/native/ffi.json",
+    "ffi": [
+      "@light/plugins/native/ffi.json",
+      "@light/lib/native/ffi.json"
+    ],
     "prepare": [
       "node --no-warnings scripts/builtin-plugins.mjs"
     ],
@@ -485,6 +488,58 @@
           [
             "the exit, with its code",
             "exit, code 1"
+          ]
+        ]
+      },
+      "segv": {
+        "wait": 20,
+        "exitCode": 139,
+        "checks": [
+          [
+            "started in the pty",
+            "started 200x40"
+          ],
+          [
+            "the signal",
+            "^--- crash: SIGSEGV ---$"
+          ],
+          [
+            "what ran, from the trail",
+            "^note: selftest segv$"
+          ],
+          [
+            "the executable",
+            "^exe: /.*widecode$"
+          ],
+          [
+            "the raw backtrace",
+            "^backtrace:$"
+          ],
+          [
+            "the offsets",
+            "^offsets: 0x[0-9a-f]"
+          ],
+          [
+            "how to symbolize by hand",
+            "^symbolize by hand: addr2line -f -C -e /.*widecode 0x"
+          ],
+          [
+            "a symbolized frame",
+            "crash_handler"
+          ]
+        ],
+        "outputChecks": [
+          [
+            "stderr names the log",
+            "widecode crashed (SIGSEGV). Log: .*\\.log"
+          ],
+          [
+            "the terminal left the alt screen",
+            "1049l"
+          ],
+          [
+            "the terminal shows the cursor again",
+            "25h"
           ]
         ]
       }
