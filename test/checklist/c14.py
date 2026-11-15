@@ -1,11 +1,11 @@
 # Titles and the status bar, live: a real turn in a temp repository with its own WIDECODE_HOME, whose
-# config adds a fourth status line running examples/statusline.sh (a Claude Code status
+# config adds a fourth status line running scripts/statusline.sh (a Claude Code status
 # line script). Checks the title Claude writes replaces the prompt, the bar's context, limits and
 # cache, and the script's line. Cleans up the session folder the turn creates.
 import json, shutil
 from common import *
 home = tempfile.mkdtemp(prefix="widecode-home-")
-script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "examples", "statusline.sh")
+script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts", "statusline.sh")
 lines = [["project", "branch", "model", "effort", "mode", "title", "spacer", "note"], ["context", "limit5h", "limitWeek", "cache"], ["activity", "tools", "calls", "thinking", "cost", "duration"], [{"command": os.path.abspath(script)}]]
 os.makedirs(home, exist_ok=True)
 open(os.path.join(home, "config.json"), "w").write(json.dumps({"titles": {"auto": True, "model": "haiku"}, "statusline": {"separator": " │ ", "lines": lines}}))

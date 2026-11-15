@@ -226,7 +226,7 @@ plugin registers; `spacer` pushes the cells after it to the right edge), a list 
 · "), an object that restyles one (`{"segment": "cost", "fg": "#98c379", "label": "spent"}`), or a
 command (`{"command": "~/.claude/statusline.sh", "interval": 5}`) that gets Claude Code's status
 line JSON on stdin, so Claude Code status line scripts work as they are (a line that is only a
-command shows every line it prints); `examples/statusline.sh` is one. F5 cycles the
+command shows every line it prints); `scripts/statusline.sh` is one. F5 cycles the
 models plugin's `"list"` (`"agents"` holds another agent's, by its id; its `"effort"` holds the
 efforts to start from, `"default"`, by `"providers"` and by `"models"`, under those chosen). Typing `/model` lists the
 agent's models above the composer, narrowed by each word typed (`/model dee pro`); ↑↓ choose and
