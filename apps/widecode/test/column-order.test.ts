@@ -30,7 +30,8 @@ const main = async (): Promise<void> => {
   };
   settle();
   const order = (): string => w.host.screen.columns.map((c) => c.id).join(",");
-  const top = w.shell.box.y + 1;
+  // The columns' top row: under the menu bar and its margin.
+  const top = w.shell.box.y + 2;
   const press = (x: number): TElement | null => {
     const target = hitTest(root, x, top);
     if (!(target instanceof TElement)) return null;

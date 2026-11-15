@@ -521,7 +521,7 @@ export class Shell extends View {
     return html`<div flex=1 bg=${palette.screenBg} @copy=${(e: CustomEvent) => {
       const copy = e.detail;
       if (copy instanceof LineCopy) this.host.screen.copySelection(copy.text, copy.rows);
-    }}>${this.menuBar}
+    }}>${this.menuBar}<div height=1></div>
       <div flex=1 direction="row">${columns.map((c, i) => {
         const tabs = this.tabs.get(c.id);
         const panels = tabs !== undefined ? this.host.screen.panelsIn(c.id) : [];

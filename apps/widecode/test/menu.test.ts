@@ -48,7 +48,7 @@ const main = async (): Promise<void> => {
 
   let lines = screen();
   ok("the bar is the first row, with the brand and the menu", lines[0].includes("◆ widecode") && lines[0].includes(" Test"));
-  ok("the columns start under it", lines[1].includes(" Chat ") && lines[1].includes("▁"));
+  ok("the columns start under it, a blank row between", lines[1].trim() === "" && lines[2].includes(" Chat "));
   const bar = w.shell.menuBar.menus.value;
   eq("the built-in menus come first, then the plugin's", bar.map((m) => m.title).join(" "), "Session Pane View Help Test");
   const quit = bar[0].items.find((i) => i.label === "Quit");

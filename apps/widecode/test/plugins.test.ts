@@ -111,8 +111,8 @@ const main = async (): Promise<void> => {
   /** The side tabs: the files column's top edge, as the row reads. */
   const tabs = (w: Widecode, shown: string[]): string => {
     const x = w.shell.xOf("side");
-    // Row 1: the columns start under the menu bar.
-    return shown[1].slice(x, x + w.shell.widthOf("side")).replace(/[▁▂]/g, " ").trim().replace(/\s+/g, " ");
+    // Row 2: the columns start under the menu bar and its margin.
+    return shown[2].slice(x, x + w.shell.widthOf("side")).replace(/[▏▕]/g, " ").trim().replace(/\s+/g, " ");
   };
   const press = (w: Widecode, name: string, text: string): boolean => w.shell.handleKey(new KeyEvent(name, text, false, false, false));
 
@@ -122,7 +122,7 @@ const main = async (): Promise<void> => {
 
   w = createWidecode(ws, new Conversation(ws.folder), JSON.parse('{"agents": false}'));
   let lines = await show(w);
-  eq("agents off: the side tabs stay on the top edge", tabs(w, lines), "Files 1 Sessions");
+  eq("agents off: the side tabs stay on the top edge", tabs(w, lines), "Files 1 Sessions Git");
   ok("agents off: no Agents tab, nothing opens a subagent", !w.host.screen.panels.some((p) => p.id === "agents") && w.host.screen.panelsIn("tools").map((p) => p.id).join(" ") === "calls available");
   end(w);
 

@@ -17,7 +17,7 @@ import { done, eq, ok } from "@light/test/assert.ts";
 import { Headless } from "@light/test/headless.ts";
 
 const W = 200;
-const H = 24;
+const H = 25;
 let headless: Headless;
 /** Flush and lay out until the line views have measured themselves, then paint. */
 const screen = (): string[] => headless.screen();
@@ -96,22 +96,22 @@ const main = async (): Promise<void> => {
   const root = headless.root;
   await app.host.load();
   let lines = screen();
-  ok("the columns with their titles on their top edges", lines[1].includes(" Chat ") && lines[1].includes("▁") && has(lines, "Agents") && has(lines, "Files") && has(lines, "Code"));
+  ok("the columns with their titles on their top edges, under the menu bar and a blank row", lines[1].trim() === "" && lines[2].includes(" Chat ") && has(lines, "Agents") && has(lines, "Files") && has(lines, "Code"));
   ok("the chat greets a new session", has(lines, "A new session in this folder"));
   /** A tab column's tabs: its top edge, as the row reads. */
   const tabs = (shown: string[], column = "side"): string => {
     const x = app.shell.xOf(column);
-    return shown[1].slice(x, x + app.shell.widthOf(column)).replace(/[▁▂]/g, " ").trim().replace(/\s+/g, " ");
+    return shown[2].slice(x, x + app.shell.widthOf(column)).replace(/[▏▕]/g, " ").trim().replace(/\s+/g, " ");
   };
   eq("the tabs on the top edge of the side column, with their badges", tabs(lines), "Files 2 Sessions 2");
   ok("and the switch: all files, changed ones", has(lines, " All 3│ Changed 2 "));
   ok("the tools column beside the chat: its Tools, Available and Agents tabs on its top edge", app.shell.xOf("tools") === app.shell.widthOf("chat") && tabs(lines, "tools") === "Tools Available Agents");
   ok("the calls' status beside them on the band", has(lines, "R 0 W 0 X 0 A 0"));
-  const secondTab = lines[1].indexOf("Available");
-  const tabHit = hitTest(root, secondTab, 1);
+  const secondTab = lines[2].indexOf("Available");
+  const tabHit = hitTest(root, secondTab, 2);
   if (tabHit !== null) {
-    tabHit.dispatch(new MouseEvent("mousedown", secondTab, 1, 0, false, false, false));
-    tabHit.dispatch(new MouseEvent("mouseup", secondTab, 1, 0, false, false, false));
+    tabHit.dispatch(new MouseEvent("mousedown", secondTab, 2, 0, false, false, false));
+    tabHit.dispatch(new MouseEvent("mouseup", secondTab, 2, 0, false, false, false));
   }
   ok("a press on the second tab on the top edge shows that panel", app.host.screen.shownIn("tools") === "available");
   app.host.screen.showPanel("calls");

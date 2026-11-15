@@ -91,15 +91,15 @@ const main = async (): Promise<void> => {
   await wait(200);
   let lines = screen();
   const sideAt = w.shell.xOf("side");
-  const top = (): string => screen()[1].slice(sideAt, sideAt + w.shell.widthOf("side"));
+  const top = (): string => screen()[2].slice(sideAt, sideAt + w.shell.widthOf("side"));
   ok("its tab on the side column's top edge, shown, at its width", top().includes(" Todo") && w.host.screen.shownIn("side") === "todo" && w.shell.widthOf("side") === 30);
   ok("its tab shows its badge", top().includes(" Todo 3 "));
   // The first tab drawn on the edge, Todo kept in view however many come before it.
   const row = top();
   const other = row.slice(1).trimStart().split(" ")[0];
   const otherAt = sideAt + row.indexOf(" " + other) + 1;
-  const link = hitTest(root, otherAt, 1);
-  if (link instanceof TElement) link.dispatch(new MouseEvent("mousedown", otherAt, 1, 0, false, false, false));
+  const link = hitTest(root, otherAt, 2);
+  if (link instanceof TElement) link.dispatch(new MouseEvent("mousedown", otherAt, 2, 0, false, false, false));
   const pressed = w.host.screen.panelsIn("side").find((p) => p.title === other);
   ok("a press on another tab shows it", other !== "Todo" && pressed !== undefined && w.host.screen.shownIn("side") === pressed.id);
   w.host.screen.showPanel("todo");
