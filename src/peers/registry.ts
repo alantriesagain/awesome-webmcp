@@ -4,8 +4,8 @@
 // an allow list). Secrets live here and never in config.json.
 import { timingSafeEqual } from "node:crypto";
 import { chmodSync, existsSync, readFileSync } from "node:fs";
-import { writeAtomic } from "@light/lib/fs.ts";
-import { listOf, num, parseJson, recordOf, str, strs } from "@light/lib/json.ts";
+import { writeAtomic } from "@lightstart/lib/fs.ts";
+import { listOf, num, parseJson, recordOf, str, strs } from "@lightstart/lib/json.ts";
 
 /** Two secrets compared in constant time; different lengths are a mismatch. */
 export const sameSecret = (a: string, b: string): boolean => {

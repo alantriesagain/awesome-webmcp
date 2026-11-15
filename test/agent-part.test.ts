@@ -1,15 +1,15 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // A plugin with only an agent part: the app's prelude takes it as a plugin that registers nothing,
 // the kernel lists it as on, and config.json's plugin section switches it off without an error.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { PluginSource } from "@light/plugins/sources.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { PluginSource } from "@lightstart/plugins/sources.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode, Widecode } from "../src/compose.ts";
-import { done, ok } from "@light/test/assert.ts";
+import { done, ok } from "@lightstart/test/assert.ts";
 
 const gate = `widecode.plugin({
   id: "gate",

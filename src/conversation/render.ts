@@ -9,14 +9,14 @@
 // output (an Edit's or Write's change as a diff); a subagent's call holds its items, nested behind a
 // bar; `callPage` draws one call whole. Lines are cached per item and per turn by revision and
 // width, so a streaming delta re-renders only the block it changed.
-import { palette } from "@light/ui/palette.ts";
-import { stamp, took } from "@light/ui/duration.ts";
+import { palette } from "@lightstart/tui/palette.ts";
+import { stamp, took } from "@lightstart/tui/duration.ts";
 import { Line, Run } from "@lightstart/light/native/tui/lines.ts";
 import { stringWidth } from "@lightstart/light/native/tui/width.ts";
 import { callState, FAILED, RUNNING, STOPPED } from "./calls.ts";
 import { programCounts } from "./command.ts";
-import { clipText, expandTabs, wrap } from "@light/ui/text.ts";
-import { renderMarkdown } from "@light/markdown/markdown.ts";
+import { clipText, expandTabs, wrap } from "@lightstart/tui/text.ts";
+import { renderMarkdown } from "@lightstart/tui-markdown/markdown.ts";
 import { EDIT, Item, NOTICE, PLAN, PROMPT, QUESTION, REQUEST, TEXT, THINKING, TOOL, Turn } from "./model.ts";
 
 /** How many lines of a tool's output an expanded card shows. */

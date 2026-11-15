@@ -4,7 +4,7 @@
 // key, name, port and a token for the joiner. Both record the other with the two tokens. A code is
 // spent by the first join that holds.
 import { createHmac, randomInt } from "node:crypto";
-import { num, parseJson, recordOf, str } from "@light/lib/json.ts";
+import { num, parseJson, recordOf, str } from "@lightstart/lib/json.ts";
 import { Identity, newToken, peerIdOf } from "./identity.ts";
 import { urlHost } from "./git-http.ts";
 import { peerRequest } from "./peer-request.ts";

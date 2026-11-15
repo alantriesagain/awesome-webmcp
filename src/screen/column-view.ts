@@ -7,7 +7,7 @@
 // press, move, hover and release bubble to the shell, which turns a press on a border into a drag
 // resizing the column, on a tab into showing it, and on the top edge into a drag moving the column.
 import { View, define, html } from "@lightstart/light/native/tui";
-import { palette } from "@light/ui/palette.ts";
+import { palette } from "@lightstart/tui/palette.ts";
 
 export class ColumnView extends View {
   column = this.prop("column", "");

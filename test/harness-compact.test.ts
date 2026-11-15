@@ -14,7 +14,7 @@ import { Auth } from "../src/harness/auth.ts";
 import { registryFor } from "../src/harness/cli.ts";
 import { HarnessConfig } from "../src/harness/config.ts";
 import { ToolSet, builtInTools } from "../src/harness/tools/tool.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const user = (id: string, text: string): Message => {
   const m = new Message("user", id);

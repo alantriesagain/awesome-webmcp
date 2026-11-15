@@ -14,8 +14,8 @@
 // threshold; the file keeps the compaction, and a load starts the context from it. A prompt
 // template of the session's, `/name words`, is expanded as the user's message (the built-in
 // commands win).
-import { errorMessage, listOf, parseJson, recordOf, str } from "@light/lib/json.ts";
-import { log } from "@light/lib/log.ts";
+import { errorMessage, listOf, parseJson, recordOf, str } from "@lightstart/lib/json.ts";
+import { log } from "@lightstart/lib/log.ts";
 import { existsSync } from "node:fs";
 import { HarnessConfig } from "../config.ts";
 import { Abort } from "../loop/abort.ts";
@@ -38,7 +38,7 @@ import { WebSettings } from "../tools/web.ts";
 import { parseRules, rulesIn } from "../tools/permissions.ts";
 import { ExtContext } from "../ext/context.ts";
 import { ExtCommand, ExtSession, ExtensionsRegistry, ExtUiHost } from "../ext/extensions.ts";
-import { PluginSource } from "@light/plugins/sources.ts";
+import { PluginSource } from "@lightstart/plugins/sources.ts";
 import { piEntries, piEntryById, piHeader } from "../ext/session-view.ts";
 import { join } from "node:path";
 import { Choice, ConfigOptions } from "./options.ts";

@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // What JS plugins draw (natively in QuickJS, under node through wcjs-node.mjs): a side tab from
 // their rows (fetched a window at a time), its info row, its tab on the column's top edge with its badge (a
 // press on a link shows that tab), presses on both and keys in its scope; a
@@ -10,13 +10,13 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { PluginSource } from "@light/plugins/sources.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { PluginSource } from "@lightstart/plugins/sources.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
 import { KeyEvent, MouseEvent, TElement, hitTest } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { Headless } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { Headless } from "@lightstart/test/headless.ts";
 
 const W = 250;
 const H = 16;

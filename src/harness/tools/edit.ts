@@ -4,7 +4,7 @@
 // a `cat` through Bash, a Grep), any other edit of it is refused until it is read; the file's
 // line ending (CRLF or LF), its BOM and its trailing newline are kept; the result is the change as
 // a patch with the file's line numbers, so the model sees what it did.
-import { str } from "@light/lib/json.ts";
+import { str } from "@lightstart/lib/json.ts";
 import { FileText, changeOutcome, writeText } from "./files.ts";
 import { resolvePath } from "./read.ts";
 import { ToolContext, ToolOutcome } from "./tool.ts";

@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // widecode, a Claude frontend for wide terminals: chat | files | code over one folder. Build and run:
 // light-native run widecode. Flags:
 //   --dir <path>        the folder (default: where it was launched)
@@ -28,9 +28,9 @@
 // This file is the entry: flags, the log, signals and the terminal checks. The app's startup pipeline
 // is in startup.ts.
 import { existsSync, statSync } from "node:fs";
-import { errorMessage } from "@light/lib/json.ts";
+import { errorMessage } from "@lightstart/lib/json.ts";
 import { resolve } from "node:path";
-import { argValue, hasArg, log, logPath, nameLog, openLog } from "@light/lib/log.ts";
+import { argValue, hasArg, log, logPath, nameLog, openLog } from "@lightstart/lib/log.ts";
 import { Terminal } from "@lightstart/light/native/tui";
 import { peersDaemonMain } from "./peers/cli.ts";
 import { harnessMain, isHarnessArgs } from "./harness/cli.ts";

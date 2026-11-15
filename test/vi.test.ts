@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The vi keymap (plugins/vi/index.ts), chosen at start, through the fake ACP agent: insert mode after a
 // message, Esc to normal mode (the composer's border says which); in normal mode the motions
 // h j k l w b e 0 ^ $ gg G with counts, the operators d c y with motions and doubled, x X D C s S
@@ -9,12 +9,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
 import { DEFAULT_STYLE, KeyEvent, TRoot, frames, layout, mount } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { until } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "@lightstart/test/headless.ts";
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-vi-"));

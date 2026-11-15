@@ -10,12 +10,12 @@
 // invocation's outcome.
 import { existsSync, watch } from "node:fs";
 import { dirname, join } from "node:path";
-import { readTextOr } from "@light/lib/fs.ts";
-import { listOf, num, parseJson, recordOf, str } from "@light/lib/json.ts";
-import { log, trail } from "@light/lib/log.ts";
-import { Closer } from "@light/lib/timing.ts";
-import { FAILED, HostAnswer, HostHandler, JsEngine, JsResult, OVER_BUDGET, OK } from "@light/plugins/engine.ts";
-import { PluginSource, sourcesIn } from "@light/plugins/sources.ts";
+import { readTextOr } from "@lightstart/lib/fs.ts";
+import { listOf, num, parseJson, recordOf, str } from "@lightstart/lib/json.ts";
+import { log, trail } from "@lightstart/lib/log.ts";
+import { Closer } from "@lightstart/lib/timing.ts";
+import { FAILED, HostAnswer, HostHandler, JsEngine, JsResult, OVER_BUDGET, OK } from "@lightstart/plugins/engine.ts";
+import { PluginSource, sourcesIn } from "@lightstart/plugins/sources.ts";
 import { Abort } from "../loop/abort.ts";
 import { Message } from "../model/message.ts";
 import { HarnessPaths } from "../paths.ts";

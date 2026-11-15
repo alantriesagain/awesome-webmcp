@@ -4,7 +4,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { JsonlIO } from "@lightstart/light/model";
-import { writeAtomic } from "@light/lib/fs.ts";
+import { writeAtomic } from "@lightstart/lib/fs.ts";
 
 export const fileIO = (): JsonlIO => ({
   read: (path: string) => (existsSync(path) ? readFileSync(path, "utf8") : null),

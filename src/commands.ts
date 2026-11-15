@@ -1,8 +1,8 @@
 // The commands the core adds: the shell's help, welcome, keymap and columns, the plugin reload,
 // the log's path, trust, and the agent to talk to. A plugin adds its own through the kernel; this
 // is the one place the app's own are added, not the views that draw them.
-import { Command, Suggestion } from "@light/kernel/commands.ts";
-import { logPath } from "@light/lib/log.ts";
+import { Command, Suggestion } from "@lightstart/kernel/commands.ts";
+import { logPath } from "@lightstart/lib/log.ts";
 import type { Widecode } from "./compose.ts";
 import type { Store } from "./services/store.ts";
 import { welcome } from "./views/onboarding.ts";

@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // widecode's own agent, the harness (src/harness), as the acp plugin drives it under node
 // (`node src/harness/main.ts --harness`, the entry's command in the config, as the real one
 // is the binary with `--harness`): its session starts with widecode, with its model, effort and
@@ -19,13 +19,13 @@ import { Conversation } from "../src/conversation/conversation.ts";
 import { Item, TEXT, THINKING, TOOL, Turn } from "../src/conversation/model.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
 import { skillRuns } from "../src/conversation/skills.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { until } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "@lightstart/test/headless.ts";
 
 const kinds = (items: Item[]): string => items.map((i: Item) => (i.kind === THINKING ? "thinking" : i.kind === TEXT ? "text:" + i.text : "other")).join(",");
 

@@ -4,9 +4,9 @@ This repository is widecode, the Claude Code frontend for wide terminals: a ligh
 TypeScript on light's native core (signals, `html` templates, the view core, the terminal host
 `native/tui`), compiled by scriptc into one static binary with no JavaScript engine (no Node, Bun or
 Deno at runtime). The one engine allowed is an embedded QuickJS for plugins a user changes while the
-app runs (`@light/plugins`); the core stays compiled. The repository root is the app, one member of a
+app runs (`@lightstart/plugins`); the core stays compiled. The repository root is the app, one member of a
 pnpm workspace that links light: `light` is the checkout beside this one (`../light`, linked at the
-root and consumed as `@lightstart/light`), and light's packages for native apps (`@light/<name>`,
+root and consumed as `@lightstart/light`), and light's packages for native apps (`@lightstart/<name>`,
 light's `packages/README.md`) are members too. What widecode needs from the framework (a widget, a
 host capability, a fix in the renderer) goes into light, and what any native app could use goes into
 light's packages; the rest is here. The compiler is the scriptc release pinned in `package.json`
@@ -14,7 +14,7 @@ light's packages; the rest is here. The compiler is the scriptc release pinned i
 
 | Path | What it is |
 |---|---|
-| `light/packages/native/*`, `light/packages/tui/*` | light's packages: `@light/cli` (`light-native`, the tooling: build, run, selftest, test, coverage, typecheck, check, install), `lib`, `highlight`, `plugins`, `workspace`, `test`, `kernel`, `ui`, `markdown` (light's `packages/README.md`) |
+| `light/packages/native/*`, `light/packages/tui/*` | light's packages: `@lightstart/native` (`light-native`, the tooling: build, run, selftest, test, coverage, typecheck, check, install), `lib`, `highlight`, `plugins`, `workspace`, `test`, `kernel`, `ui`, `markdown` (light's `packages/README.md`) |
 | `src/agent` | the `claude -p` sidecar (spawn, envelopes) and the MCP server widecode serves its own tools with |
 | `src/conversation` | the conversation with an agent, agent-neutral: the model, the events, the agent role, requests, status, the lines a view draws, the session records widecode keeps |
 | `src/screen` | the screen plugins contribute to: columns, tabs, band strips, segments, `ScreenController`, the column element |
@@ -66,17 +66,17 @@ light's packages; the rest is here. The compiler is the scriptc release pinned i
 - The root is one member of the workspace, the app (`light-native` takes a root whose
   `package.json` names a `native.entry` as an app), held to light's layout for one by
   `light-native check --all`: a `package.json` (`"type": "module"`, `"private": true`), a
-  `tsconfig.json` with `@light/cli`'s `templates/tsconfig.json` compiler options (scriptc reads the
+  `tsconfig.json` with `@lightstart/native`'s `templates/tsconfig.json` compiler options (scriptc reads the
   one nearest the entry for the whole program; its `include` names the app's folders, leaving out
   the `light` link and the harness folder), a `README.md`, and `test/*.test.ts`.
 - `package.json` declares every package it imports as `workspace:*` (`@lightstart/light` and
-  light's packages); `@light/test` and `@types/node` are devDependencies. Light's packages are
-  imported by name (`@lightstart/light/native/tui`, `@light/lib/json.ts`), the app's own files by
+  light's packages); `@lightstart/test` and `@types/node` are devDependencies. Light's packages are
+  imported by name (`@lightstart/light/native/tui`, `@lightstart/lib/json.ts`), the app's own files by
   relative path.
 - The layers inside `src/`, each importing only those before it: agent; conversation; harness;
   screen; code; chat; peers; then the app (`main.ts`, `controllers/`, `views/`, `services/`,
   `runtime/`, `api/`). Light's packages never import any of it.
-- The `native` block names the entry, the binary, the FFI manifests (`@light/plugins/native/ffi.json`
+- The `native` block names the entry, the binary, the FFI manifests (`@lightstart/plugins/native/ffi.json`
   for the plugins), the prepare steps (shell lines run at the root before a build, a test run,
   coverage or typecheck) and the selftest scenarios.
 - A generic terminal widget (a tab column, a bordered column, a markdown renderer) belongs in
@@ -92,7 +92,7 @@ light's packages; the rest is here. The compiler is the scriptc release pinned i
   `ScreenController`, `FolderController` and its own `SessionController`); `src/views/` are light
   `View`s with signals and `html` templates, composing the views of `src/chat` and `src/code`; `src/services/` is
   what it keeps (its store, its harness folder); `src/compose.ts` builds the app; a theme
-  module sets the palette's fields it wants otherwise (`@light/ui`'s `palette`).
+  module sets the palette's fields it wants otherwise (`@lightstart/tui`'s `palette`).
 - Long lists render through light's windowed `LineView` over a `LineSource` (light's
   `native/tui/README.md`), whose press and copy are events a parent handles; a view a template names by
   tag is registered with light's `define(tag, make)`: its props are `this.prop(name, initial)`, it
@@ -103,9 +103,9 @@ light's packages; the rest is here. The compiler is the scriptc release pinned i
   current folder, and `light-native selftest widecode <scenario>` runs a scripted end-to-end check in a
   pseudo-terminal on a temp repository, the app writing its outcome to the `--log` file; a pty
   driver (`test/drive.py`) runs the binary as a user would, reading the screen back.
-- Tests are `test/*.test.ts`, plain scripts on `@light/test/assert.ts`, run from the root (fixture
+- Tests are `test/*.test.ts`, plain scripts on `@lightstart/test/assert.ts`, run from the root (fixture
   paths relative to it), headless (the app mounted on a `TRoot` and
-  painted to a `Screen`, `@light/test/headless.ts`). `light-native test` runs each under node and natively and
+  painted to a `Screen`, `@lightstart/test/headless.ts`). `light-native test` runs each under node and natively and
   fails when the outputs differ; `light-native coverage` compiles every test; a test's first line may be
   `// ffi: <manifest>` (it reaches native calls bound by that manifest; node preloads the
   manifest folder's stand-in) or `// node-only` (it walks the file system).
@@ -114,7 +114,7 @@ light's packages; the rest is here. The compiler is the scriptc release pinned i
 
 widecode is a native core and JS plugins (`PLUGINS.md`). The core is compiled: the
 packages above, and in the app its controllers, views, the plugin runtime (`src/runtime/`: the
-`JsRuntime` over `@light/plugins`' engine, the JS-drawn views, the agents plugins bring, the prelude)
+`JsRuntime` over `@lightstart/plugins`' engine, the JS-drawn views, the agents plugins bring, the prelude)
 and the API's answers (`src/api/`, a file per namespace). Every feature is a plugin running in
 QuickJS: the built-in ones are `plugins/<id>/index.ts`, type-checked against
 `widecode.d.ts` and stripped into the binary by `scripts/builtin-plugins.mjs` (the app's prepare
@@ -126,7 +126,7 @@ part").
 - A feature goes in a plugin. What a key does is an action (`api.keys.action`), what a key is
   bound to a keymap (`api.keys.layer`, the user's `keys.json`); a keymap such as emacs or vi is a
   plugin of layers (`plugins/vi/index.ts`). What a plugin needs from the core is one call per need: the
-  prelude (`src/runtime/prelude.ts`, the namespaces `@light/plugins` builds the prelude around), its
+  prelude (`src/runtime/prelude.ts`, the namespaces `@lightstart/plugins` builds the prelude around), its
   answer in its namespace's `src/api/<file>.ts` (`src/runtime/runtime.ts` dispatches to them), its
   type in `widecode.d.ts`; `test/api.test.ts` checks the three agree. Heavy work (git, the tree,
   diffs, rendering the conversation) stays native; a plugin decides what to show and draws rows
@@ -134,10 +134,10 @@ part").
 - Values cross as JSON; what the core answers later is a promise the runtime settles. A call into a
   plugin has a time budget (250 ms, 2 s for an agent's history read; the core's own time not
   counted) and runs on whatever stack the core is on, an async function's fiber included
-  (`@light/plugins`' `native/wcjs.c` measures it).
+  (`@lightstart/plugins`' `native/wcjs.c` measures it).
 - A plugin reaches another only through a command, a role (the chat and code columns, the Tools
   tab), a segment or the core's state, never by its code.
-- The run's log is on by default, a file per run under the store (`@light/lib/log.ts`, README's
+- The run's log is on by default, a file per run under the store (`@lightstart/lib/log.ts`, README's
   settings paragraph). Natively an error has no stack, so the entry has `trail` around it: a key
   (`shell.ts`), a plugin's call (`runtime.ts`), the agent's events (`api/agent.ts`) and a frame's
   phases (`main.ts`) enter and leave it, and the uncaught-exception monitor in `main.ts` logs the
@@ -157,7 +157,7 @@ part").
   `api.harness` and `api.state`; `scripts/builtin-plugins.mjs` embeds PLUGINS.md and
   `widecode.d.ts` into `src/runtime/docs.ts` (generated, ignored) for `api`, and writes the build's version and time into `src/runtime/build-info.ts` (generated, ignored), which `--version`, the log's first line and the status bar's first message say.
 - A plugin's tests drive it through the app (`createWidecode`) and start with
-  `// ffi: @light/plugins/native/ffi.json`, so `light-native test` runs them natively with QuickJS and under
+  `// ffi: @lightstart/plugins/native/ffi.json`, so `light-native test` runs them natively with QuickJS and under
   node with the package's `wcjs-node.mjs`. A plugin switched off has a test too.
 
 ## The compiler (scriptc static mode)

@@ -1,7 +1,7 @@
 // Globs over relative paths: a segment's star, two stars for any depth, a question mark, a
 // brace, a class, a bare name matching at any depth, a dot kept literal.
 import { globMatches, globToRegExp } from "../src/harness/tools/glob-match.ts";
-import { done, eq } from "@light/test/assert.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 
 const m = (pattern: string, paths: string[]): string => paths.map((p) => (globMatches(pattern, p) ? "1" : "0")).join("");
 eq("a star within a segment", m("src/*.ts", ["src/a.ts", "src/deep/b.ts", "a.ts"]), "100");

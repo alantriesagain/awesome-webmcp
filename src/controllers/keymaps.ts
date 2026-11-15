@@ -2,11 +2,11 @@
 // otherwise, kept in state.json), the ones plugins bring (/keymap lists them; a keymap plugin turns
 // its layers on when the state names it), and the user's keys.json over the keymap, read by
 // `onRead` and applied as the kernel's user layer. `changed` fires when the keymap in use changes.
-import { errorMessage } from "@light/lib/json.ts";
+import { errorMessage } from "@lightstart/lib/json.ts";
 import { Controller } from "@lightstart/light/controller/class.ts";
-import { Hook } from "@light/lib/hook.ts";
-import { Kernel } from "@light/kernel/kernel.ts";
-import { keyEntriesOf } from "@light/kernel/keys.ts";
+import { Hook } from "@lightstart/lib/hook.ts";
+import { Kernel } from "@lightstart/kernel/kernel.ts";
+import { keyEntriesOf } from "@lightstart/kernel/keys.ts";
 
 /** A keymap a plugin brought, by the name /keymap takes. */
 export class KeymapDef {

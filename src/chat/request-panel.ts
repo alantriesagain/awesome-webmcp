@@ -5,7 +5,7 @@
 // replaces), or a plan (approve, or keep planning with the composer's text as feedback). The set
 // is sent once every question has an answer; Esc declines it. The finished reply goes to
 // the conversation, and the agent's adapter writes it as its agent expects (conversation/requests.ts).
-import { palette } from "@light/ui/palette.ts";
+import { palette } from "@lightstart/tui/palette.ts";
 import { Item, PLAN } from "../conversation/model.ts";
 import { ChatHost } from "./host.ts";
 import { Answer, Question, Reply } from "../conversation/requests.ts";

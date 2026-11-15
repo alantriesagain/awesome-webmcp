@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // Keys as actions and keymaps, from a plugin: an action with a name and its default key, one with
 // several keys and one with none (a keymap alone binds it), the count its function gets; a layer
 // rebinding a core action's key (F6 to the code column), binding a key the core leaves alone,
@@ -10,12 +10,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { PluginSource } from "@light/plugins/sources.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { PluginSource } from "@lightstart/plugins/sources.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const keymap = `widecode.plugin({
   id: "keymap-test",

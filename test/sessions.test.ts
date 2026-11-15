@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // Claude Code's sessions as its plugin lists them, on a synthetic projects folder: titles from the
 // tail (the latest custom or AI title, found past the first tail window), the first real prompt
 // from the head (slash-command echoes and meta records skipped), sessions of another folder left
@@ -13,10 +13,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { NOTICE, TOOL } from "../src/conversation/model.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
-import { readAt, readWindow } from "@light/workspace/window.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
+import { readAt, readWindow } from "@lightstart/workspace/window.ts";
 import { createWidecode } from "../src/compose.ts";
-import { budget, done, eq, eqn, ok } from "@light/test/assert.ts";
+import { budget, done, eq, eqn, ok } from "@lightstart/test/assert.ts";
 import { projectDir } from "./support/claude-records.ts";
 
 /** A session as the plugin lists it. */

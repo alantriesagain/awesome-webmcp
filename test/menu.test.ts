@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The menu bar: a plugin's ui.menu rows under their menu with the key bound to their action, a
 // press on a title opening the dropdown, a press on an item running the action, F10 opening the
 // first menu, Escape closing it, and the columns starting under the bar.
@@ -6,13 +6,13 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { PluginSource } from "@light/plugins/sources.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { PluginSource } from "@lightstart/plugins/sources.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
 import { KeyEvent, MouseEvent, TElement, hitTestLayers } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { Headless } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { Headless } from "@lightstart/test/headless.ts";
 
 const W = 200;
 const H = 24;

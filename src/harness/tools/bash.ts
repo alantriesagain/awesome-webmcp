@@ -1,7 +1,7 @@
 // The Bash tool: a command run in the folder, its output as the result with the exit code when it
 // is not 0, a timeout of 120 s by default and 600 s at most, 30 KB of output kept.
-import { objectText } from "@light/lib/json.ts";
-import { num, str } from "@light/lib/json.ts";
+import { objectText } from "@lightstart/lib/json.ts";
+import { num, str } from "@lightstart/lib/json.ts";
 import { Abort } from "../loop/abort.ts";
 import { CappedText, runBash } from "./proc.ts";
 import { ToolContext, ToolOutcome } from "./tool.ts";

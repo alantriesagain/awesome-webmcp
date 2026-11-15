@@ -3,10 +3,10 @@
 // the columns; a SegmentDef a segment the status table can show (by its name in the app's config),
 // drawn from a SegmentContext.
 import { StatusInfo } from "../agent/status-info.ts";
-import { LineView } from "@light/ui/line-view.ts";
+import { LineView } from "@lightstart/tui/line-view.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { TInput, View, signal } from "@lightstart/light/native/tui";
-import { Keyed } from "@light/kernel/registry.ts";
+import { Keyed } from "@lightstart/kernel/registry.ts";
 
 export class Column {
   readonly id: string;

@@ -6,8 +6,8 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import { join } from "node:path";
-import { HostAnswer, HostHandler, JsEngine, OK } from "@light/plugins/engine.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { HostAnswer, HostHandler, JsEngine, OK } from "@lightstart/plugins/engine.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { EXT_PRELUDE } from "../src/harness/ext/prelude.ts";
 
 class Quiet extends HostHandler {
@@ -30,7 +30,7 @@ class BuiltinSource {
 
 const main = async (): Promise<void> => {
   // The node stand-in for the engine's native calls, as the FFI manifest's node preload binds it.
-  await import(["@light/plugins", "native", "wcjs-node.mjs"].join("/"));
+  await import(["@lightstart/plugins", "native", "wcjs-node.mjs"].join("/"));
   const generated = join("src", "runtime", "generated");
   const plugins = join("plugins");
   const sources: BuiltinSource[] = [];

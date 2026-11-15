@@ -6,8 +6,8 @@
 // entry; a fork copies the branch into a new file.
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { listText, objectText } from "@light/lib/json.ts";
-import { readWindow } from "@light/workspace/window.ts";
+import { listText, objectText } from "@lightstart/lib/json.ts";
+import { readWindow } from "@lightstart/workspace/window.ts";
 import { Entry, SESSION, TITLE } from "./entries.ts";
 
 /** How much of a session file a load reads (one of many megabytes is cut at its start). */

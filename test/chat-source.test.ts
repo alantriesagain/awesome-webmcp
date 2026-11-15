@@ -7,8 +7,8 @@ import { CodeTarget } from "../src/code/target.ts";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { PromptHistory } from "../src/conversation/history.ts";
 import { ScreenController } from "../src/screen/screen.ts";
-import { Kernel } from "@light/kernel/kernel.ts";
-import { done, eq } from "@light/test/assert.ts";
+import { Kernel } from "@lightstart/kernel/kernel.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 
 class FakeHost extends ChatHost {
   readonly conversation: Conversation;

@@ -1,10 +1,10 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The todo plugin over the harness: add, add, toggle and list over the fake model, the details kept
 // in the session file's outcome, a fresh agent loading the session again and rebuilding the list
 // from its branch, an add with no text and a toggle of an unknown id as error results that leave
 // the list as it was, the /todos command, and config.json's switch turning the plugin off.
 import { readFileSync } from "node:fs";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { SessionStore } from "../src/harness/session/store.ts";
 import { AgentRig, toolTextOf, until } from "./support/agent-rig.ts";
 

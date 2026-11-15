@@ -3,8 +3,8 @@
 // skips the usual build folders).
 import { existsSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
-import { str } from "@light/lib/json.ts";
-import { listFiles } from "@light/workspace/files.ts";
+import { str } from "@lightstart/lib/json.ts";
+import { listFiles } from "@lightstart/workspace/files.ts";
 import { globMatches } from "./glob-match.ts";
 import { resolvePath } from "./read.ts";
 import { ToolContext, ToolOutcome } from "./tool.ts";

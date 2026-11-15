@@ -4,7 +4,7 @@
 // it, which the acp plugin knows), and `tools/call` when the model calls one: the answer read to
 // the end of its event stream (a question waits on the user, with progress meanwhile), the call
 // dropped on abort. A server is assumed to need no MCP session id (widecode's does not).
-import { listOf, recordOf, str } from "@light/lib/json.ts";
+import { listOf, recordOf, str } from "@lightstart/lib/json.ts";
 import { Abort, Stopper } from "../loop/abort.ts";
 import { SseSplitter } from "../model/sse.ts";
 import { HttpRequest, HttpStream } from "../http/stream.ts";

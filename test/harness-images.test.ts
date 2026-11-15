@@ -19,7 +19,7 @@ import { chatMessagesJson } from "../src/harness/model/openai.ts";
 import { ModelRegistry } from "../src/harness/model/registry.ts";
 import { HarnessPaths } from "../src/harness/paths.ts";
 import { ToolContext, ToolSet, builtInTools } from "../src/harness/tools/tool.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 /** A 1×1 PNG. */
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";

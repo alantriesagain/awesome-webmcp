@@ -3,11 +3,11 @@
 // daemons over the loopback, and the stop that removes the file.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { SpawnOptions, spawnCapped } from "@light/lib/process.ts";
+import { SpawnOptions, spawnCapped } from "@lightstart/lib/process.ts";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DaemonClient, DaemonOptions, processAlive, readDaemonState, startDaemon } from "../src/peers/index.ts";
-import { done, eq, eqn, ok } from "@light/test/assert.ts";
+import { done, eq, eqn, ok } from "@lightstart/test/assert.ts";
 
 const root = mkdtempSync(join(tmpdir(), "widecode-peers-daemon-"));
 

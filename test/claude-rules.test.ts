@@ -1,10 +1,10 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The claude-rules plugin's agent part over the harness: the Markdown files of the session
 // folder's .claude/rules/ reach the model in the system prompt, each under a heading with its
 // file name, and a folder without that directory leaves the system prompt alone.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { done, ok } from "@light/test/assert.ts";
+import { done, ok } from "@lightstart/test/assert.ts";
 import { AgentRig } from "./support/agent-rig.ts";
 
 const FIXTURE = '{"match":"rules","text":"Read."}';

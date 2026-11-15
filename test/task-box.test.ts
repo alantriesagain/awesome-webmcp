@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // A boxed Task target: a bwrap run goes through `box.mjs jail` with the proxy port and its projects
 // and starts no VM, a VM run goes through `box.mjs ssh --forward-proxy`, starts the proxy and the box
 // with the session folder and the configured projects, and stops once idle, a box with another
@@ -12,12 +12,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { TOOL } from "../src/conversation/model.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
 import { SegmentContext } from "../src/screen/contributions.ts";
-import { openWorkspace, Workspace } from "@light/workspace/workspace.ts";
+import { openWorkspace, Workspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode, Widecode } from "../src/compose.ts";
-import { palette } from "@light/ui/palette.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { palette } from "@lightstart/tui/palette.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const fake = join(process.cwd(), "test/fake-acp.mjs");
 const fakeBox = join(process.cwd(), "test/fake-box.mjs");

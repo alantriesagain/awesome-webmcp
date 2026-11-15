@@ -1,9 +1,9 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The permission-gate plugin's agent part over the harness: a Bash command matching a pattern asks
 // to be run, a yes lets it run and a no blocks it with the pattern in the reason; with no UI it
 // blocks without asking; a harmless command passes without a question; the settings' patterns
 // replace the defaults; and config.json's switch turns the plugin off.
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { AgentRig, toolTextOf } from "./support/agent-rig.ts";
 
 const FIXTURE = [

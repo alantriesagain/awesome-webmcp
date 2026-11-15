@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { attachImages, IMAGE_MAX, mediaTypeOf } from "../src/conversation/attach.ts";
 import { atToken, matchPaths } from "../src/chat/suggest.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const tok = (line: string, col: number): string => {
   const t = atToken(line, col);

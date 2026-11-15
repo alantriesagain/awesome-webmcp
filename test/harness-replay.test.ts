@@ -5,7 +5,7 @@
 import { Message, Part, THINKING, TOOL_CALL, TOOL_RESULT, textPart } from "../src/harness/model/message.ts";
 import { replayPaced, replayUpdates } from "../src/harness/session/replay.ts";
 import { ToolOutcome } from "../src/harness/tools/tool.ts";
-import { done, eq } from "@light/test/assert.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 
 const user = new Message("user", "u1");
 user.parts.push(textPart("edit a.txt"));

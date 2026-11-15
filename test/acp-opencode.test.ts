@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // opencode 1.19's own traffic through the acp plugin: its recording
 // (test/fixtures/acp-opencode.ndjson, made by test/probe/acp.mjs on a free model)
 // replayed by the fake. A reply and its thinking; a run call (its line the command, its output);
@@ -12,12 +12,12 @@ import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { Item, NOTICE, TEXT, THINKING, TOOL, Turn } from "../src/conversation/model.ts";
 import { RenderContext } from "../src/conversation/render.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { until } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "@lightstart/test/headless.ts";
 import { chatProblems } from "./support/chat-invariants.ts";
 
 const kinds = (items: Item[]): string => items.map((i: Item) => (i.kind === THINKING ? "thinking" : i.kind === TEXT ? "text" : i.kind === TOOL ? "tool:" + i.name : i.kind === NOTICE ? "notice:" + i.text : "other")).join(",");

@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The emacs keymap (plugins/emacs/index.ts), the default: Ctrl+F/B and Ctrl+P/N move, Alt+D deletes the
 // word after the caret (and joins at a line's end), Alt+< and Alt+> go to the chat's start and end;
 // readline's keys as before, Enter sends; the hints say the layer's keys; /keymap default turns it
@@ -7,11 +7,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-emacs-"));

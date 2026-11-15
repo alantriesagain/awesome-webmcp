@@ -9,7 +9,7 @@
 import { spawn } from "node:child_process";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createGunzip } from "node:zlib";
-import { ProcessRun, SpawnOptions, spawnCapped } from "@light/lib/process.ts";
+import { ProcessRun, SpawnOptions, spawnCapped } from "@lightstart/lib/process.ts";
 import { Peer, Registry, SharedRepo } from "./registry.ts";
 
 export const SERVICES = ["git-upload-pack", "git-receive-pack"];

@@ -1,7 +1,7 @@
 // The Write tool: a file written whole (its parents made), the change shown as a diff from what
 // was there; a file the model has not read first is refused when it exists, so a write never
 // clobbers unseen content.
-import { str } from "@light/lib/json.ts";
+import { str } from "@lightstart/lib/json.ts";
 import { FileText, changeOutcome, writeText } from "./files.ts";
 import { resolvePath } from "./read.ts";
 import { ToolContext, ToolOutcome } from "./tool.ts";

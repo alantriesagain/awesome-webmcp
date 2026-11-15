@@ -11,7 +11,7 @@ import { Abort } from "../src/harness/loop/abort.ts";
 import { findBrowser } from "../src/harness/tools/browser.ts";
 import { ToolContext, ToolSet, builtInTools } from "../src/harness/tools/tool.ts";
 import { WebSettings, encodeQuery, parseBrave, parseDuckDuckGo, parseGoogle, parseSearxng, parseTavily, searchOrder } from "../src/harness/tools/web.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const PAGE = '<html><head><title>Local page</title><script>document.addEventListener("DOMContentLoaded", () => { const p = document.createElement("p"); p.textContent = "Made by the script."; document.body.appendChild(p); });</script></head><body><h1>Hello</h1><p>Static text with <a href="/other">a link</a>.</p></body></html>';
 

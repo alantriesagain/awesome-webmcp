@@ -1,21 +1,21 @@
 // The plugin API's `ui`, `keys`, `commands`, `languages`, `files` and `clipboard` calls, answered
 // for the runtime (runtime.ts dispatches by namespace): the tabs, strips and segments plugins draw,
 // their keys and commands, languages, the tree's rows, the clipboard.
-import { PreludePart } from "@light/plugins/prelude.ts";
+import { PreludePart } from "@lightstart/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
 import { Language, addLanguage } from "@lightstart/highlight/registry.ts";
 import { TOKENIZERS, tokenizerFor } from "@lightstart/highlight/tokenizers.ts";
 import { BandPart, MenuEntry, SegmentContext, SegmentDef } from "../screen/contributions.ts";
-import { Command, Suggestion } from "@light/kernel/commands.ts";
-import { Action } from "@light/kernel/actions.ts";
+import { Command, Suggestion } from "@lightstart/kernel/commands.ts";
+import { Action } from "@lightstart/kernel/actions.ts";
 import { KeymapDef } from "../controllers/keymaps.ts";
-import { KeyEntry, Layer, keySpec } from "@light/kernel/keys.ts";
+import { KeyEntry, Layer, keySpec } from "@lightstart/kernel/keys.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
-import { visibleRows } from "@light/workspace/tree.ts";
+import { visibleRows } from "@lightstart/workspace/tree.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
-import { OK } from "@light/plugins/engine.ts";
+import { OK } from "@lightstart/plugins/engine.ts";
 import { JsBand, JsPanel, PANEL_FNS, runsOf } from "../runtime/views.ts";
-import { HostAnswer } from "@light/plugins/engine.ts";
+import { HostAnswer } from "@lightstart/plugins/engine.ts";
 import { str, num, strs, list, json, answer, answerText, objectText, refuse, listText } from "./values.ts";
 
 /** A suggestion as a plugin answers one: a string, or { value, label, detail }; every field `unknown`. */

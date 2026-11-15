@@ -4,7 +4,7 @@
 // Google through the browser (its results parsed from the page; a consent or bot page gives none),
 // Brave's and Tavily's APIs when there is a key, DuckDuckGo's HTML page only when the config's
 // order lists it.
-import { listOf, recordOf, str } from "@light/lib/json.ts";
+import { listOf, recordOf, str } from "@lightstart/lib/json.ts";
 import { Abort, Stopper } from "../loop/abort.ts";
 import { HttpRequest, HttpStream } from "../http/stream.ts";
 import { USER_AGENT, dumpDom, runProgram } from "./browser.ts";

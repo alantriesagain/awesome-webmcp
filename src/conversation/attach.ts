@@ -6,7 +6,7 @@
 // composer shows it as "[File #N]".
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
-import { expandHome } from "@light/lib/paths.ts";
+import { expandHome } from "@lightstart/lib/paths.ts";
 import { ImageBlock } from "./agent.ts";
 
 /** The API's limit is 5 MB of base64; this leaves room for the encoding. */

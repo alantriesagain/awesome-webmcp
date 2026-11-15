@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The user's keys.json and /keymap. keys.json (beside config.json) is the keymap's top layer: it
 // rebinds a core action (F6 to the code column), binds a key to a plugin's action, unbinds one with
 // null (F5 cycles no model), its entries drawn in the hints and /help; a malformed file gives a
@@ -11,12 +11,12 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { PluginSource } from "@light/plugins/sources.ts";
+import { PluginSource } from "@lightstart/plugins/sources.ts";
 import { Store } from "../src/services/store.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode, Widecode } from "../src/compose.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const vi = `widecode.plugin({
   id: "vi-test",

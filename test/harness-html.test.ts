@@ -4,7 +4,7 @@
 // tables as rows, an image's alt text; scripts, styles and forms dropped; character references
 // decoded; addresses resolved.
 import { decodeEntities, htmlToMarkdown, resolveUrl } from "../src/harness/tools/html.ts";
-import { done, eq } from "@light/test/assert.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 
 eq("references decoded: named, decimal, hex, one beyond the basic plane, an unknown one kept", decodeEntities("a &amp; b &lt;c&gt; &#233; &#x2014; &#x1F600; &bogus; &nbsp;x"), "a & b <c> é — 😀 &bogus;  x");
 eq("addresses: absolute, protocol-relative, rooted, relative, up a folder, a query", [resolveUrl("https://a.b/c/d.html", "https://x.y/z"), resolveUrl("https://a.b/c/d.html", "//cdn.b/s.js"), resolveUrl("https://a.b/c/d.html", "/root"), resolveUrl("https://a.b/c/d.html", "e/f"), resolveUrl("https://a.b/c/d.html", "../g"), resolveUrl("https://a.b/c/d.html", "?p=1")].join(" "), "https://x.y/z https://cdn.b/s.js https://a.b/root https://a.b/c/e/f https://a.b/g https://a.b/c/d.html?p=1");

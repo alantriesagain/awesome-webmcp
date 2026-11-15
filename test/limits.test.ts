@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // A turn Claude Code stopped at a rate limit: the limit is said as itself (not "Error: success"),
 // and the request panel offers waiting, changing model (/model in the composer) or sending the
 // message again when the limit resets. Limits are kept per agent (services/store.ts), so another
@@ -10,11 +10,11 @@ import { Conversation } from "../src/conversation/conversation.ts";
 import { Limits } from "../src/conversation/session-store.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
 import { NOTICE } from "../src/conversation/model.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
 import { Store } from "../src/services/store.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { until } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "@lightstart/test/headless.ts";
 
 const limit = (): string => '{"type":"result","subtype":"success","is_error":true,"result":"You\'ve hit your session limit · resets 1pm (America/Sao_Paulo)"}';
 

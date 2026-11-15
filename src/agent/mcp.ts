@@ -8,8 +8,8 @@
 // its servers from a file (Claude Code's --mcp-config) gets one written for it, readable by the
 // user alone. No sessions, no stream of the server's own, no resources or prompts.
 import { randomBytes } from "node:crypto";
-import { isRecord } from "@light/lib/json.ts";
-import { log } from "@light/lib/log.ts";
+import { isRecord } from "@lightstart/lib/json.ts";
+import { log } from "@lightstart/lib/log.ts";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { tmpdir } from "node:os";

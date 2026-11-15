@@ -3,7 +3,7 @@
 // them), undo and redo over snapshots the shell takes around each key, and the last kill, for
 // yank. A kill to the line's end goes to the clipboard too.
 import { ChatHost } from "./host.ts";
-import { Binder } from "@light/kernel/actions.ts";
+import { Binder } from "@lightstart/kernel/actions.ts";
 import { chipImages, refKind } from "../conversation/attach.ts";
 import { ChangeEvent, type KeyEvent, TInput, backspace, clearInput, del, deleteWord, graphemes, insertText, killToEnd, killToStart, lineEnd, lineStart, moveLeft, moveRight, moveRow, newline, submit, wordLeft, wordRight } from "@lightstart/light/native/tui";
 

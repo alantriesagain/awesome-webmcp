@@ -1,13 +1,13 @@
 // The plugin API's `fs` calls, answered for the runtime (runtime.ts dispatches by namespace): files
 // read, never written (an agent's transcripts and session lists, a plan it wrote), answered at
 // once. Plugins already run any command (`process`), so reading adds no reach they lacked.
-import { PreludePart } from "@light/plugins/prelude.ts";
+import { PreludePart } from "@lightstart/plugins/prelude.ts";
 import { closeSync, openSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { readAt, readWindow } from "@light/workspace/window.ts";
+import { readAt, readWindow } from "@lightstart/workspace/window.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
-import { HostAnswer } from "@light/plugins/engine.ts";
+import { HostAnswer } from "@lightstart/plugins/engine.ts";
 import { answer, answerText, json, listText, num, objectText, str, strs } from "./values.ts";
 
 /** The most of a file `text` reads. */

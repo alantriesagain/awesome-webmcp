@@ -7,7 +7,7 @@ import { applyEvents, applySubagentEvents } from "../src/conversation/events.ts"
 import { StatusInfo } from "../src/conversation/status-info.ts";
 import { agentStatus } from "../src/conversation/agents.ts";
 import { callState, FAILED } from "../src/conversation/calls.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const textOf = (lines: ReturnType<typeof itemLines>): string => lines.map((l) => l.runs.map((r) => r.text).join("")).join("\n");
 

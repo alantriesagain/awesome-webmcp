@@ -1,15 +1,15 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // A plugin's calls carry its registration. A direct __host call from a running plugin has no
 // token, so the core refuses it; the plugin does not start.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { PluginSource } from "@light/plugins/sources.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { PluginSource } from "@lightstart/plugins/sources.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
-import { done, ok } from "@light/test/assert.ts";
+import { done, ok } from "@lightstart/test/assert.ts";
 
 const hostile = `widecode.plugin({
   id: "hostile",

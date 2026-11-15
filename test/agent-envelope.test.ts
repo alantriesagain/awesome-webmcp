@@ -11,7 +11,7 @@ import {
   UnknownEvent,
   decodeEnvelope,
 } from "../src/agent/index.ts";
-import { done, eq, eqn, ok } from "@light/test/assert.ts";
+import { done, eq, eqn, ok } from "@lightstart/test/assert.ts";
 
 // 1. The captured session (Claude Code 2.1.282) decodes into the expected sequence.
 const fixture = readFileSync("test/agent/fixtures/stream.ndjson", "utf8");

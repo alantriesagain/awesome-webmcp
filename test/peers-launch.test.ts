@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The app as a test hosts it (createWidecode) names no daemon launcher, so the peers plugin, with no
 // daemon answering, only reports that none runs: it never starts one, not on its timer, not when the
 // tab is shown, not for /peers pair. The regression this guards: the plugin once ran the program it
@@ -11,8 +11,8 @@ import { createWidecode } from "../src/compose.ts";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { JsPanel } from "../src/runtime/views.ts";
 import { TRoot, mount, unmount } from "@lightstart/light/native/tui";
-import { openWorkspace } from "@light/workspace/workspace.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => {

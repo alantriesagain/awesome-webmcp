@@ -10,7 +10,7 @@ import { request as httpRequest, type ClientRequest, type IncomingMessage } from
 import { request as httpsRequest } from "node:https";
 import { type Socket } from "node:net";
 import { StringDecoder } from "node:string_decoder";
-import { objectText } from "@light/lib/json.ts";
+import { objectText } from "@lightstart/lib/json.ts";
 
 export class HttpRequest {
   method = "POST";

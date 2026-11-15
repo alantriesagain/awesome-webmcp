@@ -22,7 +22,7 @@ import { HarnessPaths } from "../src/harness/paths.ts";
 import { Entry } from "../src/harness/session/entries.ts";
 import { SessionStore } from "../src/harness/session/store.ts";
 import { ToolSet, builtInTools } from "../src/harness/tools/tool.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const FIXTURE = [
   '{"match":"hello","text":"Hello, world.","thinking":"Thinking about it.","input":12,"output":4}',

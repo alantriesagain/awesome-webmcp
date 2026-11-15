@@ -2,13 +2,13 @@
 // commands, the terminal app, its log hooks, onboarding, a resume and a selftest. The entry
 // (`main.ts`) owns the flags, the log file, the signals and the terminal checks, then calls here.
 import { readFileSync } from "node:fs";
-import { errorMessage, isRecord } from "@light/lib/json.ts";
+import { errorMessage, isRecord } from "@lightstart/lib/json.ts";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import { argValue, hasArg, log, logPath, openLogIn, trail } from "@light/lib/log.ts";
-import { installCrash, noteCrash } from "@light/lib/crash.ts";
+import { argValue, hasArg, log, logPath, openLogIn, trail } from "@lightstart/lib/log.ts";
+import { installCrash, noteCrash } from "@lightstart/lib/crash.ts";
 import { composeWidecode } from "./compose.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
 import { checkSource } from "./api/plugins.ts";
 import { AgentChoice, HarnessFile, Onboarding, folderCarries, runOnboarding } from "./views/onboarding.ts";
 import { Conversation } from "./conversation/conversation.ts";
@@ -16,7 +16,7 @@ import { FLUSH_AFTER, FLUSH_RENDER, FLUSH_VIEWS, type KeyEvent, Renderer, TInput
 import { Selftest } from "./selftest.ts";
 import { Store } from "./services/store.ts";
 import { BUILD_TIME, BUILD_VERSION } from "./runtime/build-info.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { registerStoreCommands } from "./commands.ts";
 import { flushBeforeExit, QuitFlusher } from "./quit.ts";
 

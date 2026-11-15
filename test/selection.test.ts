@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // Selecting by dragging in a pane: the rows' text as a copy gives it (a prompt's prefix left out, a
 // wrapped paragraph joined back, a word cut mid-way joined without a space), the selection drawn
 // inverse on its cells; in the app, a drag in the code column copies the file's own text (no
@@ -9,12 +9,12 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
 import { Line, LineSource, Run } from "@lightstart/light/native/tui/lines.ts";
 import { copyRows, DEFAULT_STYLE, frames, hitTest, layout, MouseEvent, mount, selectRuns, TElement, TRoot, unmount } from "@lightstart/light/native/tui";
-import { wrap } from "@light/ui/text.ts";
-import { done, eq } from "@light/test/assert.ts";
+import { wrap } from "@lightstart/tui/text.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 
 class Rows extends LineSource {
   lines: Line[] = [];

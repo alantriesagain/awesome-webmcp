@@ -1,7 +1,7 @@
 // A command's segments and the programs they name: chains, pipes, quotes, substitutions,
 // heredocs, compounds, wrappers, assignments and subcommands.
 import { programCounts, programOf, programsOf, segments } from "../src/conversation/command.ts";
-import { done, eq } from "@light/test/assert.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 
 const segs = (command: string): string => segments(command).join(" ¦ ");
 const progs = (command: string): string => programsOf(command).join(", ");

@@ -4,7 +4,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentOptions, ClaudeAgent, ExitEvent } from "../src/agent/index.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => {

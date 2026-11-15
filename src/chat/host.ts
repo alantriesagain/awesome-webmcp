@@ -6,7 +6,7 @@
 import { ConversationHolder } from "../conversation/model-source.ts";
 import { PromptHistory } from "../conversation/history.ts";
 import { CodeTarget } from "../code/target.ts";
-import { Kernel } from "@light/kernel/kernel.ts";
+import { Kernel } from "@lightstart/kernel/kernel.ts";
 import { ScreenController } from "../screen/screen.ts";
 import { ChatTarget, ToolsTarget } from "./roles.ts";
 

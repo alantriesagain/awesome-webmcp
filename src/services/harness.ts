@@ -4,10 +4,10 @@
 // `config.json` (plugin sections, column widths and tool permissions, over the user's). The folder
 // is watched: a change says which part moved, and the app applies it. Nothing here reaches light.
 import { existsSync, mkdirSync, readdirSync, readFileSync, watch, writeFileSync } from "node:fs";
-import { errorMessage, isRecord, recordOf } from "@light/lib/json.ts";
-import { stampOf } from "@light/lib/fs.ts";
+import { errorMessage, isRecord, recordOf } from "@lightstart/lib/json.ts";
+import { stampOf } from "@lightstart/lib/fs.ts";
 import { dirname, join } from "node:path";
-import { Closer, Latest } from "@light/lib/timing.ts";
+import { Closer, Latest } from "@lightstart/lib/timing.ts";
 
 const WATCH_MS = 300;
 

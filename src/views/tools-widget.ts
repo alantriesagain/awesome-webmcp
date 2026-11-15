@@ -3,7 +3,7 @@
 import { HostChat } from "../controllers/chat-host.ts";
 import { ToolsTarget } from "../chat/roles.ts";
 import { Host } from "../controllers/host.ts";
-import { Binder } from "@light/kernel/actions.ts";
+import { Binder } from "@lightstart/kernel/actions.ts";
 import { type KeyEvent } from "@lightstart/light/native/tui";
 import { CALL, ToolsPanel } from "../chat/tools-pane.ts";
 

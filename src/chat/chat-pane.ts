@@ -10,21 +10,21 @@
 // values its argument takes after its name (Enter runs it with the one chosen). ↑ on the composer's
 // first line walks back through the folder's messages (the ones the agent gave back first), ↓ on
 // its last line forward and past the newest to the draft. A typed line goes to the chat role.
-import { palette } from "@light/ui/palette.ts";
-import { clock } from "@light/ui/duration.ts";
+import { palette } from "@lightstart/tui/palette.ts";
+import { clock } from "@lightstart/tui/duration.ts";
 import { spinnerAt } from "@lightstart/light/native/tui/ticks.ts";
 import { activityOf, stepOf } from "../conversation/activity.ts";
 import { ChatModel, Item } from "../conversation/model.ts";
 import { ChatHost } from "./host.ts";
-import { Command, Suggestion } from "@light/kernel/commands.ts";
+import { Command, Suggestion } from "@lightstart/kernel/commands.ts";
 import { Composer } from "./composer.ts";
 import { RequestPanel } from "./request-panel.ts";
 import { atToken, matchPaths, SuggestStrip } from "./suggest.ts";
 import { CallGroup, PromptImages, chipAt, promptLines, turnLines } from "../conversation/render.ts";
-import { Line, LinePress, LineView } from "@light/ui/line-view.ts";
+import { Line, LinePress, LineView } from "@lightstart/tui/line-view.ts";
 import { ModelSource } from "../conversation/model-source.ts";
 import { type CustomEvent, type ChangeEvent, type SubmitEvent, TInput, View, graphemes, html, insertText, setValue, signal } from "@lightstart/light/native/tui";
-import { clipText } from "@light/ui/text.ts";
+import { clipText } from "@lightstart/tui/text.ts";
 
 /** What the strip lists: paths for an @token, commands' names, a command's argument's values. */
 const PATHS = 1;

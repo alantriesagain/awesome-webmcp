@@ -5,12 +5,12 @@
 // plain too, marked as new. A file as one commit changed it comes from
 // `git diff -U<all> <parent> <commit>` (one the commit added, a root commit's: new).
 // Tabs are expanded: the terminal grid gives a tab no width.
-import { insidePath, readFileCapped } from "@light/workspace/files.ts";
-import { GitRepo, isBinary } from "@light/workspace/git.ts";
-import { Commit } from "@light/workspace/git-log.ts";
-import { git } from "@light/workspace/git.read.ts";
+import { insidePath, readFileCapped } from "@lightstart/workspace/files.ts";
+import { GitRepo, isBinary } from "@lightstart/workspace/git.ts";
+import { Commit } from "@lightstart/workspace/git-log.ts";
+import { git } from "@lightstart/workspace/git.read.ts";
 import { HlState, languageForPath, Token, tokenizeLine } from "@lightstart/highlight";
-import { expandTabs } from "@light/ui/text.ts";
+import { expandTabs } from "@lightstart/tui/text.ts";
 
 export const KEPT = 0;
 export const ADDED = 1;

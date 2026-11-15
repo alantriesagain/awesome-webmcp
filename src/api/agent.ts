@@ -2,7 +2,7 @@
 // (runtime.ts dispatches by namespace): the conversation with the agent (what the user does, its
 // model, effort, mode and session), the agents plugins bring, the events they apply, and the
 // requests widecode's own tools put to the user.
-import { PreludePart } from "@light/plugins/prelude.ts";
+import { PreludePart } from "@lightstart/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
 import { Option } from "../conversation/agent.ts";
 import { programCounts } from "../conversation/command.ts";
@@ -12,9 +12,9 @@ import { applyEvents, applySubagentEvents } from "../conversation/events.ts";
 import { Ask } from "../conversation/requests.ts";
 import { attachImages } from "../conversation/attach.ts";
 import { FNS, JsAgent } from "../runtime/agent.ts";
-import { HostAnswer } from "@light/plugins/engine.ts";
+import { HostAnswer } from "@lightstart/plugins/engine.ts";
 import { str, num, list, json, answer, answerText, objectText, listText } from "./values.ts";
-import { trail } from "@light/lib/log.ts";
+import { trail } from "@lightstart/lib/log.ts";
 import { deliverAgentPart } from "./agent-part.ts";
 
 /** Plugin call `name` with its arguments `a`, answered; null for a call of another namespace. */

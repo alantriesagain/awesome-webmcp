@@ -6,8 +6,8 @@
 // word `result` answers the turn after a tool ran); with none left, it echoes "You said: <text>".
 // `tools` makes the reply call them, its stop reason `tool_use`; `hold` keeps the stream open
 // until it is aborted; `delayMs` waits between chunks so a message can arrive mid-turn.
-import { readTextOr } from "@light/lib/fs.ts";
-import { listOf, num, parseJson, recordOf, str } from "@light/lib/json.ts";
+import { readTextOr } from "@lightstart/lib/fs.ts";
+import { listOf, num, parseJson, recordOf, str } from "@lightstart/lib/json.ts";
 import { Abort } from "../loop/abort.ts";
 import { ModelRequest, StreamEnd, StreamListener } from "./client.ts";
 import { CANCELLED, END_TURN, FAILED, TOOL_RESULT, TOOL_USE } from "./message.ts";

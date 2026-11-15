@@ -2,7 +2,7 @@
 // 5 MB line arriving in 5000 chunks (linear time), CRLF endings, the unterminated tail on flush,
 // and the `env -u` wrapper with the new flags.
 import { AgentOptions, LineSplitter } from "../src/agent/index.ts";
-import { budget, done, eq, eqn, ok } from "@light/test/assert.ts";
+import { budget, done, eq, eqn, ok } from "@lightstart/test/assert.ts";
 
 {
   const s = new LineSplitter();

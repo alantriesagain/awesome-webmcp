@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The DeepSeek Harness (`dsh`, --agent dsh) as an ACP agent (plugins/acp/index.ts), here the fake
 // (test/fake-acp.mjs --dsh): it advertises session/list and session/resume but no session/load, no
 // fork and no modes, and its session's config options are `model` (category `model`, opaque
@@ -12,13 +12,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { Item, NOTICE, TEXT, THINKING, TOOL, Turn } from "../src/conversation/model.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { until } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "@lightstart/test/headless.ts";
 
 const kinds = (items: Item[]): string => items.map((i: Item) => (i.kind === THINKING ? "thinking" : i.kind === TEXT ? "text" : i.kind === TOOL ? "tool" : i.kind === NOTICE ? "notice:" + i.text : "other")).join(",");
 

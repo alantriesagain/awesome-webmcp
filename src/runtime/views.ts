@@ -6,14 +6,14 @@
 // row and presses from the plugin; JsBand a strip of the status band from the plugin's
 // `lines(width)`.
 import { Panel } from "../screen/contributions.ts";
-import { isRecord, parseJson } from "@light/lib/json.ts";
-import { Line, LinePress, LineSource, LineView, Run } from "@light/ui/line-view.ts";
+import { isRecord, parseJson } from "@lightstart/lib/json.ts";
+import { Line, LinePress, LineSource, LineView, Run } from "@lightstart/tui/line-view.ts";
 import { type CustomEvent, View, html } from "@lightstart/light/native/tui";
-import { Bridge, OK } from "@light/plugins/engine.ts";
+import { Bridge, OK } from "@lightstart/plugins/engine.ts";
 import { cells } from "../api/values.ts";
 import { PANEL_SLOTS, slotOf } from "./slots.ts";
-import { renderMarkdown } from "@light/markdown/markdown.ts";
-import { palette } from "@light/ui/palette.ts";
+import { renderMarkdown } from "@lightstart/tui-markdown/markdown.ts";
+import { palette } from "@lightstart/tui/palette.ts";
 
 /** Rows fetched per call into JS. */
 const WINDOW = 64;

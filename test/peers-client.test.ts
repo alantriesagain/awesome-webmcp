@@ -7,7 +7,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DaemonClient, LAUNCHES_MAX, LAUNCH_WAIT_MS } from "../src/peers/index.ts";
-import { done, eqn, ok } from "@light/test/assert.ts";
+import { done, eqn, ok } from "@lightstart/test/assert.ts";
 
 const root = mkdtempSync(join(tmpdir(), "widecode-peers-client-"));
 

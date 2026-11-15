@@ -3,8 +3,8 @@
 // `widecode --harness-auth <provider>` writes from a line on stdin. No OAuth: a subscription's
 // login is not a key the API takes.
 import { chmodSync } from "node:fs";
-import { readTextOr, writeAtomic } from "@light/lib/fs.ts";
-import { objectText, parseJson, recordOf, str } from "@light/lib/json.ts";
+import { readTextOr, writeAtomic } from "@lightstart/lib/fs.ts";
+import { objectText, parseJson, recordOf, str } from "@lightstart/lib/json.ts";
 import { Provider } from "./model/registry.ts";
 
 export class Auth {

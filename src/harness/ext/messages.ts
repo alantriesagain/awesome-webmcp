@@ -2,7 +2,7 @@
 // message holds text and images, an assistant one text, thinking with its signature and tool calls,
 // and every tool result is a message of its own. The `context` event gets this text; a replacement is converted back to the
 // harness's Message/Part and sent in that one request, never written to the session file.
-import { listOf, objectText, parseJson, recordOf, str } from "@light/lib/json.ts";
+import { listOf, objectText, parseJson, recordOf, str } from "@lightstart/lib/json.ts";
 import { IMAGE, Message, Part, TEXT, THINKING, TOOL_CALL, TOOL_RESULT } from "../model/message.ts";
 import { ToolOutcome } from "../tools/tool.ts";
 

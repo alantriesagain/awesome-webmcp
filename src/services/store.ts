@@ -10,11 +10,11 @@
 // values are written as literals typed `unknown`, and read back through all-`unknown` interfaces.
 import { Limits } from "../conversation/session-store.ts";
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { errorMessage, isRecord, recordOf, text } from "@light/lib/json.ts";
-import { readTextOr, writeAtomic } from "@light/lib/fs.ts";
+import { errorMessage, isRecord, recordOf, text } from "@lightstart/lib/json.ts";
+import { readTextOr, writeAtomic } from "@lightstart/lib/fs.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { StateFile } from "@light/kernel/settings.ts";
+import { StateFile } from "@lightstart/kernel/settings.ts";
 import { LimitsStore } from "./limits.ts";
 import { TrustStore } from "./trust.ts";
 
@@ -40,7 +40,7 @@ export class LogConfig {
 export class Config {
   /** The "plugins" object as read (null: none, every plugin on with its defaults). */
   plugins: unknown = null;
-  /** How copying reaches the clipboard: "auto", "osc52" or "xclip" (@light/ui/clipboard.ts). */
+  /** How copying reaches the clipboard: "auto", "osc52" or "xclip" (@lightstart/tui/clipboard.ts). */
   clipboard = "auto";
   /** The columns' widths, as written (null: none set; shell/column-widths.ts reads it). */
   columns: unknown = null;

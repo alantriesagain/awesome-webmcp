@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // widecode's plugins as config.json switches them: with languages off nothing is colored; with
 // agents off there is no Agents tab; with git off there is no Git tab, no b and no compare row;
 // with changes off the band is the status table alone. A plugin from outside the built-in list adds
@@ -14,15 +14,15 @@ import { Conversation } from "../src/conversation/conversation.ts";
 import { languageForFence, languageForPath } from "@lightstart/highlight";
 import { Panel, SegmentContext, SegmentDef } from "../src/screen/contributions.ts";
 import { Host } from "../src/controllers/host.ts";
-import { Command } from "@light/kernel/commands.ts";
-import { Action } from "@light/kernel/actions.ts";
-import { Plugin } from "@light/kernel/plugin.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { Command } from "@lightstart/kernel/commands.ts";
+import { Action } from "@lightstart/kernel/actions.ts";
+import { Plugin } from "@lightstart/kernel/plugin.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode, createWidecode, Widecode } from "../src/compose.ts";
 import { Caret, Clip, DEFAULT_STYLE, KeyEvent, Screen, TRoot, frames, layout, mount, paint, unmount } from "@lightstart/light/native/tui";
-import { Line, LineSource, Run } from "@light/ui/line-view.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { Line, LineSource, Run } from "@lightstart/tui/line-view.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { LANGUAGES } from "@lightstart/highlight/languages.ts";
 
 const W = 200;

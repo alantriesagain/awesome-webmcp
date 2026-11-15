@@ -2,7 +2,7 @@
 // replacement, changes close together sharing a hunk, far apart in two), a new file, no change,
 // the unified text with the file's line numbers and the counts.
 import { counts, hunksOf, unifiedPatch } from "../src/harness/tools/patch.ts";
-import { done, eq } from "@light/test/assert.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 
 const show = (oldText: string, newText: string): string => hunksOf(oldText, newText).map((h) => String(h.oldStart) + "," + String(h.newStart) + ": " + h.lines.join("|")).join(" / ");
 const ten = ["l1", "l2", "l3", "l4", "l5", "l6", "l7", "l8", "l9", "l10"].join("\n") + "\n";

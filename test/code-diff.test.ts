@@ -7,9 +7,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ADDED, CodeFile, CodeLine, expandTabs, hunkStarts, KEPT, loadCode, loadCommitFile, parseUnified, REMOVED } from "../src/code/diff.ts";
-import { openRepo } from "@light/workspace/git.ts";
-import { Commit } from "@light/workspace/git-log.ts";
-import { done, eq } from "@light/test/assert.ts";
+import { openRepo } from "@lightstart/workspace/git.ts";
+import { Commit } from "@lightstart/workspace/git-log.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 import { registerLanguages } from "@lightstart/highlight/languages.ts";
 
 registerLanguages();

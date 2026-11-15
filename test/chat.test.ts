@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The chat against recorded CLI traffic, read by Claude Code's plugin (plugins/claude/index.ts) into the
 // conversation: each fixture's stdout lines received by the agent (and the messages the user sent,
 // queued as the app queues them), the turns rendered at 80 columns and compared with
@@ -14,12 +14,12 @@ import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { ChatModel, Item, TOOL, Turn } from "../src/conversation/model.ts";
 import { itemLines, RenderContext, turnLines } from "../src/conversation/render.ts";
-import { stamp } from "@light/ui/duration.ts";
+import { stamp } from "@lightstart/tui/duration.ts";
 import { findCall } from "../src/conversation/calls.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
 import { Line } from "@lightstart/light/native/tui/lines.ts";
-import { budget, done, eq, ok } from "@light/test/assert.ts";
+import { budget, done, eq, ok } from "@lightstart/test/assert.ts";
 import { contentText, projectDir, rec, str } from "./support/claude-records.ts";
 import { registerLanguages } from "@lightstart/highlight/languages.ts";
 

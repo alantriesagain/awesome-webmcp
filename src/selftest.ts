@@ -23,8 +23,8 @@
 //                   backtrace and the log, and the terminal comes back
 import { appendFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { triggerCrash } from "@light/lib/crash.ts";
-import { log, trail } from "@light/lib/log.ts";
+import { triggerCrash } from "@lightstart/lib/crash.ts";
+import { log, trail } from "@lightstart/lib/log.ts";
 import { Widecode } from "./compose.ts";
 import { AGENT, Item, NOTICE, RUN, TEXT, TOOL, Turn } from "./conversation/model.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";

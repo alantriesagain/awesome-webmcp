@@ -6,8 +6,8 @@
 // new calls until it is scrolled up. It plays the host's tools role once a plugin mounts it.
 import { Panel } from "../screen/contributions.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
-import { palette } from "@light/ui/palette.ts";
-import { span } from "@light/ui/duration.ts";
+import { palette } from "@lightstart/tui/palette.ts";
+import { span } from "@lightstart/tui/duration.ts";
 import { spinnerAt } from "@lightstart/light/native/tui/ticks.ts";
 import { callMs, callState, DONE, FAILED, RUNNING } from "../conversation/calls.ts";
 import { ChatModel, Item, PROMPT, TOOL } from "../conversation/model.ts";
@@ -16,7 +16,7 @@ import { ChatHost } from "./host.ts";
 import { ModelSource } from "../conversation/model-source.ts";
 import { Line } from "@lightstart/light/native/tui/lines.ts";
 import { stringWidth } from "@lightstart/light/native/tui";
-import { clipText } from "@light/ui/text.ts";
+import { clipText } from "@lightstart/tui/text.ts";
 
 
 /** A row of the list: a message's header, a call, or the gap between two turns. */

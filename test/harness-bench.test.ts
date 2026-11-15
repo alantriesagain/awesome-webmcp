@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { reportText } from "../src/harness/bench/report.ts";
 import { ModelPrice, PriceTable, RunResult, RunSpec, loadTasks, opencodeUsage, pricesFromConfig, runTask } from "../src/harness/bench/runner.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const main = async (): Promise<void> => {
   const tasks = loadTasks(join(process.cwd(), "src", "harness", "bench", "tasks"), []);

@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The skills the agent has, in the Skills tab of the files column (plugins/skills/index.ts): Claude
 // Code's from disk before it starts (the project's, with its SKILL.md's description), then from its
 // init record (a plugin's under the plugin's path, a bundled one by name alone), each a command the
@@ -15,14 +15,14 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode, Widecode } from "../src/compose.ts";
 import { Store } from "../src/services/store.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent, setValue } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { until, wait } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until, wait } from "@lightstart/test/headless.ts";
 
 /** The Skills tab's rows at 60 cells, its info line first, joined with | ("none" when there is no tab); spaces between words folded to two, a clock to T. */
 const tab = (w: Widecode): string => {

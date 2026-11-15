@@ -5,7 +5,7 @@
 // webp, 3 MB at most) is given to a model that reads images as an image.
 import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import { num, str } from "@light/lib/json.ts";
+import { num, str } from "@lightstart/lib/json.ts";
 import { ToolContext, ToolOutcome } from "./tool.ts";
 
 const MAX_BYTES = 262144;

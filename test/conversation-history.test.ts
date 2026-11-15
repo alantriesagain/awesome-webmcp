@@ -6,7 +6,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PromptHistory } from "../src/conversation/history.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const walk = (h: PromptHistory): string => {
   const out: string[] = [];

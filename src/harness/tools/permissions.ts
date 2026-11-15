@@ -9,8 +9,8 @@
 // refused it, for the model to take another way.
 import { isAbsolute, join, normalize, relative } from "node:path";
 import { segments } from "../../conversation/command.ts";
-import { listOf, parseJson, recordOf, str } from "@light/lib/json.ts";
-import { readTextOr } from "@light/lib/fs.ts";
+import { listOf, parseJson, recordOf, str } from "@lightstart/lib/json.ts";
+import { readTextOr } from "@lightstart/lib/fs.ts";
 import { globToRegExp } from "./glob-match.ts";
 
 export class DenyRule {

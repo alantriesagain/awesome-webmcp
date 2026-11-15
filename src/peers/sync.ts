@@ -4,7 +4,7 @@
 // the local checkout's current branch is counted against the peer's branch of the same name, with
 // the commits that are new over there listed. A repository the peer offers that this machine has
 // no share of is listed as such, with the URL to clone it from.
-import { ProcessRun, SpawnOptions, spawnCapped } from "@light/lib/process.ts";
+import { ProcessRun, SpawnOptions, spawnCapped } from "@lightstart/lib/process.ts";
 import { urlHost } from "./git-http.ts";
 import { Peer, SharedRepo } from "./registry.ts";
 

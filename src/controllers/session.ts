@@ -11,7 +11,7 @@ import { Controller } from "@lightstart/light/controller/class.ts";
 import { Agent } from "../conversation/agent.ts";
 import { activityOf, stepOf } from "../conversation/activity.ts";
 import { Conversation } from "../conversation/conversation.ts";
-import { Hook } from "@light/lib/hook.ts";
+import { Hook } from "@lightstart/lib/hook.ts";
 import { Harness, mergePermissions, PermissionRules } from "../services/harness.ts";
 import { PromptHistory } from "../conversation/history.ts";
 import { SessionRecords } from "../services/sessions.ts";

@@ -3,9 +3,9 @@
 // behind is not called; `agentPart.send` hands the data to the chosen agent's adapter, which may
 // have no channel for it (then it answers false). The agent's side routes by plugin id, so only the
 // plugin's own messages reach it.
-import { PreludePart } from "@light/plugins/prelude.ts";
+import { PreludePart } from "@lightstart/plugins/prelude.ts";
 import type { JsRuntime, Life } from "../runtime/runtime.ts";
-import { HostAnswer } from "@light/plugins/engine.ts";
+import { HostAnswer } from "@lightstart/plugins/engine.ts";
 import { str, num, json, answer } from "./values.ts";
 
 class PartListener {

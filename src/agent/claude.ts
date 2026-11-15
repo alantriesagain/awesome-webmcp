@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { LineSplitter } from "@light/lib/ndjson.ts";
+import { LineSplitter } from "@lightstart/lib/ndjson.ts";
 import { AgentEvent, ErrorEvent, ExitEvent, StderrEvent, decodeEnvelope } from "./envelope.ts";
 
 /**

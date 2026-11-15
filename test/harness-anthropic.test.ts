@@ -11,7 +11,7 @@ import { ModelRegistry } from "../src/harness/model/registry.ts";
 import { SseEvent, SseSplitter } from "../src/harness/model/sse.ts";
 import { readFileSync } from "node:fs";
 import { ToolSet, builtInTools } from "../src/harness/tools/tool.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const r = ModelRegistry.builtIn();
 const user = new Message("user", "u1");

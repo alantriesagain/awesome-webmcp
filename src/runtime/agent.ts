@@ -8,7 +8,7 @@ import type { Conversation } from "../conversation/conversation.ts";
 import { Agent, Choices, ImageBlock, Option } from "../conversation/agent.ts";
 import { Item } from "../conversation/model.ts";
 import { Reply, replyText } from "../conversation/requests.ts";
-import { Bridge, OK } from "@light/plugins/engine.ts";
+import { Bridge, OK } from "@lightstart/plugins/engine.ts";
 import { AGENT_SLOTS, slotOf } from "./slots.ts";
 
 /** The plugin's functions, by their place in what ui.agents.register passes. */

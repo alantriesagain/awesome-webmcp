@@ -1,8 +1,8 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The inline-bash plugin's agent part over the harness: a prompt's `!{command}` reaches the model
 // as the command's output, a failing command as its exit code and stderr, two commands both
 // expanded, and a prompt without `!{` left as it was.
-import { done, eq } from "@light/test/assert.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 import { AgentRig } from "./support/agent-rig.ts";
 
 const FIXTURE = [

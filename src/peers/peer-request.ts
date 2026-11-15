@@ -1,7 +1,7 @@
 // A request from this machine's daemon to another's, through the curl binary. The runtime's own
 // fetch, in a daemon that had been running a while on macOS, failed against a peer that curl, git and
 // a fresh process reached at once; git speaks to peers through curl anyway.
-import { ProcessRun, SpawnOptions, spawnCapped } from "@light/lib/process.ts";
+import { ProcessRun, SpawnOptions, spawnCapped } from "@lightstart/lib/process.ts";
 
 /** What another machine's daemon answered: the status (0 when nothing did) and the body. */
 export class PeerAnswer {

@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // Claude's requests answered through the app's panel, headlessly, against recorded traffic: the
 // fake CLI replays each fixture to its request (Claude Code's plugin starting it on the recorded
 // message, plan mode first where the recording has it), the panel driven with keys and the
@@ -12,8 +12,8 @@ import { Conversation } from "../src/conversation/conversation.ts";
 import { TOOL } from "../src/conversation/model.ts";
 import { Choice, Question } from "../src/conversation/requests.ts";
 import { Caret, Clip, DEFAULT_STYLE, KeyEvent, Screen, TRoot, frames, layout, mount, paint, unmount } from "@lightstart/light/native/tui";
-import { openWorkspace } from "@light/workspace/workspace.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const fixtures = join(process.cwd(), "test", "fixtures");
 const W = 160;

@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The chat's composer, in the app: Ctrl+K kills to the line's end and puts what it killed on the
 // clipboard (here OSC 52, captured), and at a line's end joins the next without copying anything.
 // Alt+←/→ (and Alt+b, Alt+f) move by a word, punctuation between words, across a line's end;
@@ -15,12 +15,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { attachImages } from "../src/conversation/attach.ts";
-import { osc52 } from "@light/ui/clipboard.ts";
+import { osc52 } from "@lightstart/tui/clipboard.ts";
 import { Store } from "../src/services/store.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { createWidecode, Widecode } from "../src/compose.ts";
 import { DEFAULT_STYLE, frames, KeyEvent, layout, mount, setValue, TRoot, unmount } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 /** A key as the terminal delivers it: the shell's actions, the composer's editing among them. */
 const key = (w: Widecode, name: string, text: string, ctrl: boolean, alt = false): void => {

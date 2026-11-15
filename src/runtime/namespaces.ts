@@ -1,8 +1,8 @@
 // The plugin API's JS side, as widecode's parts of it: the namespaces each beside its answers
 // (src/api/<namespace>.ts), in the order the api object lists them, the namespace the runtime answers
 // itself (actions) declared here, and the members that are no namespace (on, tell, note, every,
-// after) as text where they sit. @light/plugins builds the prelude around them.
-import { PreludePart } from "@light/plugins/prelude.ts";
+// after) as text where they sit. @lightstart/plugins builds the prelude around them.
+import { PreludePart } from "@lightstart/plugins/prelude.ts";
 import { NAMESPACE_AGENTS, NAMESPACE_CONVERSATION, NAMESPACE_AGENT } from "../api/agent.ts";
 import { NAMESPACE_AGENT_PART } from "../api/agent-part.ts";
 import { NAMESPACE_FS } from "../api/fs.ts";
@@ -15,7 +15,7 @@ import { NAMESPACE_SETTINGS, NAMESPACE_STATE } from "../api/state.ts";
 import { NAMESPACE_TOOLS } from "../api/tools.ts";
 import { NAMESPACE_COMMANDS, NAMESPACE_KEYS, NAMESPACE_UI, NAMESPACE_CLIPBOARD, NAMESPACE_LANGUAGES, NAMESPACE_FILES } from "../api/ui.ts";
 import { NAMESPACE_CODE, NAMESPACE_COMPOSER, NAMESPACE_CHAT, NAMESPACE_WIDGETS } from "../api/widgets.ts";
-import { HostAnswer } from "@light/plugins/engine.ts";
+import { HostAnswer } from "@lightstart/plugins/engine.ts";
 import type { JsRuntime } from "./runtime.ts";
 import { answerAgent } from "../api/agent.ts";
 import { answerAgentPart } from "../api/agent-part.ts";

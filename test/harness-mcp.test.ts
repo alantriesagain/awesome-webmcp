@@ -18,7 +18,7 @@ import { FakeClient } from "../src/harness/model/fake.ts";
 import { HarnessPaths } from "../src/harness/paths.ts";
 import { McpLink } from "../src/harness/tools/mcp.ts";
 import { ToolSet, builtInTools } from "../src/harness/tools/tool.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const until = (what: () => boolean): Promise<void> =>
   new Promise<void>((settle) => {

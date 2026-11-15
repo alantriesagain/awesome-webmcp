@@ -7,7 +7,7 @@ import { ChatModel } from "../src/conversation/model.ts";
 import { applyEvents } from "../src/conversation/events.ts";
 import { StatusInfo } from "../src/conversation/status-info.ts";
 import { skillRuns } from "../src/conversation/skills.ts";
-import { done, eq } from "@light/test/assert.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 
 const model = new ChatModel();
 const info = new StatusInfo();

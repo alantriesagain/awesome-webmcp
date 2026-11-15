@@ -3,7 +3,7 @@
 // also splits on Unicode separators would break a JSON string), and the waits a run makes: for the
 // session to settle and for one command's response.
 import { spawn, type ChildProcess } from "node:child_process";
-import { recordOf, str } from "@light/lib/json.ts";
+import { recordOf, str } from "@lightstart/lib/json.ts";
 
 class Duty {
   settle: (() => void) | null = null;

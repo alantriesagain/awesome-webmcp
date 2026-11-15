@@ -4,7 +4,7 @@
 import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { parseJson, recordOf, str } from "@light/lib/json.ts";
+import { parseJson, recordOf, str } from "@lightstart/lib/json.ts";
 
 /** `b` as base64url (no padding), without relying on the runtime naming the encoding. */
 export const base64url = (b: Buffer): string => b.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");

@@ -7,9 +7,9 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { hostname, networkInterfaces } from "node:os";
 import { basename, join } from "node:path";
-import { writeAtomic } from "@light/lib/fs.ts";
-import { errorMessage, listOf, num, parseJson, recordOf, str, strs } from "@light/lib/json.ts";
-import { ProcessRun, SpawnOptions, spawnCapped } from "@light/lib/process.ts";
+import { writeAtomic } from "@lightstart/lib/fs.ts";
+import { errorMessage, listOf, num, parseJson, recordOf, str, strs } from "@lightstart/lib/json.ts";
+import { ProcessRun, SpawnOptions, spawnCapped } from "@lightstart/lib/process.ts";
 import { GitServer, bearerOf, isPrivateAddress, json, plain, remoteAddressOf, RequestUrl, urlHost } from "./git-http.ts";
 import { Identity, loadOrCreateIdentity, newToken, saveIdentity } from "./identity.ts";
 import { JoinRequest, PairOffer, acceptJoin, joinPeer, newPairCode } from "./pairing.ts";

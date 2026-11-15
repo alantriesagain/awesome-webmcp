@@ -17,7 +17,7 @@ import { registryFor } from "../src/harness/cli.ts";
 import { HarnessConfig } from "../src/harness/config.ts";
 import { deniedBy, listingRules, parseRules, rulesIn } from "../src/harness/tools/permissions.ts";
 import { ToolOutcome, ToolSet, builtInTools } from "../src/harness/tools/tool.ts";
-import { done, eq } from "@light/test/assert.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 
 const folder = mkdtempSync(join(tmpdir(), "harness-deny-"));
 const config = join(folder, "config.json");

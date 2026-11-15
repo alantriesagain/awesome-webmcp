@@ -3,10 +3,10 @@
 // is in use or asked for, and by nothing else), this folder's repository shared through it, a
 // peer's offer cloned beside this folder, and the peers whose remote (the daemon's doing, their
 // token in the checkout's git config and never in a URL or in the plugin's hands) is in this folder.
-import { PreludePart } from "@light/plugins/prelude.ts";
+import { PreludePart } from "@lightstart/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
-import { HostAnswer } from "@light/plugins/engine.ts";
-import { SpawnOptions, spawnCapped } from "@light/lib/process.ts";
+import { HostAnswer } from "@lightstart/plugins/engine.ts";
+import { SpawnOptions, spawnCapped } from "@lightstart/lib/process.ts";
 import { dirname, join } from "node:path";
 import { DaemonClient, Registry, remoteNameOf } from "../peers/index.ts";
 import { Store } from "../services/store.ts";

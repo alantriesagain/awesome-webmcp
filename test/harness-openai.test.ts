@@ -16,7 +16,7 @@ import { IMAGE, Message, Part, THINKING, TOOL_CALL, TOOL_RESULT, textPart } from
 import { ChatReader, OpenAiClient, chatMessagesJson, chatRequestBody } from "../src/harness/model/openai.ts";
 import { EFFORT, ModelInfo, ModelRegistry, NO_THINKING, OPENAI_API, Provider, TOGGLE } from "../src/harness/model/registry.ts";
 import { SseSplitter } from "../src/harness/model/sse.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const user = new Message("user", "u1");
 user.parts.push(textPart("list the files"));

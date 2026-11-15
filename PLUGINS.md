@@ -21,14 +21,14 @@ and the agents: Claude Code, and the ones that speak ACP (opencode, the DeepSeek
                   the chat views see it
     views/        the shell (the columns, the band, the keys), the tab columns, the role players
                   (the chat, code and tools widgets), the onboarding
-    runtime/      the plugin runtime: JsRuntime over @light/plugins' engine, the prelude (widecode's
+    runtime/      the plugin runtime: JsRuntime over @lightstart/plugins' engine, the prelude (widecode's
                   namespaces around the builder), the JS-drawn views, the agents plugins bring
     api/          the core's answers to the plugins' calls, a file per namespace
     services/     the store (~/.widecode), the harness folder (.widecode/), the session titles
     theme.ts      widecode's look: the palette's fields under the core's names, the plugins' theme
-packages/         what the core builds on: @light/kernel, @light/plugins (the QuickJS shim, its build
+packages/         what the core builds on: @lightstart/kernel, @lightstart/plugins (the QuickJS shim, its build
                   and FFI manifest, its node stand-in for tests), src/conversation, src/screen,
-                  src/chat, src/code, @light/workspace, @lightstart/highlight, @light/ui, src/agent, @light/lib
+                  src/chat, src/code, @lightstart/workspace, @lightstart/highlight, @lightstart/tui, src/agent, @lightstart/lib
 ```
 
 ## Where plugins come from
@@ -805,6 +805,6 @@ A built-in plugin is `plugins/<id>/index.ts`, ending with `export {};`, typed ag
 `widecode.d.ts` (`light-native check --all`). What it needs from the core is a call in the prelude
 (`src/runtime/prelude.ts`), its answer in its namespace's `src/api/<file>.ts` and its type in
 `widecode.d.ts` (`test/api.test.ts` checks the three agree). Its tests
-drive it through the app (`createWidecode`) and carry `// ffi: @light/plugins/native/ffi.json` on
+drive it through the app (`createWidecode`) and carry `// ffi: @lightstart/plugins/native/ffi.json` on
 their first line, so they run natively with QuickJS and under node with the stand-in. A plugin's
 agent part is tested through the harness (`src/harness/test/extensions.test.ts`).

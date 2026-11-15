@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { claudeExecutable } from "../src/agent/index.ts";
-import { done, eq } from "@light/test/assert.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 
 const root = mkdtempSync(join(tmpdir(), "widecode-claude-exe-"));
 const binA = join(root, "a");

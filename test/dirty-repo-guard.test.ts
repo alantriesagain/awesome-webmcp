@@ -1,11 +1,11 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The dirty-repo-guard plugin's agent part over the harness: a clean repository forks, a dirty one
 // asks and forks on yes, is refused on no, a side question's fork does not ask, and a folder that
 // is not a repository forks.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { AgentRig, until } from "./support/agent-rig.ts";
 
 const FIXTURE = '{"match":"hello","text":"Hi."}';

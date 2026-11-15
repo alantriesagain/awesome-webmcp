@@ -1,7 +1,7 @@
 // node-only
 // Leaving: the records are flushed before the exit callback runs, and no records leaves at once.
 import { flushBeforeExit, QuitFlusher } from "../src/quit.ts";
-import { done, eq } from "@light/test/assert.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 
 let waited = 0;
 const records = new QuitFlusher(() => {

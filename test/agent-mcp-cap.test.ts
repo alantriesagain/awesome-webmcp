@@ -1,7 +1,7 @@
 // capResult: a tool's answer stays whole under its limit, keeps its head and tail with a paragraph
 // between when over, and the middle is gone. The server applies it in `answer` (see mcp.ts).
 import { capResult } from "../src/agent/index.ts";
-import { done, eq, eqn, ok } from "@light/test/assert.ts";
+import { done, eq, eqn, ok } from "@lightstart/test/assert.ts";
 
 const short = "a tool's answer, well within the limit";
 eq("under the limit: unchanged", capResult(short, 40000), short);

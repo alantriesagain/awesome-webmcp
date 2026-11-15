@@ -1,5 +1,5 @@
 export { AgentOptions, ClaudeAgent, claudeExecutable } from "./claude.ts";
-export { LineSplitter } from "@light/lib/ndjson.ts";
+export { LineSplitter } from "@lightstart/lib/ndjson.ts";
 export * from "./mcp.ts";
 export {
   AgentEvent,

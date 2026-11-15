@@ -1,11 +1,11 @@
 // Moving a column among the others, and where a saved order puts the columns when they are added:
 // a moved column keeps the new order for the next run, an unknown id or the position it is at does
 // nothing, and a saved order places the columns it names while the others stay.
-import { Kernel } from "@light/kernel/kernel.ts";
+import { Kernel } from "@lightstart/kernel/kernel.ts";
 import { View } from "@lightstart/light/native/tui";
 import { Column } from "../src/screen/contributions.ts";
 import { ScreenController, applySavedOrder, columnOrderOf } from "../src/screen/screen.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const column = (id: string, order: number): Column => new Column(id, id, order, new View(), () => 0, 0, 0, null, null);
 const ids = (screen: ScreenController): string => screen.columns.map((c) => c.id).join(",");

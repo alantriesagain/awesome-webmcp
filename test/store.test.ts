@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // widecode's store and titles, in a temporary WIDECODE_HOME: the config written with the plugins'
 // defaults and the log's on first run and read back, its "log" in each of its shapes, one from
 // before plugins moved under "plugins" once, a
@@ -14,11 +14,11 @@ import { Conversation } from "../src/conversation/conversation.ts";
 import { Limits } from "../src/conversation/session-store.ts";
 import { SessionRecords } from "../src/services/sessions.ts";
 import { PluginDefault, Store } from "../src/services/store.ts";
-import { Hook } from "@light/lib/hook.ts";
+import { Hook } from "@lightstart/lib/hook.ts";
 import { cleanTitle, shownTitle, Titler } from "../src/agent/titles.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const home = mkdtempSync(join(tmpdir(), "widecode-home-"));
 const stub = join(process.cwd(), "test", "fake-title.sh");

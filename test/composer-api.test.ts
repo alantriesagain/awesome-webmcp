@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The composer from a plugin (api.composer, api.keys.run): its lines and caret read, set (the
 // caret clamped) and inserted into; whether it is empty, the suggestion strip shows or the request
 // panel is open; an action run by name with a count; the border title set; widecode.util.graphemes
@@ -8,12 +8,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { PluginSource } from "@light/plugins/sources.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { PluginSource } from "@lightstart/plugins/sources.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
 import { DEFAULT_STYLE, KeyEvent, TRoot, frames, layout, mount } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const plugin = `widecode.plugin({
   id: "composer-test",

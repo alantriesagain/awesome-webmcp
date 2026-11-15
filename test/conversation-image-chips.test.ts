@@ -3,8 +3,8 @@
 // chip knows which to open.
 import { Line } from "@lightstart/light/native/tui/lines.ts";
 import { chipAt, promptLines } from "../src/conversation/render.ts";
-import { palette } from "@light/ui/palette.ts";
-import { done, eq } from "@light/test/assert.ts";
+import { palette } from "@lightstart/tui/palette.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 
 const line = new Line();
 line.add("look at ", palette.promptFg);

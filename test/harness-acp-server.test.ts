@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AcpServer, Incoming } from "../src/harness/acp/server.ts";
-import { done, eq } from "@light/test/assert.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 
 const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
 

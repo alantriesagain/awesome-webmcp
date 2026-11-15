@@ -9,9 +9,9 @@
 //     "browser": { "command": "" },
 //     "providers": { "mine": { "name": "Mine", "baseUrl": "https://host/anthropic", "keyEnv": "MINE_API_KEY",
 //       "models": [{ "id": "big", "name": "Big", "context": 200000, "output": 32000, "price": [1, 4] }] } } }
-import { readTextOr } from "@light/lib/fs.ts";
+import { readTextOr } from "@lightstart/lib/fs.ts";
 import { rulesIn } from "./tools/permissions.ts";
-import { listOf, num, parseJson, recordOf, str, strs } from "@light/lib/json.ts";
+import { listOf, num, parseJson, recordOf, str, strs } from "@lightstart/lib/json.ts";
 import { ADAPTIVE, BUDGET, EFFORT, ModelInfo, ModelRegistry, NO_THINKING, OPENAI_API, Provider, TOGGLE, effortsFor } from "./model/registry.ts";
 
 export class HarnessConfig {

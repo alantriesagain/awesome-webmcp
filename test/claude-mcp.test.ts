@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // widecode's tools served to Claude Code: the CLI is started with --mcp-config naming a file the
 // user alone reads, which carries the server's address and this plugin's token; with that token the
 // server lists the tools not excepted for Claude (a test plugin's, not the ask plugin's AskUser and
@@ -10,13 +10,13 @@ import { request, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { PluginSource } from "@light/plugins/sources.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { PluginSource } from "@lightstart/plugins/sources.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { until } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "@lightstart/test/headless.ts";
 
 const fixtures = join(process.cwd(), "test", "fixtures");
 const fake = join(process.cwd(), "test", "fake-claude.mjs");

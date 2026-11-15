@@ -1,5 +1,5 @@
 // Claude's tool calls, for the Tools tab and the code column: where a call stands, how long it
-// took (or has been running; @light/ui/duration.ts `took` writes it), and the call a tool use id names, at any depth.
+// took (or has been running; @lightstart/tui/duration.ts `took` writes it), and the call a tool use id names, at any depth.
 import { ChatModel, Item, TOOL } from "./model.ts";
 
 export const RUNNING = "running";

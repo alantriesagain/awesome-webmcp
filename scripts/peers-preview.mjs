@@ -8,7 +8,7 @@ import { Conversation } from "../src/conversation/conversation.ts";
 import { JsPanel } from "../src/runtime/views.ts";
 import { DaemonOptions, startDaemon } from "../src/peers/index.ts";
 import { TRoot, mount, unmount } from "@lightstart/light/native/tui";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const root = mkdtempSync(join(tmpdir(), "widecode-peers-preview-"));
 const storeA = join(root, "a"), storeB = join(root, "b"), repo = join(root, "repo"), repoB = join(root, "repo-b");

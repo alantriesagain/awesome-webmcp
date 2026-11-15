@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // Claude Code's CLI as its plugin runs it (plugins/claude/index.ts), against a fake CLI replaying recorded
 // traffic that checks what it is sent: a message starts it, a permission prompt goes to the request
 // panel and the user's allow reaches the CLI with the tool's own input (byte for byte, the fake's
@@ -10,10 +10,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { until } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "@lightstart/test/headless.ts";
 
 const fixtures = join(process.cwd(), "test", "fixtures");
 const fake = join(process.cwd(), "test", "fake-claude.mjs");

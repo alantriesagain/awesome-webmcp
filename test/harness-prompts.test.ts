@@ -10,7 +10,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TemplateInfo, expandTemplate, scanTemplates, splitArgs, substituteArgs } from "../src/harness/prompt/templates.ts";
-import { done, eq } from "@light/test/assert.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 
 const root = mkdtempSync(join(tmpdir(), "harness-prompts-"));
 const folder = join(root, "project");

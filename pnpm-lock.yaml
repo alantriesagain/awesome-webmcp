@@ -8,37 +8,37 @@ importers:
 
   .:
     dependencies:
-      '@light/kernel':
-        specifier: workspace:*
-        version: link:light/packages/tui/kernel
-      '@light/lib':
-        specifier: workspace:*
-        version: link:light/packages/native/lib
-      '@light/markdown':
-        specifier: workspace:*
-        version: link:light/packages/tui/markdown
-      '@light/plugins':
-        specifier: workspace:*
-        version: link:light/packages/native/plugins
-      '@light/ui':
-        specifier: workspace:*
-        version: link:light/packages/tui/ui
-      '@light/workspace':
-        specifier: workspace:*
-        version: link:light/packages/native/workspace
       '@lightstart/highlight':
         specifier: workspace:*
         version: link:light/packages/highlight
+      '@lightstart/kernel':
+        specifier: workspace:*
+        version: link:light/packages/kernel
+      '@lightstart/lib':
+        specifier: workspace:*
+        version: link:light/packages/lib
       '@lightstart/light':
         specifier: workspace:*
         version: link:light/packages/light
+      '@lightstart/plugins':
+        specifier: workspace:*
+        version: link:light/packages/plugins
+      '@lightstart/tui':
+        specifier: workspace:*
+        version: link:light/packages/tui
+      '@lightstart/tui-markdown':
+        specifier: workspace:*
+        version: link:light/packages/tui-markdown
+      '@lightstart/workspace':
+        specifier: workspace:*
+        version: link:light/packages/workspace
     devDependencies:
-      '@light/cli':
+      '@lightstart/native':
         specifier: workspace:*
-        version: link:light/packages/native/cli
-      '@light/test':
+        version: link:light/packages/native
+      '@lightstart/test':
         specifier: workspace:*
-        version: link:light/packages/tui/test
+        version: link:light/packages/test
       '@types/node':
         specifier: ^26.6.5
         version: 26.6.5

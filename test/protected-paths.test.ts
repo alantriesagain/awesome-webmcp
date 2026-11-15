@@ -1,9 +1,9 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The protected-paths plugin's agent part over the harness: a Write or Edit of .env, .env.*, a path
 // under .git/ or node_modules/ is blocked, its reason naming the rule; an ordinary file is allowed;
 // a Bash redirect into such a path and an rm of one are blocked too; the settings' paths replace
 // the defaults; and config.json's switch turns the plugin off.
-import { done, ok } from "@light/test/assert.ts";
+import { done, ok } from "@lightstart/test/assert.ts";
 import { AgentRig, toolTextOf } from "./support/agent-rig.ts";
 
 const FIXTURE = [

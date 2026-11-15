@@ -8,7 +8,7 @@
 // `reasoning_effort`, any other leaves the model's default. Usage comes in the last chunk
 // (`stream_options.include_usage`), the cached share from `prompt_tokens_details.cached_tokens`
 // or DeepSeek's `prompt_cache_hit_tokens`.
-import { listOf, num, recordOf, str } from "@light/lib/json.ts";
+import { listOf, num, recordOf, str } from "@lightstart/lib/json.ts";
 import { Abort, Stopper } from "../loop/abort.ts";
 import { Auth } from "../auth.ts";
 import { HttpRequest, HttpStream } from "../http/stream.ts";

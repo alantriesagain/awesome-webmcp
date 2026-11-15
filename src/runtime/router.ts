@@ -1,8 +1,8 @@
 // The core side of a plugin's `__host` calls: the direct calls a plugin makes (hooks, timers,
 // tells, folder actions, tools) and the namespace dispatch into `src/api`.
-import { HostAnswer } from "@light/plugins/engine.ts";
-import { errorMessage } from "@light/lib/json.ts";
-import { log } from "@light/lib/log.ts";
+import { HostAnswer } from "@lightstart/plugins/engine.ts";
+import { errorMessage } from "@lightstart/lib/json.ts";
+import { log } from "@lightstart/lib/log.ts";
 import type { JsRuntime } from "./runtime.ts";
 import { API_ANSWERS } from "./namespaces.ts";
 import { answer, json, num, refuse, str, strs } from "../api/values.ts";

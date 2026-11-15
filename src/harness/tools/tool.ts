@@ -3,7 +3,7 @@
 // the ACP kind its calls show as, and whether it changes the world (a batch with one runs its
 // calls one at a time). The set of a mode runs a call by name, after checking its input against
 // the schema; one flat class and a switch, since an overridden method cannot be async natively.
-import { listOf, listText, objectText, parseJson, recordOf, str, strs } from "@light/lib/json.ts";
+import { listOf, listText, objectText, parseJson, recordOf, str, strs } from "@lightstart/lib/json.ts";
 import { Abort } from "../loop/abort.ts";
 import { bashTool } from "./bash.ts";
 import { editTool } from "./edit.ts";

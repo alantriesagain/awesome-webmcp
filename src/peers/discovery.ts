@@ -3,7 +3,7 @@
 // (avahi on Linux, dns-sd on macOS); a typed address works without any of this. The parsers are
 // pure and tested on recorded output; the processes are kept small and short-lived.
 import { spawn, type ChildProcess } from "node:child_process";
-import { SpawnOptions, spawnCapped } from "@light/lib/process.ts";
+import { SpawnOptions, spawnCapped } from "@lightstart/lib/process.ts";
 import { isPrivateAddress } from "./git-http.ts";
 
 export const SERVICE_TYPE = "_widecode._tcp";

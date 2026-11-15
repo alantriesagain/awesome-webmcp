@@ -5,8 +5,8 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Hook } from "@light/lib/hook.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { Hook } from "@lightstart/lib/hook.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { SessionRecords } from "../src/services/sessions.ts";
 import { Store } from "../src/services/store.ts";
 

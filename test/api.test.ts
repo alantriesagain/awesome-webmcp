@@ -11,7 +11,7 @@ import { NAMESPACE_UI } from "../src/api/ui.ts";
 import { AGENT_SLOTS, PANEL_SLOTS } from "../src/runtime/slots.ts";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const root = ".";
 const read = (path: string): string => readFileSync(join(root, path), "utf8");

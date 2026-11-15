@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // Moving a column by its title row: a drag over another column's half drops it before or after it,
 // the status bar says where it would land, the order is kept in state.json, a press without a move
 // only focuses the column, and a saved order places the columns when they are added.
@@ -6,10 +6,10 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
 import { DEFAULT_STYLE, MouseEvent, TElement, TRoot, frames, hitTest, layout, mount, unmount } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-column-order-"));

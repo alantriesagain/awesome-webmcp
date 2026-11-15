@@ -1,8 +1,8 @@
 // A tool call on a page of its own, for the code column: its line, where it stands and for how
 // long (live while it runs), its input whole and its output (conversation/render.ts `callPage`). Built
 // again when the conversation changes, and on each draw while the call runs (its clock).
-import { palette } from "@light/ui/palette.ts";
-import { span } from "@light/ui/duration.ts";
+import { palette } from "@lightstart/tui/palette.ts";
+import { span } from "@lightstart/tui/duration.ts";
 import { callMs, callState, findCall, RUNNING } from "../conversation/calls.ts";
 import { ChatModel } from "../conversation/model.ts";
 import { callPage } from "../conversation/render.ts";

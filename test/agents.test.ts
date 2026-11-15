@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The session's subagents, from a recorded turn where Claude ran one: the Agents tab lists it (its
 // kind, its task, where it stands), its link's badge counts it; a press shows its steps in the code
 // column (what it was told, its tool calls, what it handed back), Esc goes back to the file; the
@@ -11,10 +11,10 @@ import { Conversation } from "../src/conversation/conversation.ts";
 import { itemLines, RenderContext } from "../src/conversation/render.ts";
 import { JsPanel } from "../src/runtime/views.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 interface Frame {
   dir?: unknown;

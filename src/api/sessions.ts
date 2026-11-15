@@ -1,9 +1,9 @@
 // The plugin API's `sessions`, `store` and `titles` calls, answered for the runtime (runtime.ts
 // dispatches by namespace): the folder's sessions with the agent, widecode's records of them, and
 // the titles Claude writes for Claude Code's.
-import { PreludePart } from "@light/plugins/prelude.ts";
+import { PreludePart } from "@lightstart/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
-import { HostAnswer } from "@light/plugins/engine.ts";
+import { HostAnswer } from "@lightstart/plugins/engine.ts";
 import { Limits } from "../conversation/session-store.ts";
 import type { ListedSession } from "./values.ts";
 import { SkillRunRow } from "../services/sessions.ts";

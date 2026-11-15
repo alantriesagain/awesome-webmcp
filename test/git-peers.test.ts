@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The Git tab with a peer: a paired machine (in the registry) whose remote is here and fetched. Its
 // section lists it with the branch against ours (↓1: a commit of theirs we lack), the badge and the
 // info row say so, Enter on the branch shows their log, and b cycles the compare base past the two
@@ -12,8 +12,8 @@ import { Conversation } from "../src/conversation/conversation.ts";
 import { JsPanel } from "../src/runtime/views.ts";
 import { DaemonPaths, Peer, Registry } from "../src/peers/index.ts";
 import { KeyEvent, TRoot, mount, unmount } from "@lightstart/light/native/tui";
-import { openWorkspace } from "@light/workspace/workspace.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => {

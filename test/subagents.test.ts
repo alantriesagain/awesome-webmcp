@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // /subagents: which subagents the session runs, Claude Code's own, widecode's Task over the acp
 // plugin's targets, or both. The choice comes from state.json, else from
 // `replaceClaudeSubagents` and `plugins.claude.keepSubagents`; it reaches Claude Code's start as
@@ -10,12 +10,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
-import { NoStateFile, StateFile } from "@light/kernel/settings.ts";
-import { Workspace, openWorkspace } from "@light/workspace/workspace.ts";
+import { NoStateFile, StateFile } from "@lightstart/kernel/settings.ts";
+import { Workspace, openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { Widecode, composeWidecode } from "../src/compose.ts";
 import { Store } from "../src/services/store.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { until } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "@lightstart/test/headless.ts";
 
 const fake = join(process.cwd(), "test/fake-claude.mjs");
 const fakeAcp = join(process.cwd(), "test/fake-acp.mjs");

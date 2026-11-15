@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // A plugin's two parts talk: a `_widecode/plugin` message from the fake agent (test/fake-acp.mjs)
 // reaches the listener a user plugin registered with api.agentPart.on, only that plugin's, and
 // api.agentPart.send goes back to the agent as `_widecode/plugin` with the plugin's id.
@@ -6,12 +6,12 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { PluginSource } from "@light/plugins/sources.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { PluginSource } from "@lightstart/plugins/sources.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
-import { done, ok } from "@light/test/assert.ts";
-import { until } from "@light/test/headless.ts";
+import { done, ok } from "@lightstart/test/assert.ts";
+import { until } from "@lightstart/test/headless.ts";
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-agent-part-talk-"));

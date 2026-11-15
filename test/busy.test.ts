@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The chat's line saying what Claude is doing, from recorded sessions: none while Claude is idle; a
 // message sent while it is idle shows as sent at once (not queued), with "Sending…" under it and a
 // clock that runs; the running tool while one runs, with its own clock and the turn's, a message
@@ -9,10 +9,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { contentText, rec, str } from "./support/claude-records.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 interface Frame {
   dir?: unknown;

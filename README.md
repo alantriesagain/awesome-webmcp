@@ -4,9 +4,9 @@ widecode, a native app on [`light`](https://github.com/alantriesagain/light) com
 into a static binary with **no JavaScript engine** (no Node, Bun or Deno at
 runtime). The repository root is the app, in a pnpm workspace that links light: `light` is the
 checkout beside this one (`../light` on `main`, consumed as `@lightstart/light`), and light's
-packages for native apps (`@light/<name>`, light's `packages/README.md`) are its other members;
-`light-native` (`@light/cli`) builds, runs and gates it. `AGENTS.md` has the rules for
-working here, light's `packages/native/cli/README.md` the commands.
+packages for native apps (`@lightstart/<name>`, light's `packages/README.md`) are its other members;
+`light-native` (`@lightstart/native`) builds, runs and gates it. `AGENTS.md` has the rules for
+working here, light's `packages/native/README.md` the commands.
 
 widecode is a Claude Code frontend for wide terminals (chat, tools, files and code side by side over
 one folder, a native core and JavaScript plugins in an embedded QuickJS). Claude is reached through the user's installed Claude Code
@@ -314,7 +314,7 @@ The Peers tab (beside Git) lists this machine with its shares (◆ marks this fo
 
 | Directory | What it is |
 |---|---|
-| `light/packages/native/*`, `light/packages/tui/*` | light's packages: `@light/cli` (`light-native`, the tooling: `prepare`, `build`, `run`, `selftest`, `test`, `coverage`, `typecheck`, `check`, `probes`, `install`, `desktop`), and `lib`, `highlight`, `plugins`, `workspace`, `test`, `kernel`, `ui`, `markdown`: what the core's modules share; the tokenizers; the embedded JavaScript; a folder's files and git; the tests' helpers; the plugin kernel; the palette and the windowed list; Markdown as lines (light's `packages/README.md`) |
+| `light/packages/native/*`, `light/packages/tui/*` | light's packages: `@lightstart/native` (`light-native`, the tooling: `prepare`, `build`, `run`, `selftest`, `test`, `coverage`, `typecheck`, `check`, `probes`, `install`, `desktop`), and `lib`, `highlight`, `plugins`, `workspace`, `test`, `kernel`, `ui`, `markdown`: what the core's modules share; the tokenizers; the embedded JavaScript; a folder's files and git; the tests' helpers; the plugin kernel; the palette and the windowed list; Markdown as lines (light's `packages/README.md`) |
 | `src/` | the app (`main.ts`, `compose.ts`, `controllers/`, `views/`, `services/`, `runtime/` the plugin runtime, `api/` the plugin API's answers) and its parts, each with its README: `agent` (the `claude -p` sidecar and the MCP server), `conversation` (the conversation with an agent), `harness` (widecode's own agent, `widecode --harness`), `peers` (the LAN git bridge), `screen` (the screen plugins contribute to), `code` (the code column), `chat` (the chat views) |
 | `plugins/`, `widecode.d.ts`, `test/`, `box/` | the built-in plugins and their API (`PLUGINS.md`): `plugins/<id>/index.ts` (the built-in plugins: chat, code, tools, agents, files, sessions, git, changes, status, models, languages, and the agents' claude, acp and pi), `widecode.d.ts` (the plugin API's types), `test/` (the tests, fixtures, fakes and goldens; the harness's are `harness-*.test.ts`), `box/` (the sandbox subagents run in) |
 

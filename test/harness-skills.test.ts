@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { frontmatter, scanSkills, skillsJson, skillsSection, skillText } from "../src/harness/prompt/skills.ts";
 import { Abort } from "../src/harness/loop/abort.ts";
 import { ToolContext, ToolSet, builtInTools } from "../src/harness/tools/tool.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const root = mkdtempSync(join(tmpdir(), "harness-skills-"));
 const folder = join(root, "project");

@@ -1,9 +1,9 @@
 // The menu bar's entries: they keep the order plugins gave them, move the signal the shell reads,
 // and go when their plugin does.
-import { Kernel } from "@light/kernel/kernel.ts";
+import { Kernel } from "@lightstart/kernel/kernel.ts";
 import { MenuEntry } from "../src/screen/contributions.ts";
 import { ScreenController } from "../src/screen/screen.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const screen = new ScreenController(new Kernel(), "chat");
 const add = (owner: string, menu: string, label: string, action: string, order: number): void => {

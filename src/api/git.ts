@@ -1,9 +1,9 @@
 // The plugin API's `git` calls, answered for the runtime (runtime.ts dispatches by namespace): git
 // read as promises (branches, the log, a commit's files, the bases), each settled for the plugin.
-import { PreludePart } from "@light/plugins/prelude.ts";
+import { PreludePart } from "@lightstart/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
-import { AheadBehind, Branch, Commit, CommitFile, LOG_MAX, RemoteBranch, readAheadBehind, readBranches, readCommitAt, readCommitFiles, readDefaultBranch, readHeadCommit, readLog, readMergeBase, readRemoteBranches, readRootCommit } from "@light/workspace/git-log.ts";
-import { HostAnswer } from "@light/plugins/engine.ts";
+import { AheadBehind, Branch, Commit, CommitFile, LOG_MAX, RemoteBranch, readAheadBehind, readBranches, readCommitAt, readCommitFiles, readDefaultBranch, readHeadCommit, readLog, readMergeBase, readRemoteBranches, readRootCommit } from "@lightstart/workspace/git-log.ts";
+import { HostAnswer } from "@lightstart/plugins/engine.ts";
 import { str, num, json, refuse, commitOf, commitText, branchText, fileText, listText, objectText } from "./values.ts";
 
 /** Plugin call `name` with its arguments `a`, answered; null for a call of another namespace. */

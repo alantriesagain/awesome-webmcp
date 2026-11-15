@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { JoinAnswer, JoinRequest, PAIR_CODE_LIFE_MS, PairOffer, Registry, acceptJoin, newIdentity, newPairCode, newToken, proofHolds, proofOf, recordHost } from "../src/peers/index.ts";
-import { done, eq, eqn, ok } from "@light/test/assert.ts";
+import { done, eq, eqn, ok } from "@lightstart/test/assert.ts";
 
 const root = mkdtempSync(join(tmpdir(), "widecode-peers-pair-"));
 const host = newIdentity("desk");

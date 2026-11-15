@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The columns' widths: config.json's "columns" (cells, or a percentage of the terminal; the files
 // column named "files"; the code column takes the rest, so a width for it is refused, as is
 // anything else), the others giving way when the code column would get under 20 cells; the pointer
@@ -9,11 +9,11 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { ColumnWidths, settingOf } from "../src/views/column-widths.ts";
 import { createWidecode } from "../src/compose.ts";
 import { DEFAULT_STYLE, MouseEvent, TBox, TElement, TRoot, find, frames, hitTest, layout, mount, unmount } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const ids = ["chat", "tools", "side", "code"];
 const own = [80, 32, 24, 0];

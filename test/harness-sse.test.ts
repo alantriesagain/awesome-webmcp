@@ -1,7 +1,7 @@
 // Server-sent events from text in any pieces: an event's name and data, data over several lines
 // joined, a comment and an id skipped, CRLF taken, the last event flushed at the end.
 import { SseEvent, SseSplitter } from "../src/harness/model/sse.ts";
-import { done, eq } from "@light/test/assert.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 
 const s = new SseSplitter();
 const show = (events: SseEvent[]): string => events.map((e) => e.event + "=" + e.data.replace(/\n/g, "\\n")).join(" | ");

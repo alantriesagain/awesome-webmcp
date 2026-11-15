@@ -2,10 +2,10 @@
 // namespace), for the harness plugin's tools: the plugins as the runtime holds them, a file
 // reloaded, a source checked in a context of its own with nothing registered, the plugin guide and
 // the API's types the binary carries (js/docs.ts, generated), and the project's harness folder.
-import { PreludePart } from "@light/plugins/prelude.ts";
+import { PreludePart } from "@lightstart/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
 import { PLUGIN_GUIDE, PLUGIN_TYPES } from "../runtime/docs.ts";
-import { HostAnswer, HostHandler, JsEngine, OK } from "@light/plugins/engine.ts";
+import { HostAnswer, HostHandler, JsEngine, OK } from "@lightstart/plugins/engine.ts";
 import { mergeColumns, mergePlugins } from "../services/harness.ts";
 import { str, strs, json, answer, answerText, objectText, refuse, listText } from "./values.ts";
 

@@ -16,7 +16,7 @@ import { CANCELLED, END_TURN, FAILED, MAX_TOKENS, Message, Part, TEXT, THINKING,
 import { McpLink } from "../tools/mcp.ts";
 import { WebSettings } from "../tools/web.ts";
 import { DenyRule, deniedBy } from "../tools/permissions.ts";
-import { parseJson, recordOf } from "@light/lib/json.ts";
+import { parseJson, recordOf } from "@lightstart/lib/json.ts";
 import { Tool, ToolContext, ToolOutcome, ToolSet } from "../tools/tool.ts";
 import { turnNote } from "../prompt/system.ts";
 import { ExtSession } from "../ext/extensions.ts";

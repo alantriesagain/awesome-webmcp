@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The file shown, kept with the session: a session keeps the work tree's file in the code column
 // in its record; resuming it later opens that file again, and a file gone since leaves the column
 // as it is. A new session (no id yet) keeps nothing. The agent a session belongs to is kept in its
@@ -10,9 +10,9 @@ import { Agent } from "../src/conversation/agent.ts";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { SessionMeta } from "../src/conversation/session-store.ts";
 import { Store } from "../src/services/store.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
-import { done, eq } from "@light/test/assert.ts";
+import { done, eq } from "@lightstart/test/assert.ts";
 
 class OtherAgent extends Agent {
   override id(): string {

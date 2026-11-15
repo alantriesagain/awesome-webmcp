@@ -2,7 +2,7 @@
 // process. Its log is a file of its own under the store's logs; SIGTERM and a state file that went
 // away (a `/peers stop`, or a daemon that replaced this one) end it; the servers keep it alive.
 import { join } from "node:path";
-import { log, nameLog, openLogIn } from "@light/lib/log.ts";
+import { log, nameLog, openLogIn } from "@lightstart/lib/log.ts";
 import { DEFAULT_PORT, Daemon, DaemonOptions, startDaemon } from "./daemon.ts";
 
 const argValue = (args: string[], name: string): string | null => {

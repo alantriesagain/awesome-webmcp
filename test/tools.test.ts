@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The Tools tab of the tools column, from a recorded turn where a message came in while a tool ran:
 // the calls under the message each answers, the one sent meanwhile between them; a running call
 // with a spinner and its clock, a finished one with ● and its time; the count and the link's badge.
@@ -11,12 +11,12 @@ import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { contentText, projectDir, rec, str } from "./support/claude-records.ts";
 import { callMs, callState, findCall } from "../src/conversation/calls.ts";
-import { span } from "@light/ui/duration.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { span } from "@lightstart/tui/duration.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 interface Frame {
   dir?: unknown;

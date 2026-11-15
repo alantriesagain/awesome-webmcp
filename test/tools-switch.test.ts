@@ -1,10 +1,10 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The tools-switch plugin over the harness: /tools off Bash leaves the next request without Bash,
 // /tools lists every tool with its state, /tools reset turns them all on, the choice is kept in a
 // custom entry that a fresh agent loading the session restores, and an unknown name is answered
 // with a notification saying so.
 import { readFileSync } from "node:fs";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { SessionStore } from "../src/harness/session/store.ts";
 import { AgentRig, until } from "./support/agent-rig.ts";
 

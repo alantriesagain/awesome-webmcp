@@ -4,7 +4,7 @@
 // and run two at a time; each session is asked once (`/title` asks again). A failure leaves the
 // session untitled.
 import { homedir } from "node:os";
-import { ProcessRun, spawnCapped, SpawnOptions } from "@light/lib/process.ts";
+import { ProcessRun, spawnCapped, SpawnOptions } from "@lightstart/lib/process.ts";
 import { claudeExecutable } from "./claude.ts";
 /** `text` cut to `cells` characters (a title's text is short and single-line). */
 const clipText = (text: string, cells: number): string => (text.length <= cells ? text : text.slice(0, Math.max(0, cells - 1)) + "…");

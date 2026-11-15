@@ -18,7 +18,7 @@ import { FakeClient } from "../src/harness/model/fake.ts";
 import { Usage } from "../src/harness/model/message.ts";
 import { HarnessPaths } from "../src/harness/paths.ts";
 import { ToolOutcome, ToolSet, builtInTools } from "../src/harness/tools/tool.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const FIXTURE = [
   '{"match":"delegate","text":"Delegating.","tools":[{"name":"Task","input":{"description":"Find the port","prompt":"look for the port in a.txt","subagent_type":"general-purpose"}}]}',

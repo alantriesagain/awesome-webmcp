@@ -8,7 +8,7 @@
 // to 60 characters, and its `argument-hint` is the hint a client shows beside the command.
 import { readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { readTextOr } from "@light/lib/fs.ts";
+import { readTextOr } from "@lightstart/lib/fs.ts";
 import { frontmatter, piAgentDir, pluginFolders } from "./skills.ts";
 
 /** How much of a body's first line the description takes when the frontmatter gives none. */

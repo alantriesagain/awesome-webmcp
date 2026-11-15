@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The status tables (the status JS plugin) through the app, on a recorded session: the default
 // table under the chat (the session: no branch, no calls; columns as wide as their widest cell so
 // the rules line up, the meters stacked, each row's last cell growing and clipped with an ellipsis
@@ -16,10 +16,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { JsBand } from "../src/runtime/views.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { createWidecode, Widecode } from "../src/compose.ts";
 import { Line, Run } from "@lightstart/light/native/tui/lines.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => {

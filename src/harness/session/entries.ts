@@ -5,7 +5,7 @@
 // `firstKeptEntryId`), `custom` (an extension's state, outside the context). A message may be a
 // `custom_message` when `customType` is set. One flat class, told apart by `kind`; a line is
 // parsed as it is applied.
-import { listOf, num, parseJson, recordOf, str } from "@light/lib/json.ts";
+import { listOf, num, parseJson, recordOf, str } from "@lightstart/lib/json.ts";
 import { Message, Part, partJson, partOf } from "../model/message.ts";
 
 export const SESSION = "session";

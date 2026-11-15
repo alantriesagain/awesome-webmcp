@@ -10,30 +10,30 @@
 // previous plugins running), then the old instances are retired, their functions freed, and the
 // new ones started; the agent and every other plugin go on. `reload` (/reload) is the full one: it
 // stops every JS plugin, drops what they added, and evaluates the sources again in a fresh context.
-import { trail } from "@light/lib/log.ts";
-import { errorMessage } from "@light/lib/json.ts";
+import { trail } from "@lightstart/lib/log.ts";
+import { errorMessage } from "@lightstart/lib/json.ts";
 import { existsSync, readFileSync, statSync, watch } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { Host } from "../controllers/host.ts";
 import { Agent } from "../conversation/agent.ts";
-import { Plugin } from "@light/kernel/plugin.ts";
+import { Plugin } from "@lightstart/kernel/plugin.ts";
 import { SegmentContext } from "../screen/contributions.ts";
 import { removeLanguages } from "@lightstart/highlight/registry.ts";
 import { ChatWidget } from "../views/chat-widget.ts";
 import { CodeWidget } from "../views/code-widget.ts";
 import { ToolsWidget } from "../views/tools-widget.ts";
-import { Bridge, FAILED, HostAnswer, JsEngine, JsResult, OK, OVER_BUDGET } from "@light/plugins/engine.ts";
+import { Bridge, FAILED, HostAnswer, JsEngine, JsResult, OK, OVER_BUDGET } from "@lightstart/plugins/engine.ts";
 import { JsAgent } from "./agent.ts";
-import { PluginProcess } from "@light/plugins/process.ts";
-import { PluginSource, sourcesIn } from "@light/plugins/sources.ts";
+import { PluginProcess } from "@lightstart/plugins/process.ts";
+import { PluginSource, sourcesIn } from "@lightstart/plugins/sources.ts";
 import { PRELUDE } from "./prelude.ts";
 import { PluginTable } from "./registry.ts";
 import { ProcessTable } from "./processes.ts";
 import { HostRouter } from "./router.ts";
 import { ViewTable } from "./view-registry.ts";
 import { McpCall, McpServer } from "../agent/mcp.ts";
-import { ProcessRun, spawnCapped, SpawnOptions } from "@light/lib/process.ts";
-import { Closer, Latest } from "@light/lib/timing.ts";
+import { ProcessRun, spawnCapped, SpawnOptions } from "@lightstart/lib/process.ts";
+import { Closer, Latest } from "@lightstart/lib/timing.ts";
 import { json, answer, objectText, refuse } from "../api/values.ts";
 
 /** How long a folder's events gather before the plugins reload. */

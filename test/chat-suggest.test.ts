@@ -2,7 +2,7 @@
 // starts with the query, then a path, then one holding it, then holding its letters in order),
 // without scoring the whole list twice.
 import { atToken, matchPaths } from "../src/chat/suggest.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const tok = atToken("look at @sr", 11);
 ok("the @token at the caret", tok !== null && tok.start === 8 && tok.query === "sr");

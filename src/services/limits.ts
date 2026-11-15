@@ -3,8 +3,8 @@
 // shown for one that reports none. `Limits` and its windows come from the conversation package.
 import { Limits } from "../conversation/session-store.ts";
 import { join } from "node:path";
-import { readTextOr, writeAtomic } from "@light/lib/fs.ts";
-import { isRecord, num, text } from "@light/lib/json.ts";
+import { readTextOr, writeAtomic } from "@lightstart/lib/fs.ts";
+import { isRecord, num, text } from "@lightstart/lib/json.ts";
 
 interface WindowFields {
   usedPercent?: unknown;

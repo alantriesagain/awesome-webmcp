@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The extension UI of an agent over ACP (plugins/acp/index.ts), `_widecode/ui` as widecode and the fake
 // (test/fake-acp.mjs) agree it: the capability in initialize; a select, a confirm, an input and an
 // editor in the request panel, the answers the agent hears, a dialog withdrawn by Esc and one that
@@ -12,14 +12,14 @@ import { request, type IncomingMessage } from "node:http";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
 import { TOOL, Turn } from "../src/conversation/model.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { SegmentContext } from "../src/screen/contributions.ts";
 import { composeWidecode } from "../src/compose.ts";
 import { JsBand } from "../src/runtime/views.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { until } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "@lightstart/test/headless.ts";
 
 const send = (url: string, token: string, body: string): Promise<string> =>
   new Promise((resolve) => {

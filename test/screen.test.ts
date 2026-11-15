@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The frontend's screen without a terminal: the app on a temp repository, painted headlessly at
 // 200x24. The columns with their titles, the tree with git marks, a file opened by key and
 // by a press on its row, its changes in place, n/p between changes, the changed-only switch,
@@ -10,11 +10,11 @@ import { join } from "node:path";
 import { createWidecode } from "../src/compose.ts";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { KeyEvent, MouseEvent, hitTest, insertText } from "@lightstart/light/native/tui";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { projectDir } from "./support/claude-records.ts";
 import { Store } from "../src/services/store.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { Headless } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { Headless } from "@lightstart/test/headless.ts";
 
 const W = 200;
 const H = 25;

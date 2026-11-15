@@ -1,7 +1,7 @@
 // The LS tool: a folder's entries by name, folders marked with a slash, 500 at most.
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { str } from "@light/lib/json.ts";
+import { str } from "@lightstart/lib/json.ts";
 import { resolvePath } from "./read.ts";
 import { ToolContext, ToolOutcome } from "./tool.ts";
 

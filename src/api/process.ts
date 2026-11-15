@@ -1,8 +1,8 @@
 // The plugin API's `process` calls, answered for the runtime (runtime.ts dispatches by namespace):
 // a command run to its end, and a process kept running for its plugin.
-import { PreludePart } from "@light/plugins/prelude.ts";
+import { PreludePart } from "@lightstart/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
-import { HostAnswer } from "@light/plugins/engine.ts";
+import { HostAnswer } from "@lightstart/plugins/engine.ts";
 import { str, num, strs, answer } from "./values.ts";
 
 /** Plugin call `name` with its arguments `a`, answered; null for a call of another namespace. */

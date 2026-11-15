@@ -5,8 +5,8 @@
 import { Host } from "../controllers/host.ts";
 import { Panel } from "../screen/contributions.ts";
 import { type CustomEvent, type MouseEvent, View, html } from "@lightstart/light/native/tui";
-import { LinePress } from "@light/ui/line-view.ts";
-import { colorOr } from "@light/ui/palette.ts";
+import { LinePress } from "@lightstart/tui/line-view.ts";
+import { colorOr } from "@lightstart/tui/palette.ts";
 
 export class TabColumn extends View {
   readonly host: Host;

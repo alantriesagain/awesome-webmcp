@@ -1,6 +1,6 @@
 // A child process the tools run: its output streamed as it comes and kept within a cap (the
 // start and the end of it, what was between said as omitted), a timeout that ends it, a kill
-// handle the abort uses (`spawnCapped` of @light/lib gathers to the end and has none).
+// handle the abort uses (`spawnCapped` of @lightstart/lib gathers to the end and has none).
 import { spawn, type ChildProcess } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 import { Abort, Stopper } from "../loop/abort.ts";

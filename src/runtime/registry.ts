@@ -3,7 +3,7 @@
 // a late callback is checked against. One table so a plugin added, replaced or retired is added,
 // replaced or retired everywhere.
 import type { JsPlugin } from "./runtime.ts";
-import { PluginSource } from "@light/plugins/sources.ts";
+import { PluginSource } from "@lightstart/plugins/sources.ts";
 
 export class PluginTable {
   private defsList: JsPlugin[] = [];

@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { contextFiles, foldersDown } from "../src/harness/prompt/context-files.ts";
 import { SystemFacts, systemBlocks, turnNote } from "../src/harness/prompt/system.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const root = mkdtempSync(join(tmpdir(), "harness-prompt-"));
 const repo = join(root, "repo");

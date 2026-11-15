@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The first run and a folder's first access (shell/onboarding.ts), as questions in the request panel
 // one after the other: the welcome in the chat (also on /welcome), the agent, the model, the folder's
 // trust (what it carries: the agent's files, each harness plugin file's ids or why it does not load,
@@ -12,12 +12,12 @@ import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { checkSource } from "../src/api/plugins.ts";
 import { Store } from "../src/services/store.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { AgentChoice, HarnessFile, Onboarding, folderCarries, runOnboarding, welcome, welcomeText } from "../src/views/onboarding.ts";
 import { createWidecode, Widecode } from "../src/compose.ts";
-import { Run } from "@light/ui/line-view.ts";
+import { Run } from "@lightstart/tui/line-view.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const chatOf = (w: Widecode): string => {
   const s = w.chat.pane.source;

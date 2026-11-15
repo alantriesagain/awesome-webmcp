@@ -1,7 +1,7 @@
 // The `session/update` notifications the daemon sends, as JSON text: a message's or a thought's
 // chunk (one message id per block, so the client joins its chunks), the usage after a request, the
 // commands the session answers, the config options and the mode as they change.
-import { listText, objectText } from "@light/lib/json.ts";
+import { listText, objectText } from "@lightstart/lib/json.ts";
 
 const update = (sessionId: string, fields: string[], values: string[]): string => objectText(["sessionId", "update"], [JSON.stringify(sessionId), objectText(fields, values)]);
 

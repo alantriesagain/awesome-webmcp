@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The status bar's data from recorded CLI traffic, read by Claude Code's plugin: context (the last
 // main request's input over the window the result reports), prompt cache (requests, misses, hit
 // ratio, TTL), rate limits, tool counts and calls, thinking, lines changed; the same counts from the
@@ -9,9 +9,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { modelName, StatusInfo } from "../src/conversation/status-info.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { projectDir } from "./support/claude-records.ts";
 
 const fixtures = join(process.cwd(), "test", "fixtures");

@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // widecode's JS plugins in the embedded engine (natively QuickJS; under node, node:vm through
 // wcjs-node.mjs, the same calls): a plugin's command, key, hook, message, settings and kept state;
 // the drawing helpers; one replacing a built-in of its id, and a later one replacing an earlier; a
@@ -13,13 +13,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { stringWidth } from "@lightstart/light/native/tui/width.ts";
-import { PluginSource, sourcesIn } from "@light/plugins/sources.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
+import { PluginSource, sourcesIn } from "@lightstart/plugins/sources.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
 import { Store } from "../src/services/store.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode, Widecode } from "../src/compose.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const greeter = `widecode.plugin({
   id: "greeter",

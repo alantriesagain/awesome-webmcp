@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { Auth } from "../src/harness/auth.ts";
 import { HarnessConfig } from "../src/harness/config.ts";
 import { ModelInfo, ModelRegistry, Provider, budgetFor, costUsd } from "../src/harness/model/registry.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const r = ModelRegistry.builtIn();
 eq("the providers", r.providers.map((p) => p.id + ":" + p.baseUrl).join(" "), "anthropic:https://api.anthropic.com deepseek:https://api.deepseek.com/anthropic opencode:https://opencode.ai/inference/openai/v1");

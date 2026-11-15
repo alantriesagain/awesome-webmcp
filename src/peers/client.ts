@@ -2,7 +2,7 @@
 // request goes to the control API; `ensure` starts the daemon detached when none answers (the
 // sessions plugin's recipe: setsid where there is one, a subshell elsewhere, every stream closed),
 // a bounded number of times, and only when given the program to start.
-import { spawnCapped, SpawnOptions } from "@light/lib/process.ts";
+import { spawnCapped, SpawnOptions } from "@lightstart/lib/process.ts";
 import { DaemonPaths, DaemonState, daemonAnswers, readDaemonState } from "./daemon.ts";
 
 export class ClientAnswer {

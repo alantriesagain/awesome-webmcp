@@ -4,7 +4,7 @@
 // and echoed as it came. Lines in and out go to a trace file when `--log` names one (the tests
 // read it). Nothing but protocol lines goes to stdout.
 import { appendFileSync } from "node:fs";
-import { parseJson, recordOf, str } from "@light/lib/json.ts";
+import { parseJson, recordOf, str } from "@lightstart/lib/json.ts";
 
 /** A request (`idText` its id as JSON text) or a notification (`idText` "") from the client. */
 export class Incoming {

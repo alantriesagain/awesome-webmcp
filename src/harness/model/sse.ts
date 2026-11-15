@@ -1,6 +1,6 @@
 // Server-sent events from a stream's text: an event ends at a blank line and carries its `event:`
 // name and its `data:` lines joined with newlines; `id:` lines and `:` comments are skipped. The
-// line splitter of @light/lib drops blank lines, which end events here, so this keeps its own.
+// line splitter of @lightstart/lib drops blank lines, which end events here, so this keeps its own.
 
 export class SseEvent {
   readonly event: string;

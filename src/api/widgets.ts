@@ -1,10 +1,10 @@
 // The plugin API's `code`, `chat` and `widgets` calls, answered for the runtime (runtime.ts
 // dispatches by namespace): the chat and code columns' roles, and the core's widgets a plugin
 // mounts as columns and tabs.
-import { PreludePart } from "@light/plugins/prelude.ts";
+import { PreludePart } from "@lightstart/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
-import { OK } from "@light/plugins/engine.ts";
-import { HostAnswer } from "@light/plugins/engine.ts";
+import { OK } from "@lightstart/plugins/engine.ts";
+import { HostAnswer } from "@lightstart/plugins/engine.ts";
 import { str, num, strs, json, answer, answerText, objectText, refuse, commitOf, cells } from "./values.ts";
 import { JsRows, MarkdownRows } from "../runtime/views.ts";
 import { insertText } from "@lightstart/light/native/tui";

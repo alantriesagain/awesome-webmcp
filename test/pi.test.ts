@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // An agent over pi's RPC mode (plugins/pi/index.ts), here the fake (test/fake-pi.mjs) from the plugin's
 // section: its session, its model and thinking levels as the model and effort, its commands as the
 // session's slash commands; a reply and its thinking; a bash call with its output; an edit with its
@@ -11,15 +11,15 @@ import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
 import { Item, NOTICE, TEXT, THINKING, TOOL, Turn } from "../src/conversation/model.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { SegmentContext } from "../src/screen/contributions.ts";
 import { composeWidecode } from "../src/compose.ts";
 import { JsBand } from "../src/runtime/views.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { until } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "@lightstart/test/headless.ts";
 
 const kinds = (items: Item[]): string => items.map((i: Item) => (i.kind === THINKING ? "thinking" : i.kind === TEXT ? "text" : i.kind === TOOL ? "tool" : i.kind === NOTICE ? "notice:" + i.text : "other")).join(",");
 

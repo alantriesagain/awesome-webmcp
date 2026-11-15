@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The Git tab's reads on a temp repository with a root commit, a branch that tracks another, a
 // rename, a merge and a topic branch: branches (current first, ahead and behind), the log (limited
 // to a folder below the root too), a commit's files (a root commit, a merge against its first
@@ -14,13 +14,13 @@ import { join } from "node:path";
 import { createWidecode } from "../src/compose.ts";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { ADDED, CodeFile, loadCommitFile, REMOVED } from "../src/code/diff.ts";
-import { openRepo } from "@light/workspace/git.ts";
+import { openRepo } from "@lightstart/workspace/git.ts";
 import { JsPanel } from "../src/runtime/views.ts";
-import { Commit, parseBranches, parseLog, readBranches, readCommitAt, readCommitFiles, readDefaultBranch, readLog, readMergeBase } from "@light/workspace/git-log.ts";
-import { parseNameStatus } from "@light/workspace/git-parse.ts";
+import { Commit, parseBranches, parseLog, readBranches, readCommitAt, readCommitFiles, readDefaultBranch, readLog, readMergeBase } from "@lightstart/workspace/git-log.ts";
+import { parseNameStatus } from "@lightstart/workspace/git-parse.ts";
 import { KeyEvent, TRoot, mount, unmount } from "@lightstart/light/native/tui";
-import { openWorkspace } from "@light/workspace/workspace.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => {

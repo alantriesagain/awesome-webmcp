@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // Host actions (the box plugin): commands a project configures for agents to ask the host to run.
 // HostAction is offered only while one is configured, its call opens the question under the call
 // with the command and the agent's reason, "Run it" runs it in the session's folder and answers its
@@ -14,11 +14,11 @@ import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { TOOL } from "../src/conversation/model.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { until } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "@lightstart/test/headless.ts";
 
 const send = (url: string, token: string, body: string): Promise<string> =>
   new Promise((resolve) => {

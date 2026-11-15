@@ -3,8 +3,8 @@
 // change (the diff block for the chat, the unified patch for the code column).
 import { chmodSync, existsSync, mkdirSync, statSync, type Stats } from "node:fs";
 import { dirname } from "node:path";
-import { writeAtomic } from "@light/lib/fs.ts";
-import { objectText } from "@light/lib/json.ts";
+import { writeAtomic } from "@lightstart/lib/fs.ts";
+import { objectText } from "@lightstart/lib/json.ts";
 import { counts, hunksOf, unifiedPatch } from "./patch.ts";
 import { readCapped } from "./read.ts";
 import { ToolOutcome } from "./tool.ts";

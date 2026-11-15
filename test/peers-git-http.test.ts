@@ -8,8 +8,8 @@ import { gzipSync } from "node:zlib";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Daemon, DaemonOptions, DaemonPaths, Peer, Registry, isPrivateAddress, newIdentity, newToken, pktLine, plainAddress, urlHost } from "../src/peers/index.ts";
-import { SpawnOptions, spawnCapped } from "@light/lib/process.ts";
-import { done, eq, eqn, ok } from "@light/test/assert.ts";
+import { SpawnOptions, spawnCapped } from "@lightstart/lib/process.ts";
+import { done, eq, eqn, ok } from "@lightstart/test/assert.ts";
 
 const root = mkdtempSync(join(tmpdir(), "widecode-peers-git-"));
 const store = join(root, "store");

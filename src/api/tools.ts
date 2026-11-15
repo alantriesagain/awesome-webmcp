@@ -1,11 +1,11 @@
 // The plugin API's `tools` calls, answered for the runtime (runtime.ts dispatches by namespace):
 // widecode's own tools, which plugins add and agents call over widecode's MCP server
 // (src/agent/mcp.ts), and where that server listens, for an agent's plugin to offer it.
-import { PreludePart } from "@light/plugins/prelude.ts";
+import { PreludePart } from "@lightstart/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
-import { isRecord } from "@light/lib/json.ts";
+import { isRecord } from "@lightstart/lib/json.ts";
 import { McpTool } from "../agent/mcp.ts";
-import { HostAnswer } from "@light/plugins/engine.ts";
+import { HostAnswer } from "@lightstart/plugins/engine.ts";
 import { str, num, strs, json, answer, objectText, refuse } from "./values.ts";
 
 const NAME = /^[A-Za-z0-9_.-]{1,64}$/;

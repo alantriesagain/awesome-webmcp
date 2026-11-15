@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The composer's editing as actions in the "input" scope (src/chat's composer.ts), every
 // key through the shell: characters and a paste insert, a modifier on a character inserts nothing;
 // each editing key and the modifier variants light's editor took (Shift with an arrow, Ctrl+H,
@@ -10,11 +10,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { osc52 } from "@light/ui/clipboard.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { osc52 } from "@lightstart/tui/clipboard.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-editor-"));

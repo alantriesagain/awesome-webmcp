@@ -1,6 +1,6 @@
 // What every plugin is given: the kernel (commands, keys, settings); three controllers of light's
 // holding the app's state, the screen (src/screen: the columns, tabs, band and segments, the
-// active column, the message, the focus), the folder (@light/workspace/folder.ts: the files, the git status,
+// active column, the message, the focus), the folder (@lightstart/workspace/folder.ts: the files, the git status,
 // the compare base, the tree) and the session (controllers/session.ts: the conversation with the agent,
 // the agents, the trust, the store, the harness); the hooks announcing a change, reached here by
 // name; the role slots one plugin fills for the others (the code column, the chat, the tools); the
@@ -9,19 +9,19 @@
 import { ConversationHolder } from "../conversation/model-source.ts";
 import { ChatModel, Item } from "../conversation/model.ts";
 import { existsSync, statSync } from "node:fs";
-import { expandHome } from "@light/lib/paths.ts";
+import { expandHome } from "@lightstart/lib/paths.ts";
 import { resolve } from "node:path";
 import { Conversation } from "../conversation/conversation.ts";
 import { removeLanguages } from "@lightstart/highlight/registry.ts";
-import { Hook } from "@light/lib/hook.ts";
+import { Hook } from "@lightstart/lib/hook.ts";
 import { KeymapController } from "./keymaps.ts";
 import { Roles } from "./roles.ts";
-import { Kernel } from "@light/kernel/kernel.ts";
-import { FileChange } from "@light/workspace/changes.ts";
+import { Kernel } from "@lightstart/kernel/kernel.ts";
+import { FileChange } from "@lightstart/workspace/changes.ts";
 import { Harness } from "../services/harness.ts";
 import { Store } from "../services/store.ts";
-import { openWorkspace, Workspace } from "@light/workspace/workspace.ts";
-import { FolderController, FolderHooks } from "@light/workspace/folder.ts";
+import { openWorkspace, Workspace } from "@lightstart/workspace/workspace.ts";
+import { FolderController, FolderHooks } from "@lightstart/workspace/folder.ts";
 import { ScreenController } from "../screen/screen.ts";
 import { SessionController } from "./session.ts";
 

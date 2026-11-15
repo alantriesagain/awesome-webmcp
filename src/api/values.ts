@@ -1,8 +1,8 @@
 // What the runtime and its answers (src/api/*.ts) share: reading a call's arguments, writing answers as JSON text.
-import { Branch, Commit, CommitFile } from "@light/workspace/git-log.ts";
-import { FAILED, HostAnswer, OK } from "@light/plugins/engine.ts";
+import { Branch, Commit, CommitFile } from "@lightstart/workspace/git-log.ts";
+import { FAILED, HostAnswer, OK } from "@lightstart/plugins/engine.ts";
 
-import { listOf, str, strs } from "@light/lib/json.ts";
+import { listOf, str, strs } from "@lightstart/lib/json.ts";
 export const num = (v: unknown): number => (typeof v === "number" ? v : -1);
 export { listOf as list, str, strs };
 /** `v` as a count of cells (a positive number, floored), else `fallback`. */
@@ -26,7 +26,7 @@ export const json = (v: unknown): string => {
 export const answer = (v: unknown): HostAnswer => new HostAnswer(OK, json(v));
 /** An answer already written as JSON text. */
 export const answerText = (text: string): HostAnswer => new HostAnswer(OK, text);
-import { listText, objectText } from "@light/lib/json.ts";
+import { listText, objectText } from "@lightstart/lib/json.ts";
 export { listText, objectText };
 export const refuse = (message: string): HostAnswer => new HostAnswer(FAILED, message);
 /** A commit a plugin passed back ({ sha, short, subject, parents }); null when it is not one. */

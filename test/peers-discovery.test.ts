@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Advertiser, DaemonOptions, Seen, instanceName, parseAvahi, parseDnsSdZone, parseDscacheutil, parseTxt, startDaemon } from "../src/peers/index.ts";
-import { done, eq, eqn, ok } from "@light/test/assert.ts";
+import { done, eq, eqn, ok } from "@lightstart/test/assert.ts";
 
 const AVAHI = [
   "+;virbr0;IPv4;widecode-linux-test;_widecode._tcp;local",

@@ -1,7 +1,7 @@
 // The code column's role, as other plugins use it: a class with no-op methods the plugin playing
 // it overrides (an app holds one, replaced when that plugin goes).
 import { LineSource } from "@lightstart/light/native/tui/lines.ts";
-import { Commit } from "@light/workspace/git-log.ts";
+import { Commit } from "@lightstart/workspace/git-log.ts";
 import { CodeFile } from "./diff.ts";
 
 /** The code column, as other plugins use it. */

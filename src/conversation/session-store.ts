@@ -3,7 +3,7 @@
 // rate limits as it last reported them. The app's store holds them wherever it keeps its data; the
 // conversation reads and writes them through this class.
 
-import { num, recordOf, text } from "@light/lib/json.ts";
+import { num, recordOf, text } from "@lightstart/lib/json.ts";
 
 export class SessionMeta {
   id = "";

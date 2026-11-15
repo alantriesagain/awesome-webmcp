@@ -1,6 +1,6 @@
 // The long-running processes plugins started: one handle each, by plugin owner, so a plugin's
 // reload, its retirement or the app quitting ends exactly its own.
-import { PluginProcess } from "@light/plugins/process.ts";
+import { PluginProcess } from "@lightstart/plugins/process.ts";
 
 export class ProcessTable {
   private list: PluginProcess[] = [];

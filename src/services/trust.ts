@@ -1,7 +1,7 @@
 // The folders the user trusts: the agent works there and the folder's harness runs. The list is
 // `trusted.json` under the store, written whole when a folder is added.
 import { join } from "node:path";
-import { readTextOr, writeAtomic } from "@light/lib/fs.ts";
+import { readTextOr, writeAtomic } from "@lightstart/lib/fs.ts";
 
 export class TrustStore {
   readonly root: string;

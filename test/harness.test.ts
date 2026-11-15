@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The project's harness, `.widecode/` trusted as one: its config.json over the user's (a plugin
 // switched off, a section, the columns' widths), its plugins, its prompt.md appended to Claude
 // Code's system prompt after the fixed paragraph that says the agent runs inside widecode (with
@@ -12,16 +12,16 @@ import { request, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { PluginSource } from "@light/plugins/sources.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
+import { PluginSource } from "@lightstart/plugins/sources.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
 import { mergePlugins } from "../src/services/harness.ts";
 import { Store } from "../src/services/store.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode, Widecode } from "../src/compose.ts";
 import { Caret, Clip, DEFAULT_STYLE, Screen, TRoot, frames, layout, mount, paint, KeyEvent } from "@lightstart/light/native/tui";
-import { Run } from "@light/ui/line-view.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { until } from "@light/test/headless.ts";
+import { Run } from "@lightstart/tui/line-view.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "@lightstart/test/headless.ts";
 
 const fixtures = join(process.cwd(), "test", "fixtures");
 const fake = join(process.cwd(), "test", "fake-claude.mjs");

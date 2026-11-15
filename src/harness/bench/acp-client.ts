@@ -3,7 +3,7 @@
 // with its first option that allows (the benchmark measures what the agent does unattended), a
 // file read or write refused (the client offers no file system; the agent uses its own tools).
 import { spawn, type ChildProcess } from "node:child_process";
-import { listOf, recordOf, str } from "@light/lib/json.ts";
+import { listOf, recordOf, str } from "@lightstart/lib/json.ts";
 
 /** What a request answered: its result as JSON text, or the error's message. */
 export class RpcReply {

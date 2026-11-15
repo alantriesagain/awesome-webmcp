@@ -1,9 +1,9 @@
 // The Grep tool: a regular expression searched through the folder's files, ripgrep when a `rg`
 // binary is on PATH, else grep; file name, line number and the line, 200 matches at most.
 import { existsSync } from "node:fs";
-import { num, str } from "@light/lib/json.ts";
-import { SpawnOptions, spawnCapped } from "@light/lib/process.ts";
-import { SKIP_DIRS } from "@light/lib/paths.ts";
+import { num, str } from "@lightstart/lib/json.ts";
+import { SpawnOptions, spawnCapped } from "@lightstart/lib/process.ts";
+import { SKIP_DIRS } from "@lightstart/lib/paths.ts";
 import { resolvePath } from "./read.ts";
 import { ToolContext, ToolOutcome } from "./tool.ts";
 

@@ -6,8 +6,8 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openLog } from "@light/lib/log.ts";
-import { PluginSource } from "@light/plugins/sources.ts";
+import { openLog } from "@lightstart/lib/log.ts";
+import { PluginSource } from "@lightstart/plugins/sources.ts";
 import { AcpAgent } from "../../src/harness/acp/agent.ts";
 import { AcpServer, Incoming } from "../../src/harness/acp/server.ts";
 import { Auth } from "../../src/harness/auth.ts";

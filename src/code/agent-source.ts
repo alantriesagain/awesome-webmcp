@@ -1,12 +1,12 @@
 // A subagent's steps, for the code column: what it was told, then its items as the chat draws them
 // (conversation/render.ts), flat instead of nested, then what it handed back. Built again when the
 // conversation changes, so a running subagent's steps arrive as it takes them.
-import { palette } from "@light/ui/palette.ts";
+import { palette } from "@lightstart/tui/palette.ts";
 import { agentPrompt, agentStatus, findAgent } from "../conversation/agents.ts";
 import { ChatModel } from "../conversation/model.ts";
 import { itemLines, promptLines } from "../conversation/render.ts";
 import { Line, Run } from "@lightstart/light/native/tui/lines.ts";
-import { wrap } from "@light/ui/text.ts";
+import { wrap } from "@lightstart/tui/text.ts";
 import { ConversationHolder, ModelSource } from "../conversation/model-source.ts";
 
 /** What it handed back, at most this many lines. */

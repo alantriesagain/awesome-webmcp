@@ -4,7 +4,7 @@
 // widecode's names: its handlers and tool tables, the answer path for a callback that returns a
 // promise (the prelude tells the host the call's id and the settled value or error, and the host
 // keeps the turn going meanwhile), and its settings. Mirrors the app runtime's toolCall/toolDone shape.
-import { buildPrelude } from "@light/plugins/prelude.ts";
+import { buildPrelude } from "@lightstart/plugins/prelude.ts";
 
 /** The theme a plugin's top level sees: the fields the builder reads, and the names plugins use. */
 const HARNESS_THEME = '{"dim":"#666666","ok":"#5fd75f","bad":"#ff5f5f","warn":"#ffd75f","think":"#878787","link":"#5fafff","code":"#c0c0c0","prompt":"#ffffff","selected":"#303030","shown":"#202020","fresh":"#ffffff","band":"#101010","marks":{},"frames":["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"],"tick":80}';

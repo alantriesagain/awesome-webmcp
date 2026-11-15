@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // widecode's Task tool (the acp plugin): a Claude call with its tool-use id starts an ACP subagent
 // on a target's agent and model, its thought and words stream under the call, the call shows as a
 // subagent and the Agents tab follows it, and the MCP result is its last words. Cancelling the MCP
@@ -12,12 +12,12 @@ import { Conversation } from "../src/conversation/conversation.ts";
 import { AGENT, TEXT, THINKING, TOOL } from "../src/conversation/model.ts";
 import { agentsOf } from "../src/conversation/agents.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
-import { NoStateFile } from "@light/kernel/settings.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { composeWidecode } from "../src/compose.ts";
 import { Store } from "../src/services/store.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { until } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "@lightstart/test/headless.ts";
 
 const fake = join(process.cwd(), "test/fake-acp.mjs");
 const fakeClaude = join(process.cwd(), "test/fake-claude.mjs");

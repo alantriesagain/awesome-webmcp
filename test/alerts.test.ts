@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // Alerts when a request opens in the request panel: the terminal bell (the BEL the clipboard's
 // write carries in tests) and the notify-send command, recorded in a script of the test's; a
 // category left out of "on"; bell and notify each turned off; the plugin switched off; two
@@ -12,10 +12,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { TOOL } from "../src/conversation/model.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { createWidecode, Widecode } from "../src/compose.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { until } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "@lightstart/test/headless.ts";
 
 interface App {
   w: Widecode;

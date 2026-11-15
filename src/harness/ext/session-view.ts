@@ -1,7 +1,7 @@
 // A session's entries as pi's SessionManager shows them: the header, a message entry with its
 // AgentMessage (a custom one as `custom_message`), a model change, a compaction, the title as
 // `session_info`, a custom entry with its data, and anything else with its own fields.
-import { listOf, parseJson, recordOf } from "@light/lib/json.ts";
+import { listOf, parseJson, recordOf } from "@lightstart/lib/json.ts";
 import { COMPACTION, CUSTOM, Entry, MESSAGE, MODEL, SESSION, TITLE } from "../session/entries.ts";
 import { messageToAgent, messagesToAgent } from "./messages.ts";
 

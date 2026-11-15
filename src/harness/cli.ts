@@ -7,9 +7,9 @@
 // `--harness-forget <id>` (its file removed); and for the user, `--harness-models` (the models offered and which
 // providers have a key) and `--harness-auth <provider>` (a key read from stdin into auth.json).
 import { join } from "node:path";
-import { log, nameLog, openLogIn } from "@light/lib/log.ts";
-import { readTextOr } from "@light/lib/fs.ts";
-import { errorMessage, listOf, parseJson, recordOf, str } from "@light/lib/json.ts";
+import { log, nameLog, openLogIn } from "@lightstart/lib/log.ts";
+import { readTextOr } from "@lightstart/lib/fs.ts";
+import { errorMessage, listOf, parseJson, recordOf, str } from "@lightstart/lib/json.ts";
 import { AcpAgent } from "./acp/agent.ts";
 import { AcpServer, Incoming } from "./acp/server.ts";
 import { Auth } from "./auth.ts";
@@ -26,7 +26,7 @@ import { Abort } from "./loop/abort.ts";
 import { SessionStore, sessionsJson } from "./session/store.ts";
 import { ToolSet, builtInTools } from "./tools/tool.ts";
 import { ExtensionsRegistry } from "./ext/extensions.ts";
-import { PluginSource } from "@light/plugins/sources.ts";
+import { PluginSource } from "@lightstart/plugins/sources.ts";
 
 const argValue = (args: string[], name: string): string | null => {
   const at = args.indexOf(name);

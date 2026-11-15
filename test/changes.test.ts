@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The changes: `diff --numstat -z` parsed (a binary file, a rename, a tab in a name); on a temp
 // repository the changed files with their marks and line counts (modified, deleted, untracked,
 // binary), newest first, Claude's edits marked. In the app, the JS plugin's strip of the band: split
@@ -10,17 +10,17 @@ import { mkdirSync, mkdtempSync, rmSync, unlinkSync, utimesSync, writeFileSync }
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createWidecode } from "../src/compose.ts";
-import { buildChanges, FileChange, readNumstat, UntrackedCounter } from "@light/workspace/changes.ts";
-import { parseNumstat } from "@light/workspace/git-parse.ts";
+import { buildChanges, FileChange, readNumstat, UntrackedCounter } from "@lightstart/workspace/changes.ts";
+import { parseNumstat } from "@lightstart/workspace/git-parse.ts";
 import { JsBand } from "../src/runtime/views.ts";
 import { Conversation } from "../src/conversation/conversation.ts";
-import { openRepo, readStatus } from "@light/workspace/git.ts";
+import { openRepo, readStatus } from "@lightstart/workspace/git.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { Line } from "@lightstart/light/native/tui/lines.ts";
-import { marksOf } from "@light/workspace/tree.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { Headless } from "@light/test/headless.ts";
+import { marksOf } from "@lightstart/workspace/tree.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { Headless } from "@lightstart/test/headless.ts";
 
 const textOf = (l: Line): string => l.runs.map((r) => r.text).join("").replace(/\s+$/, "");
 const wait = (ms: number): Promise<void> =>

@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { Message, Part, TOOL_CALL, TOOL_RESULT, textPart } from "../src/harness/model/message.ts";
 import { Entry, MESSAGE, MODEL, TITLE } from "../src/harness/session/entries.ts";
 import { SessionStore, sessionsJson } from "../src/harness/session/store.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "harness-store-"));
 const store = new SessionStore(join(dir, "sessions"));

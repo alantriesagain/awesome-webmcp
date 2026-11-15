@@ -8,7 +8,7 @@ import { HostChat } from "../controllers/chat-host.ts";
 import { Column } from "../screen/contributions.ts";
 import { ChatTarget } from "../chat/roles.ts";
 import { Host } from "../controllers/host.ts";
-import { Binder } from "@light/kernel/actions.ts";
+import { Binder } from "@lightstart/kernel/actions.ts";
 import { type KeyEvent } from "@lightstart/light/native/tui";
 import { ChatPane } from "../chat/chat-pane.ts";
 

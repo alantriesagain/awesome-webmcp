@@ -1,7 +1,7 @@
 // The session's config options as the ACP client reads them: three selects keyed by category,
 // `model` (grouped by provider), `thought_level` (the effort) and `mode` (`build`, `plan`), each
 // with its current value; the same shape opencode gives.
-import { listText, objectText } from "@light/lib/json.ts";
+import { listText, objectText } from "@lightstart/lib/json.ts";
 
 export class Choice {
   readonly value: string;

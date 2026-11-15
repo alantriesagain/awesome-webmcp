@@ -3,8 +3,8 @@
 // order), a command's name or its argument's values (commands/Command.onComplete), and the strip
 // above the composer that lists them, the highlighted one taken with Tab (and Enter, for a
 // command's).
-import { palette } from "@light/ui/palette.ts";
-import { Suggestion } from "@light/kernel/commands.ts";
+import { palette } from "@lightstart/tui/palette.ts";
+import { Suggestion } from "@lightstart/kernel/commands.ts";
 import { View, graphemes, html, signal } from "@lightstart/light/native/tui";
 
 export class AtToken {

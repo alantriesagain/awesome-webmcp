@@ -5,10 +5,10 @@
 // screen's parts come or go. One of light's controllers, as the app's state is.
 import { type Signal, type TInput, signal } from "@lightstart/light/native/tui";
 import { Controller } from "@lightstart/light/controller/class.ts";
-import { Latest } from "@light/lib/timing.ts";
-import { Hook } from "@light/lib/hook.ts";
-import { Kernel } from "@light/kernel/kernel.ts";
-import { Clipboard } from "@light/ui/clipboard.ts";
+import { Latest } from "@lightstart/lib/timing.ts";
+import { Hook } from "@lightstart/lib/hook.ts";
+import { Kernel } from "@lightstart/kernel/kernel.ts";
+import { Clipboard } from "@lightstart/tui/clipboard.ts";
 import { BandPart, Column, MenuEntry, Panel, Segments } from "./contributions.ts";
 
 /** How long a message stays in the status bar before the key hints come back. */

@@ -5,10 +5,10 @@
 // or the box in the footer) a long line breaks at a space where it can and continues on the rows
 // below, under a blank gutter and at its own indentation; the view then counts rows, and changes,
 // the position and n/p map between rows and code lines.
-import { palette } from "@light/ui/palette.ts";
+import { palette } from "@lightstart/tui/palette.ts";
 import { ADDED, CodeFile, CodeLine, REMOVED } from "./diff.ts";
 import { languageForPath, TOKEN_COLORS, tokenStyle } from "@lightstart/highlight";
-import { Line, LinePress, LineSource, LineView, Run } from "@light/ui/line-view.ts";
+import { Line, LinePress, LineSource, LineView, Run } from "@lightstart/tui/line-view.ts";
 import { type CustomEvent, type MouseEvent, View, html, signal, sliceCells, stringWidth } from "@lightstart/light/native/tui";
 
 

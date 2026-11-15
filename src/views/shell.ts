@@ -11,16 +11,16 @@
 import { Host } from "../controllers/host.ts";
 import { BandPart, Column } from "../screen/contributions.ts";
 import { columnOrderOf } from "../screen/screen.ts";
-import { Action, Binder } from "@light/kernel/actions.ts";
-import { joinLabels } from "@light/kernel/keys.ts";
+import { Action, Binder } from "@lightstart/kernel/actions.ts";
+import { joinLabels } from "@lightstart/kernel/keys.ts";
 import { type CustomEvent, KeyEvent, type MouseEvent, TBox, TElement, TNode, View, html, signal, key, tabAt } from "@lightstart/light/native/tui";
-import { LineCopy } from "@light/ui/line-view.ts";
-import { Menu, MenuBar, MenuItem } from "@light/ui/menu-bar.ts";
+import { LineCopy } from "@lightstart/tui/line-view.ts";
+import { Menu, MenuBar, MenuItem } from "@lightstart/tui/menu-bar.ts";
 import { ColumnWidths } from "./column-widths.ts";
 import { TabColumn } from "./tab-column.ts";
 import "../screen/column-view.ts";
-import { palette } from "@light/ui/palette.ts";
-import { trail } from "@light/lib/log.ts";
+import { palette } from "@lightstart/tui/palette.ts";
+import { trail } from "@lightstart/lib/log.ts";
 
 /** A key as the trail names it: its modifiers and name, a character only with Ctrl or Alt (what is typed stays out of the log). */
 const keyName = (e: KeyEvent): string => (e.ctrl ? "ctrl+" : "") + (e.alt ? "alt+" : "") + (e.shift ? "shift+" : "") + (e.key === "char" ? (e.ctrl || e.alt ? "char:" + e.text : "char") : e.key);

@@ -1,6 +1,6 @@
 // Skill: a skill's instructions by name, from the skills the session offers (the folder's when it
 // is trusted, the user's, the harness's), for the model to follow.
-import { str } from "@light/lib/json.ts";
+import { str } from "@lightstart/lib/json.ts";
 import { scanSkills, skillText } from "../prompt/skills.ts";
 import { ToolContext, ToolOutcome } from "./tool.ts";
 

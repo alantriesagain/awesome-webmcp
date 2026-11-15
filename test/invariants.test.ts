@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The conversation's invariants (test/chat-invariants.ts) over every recorded Claude Code session
 // in test/fixtures, received by Claude Code's plugin as the chat test replays them
 // and drawn at 40, 80 and 120 columns; and the model's own: a notice while idle opens no turn, a
@@ -10,9 +10,9 @@ import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { ChatModel } from "../src/conversation/model.ts";
 import { RenderContext } from "../src/conversation/render.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { chatProblems } from "./support/chat-invariants.ts";
 import { contentText, rec, str } from "./support/claude-records.ts";
 import { registerLanguages } from "@lightstart/highlight/languages.ts";

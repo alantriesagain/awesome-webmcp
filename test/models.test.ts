@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The models: aliases named in the status bar, the context window before the CLI reports one (the
 // alias widecode starts with, the window stored for the session, the transcript's model, read by
 // Claude Code's plugin), the
@@ -14,8 +14,8 @@ import { Conversation } from "../src/conversation/conversation.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { modelName, StatusInfo } from "../src/conversation/status-info.ts";
 import { Store } from "../src/services/store.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const fixtures = join(process.cwd(), "test", "fixtures");
 const fake = join(process.cwd(), "test", "fake-claude.mjs");

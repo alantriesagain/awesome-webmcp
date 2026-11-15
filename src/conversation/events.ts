@@ -5,7 +5,7 @@
 // (the adapter's own: a message and its index, a call's id).
 import { ChatModel, Item, PatchHunk, ServerInfo, SkillInfo, TaskInfo, Todo, ToolInfo, ToolResult, TurnResult, AGENT, EDIT, READ, RUN, SEARCH, TEXT, THINKING, TOOL } from "./model.ts";
 import { programsOf } from "./command.ts";
-import { isRecord, listOf, num, str, strs, text } from "@light/lib/json.ts";
+import { isRecord, listOf, num, str, strs, text } from "@lightstart/lib/json.ts";
 import { Choice, Question } from "./requests.ts";
 import { StatusInfo } from "./status-info.ts";
 

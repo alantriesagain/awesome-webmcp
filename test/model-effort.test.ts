@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The model and effort chosen are kept (plugins/models/index.ts), and an ACP agent's session starts with
 // widecode (plugins/acp/index.ts), through the fake ACP agent and a store: the session made at the start,
 // its model and efforts known before any message; /effort kept for the model, its provider and
@@ -12,10 +12,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { Store } from "../src/services/store.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { Widecode, composeWidecode } from "../src/compose.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
-import { until } from "@light/test/headless.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "@lightstart/test/headless.ts";
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => {

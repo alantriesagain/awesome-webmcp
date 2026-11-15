@@ -13,18 +13,18 @@
     "widecode": "light-native run widecode"
   },
   "dependencies": {
-    "@light/kernel": "workspace:*",
-    "@light/lib": "workspace:*",
-    "@light/markdown": "workspace:*",
-    "@light/plugins": "workspace:*",
-    "@light/ui": "workspace:*",
-    "@light/workspace": "workspace:*",
+    "@lightstart/kernel": "workspace:*",
+    "@lightstart/lib": "workspace:*",
+    "@lightstart/tui-markdown": "workspace:*",
+    "@lightstart/plugins": "workspace:*",
+    "@lightstart/tui": "workspace:*",
+    "@lightstart/workspace": "workspace:*",
     "@lightstart/highlight": "workspace:*",
     "@lightstart/light": "workspace:*"
   },
   "devDependencies": {
-    "@light/cli": "workspace:*",
-    "@light/test": "workspace:*",
+    "@lightstart/native": "workspace:*",
+    "@lightstart/test": "workspace:*",
     "@types/node": "^26.6.5",
     "scriptc": "file:tools/scriptc-node",
     "typescript": "^6.0.3"
@@ -38,8 +38,8 @@
     "entry": "src/main.ts",
     "binary": "widecode",
     "ffi": [
-      "@light/plugins/native/ffi.json",
-      "@light/lib/native/ffi.json"
+      "@lightstart/plugins/native/ffi.json",
+      "@lightstart/lib/native/ffi.json"
     ],
     "prepare": [
       "node --no-warnings scripts/builtin-plugins.mjs"

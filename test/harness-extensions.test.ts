@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The plugins' agent halves over AcpAgent and the fake model: a registered tool the model calls (its
 // details kept in the session file), a command answered without a turn, tool_call blocking Bash and
 // changing a Read's path, tool_result rewriting content, before_agent_start appending to the system
@@ -10,7 +10,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openLog } from "@light/lib/log.ts";
+import { openLog } from "@lightstart/lib/log.ts";
 import { AcpAgent } from "../src/harness/acp/agent.ts";
 import { AcpServer, Incoming } from "../src/harness/acp/server.ts";
 import { Auth } from "../src/harness/auth.ts";
@@ -19,12 +19,12 @@ import { HarnessConfig } from "../src/harness/config.ts";
 import { ExtensionsRegistry } from "../src/harness/ext/extensions.ts";
 import { ModelClient, ModelRequest } from "../src/harness/model/client.ts";
 import { ModelInfo } from "../src/harness/model/registry.ts";
-import { PluginSource } from "@light/plugins/sources.ts";
+import { PluginSource } from "@lightstart/plugins/sources.ts";
 import { FakeClient } from "../src/harness/model/fake.ts";
 import { HarnessPaths } from "../src/harness/paths.ts";
 import { SessionStore } from "../src/harness/session/store.ts";
 import { ToolSet, builtInTools } from "../src/harness/tools/tool.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const until = (what: () => boolean): Promise<void> =>
   new Promise<void>((settle) => {

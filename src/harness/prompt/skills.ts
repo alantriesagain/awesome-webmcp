@@ -9,8 +9,8 @@
 // frontmatter says `disable-model-invocation: true` is not listed for the model.
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { listText, objectText } from "@light/lib/json.ts";
-import { readTextOr } from "@light/lib/fs.ts";
+import { listText, objectText } from "@lightstart/lib/json.ts";
+import { readTextOr } from "@lightstart/lib/fs.ts";
 
 /** How much of a SKILL.md the scan reads for its frontmatter. */
 const HEAD_BYTES = 4096;

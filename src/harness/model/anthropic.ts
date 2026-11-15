@@ -6,7 +6,7 @@
 // and the last user block; eager input streaming; the effort) go to providers that take them. A
 // request refused with 429, 529 or a server error before anything streamed is tried again, three
 // times, with a pause between.
-import { num, recordOf, str } from "@light/lib/json.ts";
+import { num, recordOf, str } from "@lightstart/lib/json.ts";
 import { Auth } from "../auth.ts";
 import { Abort, Stopper } from "../loop/abort.ts";
 import { HttpRequest, HttpStream } from "../http/stream.ts";

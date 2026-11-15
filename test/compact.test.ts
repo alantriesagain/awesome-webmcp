@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // /compact, from a recorded session that compacted after one exchange: while Claude Code compacts,
 // the activity says so and the chat's last line too (its spinner, what and how long), under /compact shown as sent; after, one notice says how much it freed, the
 // summary it left is a notice opened on a press (not a prompt), its "Compacted" output is not
@@ -9,10 +9,10 @@ import { join } from "node:path";
 import { activityOf } from "../src/conversation/activity.ts";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { contentText, rec, str } from "./support/claude-records.ts";
-import { openWorkspace } from "@light/workspace/workspace.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { createWidecode } from "../src/compose.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 interface Frame {
   dir?: unknown;

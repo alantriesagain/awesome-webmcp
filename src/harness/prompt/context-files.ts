@@ -4,7 +4,7 @@
 // file whose text another one had already (CLAUDE.md often links AGENTS.md) is left out.
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { readTextOr } from "@light/lib/fs.ts";
+import { readTextOr } from "@lightstart/lib/fs.ts";
 
 const FILE_MAX = 32 * 1024;
 const ALL_MAX = 128 * 1024;

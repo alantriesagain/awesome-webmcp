@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listOf, num, objectText, recordOf, str } from "@light/lib/json.ts";
+import { listOf, num, objectText, recordOf, str } from "@lightstart/lib/json.ts";
 import { HarnessConfig } from "../config.ts";
 import { ModelRegistry } from "../model/registry.ts";
 import { AcpClient, AgentNote, RpcReply } from "./acp-client.ts";

@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The git-checkpoint plugin's agent part over the harness: each turn in a repository keeps a
 // checkpoint, /checkpoints lists them, /checkpoint restore brings back a confirmed one's tracked
 // files while leaving untracked files alone, a refusal changes nothing, no ref is written, a
@@ -7,7 +7,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { AgentRig, until } from "./support/agent-rig.ts";
 
 const FIXTURE = ['{"match":"first","text":"One."}', '{"match":"second","text":"Two."}'].join("\n");

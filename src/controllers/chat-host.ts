@@ -5,7 +5,7 @@ import { ChatTarget, ToolsTarget } from "../chat/roles.ts";
 import { CodeTarget } from "../code/target.ts";
 import { Conversation } from "../conversation/conversation.ts";
 import { PromptHistory } from "../conversation/history.ts";
-import { Kernel } from "@light/kernel/kernel.ts";
+import { Kernel } from "@lightstart/kernel/kernel.ts";
 import { ScreenController } from "../screen/screen.ts";
 import { spawn } from "node:child_process";
 import { Host } from "./host.ts";

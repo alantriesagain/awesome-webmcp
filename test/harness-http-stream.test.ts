@@ -13,7 +13,7 @@ import { Abort } from "../src/harness/loop/abort.ts";
 import { ModelClient, ModelRequest, StreamListener } from "../src/harness/model/client.ts";
 import { Message, textPart } from "../src/harness/model/message.ts";
 import { ModelRegistry } from "../src/harness/model/registry.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const SSE = (text: string): string =>
   [

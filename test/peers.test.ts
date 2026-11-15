@@ -1,4 +1,4 @@
-// ffi: @light/plugins/native/ffi.json
+// ffi: @lightstart/plugins/native/ffi.json
 // The peers plugin over two daemons on the loopback: this machine's (the app finds it through the
 // store's state file, so nothing is spawned) and another machine's, which shares a clone of this
 // folder's repository with one more commit. The tab shows this machine, its port and the share
@@ -17,9 +17,9 @@ import { Conversation } from "../src/conversation/conversation.ts";
 import { JsPanel } from "../src/runtime/views.ts";
 import { DaemonOptions, startDaemon } from "../src/peers/index.ts";
 import { KeyEvent, TRoot, mount, unmount } from "@lightstart/light/native/tui";
-import { openWorkspace } from "@light/workspace/workspace.ts";
-import { SpawnOptions, spawnCapped } from "@light/lib/process.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { openWorkspace } from "@lightstart/workspace/workspace.ts";
+import { SpawnOptions, spawnCapped } from "@lightstart/lib/process.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => {

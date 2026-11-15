@@ -3,8 +3,8 @@
 // The Settings instance is what gives the native build of the router's import graph a concrete
 // state file; without it scriptc refuses the API's virtual call through the abstract StateFile.
 import { argsExcerpt } from "../src/runtime/router.ts";
-import { Settings } from "@light/kernel/settings.ts";
-import { done, eq, ok } from "@light/test/assert.ts";
+import { Settings } from "@lightstart/kernel/settings.ts";
+import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const settings = new Settings();
 ok("the settings the router imports have a concrete state file", settings.section("router.test") === null);
