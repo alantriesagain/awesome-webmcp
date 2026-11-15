@@ -6,8 +6,8 @@ dist/
 *.log
 __pycache__/
 *.pyc
-apps/widecode/src/runtime/builtin.ts
-apps/widecode/src/runtime/docs.ts
-apps/widecode/src/runtime/build-info.ts
-apps/widecode/src/runtime/generated/
-packages/harness/bench/results/
+src/runtime/builtin.ts
+src/runtime/docs.ts
+src/runtime/build-info.ts
+src/runtime/generated/
+src/harness/bench/results/

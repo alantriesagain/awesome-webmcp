@@ -2,11 +2,10 @@
 
 widecode, a native app on [`light`](https://github.com/alantriesagain/light) compiled by scriptc
 into a static binary with **no JavaScript engine** (no Node, Bun or Deno at
-runtime). A pnpm workspace that links light: `light` is the checkout beside this one (`../light`
-on `main`, consumed as `@lightstart/light`), and light's packages for native apps (`@light/<name>`,
-light's `packages/README.md`) are members here too; `packages/*` are what these apps share
-(`@widecode/<name>`), `apps/*` the app, each member with its own package.json declaring what it
-imports; `light-native` (`@light/cli`) builds, runs and gates them. `AGENTS.md` has the rules for
+runtime). The repository root is the app, in a pnpm workspace that links light: `light` is the
+checkout beside this one (`../light` on `main`, consumed as `@lightstart/light`), and light's
+packages for native apps (`@light/<name>`, light's `packages/README.md`) are its other members;
+`light-native` (`@light/cli`) builds, runs and gates it. `AGENTS.md` has the rules for
 working here, light's `packages/native/cli/README.md` the commands.
 
 widecode is a Claude Code frontend for wide terminals (chat, tools, files and code side by side over
@@ -29,16 +28,14 @@ directory at `../light` on the `main` branch (`pnpm install` there once).
 
 ```
 pnpm install                    # links light, its packages and these; typescript and @types/node (dev only; zero runtime deps)
-pnpm typecheck                  # tsc per member (light-native typecheck --all)
-pnpm test                       # every member's tests under node AND as native binaries; outputs must match (light-native test)
-pnpm coverage                   # scriptc coverage gate: every app entry and test compiles statically, failing on blockers (light-native coverage)
-scripts/lint.sh                 # no em dashes or any types in app/package text
-scripts/ci.sh                   # the CI gate: lint, verify, build, and the three widecode selftests
-pnpm light-native build widecode         # apps/widecode/dist/widecode (symbols kept; --strip to drop them)
-pnpm light-native test widecode -- chat.test.ts   # one member, one test
+pnpm typecheck                  # tsc (light-native typecheck --all)
+pnpm test                       # every test under node AND as a native binary; outputs must match (light-native test)
+pnpm coverage                   # scriptc coverage gate: the entry and every test compile statically, failing on blockers (light-native coverage)
+pnpm light-native build widecode         # dist/widecode (symbols kept; --strip to drop them)
+pnpm light-native test widecode -- chat.test.ts   # one test
 ```
 
-A Claude Code frontend in the terminal, `apps/widecode` (chat | tools | files | code over one
+A Claude Code frontend in the terminal (chat | tools | files | code over one
 folder: sessions of the folder listed and resumed, interrupts, plan mode, questions and plan
 approvals answered in the TUI, model and effort per session, `@` file completion and images attached
 by path, Claude's tool calls and subagents in a column of their own, and the code column showing
@@ -47,12 +44,12 @@ agent to talk to, which model, and which keys to use (default, emacs, vi). A fol
 trust it: the first launch there asks, with what the folder carries, as Claude Code does. A folder's
 `.widecode/` is its harness: plugins, a prompt appended to the agent's, a config over the user's,
 run once the folder is trusted; `/harness init` writes its skeleton and a skill, and the agent
-reshapes widecode from inside through widecode's own tools (`apps/widecode/PLUGINS.md`, "The
+reshapes widecode from inside through widecode's own tools (`PLUGINS.md`, "The
 harness"):
 
 ```
 pnpm light-native install widecode                      # builds it and installs it as `widecode` in ~/.local/bin; then `widecode` in any folder
-pnpm widecode                                  # builds apps/widecode/dist/widecode, then runs it in the current folder
+pnpm widecode                                  # builds dist/widecode, then runs it in the current folder
 pnpm widecode -- --no-build --resume ID        # resume a session of the folder
 pnpm widecode -- --agent opencode              # talk to opencode over ACP instead of Claude Code
 pnpm light-native selftest widecode shell               # in a pty on a temp repo: tree, diff, a write followed within 1 s
@@ -164,7 +161,7 @@ the languages),
 running in an embedded QuickJS. Each can be switched off in config.json or replaced: a `.js` file in
 `~/.widecode/plugins/` with a built-in's id overrides it, a new one adds a feature, and a project's
 own `.widecode/plugins/` run once the folder is trusted. Saving a plugin reloads the plugins, as
-`/reload` does. `apps/widecode/PLUGINS.md` has the API and how to write one, and `widecode.d.ts`
+`/reload` does. `PLUGINS.md` has the API and how to write one, and `widecode.d.ts`
 types it.
 
 The conversation talks to an agent a plugin brings, Claude Code's by default (`plugins/claude/index.ts`,
@@ -229,13 +226,13 @@ plugin registers; `spacer` pushes the cells after it to the right edge), a list 
 · "), an object that restyles one (`{"segment": "cost", "fg": "#98c379", "label": "spent"}`), or a
 command (`{"command": "~/.claude/statusline.sh", "interval": 5}`) that gets Claude Code's status
 line JSON on stdin, so Claude Code status line scripts work as they are (a line that is only a
-command shows every line it prints); `apps/widecode/examples/statusline.sh` is one. F5 cycles the
+command shows every line it prints); `examples/statusline.sh` is one. F5 cycles the
 models plugin's `"list"` (`"agents"` holds another agent's, by its id; its `"effort"` holds the
 efforts to start from, `"default"`, by `"providers"` and by `"models"`, under those chosen). Typing `/model` lists the
 agent's models above the composer, narrowed by each word typed (`/model dee pro`); ↑↓ choose and
 Enter switches. A command's name completes the same way after "/", and `/effort` its levels. The CLI protocol it relies on, measured with recorded fixtures, is in
-`apps/widecode/PROTOCOL.md`; the manual checklist, driven in a pseudo-terminal, is in
-`apps/widecode/test/checklist/`.
+`PROTOCOL.md`; the manual checklist, driven in a pseudo-terminal, is in
+`test/checklist/`.
 
 ## The harness: widecode's own agent
 
@@ -298,10 +295,10 @@ avoids that:
 A widecode plugin may carry an agent part for the harness's loop: handlers for its events, tools,
 commands and settings. The built-in `permission-gate`, `protected-paths`, `inline-bash`,
 `claude-rules`, `dirty-repo-guard`, `git-checkpoint`, `todo` and `tools-switch` use it, so a plugin
-file changes what the harness does as it changes what widecode shows. `apps/widecode/AGENT-PLUGINS.md`
+file changes what the harness does as it changes what widecode shows. `AGENT-PLUGINS.md`
 is a short guide to using it; PLUGINS.md's "The agent part" has the API.
 
-The package is `packages/harness` (its README has the files).
+The package is `src/harness` (its README has the files).
 
 ## Peers: the machines on your network
 
@@ -318,8 +315,8 @@ The Peers tab (beside Git) lists this machine with its shares (◆ marks this fo
 | Directory | What it is |
 |---|---|
 | `light/packages/native/*`, `light/packages/tui/*` | light's packages: `@light/cli` (`light-native`, the tooling: `prepare`, `build`, `run`, `selftest`, `test`, `coverage`, `typecheck`, `check`, `probes`, `install`, `desktop`), and `lib`, `highlight`, `plugins`, `workspace`, `test`, `kernel`, `ui`, `markdown`: what the core's modules share; the tokenizers; the embedded JavaScript; a folder's files and git; the tests' helpers; the plugin kernel; the palette and the windowed list; Markdown as lines (light's `packages/README.md`) |
-| `packages/agent`, `conversation`, `harness`, `screen`, `code`, `chat` | the `@widecode/*` packages, each with its README: the `claude -p` sidecar and the MCP server; the conversation with an agent; widecode's own agent (`widecode --harness`); the screen plugins contribute to; the code column; the chat views |
-| `apps/widecode` | the Claude frontend, a native core and JS plugins (`PLUGINS.md`): `plugins/<id>/index.ts` (the built-in plugins: chat, code, tools, agents, files, sessions, git, changes, status, models, languages, and the agents' claude, acp and pi), `widecode.d.ts` (the plugin API's types), `src/` (controllers, views, the plugin runtime and the API's answers, the store and the harness folder), `test/` (its tests, fixtures, fakes and goldens) |
+| `src/` | the app (`main.ts`, `compose.ts`, `controllers/`, `views/`, `services/`, `runtime/` the plugin runtime, `api/` the plugin API's answers) and its parts, each with its README: `agent` (the `claude -p` sidecar and the MCP server), `conversation` (the conversation with an agent), `harness` (widecode's own agent, `widecode --harness`), `peers` (the LAN git bridge), `screen` (the screen plugins contribute to), `code` (the code column), `chat` (the chat views) |
+| `plugins/`, `widecode.d.ts`, `test/`, `box/` | the built-in plugins and their API (`PLUGINS.md`): `plugins/<id>/index.ts` (the built-in plugins: chat, code, tools, agents, files, sessions, git, changes, status, models, languages, and the agents' claude, acp and pi), `widecode.d.ts` (the plugin API's types), `test/` (the tests, fixtures, fakes and goldens; the harness's are `harness-*.test.ts`), `box/` (the sandbox subagents run in) |
 
 A component:
 

@@ -1,0 +1,54 @@
+// ffi: @light/plugins/native/ffi.json
+// --trust: the folder's harness is put in use for this run after start, without keeping the trust.
+// Its plugins load, its config applies, and the folder is watched, the same way /trust does it.
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Conversation } from "../src/conversation/conversation.ts";
+import { NoStateFile } from "@light/kernel/settings.ts";
+import { openWorkspace } from "@light/workspace/workspace.ts";
+import { composeWidecode } from "../src/compose.ts";
+import { done, eq, ok } from "@light/test/assert.ts";
+
+const plugin = `widecode.plugin({
+  id: "trusted",
+  defaults: () => ({ greeting: "hi" }),
+  activate(api) {
+    const greeting = String((api.settings.section() ?? {}).greeting ?? "");
+    api.commands.add({ name: "/trusted", run: () => api.tell(greeting) });
+  },
+});`;
+
+const main = async (): Promise<void> => {
+  const folder = mkdtempSync(join(tmpdir(), "widecode-trust-run-"));
+  const dir = join(folder, ".widecode");
+  mkdirSync(join(dir, "plugins"), { recursive: true });
+  writeFileSync(join(dir, "plugins", "trusted.js"), plugin);
+  writeFileSync(join(dir, "config.json"), '{"plugins":{"trusted":{"greeting":"the harness"}}}');
+  const ws = await openWorkspace(folder, 100);
+  const c = new Conversation(ws.folder);
+  const w = composeWidecode(ws, c);
+  w.start(null, new NoStateFile(), []);
+  await w.host.load();
+  ok("the folder starts untrusted, its harness out", !w.host.harness.trusted);
+  ok("the project's plugin is out before the harness is used", !w.host.kernel.has("trusted"));
+  ok("and its folder is not one of the plugin folders", !w.js.dirs.includes(join(dir, "plugins")));
+
+  const note = w.useHarnessNow();
+  ok("the folder is trusted for this run", w.host.harness.trusted);
+  ok("its plugin is in use", w.host.kernel.has("trusted"));
+  ok("its folder is watched", w.js.dirs.includes(join(dir, "plugins")));
+  w.host.kernel.commands.run("/trusted");
+  eq("its config applies" + (note.length > 0 ? " (" + note + ")" : ""), w.host.screen.message.peek(), "the harness");
+
+  w.host.kernel.stop();
+  w.js.stopWatching();
+  w.host.workspace.close();
+  rmSync(folder, { recursive: true, force: true });
+  done();
+};
+
+main().catch((err: unknown) => {
+  console.log("FAIL " + (err instanceof Error ? err.message : String(err)));
+  process.exit(1);
+});

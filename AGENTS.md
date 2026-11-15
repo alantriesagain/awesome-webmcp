@@ -1,49 +1,52 @@
 # widecode: a native app on light
 
-This repository holds widecode, the Claude Code frontend for wide terminals: a light-native app,
+This repository is widecode, the Claude Code frontend for wide terminals: a light-native app,
 TypeScript on light's native core (signals, `html` templates, the view core, the terminal host
-`native/tui`), compiled by scriptc into one static binary with no
-JavaScript engine (no Node, Bun or Deno at runtime). The one engine allowed is an embedded QuickJS
-for plugins a user changes while the app runs (`@light/plugins`); an app's core stays compiled. It
-is a pnpm workspace that links light: `light` is the checkout beside this one (`../light`, consumed
-as `@lightstart/light`), and light's packages for native apps (`@light/<name>`, light's
-`packages/README.md`) are members here too; `packages/*` are what these apps share
-(`@widecode/<dirname>`), `apps/*` the apps. What an app needs from the framework (a widget, a host
-capability, a fix in the renderer) goes into light, what any native app could use goes into light's
-packages, and what only these apps share goes into a package here; nothing is imported by relative
-path across members. The compiler is the scriptc release pinned in `package.json` (0.4.12),
-installed at the workspace root; `SCRIPTC` names another.
+`native/tui`), compiled by scriptc into one static binary with no JavaScript engine (no Node, Bun or
+Deno at runtime). The one engine allowed is an embedded QuickJS for plugins a user changes while the
+app runs (`@light/plugins`); the core stays compiled. The repository root is the app, one member of a
+pnpm workspace that links light: `light` is the checkout beside this one (`../light`, linked at the
+root and consumed as `@lightstart/light`), and light's packages for native apps (`@light/<name>`,
+light's `packages/README.md`) are members too. What widecode needs from the framework (a widget, a
+host capability, a fix in the renderer) goes into light, and what any native app could use goes into
+light's packages; the rest is here. The compiler is the scriptc release pinned in `package.json`
+(0.4.12), installed at the root; `SCRIPTC` names another.
 
 | Path | What it is |
 |---|---|
-| `light/packages/native/*`, `light/packages/tui/*` | light's packages: `@light/cli` (`light-native`, the tooling: build, run, selftest, test, coverage, typecheck, check, install, desktop), `lib`, `highlight`, `plugins`, `workspace`, `test`, `kernel`, `ui`, `markdown` (light's `packages/README.md`) |
-| `packages/agent` | the `claude -p` sidecar (spawn, envelopes) and the MCP server an app serves its own tools with |
-| `packages/conversation` | the conversation with an agent, agent-neutral: the model, the events, the agent role, requests, status, the lines a view draws, the session records an app keeps |
-| `packages/screen` | the screen plugins contribute to: columns, tabs, band strips, segments, `ScreenController`, the column element |
-| `packages/code` | the code column: a file with its changes in place, the view, a subagent's steps, a call's page, the `CodeTarget` role |
-| `packages/chat` | the chat views: the transcript with the composer, the request panel, the completion strip, the Tools tab, the `ChatTarget` and `ToolsTarget` roles, on a `ChatHost` the app provides |
-| `packages/harness` | widecode's own coding agent, the harness: a daemon of the binary (`widecode --harness`) speaking ACP over stdio to the ACP plugin, talking to model APIs directly, running its own tools, keeping its own sessions (`PLAN.md`, milestone J) |
-| `apps/widecode` | widecode, the Claude Code frontend for wide terminals (chat, files, code), installed as `widecode`: a native core and JS plugins; a project's `.widecode/` is its harness, which the agent edits |
+| `light/packages/native/*`, `light/packages/tui/*` | light's packages: `@light/cli` (`light-native`, the tooling: build, run, selftest, test, coverage, typecheck, check, install), `lib`, `highlight`, `plugins`, `workspace`, `test`, `kernel`, `ui`, `markdown` (light's `packages/README.md`) |
+| `src/agent` | the `claude -p` sidecar (spawn, envelopes) and the MCP server widecode serves its own tools with |
+| `src/conversation` | the conversation with an agent, agent-neutral: the model, the events, the agent role, requests, status, the lines a view draws, the session records widecode keeps |
+| `src/screen` | the screen plugins contribute to: columns, tabs, band strips, segments, `ScreenController`, the column element |
+| `src/code` | the code column: a file with its changes in place, the view, a subagent's steps, a call's page, the `CodeTarget` role |
+| `src/chat` | the chat views: the transcript with the composer, the request panel, the completion strip, the Tools tab, the `ChatTarget` and `ToolsTarget` roles, on a `ChatHost` the app provides |
+| `src/harness` | widecode's own coding agent, the harness: a daemon of the binary (`widecode --harness`) speaking ACP over stdio to the ACP plugin, talking to model APIs directly, running its own tools, keeping its own sessions |
+| `src/peers` | the LAN git bridge's daemon (`widecode --peers-daemon`): discovery, pairing, the repositories each peer has |
+| `src/` (the rest) | the app: `main.ts`, `compose.ts`, `controllers/`, `views/`, `services/`, `runtime/` (the plugin runtime), `api/` (the plugin API's answers) |
+| `plugins/` | the built-in plugins, `plugins/<id>/index.ts`, typed against `widecode.d.ts` (`PLUGINS.md`) |
+| `test/` | the tests (`test/*.test.ts`, the harness's and the other folders' prefixed with theirs: `harness-*.test.ts`), their fixtures and fakes |
+| `box/` | the sandbox subagents run in: a bubblewrap jail or a VM (`box/README.md`) |
+| `.widecode/` | this project's harness, which the agent edits |
 
 ## Git and commits
 
 - **NEVER add `Co-Authored-By:` or `Claude-Session:` trailers to a commit message.**
 - **This repo is not synced with a remote. Never push, pull, fetch, or mention the remote's state; local commits and merges are the whole workflow.**
-- A commit message is `<area>: <what changed>` (the area is the app or package: `widecode`,
-  `packages`, `docs`), then a body of plain paragraphs saying what
+- A commit message is `<area>: <what changed>` (the area is the part of the app: `widecode`,
+  `harness`, `peers`, `docs`, `repo`), then a body of plain paragraphs saying what
   changed and why. The prose rules below apply.
 - Checks come in three sizes, so a change is tried in seconds and the whole native run happens once
   a series ends:
   - While working: the tests the change touches, under node
-    (`light-native test <member> --node-only -- <name>.test.ts`, seconds).
+    (`light-native test widecode --node-only -- <name>.test.ts`, seconds).
   - Commit green (a few minutes): `light-native check --all`, `light-native typecheck --all`,
-    `light-native test --node-only` (every member's tests under node, about two minutes), the
-    tests the change touches natively as well (`light-native test <member> -- <name>.test.ts`:
-    under node and natively, outputs equal) and `light-native coverage --apps` (the app entries
-    compiling statically). A change to an app also runs the selftests that drive what it changed:
+    `light-native test --node-only` (every test under node, about two minutes), the
+    tests the change touches natively as well (`light-native test widecode -- <name>.test.ts`:
+    under node and natively, outputs equal) and `light-native coverage --apps` (the app's entry
+    compiling statically). A change also runs the selftests that drive what it changed:
     `light-native selftest widecode shell` for the core, `fake` for Claude Code's plugin,
     `fake-acp` for the acp plugin, `harness` for the harness.
-  - A series of commits ends with `pnpm verify` (every member's tests natively too), run in the
+  - A series of commits ends with `pnpm verify` (every test natively too), run in the
     background while the next work goes on. With scriptc's cache warm it takes about six minutes
     after a change to plugins, docs or tests (a test run reads the plugins' code when it starts,
     so none of that recompiles it); a change to the compiled core recompiles the tests that
@@ -58,40 +61,37 @@ installed at the workspace root; `SCRIPTC` names another.
 - No rule-of-three padding. Plain declarative sentences. A section earns its length with information, not enthusiasm.
 - No reassurance asides in UI copy. Say what a thing is and what it does.
 
-## Members
+## The member
 
-- A member follows light's layout for one (light's `packages/README.md`, "A member"), which
-  `light-native check --all` holds it to: a `package.json` (`"type": "module"`, `"private": true`),
-  a `tsconfig.json` identical to `@light/cli`'s `templates/tsconfig.json` (scriptc reads the one
-  nearest an app's entry for the whole program, so every member typechecks under the same options),
-  a `README.md`, and `test/*.test.ts`. A package here is `@widecode/<dirname>` with
-  `exports: { ".": "./index.ts", "./*": "./*" }`: every export target is a `.ts` file, which is
-  what lets scriptc compile a bare import of a linked package as program source (a `.js` target
-  would make it an npm package and fail the build, probe p0).
-- A member declares in its package.json every member and `@lightstart/light` it imports, as
-  `workspace:*`; `@light/test` and `@types/node` are devDependencies. Imports are by
-  name (`@lightstart/light/native/tui`, `@lightstart/light/native/tui/lines.ts`, `@light/lib/json.ts`); a
-  relative import never leaves the member.
-- The dependency order: light's packages (lib, highlight; plugins, workspace; test; kernel, ui;
-  markdown), then agent; conversation; harness; screen; code; chat; then the apps. A package never imports
-  an app, nor a package after it in this order; light's packages never import one of these.
-- An app's `native` block names its entry, its binary, its FFI manifest (`@light/plugins/native/ffi.json`
-  for one with plugins), its prepare steps (shell lines run in its folder before a build, a test
-  run, coverage or typecheck) and its selftest scenarios; a package with a native part names its
-  build as a prepare step (`@light/plugins`), run for every member that depends on it.
-- The third time a piece of an app is hand-written for another app, it moves to a package, to
-  light's packages or into light; a generic terminal widget (a tab column, a bordered column, a
-  markdown renderer) belongs in light's `native/tui/` once it needs nothing of the kernel.
+- The root is one member of the workspace, the app (`light-native` takes a root whose
+  `package.json` names a `native.entry` as an app), held to light's layout for one by
+  `light-native check --all`: a `package.json` (`"type": "module"`, `"private": true`), a
+  `tsconfig.json` with `@light/cli`'s `templates/tsconfig.json` compiler options (scriptc reads the
+  one nearest the entry for the whole program; its `include` names the app's folders, leaving out
+  the `light` link and the harness folder), a `README.md`, and `test/*.test.ts`.
+- `package.json` declares every package it imports as `workspace:*` (`@lightstart/light` and
+  light's packages); `@light/test` and `@types/node` are devDependencies. Light's packages are
+  imported by name (`@lightstart/light/native/tui`, `@light/lib/json.ts`), the app's own files by
+  relative path.
+- The layers inside `src/`, each importing only those before it: agent; conversation; harness;
+  screen; code; chat; peers; then the app (`main.ts`, `controllers/`, `views/`, `services/`,
+  `runtime/`, `api/`). Light's packages never import any of it.
+- The `native` block names the entry, the binary, the FFI manifests (`@light/plugins/native/ffi.json`
+  for the plugins), the prepare steps (shell lines run at the root before a build, a test run,
+  coverage or typecheck) and the selftest scenarios.
+- A generic terminal widget (a tab column, a bordered column, a markdown renderer) belongs in
+  light's `native/tui/` once it needs nothing of the kernel; what any native app could use, in
+  light's packages.
 
-## Making an app
+## The app
 
-- `apps/<name>/src/main.ts` is the entry, on light's `runApp({ app, term, focus, onKey })`. An app
-  is a light app in the MVC shape: `src/controllers/` are `Controller` subclasses whose signal
+- `src/main.ts` is the entry, on light's `runApp({ app, term, focus, onKey })`. widecode is a
+  light app in the MVC shape: `src/controllers/` are `Controller` subclasses whose signal
   fields the views read in their render and which the views call for the change they want
-  (widecode's `host.ts` is the facade its plugins and views are given, over the packages'
+  (`host.ts` is the facade its plugins and views are given, over
   `ScreenController`, `FolderController` and its own `SessionController`); `src/views/` are light
-  `View`s with signals and `html` templates, composing the packages' views; `src/services/` is
-  what the app keeps (its store, its harness folder); `src/compose.ts` builds the app; a theme
+  `View`s with signals and `html` templates, composing the views of `src/chat` and `src/code`; `src/services/` is
+  what it keeps (its store, its harness folder); `src/compose.ts` builds the app; a theme
   module sets the palette's fields it wants otherwise (`@light/ui`'s `palette`).
 - Long lists render through light's windowed `LineView` over a `LineSource` (light's
   `native/tui/README.md`), whose press and copy are events a parent handles; a view a template names by
@@ -99,12 +99,12 @@ installed at the workspace root; `SCRIPTC` names another.
   emits with `$emit`, and the `<slot>`s of its template take the children the parent wrote inside
   the tag. The theme's utility classes style terminal elements once the entry calls
   `configureClasses(new TerminalClasses(theme, scheme))` (light's `theme/README.md`, Hosts).
-- `light-native build <app>` builds the binary into the app's `dist/`, `light-native run <app>` runs it in the
-  current folder, and `light-native selftest <app> <scenario>` runs a scripted end-to-end check in a
+- `light-native build widecode` builds the binary into `dist/`, `light-native run widecode` runs it in the
+  current folder, and `light-native selftest widecode <scenario>` runs a scripted end-to-end check in a
   pseudo-terminal on a temp repository, the app writing its outcome to the `--log` file; a pty
-  driver (`apps/widecode/test/drive.py`) runs the binary as a user would, reading the screen back.
-- Tests are `test/*.test.ts` in the member, plain scripts on `@light/test/assert.ts`, run from the
-  member's folder (fixture paths relative to it), headless (the app mounted on a `TRoot` and
+  driver (`test/drive.py`) runs the binary as a user would, reading the screen back.
+- Tests are `test/*.test.ts`, plain scripts on `@light/test/assert.ts`, run from the root (fixture
+  paths relative to it), headless (the app mounted on a `TRoot` and
   painted to a `Screen`, `@light/test/headless.ts`). `light-native test` runs each under node and natively and
   fails when the outputs differ; `light-native coverage` compiles every test; a test's first line may be
   `// ffi: <manifest>` (it reaches native calls bound by that manifest; node preloads the
@@ -112,11 +112,11 @@ installed at the workspace root; `SCRIPTC` names another.
 
 ## widecode's plugins
 
-widecode is a native core and JS plugins (`apps/widecode/PLUGINS.md`). The core is compiled: the
+widecode is a native core and JS plugins (`PLUGINS.md`). The core is compiled: the
 packages above, and in the app its controllers, views, the plugin runtime (`src/runtime/`: the
 `JsRuntime` over `@light/plugins`' engine, the JS-drawn views, the agents plugins bring, the prelude)
 and the API's answers (`src/api/`, a file per namespace). Every feature is a plugin running in
-QuickJS: the built-in ones are `apps/widecode/plugins/<id>/index.ts`, type-checked against
+QuickJS: the built-in ones are `plugins/<id>/index.ts`, type-checked against
 `widecode.d.ts` and stripped into the binary by `scripts/builtin-plugins.mjs` (the app's prepare
 step); the user's and a trusted project's are `.js` files or plugin folders (`plugins/<name>/index.js`
 beside its `skills/` and `prompts/`) that reload on save, each alone, the agent and the other plugins
@@ -165,7 +165,7 @@ part").
 `light-native` compiles with `$SCRIPTC` when it is set, else the scriptc release pinned in
 `package.json` (0.4.12), installed at the workspace root. The root's `scriptc` is
 `tools/scriptc-node`: the release's `@scriptc/compiler` run under node, since npm's native
-`scriptc` binary segfaults on `apps/widecode/src/main.ts` (vercel-labs/scriptc#3595); switch back to
+`scriptc` binary segfaults on `src/main.ts` (vercel-labs/scriptc#3595); switch back to
 the npm `scriptc` package once a release fixes that. To move to another release before then,
 change the version in `tools/scriptc-node/package.json` (its own and `@scriptc/compiler`'s),
 port any change to upstream's `packages/cli/src/main.ts` between the two tags into
@@ -182,7 +182,7 @@ natively, and a row in its `README.md`; prefer fixing scriptc over working aroun
 rules the code follows today:
 
 - No `any`. Dynamic data is `unknown`, read through interfaces whose fields are all `unknown`
-  (`@widecode/conversation`'s `events.ts` `Ev`) or narrowed with `JSON.parse(s) as { ... }`.
+  (`src/conversation`'s `events.ts` `Ev`) or narrowed with `JSON.parse(s) as { ... }`.
 - What needs identity is a class. An instance keeps its class through `unknown`, not through a
   parameter typed with its base class: prefer one flat class over a hierarchy that downcasts. What a
   package needs of an app is an abstract class with the methods it calls (`SessionStore`,
@@ -205,11 +205,11 @@ rules the code follows today:
 - Apps reach an agent only through the CLI the user installed: Claude Code's `claude` over
   `stream-json`, an ACP agent (`opencode acp`) over stdio. Never bundle an agent's binary or embed
   an SDK that wraps it (the Agent SDK is a wrapper around Claude Code's binary).
-- The conversation is agent-neutral (`@widecode/conversation`) and every agent is a plugin of the app:
+- The conversation is agent-neutral (`src/conversation`) and every agent is a plugin of the app:
   Claude Code's is widecode's `plugins/claude/index.ts`, ACP agents' `plugins/acp/index.ts`, over `api.agents`,
   `api.process.spawn`, `api.fs` and `api.conversation.apply`.
 - widecode's own tools for an agent (`plugins/ask/index.ts`: a question, a plan to approve, both in the
-  request panel) are plugins over `api.tools`, served by `@widecode/agent`'s MCP server (127.0.0.1, a
+  request panel) are plugins over `api.tools`, served by `src/agent`'s MCP server (127.0.0.1, a
   token per agent plugin, no library), named by the app. A tool names the agent plugins whose
   agents do not see it (`except`): the ask plugin's except Claude Code, which keeps AskUserQuestion
   and ExitPlanMode; every other tool reaches every agent, Claude Code through `--mcp-config` (a
@@ -217,7 +217,7 @@ rules the code follows today:
 - Tests and selftests spawn agents with `env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT`. Checks that
   talk to a real agent run only when asked (`NATIVE_LIVE=1`), on its cheapest model (Claude: haiku at
   low effort with `--no-session-persistence`); everything else replays recorded fixtures through
-  `apps/widecode/test/fake-claude.mjs` or runs against `apps/widecode/test/fake-acp.mjs`.
+  `test/fake-claude.mjs` or runs against `test/fake-acp.mjs`.
 
 ## On the user's machine
 

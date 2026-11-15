@@ -2,7 +2,7 @@
 // scriptc's command line, run under node: upstream's packages/cli/src/main.ts at v0.4.12 over the
 // published @scriptc/compiler, unchanged but for where the version and the WASI runner come from.
 // npm's scriptc package runs a natively compiled copy of this compiler, which segfaults on
-// apps/widecode/src/main.ts; this one compiles it. Replace this folder with the npm `scriptc`
+// src/main.ts; this one compiles it. Replace this folder with the npm `scriptc`
 // package once a release fixes the crash.
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
