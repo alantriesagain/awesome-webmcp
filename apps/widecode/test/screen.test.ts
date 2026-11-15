@@ -190,7 +190,8 @@ const main = async (): Promise<void> => {
 
   app.shell.handleKey(key("char", "c"));
   lines = screen();
-  ok("changed only: README.md hidden, the changed files shown", !has(lines, "  README.md") && has(lines, "notes.md U") && has(lines, "app.js M"));
+  const sideRows = lines.map((l) => l.slice(app.shell.xOf("side"), app.shell.xOf("side") + app.shell.widthOf("side")));
+  ok("changed only: README.md hidden, the changed files shown", !has(sideRows, "README.md") && has(sideRows, "notes.md U") && has(sideRows, "app.js M"));
   app.shell.handleKey(key("char", "c"));
 
   await app.code.load("src/app.js");
