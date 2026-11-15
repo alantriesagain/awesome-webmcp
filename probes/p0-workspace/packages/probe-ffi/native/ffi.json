@@ -1,7 +1,0 @@
-{
-  "ffi_format": 7,
-  "functions": [
-    { "name": "probeAdd", "symbol": "probe_add", "params": ["i32", "i32"], "returns": "i32" }
-  ],
-  "libraries": ["./out/libprobe.a"]
-}

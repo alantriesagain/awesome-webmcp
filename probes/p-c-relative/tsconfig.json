@@ -1,1 +1,0 @@
-{ "compilerOptions": { "target": "es2024", "module": "nodenext", "moduleResolution": "nodenext", "lib": ["es2024", "dom"], "types": ["node"], "strict": true, "allowJs": true, "checkJs": false, "allowImportingTsExtensions": true, "noEmit": true, "skipLibCheck": true, "typeRoots": ["../../node_modules/@types"] } }

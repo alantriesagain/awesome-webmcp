@@ -1,7 +1,0 @@
-{
-  "name": "tui-probe",
-  "private": true,
-  "type": "module",
-  "workspaces": ["light", "packages/*", "apps/*"],
-  "devDependencies": { "typescript": "^5.9.0", "@types/node": "^24.0.0" }
-}

@@ -1,7 +1,7 @@
 # widecode's box (spike)
 
 The box has two backends: a Debian 13 VM and a bubblewrap jail on the host. The jail is the lighter
-one, with no VM memory cost; the VM is V1 in `PLAN-security.md`. Both are built and driven by node
+one, with no VM memory cost. Both are built and driven by node
 scripts with no dependencies.
 
 The VM follows bootstrapp's test VM (`packages/vps/testvm/vm.mjs`): QEMU runs as the user, the Debian

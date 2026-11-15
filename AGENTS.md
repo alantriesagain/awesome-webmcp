@@ -1,8 +1,8 @@
-# widecode: native apps on light
+# widecode: a native app on light
 
-This repository holds widecode, the Claude Code frontend for wide terminals, and its desktop chat:
-light-native apps, TypeScript on light's native core (signals, `html` templates, the view core, the
-terminal host `native/tui`, the desktop shell), compiled by scriptc into one static binary with no
+This repository holds widecode, the Claude Code frontend for wide terminals: a light-native app,
+TypeScript on light's native core (signals, `html` templates, the view core, the terminal host
+`native/tui`), compiled by scriptc into one static binary with no
 JavaScript engine (no Node, Bun or Deno at runtime). The one engine allowed is an embedded QuickJS
 for plugins a user changes while the app runs (`@light/plugins`); an app's core stays compiled. It
 is a pnpm workspace that links light: `light` is the checkout beside this one (`../light`, consumed
@@ -24,15 +24,13 @@ installed at the workspace root; `SCRIPTC` names another.
 | `packages/chat` | the chat views: the transcript with the composer, the request panel, the completion strip, the Tools tab, the `ChatTarget` and `ToolsTarget` roles, on a `ChatHost` the app provides |
 | `packages/harness` | widecode's own coding agent, the harness: a daemon of the binary (`widecode --harness`) speaking ACP over stdio to the ACP plugin, talking to model APIs directly, running its own tools, keeping its own sessions (`PLAN.md`, milestone J) |
 | `apps/widecode` | widecode, the Claude Code frontend for wide terminals (chat, files, code), installed as `widecode`: a native core and JS plugins; a project's `.widecode/` is its harness, which the agent edits |
-| `apps/desktop` | the chat as a desktop app: a scriptc backend on light's desktop host, a light page in the system web view |
-| `probes/` | one-file compiler probes from widecode's start and the rules they produced (`probes/README.md`); `p0-workspace/` is the probe the workspace's import route rests on; light's `native/probes/` continues the work |
 
 ## Git and commits
 
 - **NEVER add `Co-Authored-By:` or `Claude-Session:` trailers to a commit message.**
 - **This repo is not synced with a remote. Never push, pull, fetch, or mention the remote's state; local commits and merges are the whole workflow.**
 - A commit message is `<area>: <what changed>` (the area is the app or package: `widecode`,
-  `desktop`, `packages`, `probes`, `docs`), then a body of plain paragraphs saying what
+  `packages`, `docs`), then a body of plain paragraphs saying what
   changed and why. The prose rules below apply.
 - Checks come in three sizes, so a change is tried in seconds and the whole native run happens once
   a series ends:

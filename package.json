@@ -3,16 +3,14 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.11.0",
-  "description": "widecode, the Claude Code frontend for wide terminals, and its desktop chat: native apps on light compiled by scriptc, with the packages they share (@widecode/*) on light's (@light/*).",
+  "description": "widecode, the Claude Code frontend for wide terminals: a native app on light compiled by scriptc, with its packages (@widecode/*) on light's (@light/*).",
   "scripts": {
     "check": "light-native check --all",
     "typecheck": "light-native typecheck --all",
     "test": "light-native test",
     "coverage": "light-native coverage",
-    "probes": "light-native probes",
     "verify": "pnpm check && pnpm typecheck && pnpm test && pnpm coverage",
-    "widecode": "light-native run widecode",
-    "desktop": "light-native desktop desktop"
+    "widecode": "light-native run widecode"
   },
   "devDependencies": {
     "@light/cli": "workspace:*",

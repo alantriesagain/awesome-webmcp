@@ -21,25 +21,6 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
-  apps/desktop:
-    dependencies:
-      '@light/lib':
-        specifier: workspace:*
-        version: link:../../light/packages/native/lib
-      '@lightstart/components':
-        specifier: workspace:*
-        version: link:../../light/packages/components
-      '@lightstart/light':
-        specifier: workspace:*
-        version: link:../../light/packages/light
-      '@widecode/agent':
-        specifier: workspace:*
-        version: link:../../packages/agent
-    devDependencies:
-      '@types/node':
-        specifier: ^26.6.5
-        version: 26.6.5
-
   apps/widecode:
     dependencies:
       '@light/kernel':

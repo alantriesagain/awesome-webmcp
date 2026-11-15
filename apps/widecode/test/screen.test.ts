@@ -72,7 +72,7 @@ writeFileSync(
 );
 writeFileSync(
   join(sessionDir, "bbbbbbbb-1111-2222-3333-444444444444.jsonl"),
-  // Written as text: natively literals with the same keys share their key order (probes/p39), and
+  // Written as text: natively literals with the same keys share their key order (probe p39), and
   // a record starting with "type" is read as bookkeeping.
   '{"parentUuid":null,"type":"user","uuid":"v1","cwd":' + JSON.stringify(repo) + ',"message":{"role":"user","content":"Please look at the failing build on CI, it started after the dependency upgrade yesterday and only fails on Linux"}}\n',
 );

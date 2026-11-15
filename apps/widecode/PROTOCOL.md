@@ -59,7 +59,7 @@ deferred tool Claude loads with ToolSearch).
 | Turn boundaries | `system/init` is emitted at the start of every turn; one `result` per turn; `system/thinking_tokens` and `rate_limit_event` appear too | all |
 | Tool results | `user` envelopes carry `tool_use_result`: Write `{type, filePath, content, structuredPatch, originalFile, userModified}`, Edit `{filePath, oldString, newString, originalFile, structuredPatch, userModified, replaceAll}` | `edit` |
 
-## Native capabilities (probe `probes/p32-code-io.ts`)
+## Native capabilities (probe p32)
 
 Positioned `readSync` (file heads and tails), `statSync` size and mtime, `spawn` with `env` and
 `cwd`, `Buffer.concat` decoded once, base64 both ways, and `fs.watch` on a single file all work
@@ -77,13 +77,13 @@ natively, fully static, with output identical to node.
 4. **One process, lines parsed in-process.** The frontend became a TUI (light's `tdom`), so there
    is no bridge: the session's stdout lines are parsed where they are drawn. Native `JSON.parse`
    takes about 10 ms for a 5.6 MB Edit result and 6 ms for 5000 text deltas
-   (`probes/p34-parse-cost.ts`), so every line is parsed and none is skipped. (An earlier desktop
+   (probe p34), so every line is parsed and none is skipped. (An earlier desktop
    page measured light's bridge for this, which led to `emitJson` in light.)
 5. **Diffs from git, no syntax colors in v1.** `@bootstrapp/editor`'s tokenizers and Myers diff
    compile 96% statically but not fully (records of functions, generic state, an optional
-   destructured parameter blocks `diffLines`; `probes/p33-editor-core.ts`), so the code view gets
+   destructured parameter blocks `diffLines`; probe p33), so the code view gets
    its hunks from `git diff -U<all> HEAD` and shows plain text; a native tokenizer can come later.
 6. **Windowed line views, rendered by templates.** A frame where all 200 rows of 10 styled runs
-   change costs 10.5 ms natively (4.5 ms under node; `probes/p35-line-view.ts`); a pane is about
+   change costs 10.5 ms natively (4.5 ms under node; probe p35); a pane is about
    60 rows, so the chat, tree and code views render only their visible rows as `<p wrap="none">`
    with `<span>` runs, without building nodes by hand.

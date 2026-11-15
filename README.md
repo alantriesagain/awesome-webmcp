@@ -1,17 +1,16 @@
 # widecode
 
-widecode and its desktop chat, native apps on [`light`](https://github.com/alantriesagain/light)
-compiled by scriptc into static binaries with **no JavaScript engine** (no Node, Bun or Deno at
+widecode, a native app on [`light`](https://github.com/alantriesagain/light) compiled by scriptc
+into a static binary with **no JavaScript engine** (no Node, Bun or Deno at
 runtime). A pnpm workspace that links light: `light` is the checkout beside this one (`../light`
 on `main`, consumed as `@lightstart/light`), and light's packages for native apps (`@light/<name>`,
 light's `packages/README.md`) are members here too; `packages/*` are what these apps share
-(`@widecode/<name>`), `apps/*` the apps, each member with its own package.json declaring what it
+(`@widecode/<name>`), `apps/*` the app, each member with its own package.json declaring what it
 imports; `light-native` (`@light/cli`) builds, runs and gates them. `AGENTS.md` has the rules for
 working here, light's `packages/native/cli/README.md` the commands.
 
-The apps: widecode, a Claude Code frontend for wide terminals (chat, tools, files and code side by
-side over one folder, a native core and JavaScript plugins in an embedded QuickJS), and the chat as
-a desktop app on light's desktop shell. Claude is reached through the user's installed Claude Code
+widecode is a Claude Code frontend for wide terminals (chat, tools, files and code side by side over
+one folder, a native core and JavaScript plugins in an embedded QuickJS). Claude is reached through the user's installed Claude Code
 CLI as a sidecar over `stream-json`, or any agent speaking ACP.
 
 The compiler is the scriptc release pinned in `package.json` (0.4.12), installed at the workspace
@@ -38,18 +37,6 @@ scripts/ci.sh                   # the CI gate: lint, verify, build, and the thre
 pnpm light-native build widecode         # apps/widecode/dist/widecode (symbols kept; --strip to drop them)
 pnpm light-native test widecode -- chat.test.ts   # one member, one test
 ```
-
-The chat as a desktop app (light's desktop shell: the backend compiled by scriptc, the chat screen
-as a light page in the system's web view, WebKitGTK on Linux):
-
-```
-pnpm desktop                        # builds apps/desktop/dist/harness-desktop and its page, then opens the window
-pnpm light-native desktop desktop --selftest # end to end: the page connects, a turn runs against claude, exit 0 on its result
-```
-
-Needs light's desktop prerequisites (`libwebkit2gtk-4.1-dev`, `g++`) and a display; the built app
-(3.3 MB) needs only the runtime WebKitGTK a desktop already has. The shell, the bridge and its rules are
-documented in light's `native/desktop/README.md`.
 
 A Claude Code frontend in the terminal, `apps/widecode` (chat | tools | files | code over one
 folder: sessions of the folder listed and resumed, interrupts, plan mode, questions and plan
@@ -250,8 +237,6 @@ Enter switches. A command's name completes the same way after "/", and `/effort`
 `apps/widecode/PROTOCOL.md`; the manual checklist, driven in a pseudo-terminal, is in
 `apps/widecode/test/checklist/`.
 
-Other commands: `pnpm probes` runs the compiler probes into `probes/RESULTS.md`.
-
 ## The harness: widecode's own agent
 
 `widecode --agent harness` (or `"agent": "harness"` in config.json) talks to widecode's own coding
@@ -316,7 +301,7 @@ commands and settings. The built-in `permission-gate`, `protected-paths`, `inlin
 file changes what the harness does as it changes what widecode shows. `apps/widecode/AGENT-PLUGINS.md`
 is a short guide to using it; PLUGINS.md's "The agent part" has the API.
 
-The package is `packages/harness` (its README has the files); PLAN.md's milestone J is its plan.
+The package is `packages/harness` (its README has the files).
 
 ## Peers: the machines on your network
 
@@ -335,8 +320,6 @@ The Peers tab (beside Git) lists this machine with its shares (◆ marks this fo
 | `light/packages/native/*`, `light/packages/tui/*` | light's packages: `@light/cli` (`light-native`, the tooling: `prepare`, `build`, `run`, `selftest`, `test`, `coverage`, `typecheck`, `check`, `probes`, `install`, `desktop`), and `lib`, `highlight`, `plugins`, `workspace`, `test`, `kernel`, `ui`, `markdown`: what the core's modules share; the tokenizers; the embedded JavaScript; a folder's files and git; the tests' helpers; the plugin kernel; the palette and the windowed list; Markdown as lines (light's `packages/README.md`) |
 | `packages/agent`, `conversation`, `harness`, `screen`, `code`, `chat` | the `@widecode/*` packages, each with its README: the `claude -p` sidecar and the MCP server; the conversation with an agent; widecode's own agent (`widecode --harness`); the screen plugins contribute to; the code column; the chat views |
 | `apps/widecode` | the Claude frontend, a native core and JS plugins (`PLUGINS.md`): `plugins/<id>/index.ts` (the built-in plugins: chat, code, tools, agents, files, sessions, git, changes, status, models, languages, and the agents' claude, acp and pi), `widecode.d.ts` (the plugin API's types), `src/` (controllers, views, the plugin runtime and the API's answers, the store and the harness folder), `test/` (its tests, fixtures, fakes and goldens) |
-| `apps/desktop` | the desktop app: `contract.ts` (the bridge's methods and events, imported by both sides), `src/main.ts` (the backend: a `DesktopApp` on light's desktop host with the Claude sidecar as `AgentService`, `--selftest`), `web/` (the page: one light component, its importmap) |
-| `probes/` | the proof of concept's scriptc experiments and the rules they produced (`probes/README.md`), `p0-workspace/` the probe of the workspace's import route; light's `native/probes/` continues them |
 
 A component:
 

@@ -1,7 +1,6 @@
 # TODO
 
-Open issues found along the way, each with what is known. The plans (`PLAN.md`, `PLAN-task.md`,
-`PLAN-security.md`) hold the larger work.
+Open issues found along the way, each with what is known.
 
 - A foreground Task run may stop streaming after the user sends a message mid-turn. The message
   closes the model's turn, and `applySubagentEvents` (`packages/conversation/events.ts`) drops a
