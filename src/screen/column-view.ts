@@ -28,7 +28,7 @@ export class ColumnView extends View {
     const id = this.column.value;
     const drop = this.drop.value;
     const line = drop !== "" ? palette.accentOf(drop) : palette.lineOf(id, active);
-    const tint = drop !== "" ? palette.dropBg : palette.tintOf(id, active);
+    const tint = drop !== "" ? palette.dropBg : palette.tintOf(id, false);
     return html`<div flex=1 border borderStyle="cell" borderColor=${line} borderSides=${active || drop !== "" ? "both" : this.edge.value !== "" ? this.edge.value : "none"} ?borderHeavy=${active || drop !== ""} bg=${tint} title=${this.title.value} tabs=${this.tabs.value} activeTab=${this.shown.value}><div flex=1 direction="row"><div width=${this.left.value}></div><div flex=1 fg=${palette.paneText}>${this.view.value}</div><div width=${this.right.value}></div></div></div>`;
   }
 }
