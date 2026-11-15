@@ -1,6 +1,6 @@
 # widecode: a native app on light
 
-This repository is widecode, the Claude Code frontend for wide terminals: a light-native app,
+This repository is widecode, the Claude Code frontend for wide terminals: a light app,
 TypeScript on light's native core (signals, `html` templates, the view core, the terminal host
 `native/tui`), compiled by scriptc into one static binary with no JavaScript engine (no Node, Bun or
 Deno at runtime). The one engine allowed is an embedded QuickJS for plugins a user changes while the
@@ -14,7 +14,7 @@ light's packages; the rest is here. The compiler is the scriptc release pinned i
 
 | Path | What it is |
 |---|---|
-| `light/packages/native/*`, `light/packages/tui/*` | light's packages: `@lightstart/native` (`light-native`, the tooling: build, run, selftest, test, coverage, typecheck, check, install), `lib`, `highlight`, `plugins`, `workspace`, `test`, `kernel`, `ui`, `markdown` (light's `packages/README.md`) |
+| `light/packages/native/*`, `light/packages/tui/*` | light's packages: `@lightstart/native` (`light`, the tooling: build, run, selftest, test, coverage, typecheck, check, install), `lib`, `highlight`, `plugins`, `workspace`, `test`, `kernel`, `ui`, `markdown` (light's `packages/README.md`) |
 | `src/agent` | the `claude -p` sidecar (spawn, envelopes) and the MCP server widecode serves its own tools with |
 | `src/conversation` | the conversation with an agent, agent-neutral: the model, the events, the agent role, requests, status, the lines a view draws, the session records widecode keeps |
 | `src/screen` | the screen plugins contribute to: columns, tabs, band strips, segments, `ScreenController`, the column element |
@@ -38,13 +38,13 @@ light's packages; the rest is here. The compiler is the scriptc release pinned i
 - Checks come in three sizes, so a change is tried in seconds and the whole native run happens once
   a series ends:
   - While working: the tests the change touches, under node
-    (`light-native test widecode --node-only -- <name>.test.ts`, seconds).
-  - Commit green (a few minutes): `light-native check --all`, `light-native typecheck --all`,
-    `light-native test --node-only` (every test under node, about two minutes), the
-    tests the change touches natively as well (`light-native test widecode -- <name>.test.ts`:
-    under node and natively, outputs equal) and `light-native coverage --apps` (the app's entry
+    (`light test --node-only -- <name>.test.ts`, seconds).
+  - Commit green (a few minutes): `light check`, `light typecheck`,
+    `light test --node-only` (every test under node, about two minutes), the
+    tests the change touches natively as well (`light test -- <name>.test.ts`:
+    under node and natively, outputs equal) and `light coverage --apps` (the app's entry
     compiling statically). A change also runs the selftests that drive what it changed:
-    `light-native selftest widecode shell` for the core, `fake` for Claude Code's plugin,
+    `light selftest shell` for the core, `fake` for Claude Code's plugin,
     `fake-acp` for the acp plugin, `harness` for the harness.
   - A series of commits ends with `pnpm verify` (every test natively too), run in the
     background while the next work goes on. With scriptc's cache warm it takes about six minutes
@@ -63,9 +63,9 @@ light's packages; the rest is here. The compiler is the scriptc release pinned i
 
 ## The member
 
-- The root is one member of the workspace, the app (`light-native` takes a root whose
+- The root is one member of the workspace, the app (`light` takes a root whose
   `package.json` names a `native.entry` as an app), held to light's layout for one by
-  `light-native check --all`: a `package.json` (`"type": "module"`, `"private": true`), a
+  `light check`: a `package.json` (`"type": "module"`, `"private": true`), a
   `tsconfig.json` with `@lightstart/native`'s `templates/tsconfig.json` compiler options (scriptc reads the
   one nearest the entry for the whole program; its `include` names the app's folders, leaving out
   the `light` link and the harness folder), a `README.md`, and `test/*.test.ts`.
@@ -99,14 +99,14 @@ light's packages; the rest is here. The compiler is the scriptc release pinned i
   emits with `$emit`, and the `<slot>`s of its template take the children the parent wrote inside
   the tag. The theme's utility classes style terminal elements once the entry calls
   `configureClasses(new TerminalClasses(theme, scheme))` (light's `theme/README.md`, Hosts).
-- `light-native build widecode` builds the binary into `dist/`, `light-native run widecode` runs it in the
-  current folder, and `light-native selftest widecode <scenario>` runs a scripted end-to-end check in a
+- `light build` builds the binary into `dist/`, `light run` runs it in the
+  current folder, and `light selftest <scenario>` runs a scripted end-to-end check in a
   pseudo-terminal on a temp repository, the app writing its outcome to the `--log` file; a pty
   driver (`test/drive.py`) runs the binary as a user would, reading the screen back.
 - Tests are `test/*.test.ts`, plain scripts on `@lightstart/test/assert.ts`, run from the root (fixture
   paths relative to it), headless (the app mounted on a `TRoot` and
-  painted to a `Screen`, `@lightstart/test/headless.ts`). `light-native test` runs each under node and natively and
-  fails when the outputs differ; `light-native coverage` compiles every test; a test's first line may be
+  painted to a `Screen`, `@lightstart/test/headless.ts`). `light test` runs each under node and natively and
+  fails when the outputs differ; `light coverage` compiles every test; a test's first line may be
   `// ffi: <manifest>` (it reaches native calls bound by that manifest; node preloads the
   manifest folder's stand-in) or `// node-only` (it walks the file system).
 
@@ -157,12 +157,12 @@ part").
   `api.harness` and `api.state`; `scripts/builtin-plugins.mjs` embeds PLUGINS.md and
   `widecode.d.ts` into `src/runtime/docs.ts` (generated, ignored) for `api`, and writes the build's version and time into `src/runtime/build-info.ts` (generated, ignored), which `--version`, the log's first line and the status bar's first message say.
 - A plugin's tests drive it through the app (`createWidecode`) and start with
-  `// ffi: @lightstart/plugins/native/ffi.json`, so `light-native test` runs them natively with QuickJS and under
+  `// ffi: @lightstart/plugins/native/ffi.json`, so `light test` runs them natively with QuickJS and under
   node with the package's `wcjs-node.mjs`. A plugin switched off has a test too.
 
 ## The compiler (scriptc static mode)
 
-`light-native` compiles with `$SCRIPTC` when it is set, else the scriptc release pinned in
+`light` compiles with `$SCRIPTC` when it is set, else the scriptc release pinned in
 `package.json` (0.4.12), installed at the workspace root. The root's `scriptc` is
 `tools/scriptc-node`: the release's `@scriptc/compiler` run under node, since npm's native
 `scriptc` binary segfaults on `src/main.ts` (vercel-labs/scriptc#3595); switch back to
@@ -171,7 +171,7 @@ change the version in `tools/scriptc-node/package.json` (its own and `@scriptc/c
 port any change to upstream's `packages/cli/src/main.ts` between the two tags into
 `tools/scriptc-node/main.mjs`, and run `pnpm install`; once #3595 is fixed, replace the root's
 `file:tools/scriptc-node` with the release's version, delete `tools/scriptc-node`, run
-`pnpm install`, and build the app (`pnpm light-native build widecode`) to confirm the native binary
+`pnpm install`, and build the app (`pnpm light build`) to confirm the native binary
 no longer crashes. light pins its own `scriptc` (light's `packages/light/native/README.md` says how
 to move it). For a full test run, set
 `SCRIPTC_CACHE_MAX_MB=20480` in the environment: every test is an executable of its own, a full
@@ -198,7 +198,7 @@ rules the code follows today:
 - Parsed JSON stays short-lived (p37): keep records as text and parse one while applying it.
 - `spawnSync` takes no `cwd` natively: `git -C <dir>`, or `sh -c "cd <dir> && ..."`.
 - Erasable TypeScript only, so the same file runs under node for fast feedback.
-- `light-native coverage` stays static (it fails on blockers, no site compiling dynamically).
+- `light coverage` stays static (it fails on blockers, no site compiling dynamically).
 
 ## Agents
 

@@ -7,7 +7,7 @@
 // The build's version (git describe of the workspace, else the package's version) and time go into
 // src/runtime/build-info.ts, so a running binary says which build it is.
 //
-// For a test run (light-native's LIGHT_NATIVE_COMMAND is "test") the three modules are written so
+// For a test run (light's LIGHT_NATIVE_COMMAND is "test") the three modules are written so
 // their text stays the same while plugins, the docs and the clock change: builtin.ts names the
 // plugins and reads their stripped code from src/runtime/generated/ when the program starts,
 // docs.ts reads PLUGINS.md and widecode.d.ts, and build-info.ts says "test". scriptc's cache keys a

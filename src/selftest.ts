@@ -1,4 +1,4 @@
-// Scripted checks run inside the app (light-native selftest widecode <name>), each logging what it saw
+// Scripted checks run inside the app (light selftest <name>), each logging what it saw
 // and quitting with 0 once done:
 //   shell           open the first modified file, append a line, see one more change come back
 //   fake | live-turn  send a message (to the fake CLI replaying a recorded turn, or to Claude) and

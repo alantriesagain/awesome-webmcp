@@ -9,35 +9,41 @@ importers:
   .:
     dependencies:
       '@lightstart/highlight':
-        specifier: workspace:*
+        specifier: link:light/packages/highlight
         version: link:light/packages/highlight
       '@lightstart/kernel':
-        specifier: workspace:*
+        specifier: link:light/packages/kernel
         version: link:light/packages/kernel
       '@lightstart/lib':
-        specifier: workspace:*
+        specifier: link:light/packages/lib
         version: link:light/packages/lib
       '@lightstart/light':
-        specifier: workspace:*
+        specifier: link:light/packages/light
         version: link:light/packages/light
       '@lightstart/plugins':
-        specifier: workspace:*
+        specifier: link:light/packages/plugins
         version: link:light/packages/plugins
       '@lightstart/tui':
-        specifier: workspace:*
+        specifier: link:light/packages/tui
         version: link:light/packages/tui
       '@lightstart/tui-markdown':
-        specifier: workspace:*
+        specifier: link:light/packages/tui-markdown
         version: link:light/packages/tui-markdown
       '@lightstart/workspace':
-        specifier: workspace:*
+        specifier: link:light/packages/workspace
         version: link:light/packages/workspace
     devDependencies:
+      '@lightstart/build':
+        specifier: link:light/packages/build
+        version: link:light/packages/build
+      '@lightstart/cli':
+        specifier: link:light/packages/cli
+        version: link:light/packages/cli
       '@lightstart/native':
-        specifier: workspace:*
+        specifier: link:light/packages/native
         version: link:light/packages/native
       '@lightstart/test':
-        specifier: workspace:*
+        specifier: link:light/packages/test
         version: link:light/packages/test
       '@types/node':
         specifier: ^26.6.5

@@ -82,7 +82,7 @@ returns at once; with a different list it refuses and says to run `down`, then `
 ### scriptc and the build cache
 
 The guest uses the scriptc installed in the shared checkout's `node_modules`, which
-`light-native` resolves from the workspace root. The widecode checkout is shared at its own host
+`light` resolves from the workspace root. The widecode checkout is shared at its own host
 path, so `/home/alanleal/Projects/widecode/node_modules/.bin/scriptc` exists in the guest. Its
 cache lives under the guest's `/home/agent/.cache`, which is the host folder
 `<state>/guest-cache`. A host-shared cache would let the box plant a build the host then runs, so
@@ -321,9 +321,9 @@ tests below started from a cold image and a cold build cache.
 4. The host's `git -C /home/alanleal/Projects/widecode status --short` was `M
    box/box.mjs` before and after; the guest's build left only gitignored outputs.
    `scriptc-dev --version` in the guest printed `0.4.5` from the shared checkout.
-5. `light-native test widecode -- api.test.ts` is node-only by its first line (`// node-only: the
+5. `light test -- api.test.ts` is node-only by its first line (`// node-only: the
    test walks the repository ...`), so it does not compile with scriptc: cold 0.6 s, warm 1.0 s, and
-   light-native reports `(node only)`. To exercise the box's scriptc toolchain, `keymap.test.ts` (an
+   light reports `(node only)`. To exercise the box's scriptc toolchain, `keymap.test.ts` (an
    ffi test that runs under node and natively) took 65 s cold and 21 s warm; both runs passed with
    equal output, and the guest cache grew to 254 MB. Root stayed at 40 GB with 35 GB free.
 6. `down` powered the guest down in 5 seconds. No `qemu-system-x86_64`, `virtiofsd` or proxy of the

@@ -5,26 +5,28 @@
   "packageManager": "pnpm@10.11.0",
   "description": "widecode, the Claude Code frontend for wide terminals: chat, files and code side by side, a native core on light compiled by scriptc and JS plugins.",
   "scripts": {
-    "check": "light-native check --all",
-    "typecheck": "light-native typecheck --all",
-    "test": "light-native test",
-    "coverage": "light-native coverage",
+    "check": "light check",
+    "typecheck": "light typecheck",
+    "test": "light test",
+    "coverage": "light coverage",
     "verify": "pnpm check && pnpm typecheck && pnpm test && pnpm coverage",
-    "widecode": "light-native run widecode"
+    "widecode": "light run"
   },
   "dependencies": {
-    "@lightstart/kernel": "workspace:*",
-    "@lightstart/lib": "workspace:*",
-    "@lightstart/tui-markdown": "workspace:*",
-    "@lightstart/plugins": "workspace:*",
-    "@lightstart/tui": "workspace:*",
-    "@lightstart/workspace": "workspace:*",
-    "@lightstart/highlight": "workspace:*",
-    "@lightstart/light": "workspace:*"
+    "@lightstart/kernel": "link:light/packages/kernel",
+    "@lightstart/lib": "link:light/packages/lib",
+    "@lightstart/tui-markdown": "link:light/packages/tui-markdown",
+    "@lightstart/plugins": "link:light/packages/plugins",
+    "@lightstart/tui": "link:light/packages/tui",
+    "@lightstart/workspace": "link:light/packages/workspace",
+    "@lightstart/highlight": "link:light/packages/highlight",
+    "@lightstart/light": "link:light/packages/light"
   },
   "devDependencies": {
-    "@lightstart/native": "workspace:*",
-    "@lightstart/test": "workspace:*",
+    "@lightstart/build": "link:light/packages/build",
+    "@lightstart/cli": "link:light/packages/cli",
+    "@lightstart/native": "link:light/packages/native",
+    "@lightstart/test": "link:light/packages/test",
     "@types/node": "^26.6.5",
     "scriptc": "file:tools/scriptc-node",
     "typescript": "^6.0.3"

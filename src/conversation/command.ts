@@ -5,7 +5,7 @@
 // is parsed beyond that: a command this cannot read names nothing rather than something wrong.
 
 /** The programs whose first argument that is not a flag names what they do. */
-const SUBCOMMANDS = new Set(["git", "pnpm", "npm", "npx", "yarn", "gh", "docker", "cargo", "go", "kubectl", "systemctl", "apt", "brew", "pip", "light", "light-native", "widecode", "scriptc"]);
+const SUBCOMMANDS = new Set(["git", "pnpm", "npm", "npx", "yarn", "gh", "docker", "cargo", "go", "kubectl", "systemctl", "apt", "brew", "pip", "light", "widecode", "scriptc"]);
 /** Flags before a subcommand that take the next word. */
 const VALUED = new Set(["-C", "-c", "--filter", "-F", "--workspace", "-w", "--prefix", "--cwd", "--dir", "-p", "--project", "--context", "-n", "--namespace", "--profile"]);
 /** Words a segment starts with that run the command after them. */

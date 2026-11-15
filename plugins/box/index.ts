@@ -1,7 +1,7 @@
 // Host actions: commands only the host can run (installing widecode's build into ~/.local/bin,
 // a deploy with production credentials), which an agent asks for and the user approves each time.
 // The commands come from config.json's "box" section, never from an agent's input:
-//   { "hostActions": { "install": { "run": "node_modules/.bin/light-native install widecode",
+//   { "hostActions": { "install": { "run": "node_modules/.bin/light install",
 //     "description": "build widecode and install it into ~/.local/bin", "timeoutMs": 900000 } } }
 // `run` is a shell command run in the session's folder; `description` says what it does;
 // `timeoutMs` is how long it may take (10 minutes by default). Only the user's or a trusted

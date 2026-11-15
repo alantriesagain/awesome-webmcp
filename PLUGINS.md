@@ -586,7 +586,7 @@ next prompt). Its section names them: `{ "names": { "question": "AskUser", "plan
 configures, the request panel shows the command and the agent's reason under the call, and the user
 approves each run. Only the user's or a trusted project's `config.json` defines them, so an agent
 cannot add one, and the agent's reason is shown, never run. Its section is
-`{ "hostActions": { "install": { "run": "node_modules/.bin/light-native install widecode", "description": "build widecode and install it into ~/.local/bin", "timeoutMs": 900000 } } }`,
+`{ "hostActions": { "install": { "run": "node_modules/.bin/light install", "description": "build widecode and install it into ~/.local/bin", "timeoutMs": 900000 } } }`,
 with `timeoutMs` ten minutes by default. The command runs in the session's folder, and its exit code
 and last 60 lines of output go back to the agent. `Run it` and `Don't run` are the choices; without
 approval the call answers that the user did not approve it. `/box` lists the actions configured.
@@ -802,7 +802,7 @@ line of the status section.
 ## Writing a built-in plugin
 
 A built-in plugin is `plugins/<id>/index.ts`, ending with `export {};`, typed against
-`widecode.d.ts` (`light-native check --all`). What it needs from the core is a call in the prelude
+`widecode.d.ts` (`light check`). What it needs from the core is a call in the prelude
 (`src/runtime/prelude.ts`), its answer in its namespace's `src/api/<file>.ts` and its type in
 `widecode.d.ts` (`test/api.test.ts` checks the three agree). Its tests
 drive it through the app (`createWidecode`) and carry `// ffi: @lightstart/plugins/native/ffi.json` on

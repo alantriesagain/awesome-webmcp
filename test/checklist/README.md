@@ -3,7 +3,7 @@
 Each script runs dist/widecode in a pseudo-terminal through `../drive.py` (keys, text, mouse presses,
 screens read back with F12) and prints what it saw; screens and logs go to `$CHECKLIST_OUT`
 (default /tmp/code-checklist/). The live ones talk to Claude (haiku, low effort, nothing saved).
-Run from this directory, after `light-native build widecode` has a fresh `dist/widecode`:
+Run from this directory, after `light build` has a fresh `dist/widecode`:
 
 | Script | Checks |
 |---|---|

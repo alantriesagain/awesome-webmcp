@@ -9,7 +9,7 @@ Open issues found along the way, each with what is known.
   fixing the background case (a8078e5); not reproduced yet.
 - `test/acp-dsh.test.ts` fails three checks ("its sessions listed from the agent",
   "resumed without replaying its turns, with a notice", "session/resume for it too, and no replayed
-  exchange") in a full parallel `light-native test --node-only`, twice in a row, and passes alone
+  exchange") in a full parallel `light test --node-only`, twice in a row, and passes alone
   and natively: a fixed wait that a loaded machine outruns, as `changes.test.ts` had (dbd309c).
 - Alerts ring whether or not the terminal has focus: light's terminal host does not report focus
   (`CSI ?1004h`, then `ESC [ I` and `ESC [ O`). With it, the alerts plugin can alert only when the

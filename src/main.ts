@@ -1,6 +1,6 @@
 // ffi: @lightstart/plugins/native/ffi.json
 // widecode, a Claude frontend for wide terminals: chat | files | code over one folder. Build and run:
-// light-native run widecode. Flags:
+// light run. Flags:
 //   --dir <path>        the folder (default: where it was launched)
 //   --agent <id>        the agent to talk to: claude (default, Claude Code), or one a plugin brings
 //   --claude <path>     the CLI (default: `claude` on PATH, then ~/.local/bin/claude)
