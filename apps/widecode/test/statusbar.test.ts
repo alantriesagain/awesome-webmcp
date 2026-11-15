@@ -3,8 +3,8 @@
 // table under the chat (the session: no branch, no calls; columns as wide as their widest cell so
 // the rules line up, the meters stacked, each row's last cell growing and clipped with an ellipsis
 // at the bar's edge, columns dropped before the text gets too little room) and the one under the
-// tools column (what Claude is doing and for how long, its calls); no rule after an empty last
-// cell; custom layouts from config.json
+// tools column (what Claude is doing and for how long, its calls by kind, its thinking); no rule
+// after an empty last cell; custom layouts from config.json
 // (order and separator, a label, a list cell, a recolored segment and an unknown color ignored, a
 // spacer, an unknown name shown as ?name, a column blank in every row left out); a press on a cell
 // (the model's switches it, the mode's toggles plan mode); the previous default moved to the table;
@@ -79,7 +79,7 @@ const main = async (): Promise<void> => {
   eq("and in the third", rules(table[2]).split(",").slice(0, 2).join(","), rules(table[0]).split(",").slice(0, 2).join(","));
   const meters = [table[0].indexOf("▰"), table[1].indexOf("▱"), table[2].indexOf("▰")];
   eq("the meters stack: their bars start in the same column", String(meters[1] === meters[0] && meters[2] === meters[0]), "true");
-  eq("under the tools column: the running tool, its calls by kind, the calls and thinking", draw(w, 60, "tools-status").join(" | "), " ↳ Bash npm test |  R 0 W 2 X 0 A 0 |  2 calls · think 267");
+  eq("under the tools column: the running tool, its calls by kind, its thinking", draw(w, 60, "tools-status").join(" | "), " ↳ Bash npm test |  R 0 W 2 X 0 A 0 |  think 267");
   const info = w.host.conversation.info;
   info.activity = "thinking";
   info.activitySince = Date.now() - 3200;

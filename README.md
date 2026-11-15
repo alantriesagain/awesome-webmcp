@@ -165,8 +165,7 @@ session as a table (the config's lines are its rows; cell i of each row as wide 
 like things stack; each row's last cell, the text, grows): folder, model and effort, mode; context
 and the 5-hour and weekly limits as meters; cost, time, cache; then the title and the app's
 messages. Under the tools column, what Claude is doing and for how
-long (✻ while it thinks), the calls by kind (read, write, run, agents), and the calls and thinking
-tokens. Under the code column, the
+long (✻ while it thinks), the calls by kind (read, write, run, agents), and the thinking tokens. Under the code column, the
 changes (the branch among them): how many files and lines against the
 base, the open file and where its view is among its changes, then every changed file newest first
 with its lines added and removed, how long ago it changed, ● when Claude edited it; a press opens
