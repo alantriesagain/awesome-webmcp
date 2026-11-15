@@ -156,6 +156,16 @@ declare namespace widecode {
     press?(): void;
   }
 
+  /** A row of the menu bar a plugin contributes (a label of "-" is a separator). */
+  interface MenuContribution {
+    /** The menu the row shows under. */
+    menu: string;
+    label: string;
+    /** The action the row runs, as a key would. */
+    action?: string;
+    order?: number;
+  }
+
   /** Drawn things a plugin refreshes when its data changed. */
   interface Drawn {
     refresh(): void;
@@ -595,8 +605,12 @@ declare namespace widecode {
       panel(panel: Panel): PanelHandle;
       band(band: Band): Drawn;
       segment(segment: Segment): void;
+      /** A row of the menu bar, running its action as the key bound to it would (label "-" is a separator). */
+      menu(entry: MenuContribution): void;
       /** A notice in the chat, as /help answers: `text` shown, `detail` when it is opened. */
       notice(text: string, detail?: string): void;
+      /** Move column `id` to `index` among the columns, kept for the next run; false for an unknown id or a position it is already at. */
+      moveColumn(id: string, index: number): boolean;
       /** Ring the terminal's bell (BEL), which terminals turn into a sound, a flash or an urgent hint. */
       bell(): void;
       /** Draw a segment any plugin added (null when none has the name). */

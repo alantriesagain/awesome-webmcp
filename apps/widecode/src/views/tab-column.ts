@@ -1,5 +1,5 @@
 // A tab column (the files column, the tools column): the shown tab's info row and its rows (the
-// tabs' links are on the band under it, tab-links.ts). A press on the info row goes to the panel.
+// tabs are on the column's top edge, column-view.ts). A press on the info row goes to the panel.
 // The host keeps which tab each column shows; each panel keeps its own view, so its scroll position
 // survives a switch.
 import { Host } from "../controllers/host.ts";
@@ -23,12 +23,6 @@ export class TabColumn extends View {
   /** The panel shown (the first one when the host names none). */
   current(): Panel | null {
     return this.host.screen.shownPanel(this.column);
-  }
-
-  /** The panel's title, for the column's border. */
-  title(): string {
-    const p = this.current();
-    return p !== null ? p.title : "";
   }
 
   override render(): unknown {

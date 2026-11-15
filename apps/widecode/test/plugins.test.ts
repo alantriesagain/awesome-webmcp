@@ -108,10 +108,11 @@ const main = async (): Promise<void> => {
     unmount(w.shell);
     w.host.kernel.stop();
   };
-  /** The side tabs' links: the band's rows under the side column. */
-  const links = (w: Widecode, shown: string[]): string => {
+  /** The side tabs: the files column's top edge, as the row reads. */
+  const tabs = (w: Widecode, shown: string[]): string => {
     const x = w.shell.xOf("side");
-    return shown.slice(-3).map((l) => l.slice(x, x + w.shell.widthOf("side")).trim()).filter((t) => t.length > 0).join("|");
+    // Row 1: the columns start under the menu bar.
+    return shown[1].slice(x, x + w.shell.widthOf("side")).replace(/[▁▂]/g, " ").trim().replace(/\s+/g, " ");
   };
   const press = (w: Widecode, name: string, text: string): boolean => w.shell.handleKey(new KeyEvent(name, text, false, false, false));
 
@@ -121,13 +122,13 @@ const main = async (): Promise<void> => {
 
   w = createWidecode(ws, new Conversation(ws.folder), JSON.parse('{"agents": false}'));
   let lines = await show(w);
-  eq("agents off: the side tabs stay (the fourth beside the first)", links(w, lines), "Files 1    Peers|Sessions   Skills|Git");
+  eq("agents off: the side tabs stay on the top edge", tabs(w, lines), "Files 1 Sessions");
   ok("agents off: no Agents tab, nothing opens a subagent", !w.host.screen.panels.some((p) => p.id === "agents") && w.host.screen.panelsIn("tools").map((p) => p.id).join(" ") === "calls available");
   end(w);
 
   w = createWidecode(ws, new Conversation(ws.folder), JSON.parse('{"git": false}'));
   lines = await show(w);
-  eq("git off: no Git tab", w.host.screen.panelsIn("side").map((p) => p.id).join(" ") + " · " + links(w, lines), "files sessions peers skills · Files 1    Skills|Sessions|Peers");
+  eq("git off: no Git tab", w.host.screen.panelsIn("side").map((p) => p.id).join(" ") + " · " + tabs(w, lines), "files sessions peers skills · Files 1 Sessions");
   w.host.screen.showPanel("files");
   ok("no b, no compare row", !press(w, "char", "b") && !lines.some((l) => l.includes(" vs  HEAD ")));
   ok("the languages are back with their plugin", languageForPath("a.ts") === "typescript");
@@ -145,7 +146,7 @@ const main = async (): Promise<void> => {
   const extra = new Extra(w.host, ["git"]);
   w.start(JSON.parse('{"status": {"lines": [["hello", "note"]]}}'), new NoStateFile(), [extra]);
   lines = await show(w);
-  ok("an extra plugin's tab", links(w, lines).includes("Notes"));
+  ok("an extra plugin's tab joins the column", w.host.screen.panelsIn("side").map((p) => p.id).includes("notes"));
   ok("its segment in the status table the config lays out", lines.some((l) => l.includes(" hello! │ ")));
   w.host.roles.chat.submit("/hello there");
   eq("its command", w.host.screen.message.peek(), "hello there");
@@ -200,7 +201,7 @@ const main = async (): Promise<void> => {
   end(w);
 
   const defaults = composeWidecode(ws, new Conversation(ws.folder)).defaults();
-  eq("every built-in plugin answers its defaults", defaults.map((d) => d.id + (d.value === true ? "" : "*")).join(" "), "acp* agents alerts* ask* box changes chat claude* claude-rules code dirty-repo-guard emacs files git git-checkpoint harness inline-bash languages models* peers* permission-gate* pi* protected-paths* sessions* skills status* todo tools tools-switch vi");
+  eq("every built-in plugin answers its defaults", defaults.map((d) => d.id + (d.value === true ? "" : "*")).join(" "), "acp* agents alerts* ask* box changes chat claude* claude-rules code dirty-repo-guard emacs files git git-checkpoint harness inline-bash languages menus models* peers* permission-gate* pi* protected-paths* sessions* skills status* todo tools tools-switch vi");
   ws.close();
   rmSync(repo, { recursive: true, force: true });
   done();

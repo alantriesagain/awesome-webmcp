@@ -3,19 +3,21 @@
 // tab-column.ts), and the status band under them. Keys go to the kernel's bindings in the scopes in
 // effect (a tab column's shown tab, the active column, anywhere), and the active column's input has
 // the terminal's focus. The shell's own keys: Ctrl+C (interrupt the agent, then quit), F12 (the
-// screen's text to the log), F1 (chat), F2 (files), F3 (code), F6 (tools) and Ctrl+←/→ between the
-// columns, PgUp/PgDn (half a page), Esc (interrupt the agent), Tab through a tab column's tabs; /help, written from
+// screen's text to the log), F1 (chat), F2 (files), F3 (code), F6 (tools), F10 (the menu bar) and
+// Ctrl+←/→ between the columns, PgUp/PgDn (half a page), Esc (interrupt the agent), Tab through a
+// tab column's tabs; /help, written from
 // every command and key binding registered, and /columns. The columns are as wide as column-widths.ts
 // says; a drag on the border between two resizes them, and state.json keeps what it left.
 import { Host } from "../controllers/host.ts";
 import { BandPart, Column } from "@widecode/screen/contributions.ts";
+import { columnOrderOf } from "@widecode/screen/screen.ts";
 import { Action, Binder } from "@light/kernel/actions.ts";
 import { joinLabels } from "@light/kernel/keys.ts";
-import { type CustomEvent, type KeyEvent, type MouseEvent, View, html, signal, key } from "@lightstart/light/native/tui";
+import { type CustomEvent, KeyEvent, type MouseEvent, TBox, TElement, TNode, View, html, signal, key, tabAt } from "@lightstart/light/native/tui";
 import { LineCopy } from "@light/ui/line-view.ts";
+import { Menu, MenuBar, MenuItem } from "@light/ui/menu-bar.ts";
 import { ColumnWidths } from "./column-widths.ts";
 import { TabColumn } from "./tab-column.ts";
-import { TabLinks } from "./tab-links.ts";
 import "@widecode/screen/column-view.ts";
 import { palette } from "@light/ui/palette.ts";
 import { trail } from "@light/lib/log.ts";
@@ -54,29 +56,50 @@ class BorderDrag {
   }
 }
 
+/** A column being dragged: its id, where the press was, and whether the pointer moved. */
+class ColumnDrag {
+  readonly id: string;
+  readonly from: number;
+  moved = false;
+
+  constructor(id: string, from: number) {
+    this.id = id;
+    this.from = from;
+  }
+}
+
 /** The column each function key makes active. */
 const FKEYS = ["f1", "f2", "f3", "f6"];
 const FKEY_COLUMNS = ["chat", "side", "code", "tools"];
 
 export class Shell extends View {
   readonly host: Host;
-  /** The tab columns (by id: "side", "tools") and their tabs' links, on the band under each. */
+  readonly menuBar = new MenuBar();
+  /** The tab columns (by id: "side", "tools"). */
   readonly tabs = new Map<string, TabColumn>();
-  readonly links = new Map<string, TabLinks>();
   private readonly cols = signal(160);
   private lastCtrlC = 0;
   /** The columns' widths: config.json's, a drag's; `resized` moves when a drag changes one. */
   readonly sizes = new ColumnWidths();
   private readonly resized = signal(0);
+  private readonly keymapVersion = signal(0);
+  /** The menu entries, the keymap and the actions last built into the bar. */
+  private menuSignature = "";
   private drag: BorderDrag | null = null;
+  private columnDrag: ColumnDrag | null = null;
+  /** The column the dragged column would drop on (drawn on the drop color in the dragged one's accent). */
+  private readonly dropTarget = signal("");
 
   constructor(host: Host) {
     super();
     this.box.flex = 1;
     this.host = host;
+    this.menuBar.brand.value = "◆ widecode";
+    host.keys.changed.add("shell", () => {
+      this.keymapVersion.value = this.keymapVersion.peek() + 1;
+    });
     for (const spec of TAB_COLUMNS) {
       this.tabs.set(spec.id, new TabColumn(host, spec.id));
-      this.links.set(spec.id, new TabLinks(host, spec.id));
     }
     this.addKeys();
   }
@@ -85,6 +108,7 @@ export class Shell extends View {
   finish(): void {
     this.host.kernel.actions.add(new Action("app.help", "", "/help", [], "shell", (_key: KeyEvent, _count: number) => false));
     this.side();
+    this.host.screen.setColumnOrder(columnOrderOf(this.host.kernel.settings.state("columnOrder")));
     this.sizes.restore(this.host.kernel.settings.state("columns"));
   }
 
@@ -93,9 +117,8 @@ export class Shell extends View {
     const h = this.host;
     for (const spec of TAB_COLUMNS) {
       const tabs = this.tabs.get(spec.id);
-      const links = this.links.get(spec.id);
-      if (tabs === undefined || links === undefined) continue;
-      // Owned per column, so one goes without the other.
+      if (tabs === undefined) continue;
+      // Owned per column.
       const owner = "shell:" + spec.id;
       const has = h.screen.column(spec.id) !== null;
       if (h.screen.panelsIn(spec.id).length === 0) {
@@ -103,12 +126,11 @@ export class Shell extends View {
         continue;
       }
       if (has) continue;
-      // As wide as the shown panel asks; its tabs' links go on the band under it.
+      // As wide as the shown panel asks; its tabs go on its top edge.
       h.screen.addColumn(owner, new Column(spec.id, spec.title, spec.order, tabs, (cols: number) => {
         const p = tabs.current();
         return p !== null ? p.width(cols) : 24;
       }, 0, 0, null, null));
-      h.screen.addBand(owner, new BandPart("tabs:" + spec.id, spec.id, 0, links));
     }
   }
 
@@ -120,6 +142,10 @@ export class Shell extends View {
   handleKey(e: KeyEvent): boolean {
     trail.reset();
     const d = trail.enter("key", keyName(e));
+    if (this.menuBar.key(e)) {
+      trail.leave(d);
+      return true;
+    }
     const composer = this.host.roles.chat.composer;
     const before = composer !== null ? composer.snapshot() : null;
     const id = this.host.kernel.keys.dispatch(e, this.host.screen.scopes());
@@ -160,9 +186,59 @@ export class Shell extends View {
     return -1;
   }
 
-  /** A left press on column `index`: on its border with a neighbour, a drag starts resizing them; else the column becomes active. */
+  /** The columns' widths as drawn, the one taking the rest as wide as the others leave. */
+  private shownWidths(): number[] {
+    const cols = this.cols.peek();
+    const widths = this.laidOut(cols);
+    let fixed = 0;
+    for (const w of widths) fixed += w;
+    return widths.map((w) => (w > 0 ? w : Math.max(0, cols - fixed)));
+  }
+
+  /** The column under `x`, and whether `x` is in its left half (drop before it). */
+  private targetAt(x: number): { index: number; before: boolean } | null {
+    const columns = this.host.screen.columns;
+    if (columns.length === 0) return null;
+    const shown = this.shownWidths();
+    let start = 0;
+    for (let i = 0; i < columns.length; i++) {
+      const w = shown[i];
+      if (x < start + w || i === columns.length - 1) return { index: i, before: x < start + w / 2 };
+      start += w;
+    }
+    return null;
+  }
+
+  /** The cell-bordered box of column `index` (the div inside its wc-column element), for where its top edge is. */
+  private columnBox(index: number): TBox | null {
+    const columns: TBox[] = [];
+    this.collectColumns(this.box, columns);
+    if (index < 0 || index >= columns.length) return null;
+    return this.borderBox(columns[index]);
+  }
+
+  /** The wc-column elements under `node`, in document order. */
+  private collectColumns(node: TNode, out: TBox[]): void {
+    if (!(node instanceof TElement)) return;
+    if (node instanceof TBox && node.tag === "wc-column") out.push(node);
+    for (let c = node.firstChild; c !== null; c = c.next) this.collectColumns(c, out);
+  }
+
+  /** The first cell-bordered box under `node`, where a column's tabs are drawn. */
+  private borderBox(node: TNode): TBox | null {
+    if (!(node instanceof TBox)) return null;
+    if (node.border) return node;
+    for (let c = node.firstChild; c !== null; c = c.next) {
+      const found = this.borderBox(c);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+
+  /** A left press on column `index`: on its border with a neighbour, a drag starts resizing them; on its title row, a drag starts moving it (and a tab column shows the tab under it); else the column becomes active. */
   private pressColumn(index: number, e: MouseEvent): void {
     if (e.button !== 0) return;
+    this.columnDrag = null;
     const cols = this.cols.peek();
     const widths = this.laidOut(cols);
     // The column taking the rest is as wide as the others leave.
@@ -184,8 +260,56 @@ export class Shell extends View {
         return;
       }
     }
+    const box = this.columnBox(index);
+    if (box !== null && e.y === box.y) {
+      if (this.tabs.get(columns[index].id) !== undefined) {
+        const at = tabAt(box, e.x);
+        const panels = this.host.screen.panelsIn(columns[index].id);
+        if (at >= 0 && at < panels.length) this.host.screen.showPanel(panels[at].id);
+      }
+      this.columnDrag = new ColumnDrag(columns[index].id, e.x);
+    }
     const id = columns[index].id;
     if (this.host.screen.active.peek() !== id) this.host.screen.focus(id);
+  }
+
+  /** The column under the pointer follows it: the drop target's border lights, and the status bar says where it would land. */
+  private dragColumn(e: MouseEvent): void {
+    const d = this.columnDrag;
+    if (d === null) return;
+    if (e.x !== d.from) d.moved = true;
+    const target = this.targetAt(e.x);
+    if (target === null) return;
+    const columns = this.host.screen.columns;
+    const c = columns[target.index];
+    if (c.id === d.id) {
+      this.dropTarget.value = "";
+      this.host.screen.tell("");
+      return;
+    }
+    this.dropTarget.value = c.id;
+    let dragged = c;
+    for (const column of columns) if (column.id === d.id) dragged = column;
+    this.host.screen.tell("move " + dragged.title + (target.before ? " before " : " after ") + c.title);
+  }
+
+  /** Let go: the column takes the place the target showed, kept in state.json for the next run. */
+  private dropColumn(e: MouseEvent): void {
+    const d = this.columnDrag;
+    if (d === null) return;
+    this.columnDrag = null;
+    const target = this.targetAt(e.x);
+    this.dropTarget.value = "";
+    this.host.screen.tell("");
+    if (!d.moved || target === null) return;
+    const columns = this.host.screen.columns;
+    if (columns[target.index].id === d.id) return;
+    let from = -1;
+    for (let i = 0; i < columns.length; i++) if (columns[i].id === d.id) { from = i; break; }
+    if (from < 0) return;
+    const i = target.index;
+    const index = target.before ? (from > i ? i : i - 1) : from > i ? i + 1 : i;
+    if (this.host.screen.moveColumn(d.id, index)) this.host.kernel.settings.setState("columnOrder", this.host.screen.columnOrder());
   }
 
   /** The border follows the pointer while it is held. */
@@ -254,6 +378,10 @@ export class Shell extends View {
       if (fn !== null) fn();
       return true;
     });
+    app.add("app.menu", ["f10"], "", (_key: KeyEvent) => {
+      this.menuBar.open(0);
+      return true;
+    });
     for (let i = 0; i < FKEYS.length; i++) {
       const id = FKEY_COLUMNS[i];
       app.add("app.focus." + id, [FKEYS[i]], "", (_key: KeyEvent) => {
@@ -297,6 +425,47 @@ export class Shell extends View {
     }
   }
 
+  /** Build the bar's menus from the entries, with each item's key as the keymap binds it now. */
+  private buildMenus(): void {
+    const h = this.host;
+    const entries = h.screen.menuEntries;
+    const parts: string[] = [h.keys.keymap];
+    for (const e of entries) parts.push(e.owner + "\n" + e.menu + "\n" + e.label + "\n" + e.action + "\n" + String(e.order) + "\n" + h.kernel.keys.label(e.action) + "\n" + String(h.kernel.actions.find(e.action) !== null));
+    const signature = parts.join("\n");
+    if (signature === this.menuSignature) return;
+    this.menuSignature = signature;
+    const titles: string[] = [];
+    for (const e of entries) if (!titles.includes(e.menu)) titles.push(e.menu);
+    const lowest = (title: string): number => {
+      let order = 1e9;
+      for (const e of entries) if (e.menu === title && e.order < order) order = e.order;
+      return order;
+    };
+    titles.sort((a, b) => lowest(a) - lowest(b));
+    const menus: Menu[] = [];
+    for (const title of titles) {
+      const items: MenuItem[] = [];
+      for (const e of entries) {
+        if (e.menu !== title) continue;
+        if (e.label === "-") {
+          items.push(MenuItem.separator());
+          continue;
+        }
+        const item = new MenuItem(e.label, h.kernel.keys.label(e.action), () => this.runAction(e.action));
+        item.enabled = h.kernel.actions.find(e.action) !== null;
+        items.push(item);
+      }
+      menus.push(new Menu(title, items));
+    }
+    this.menuBar.setMenus(menus);
+  }
+
+  /** Run action `id` as its key would. */
+  private runAction(id: string): void {
+    const a = this.host.kernel.actions.find(id);
+    if (a !== null) a.onRun(new KeyEvent("none", "", false, false, false), 1);
+  }
+
   /** Every command and key, as the keymap binds them, as a notice in the chat. */
   help(): void {
     const h = this.host;
@@ -334,32 +503,47 @@ export class Shell extends View {
 
   override render(): unknown {
     this.host.screen.layout.value;
+    this.host.screen.menus.value;
+    this.keymapVersion.value;
+    this.buildMenus();
     this.side();
     const cols = this.cols.value;
     const active = this.host.screen.active.value;
     this.host.screen.tabs.value;
     this.resized.value;
+    const drop = this.dropTarget.value;
+    const dragged = this.columnDrag;
     const columns = this.host.screen.columns;
     const widths = this.laidOut(cols);
     // The band in parts as wide as the columns above them: each strip under the column it names.
     const last = columns.length > 0 ? columns[columns.length - 1].id : "";
     const under = (b: BandPart): string => (this.host.screen.column(b.under) !== null ? b.under : last);
-    return html`<div flex=1 @copy=${(e: CustomEvent) => {
+    return html`<div flex=1 bg=${palette.screenBg} @copy=${(e: CustomEvent) => {
       const copy = e.detail;
       if (copy instanceof LineCopy) this.host.screen.copySelection(copy.text, copy.rows);
-    }}>
+    }}>${this.menuBar}
       <div flex=1 direction="row">${columns.map((c, i) => {
         const tabs = this.tabs.get(c.id);
+        const panels = tabs !== undefined ? this.host.screen.panelsIn(c.id) : [];
+        // A tab's label is its title and its badge's text ("Todo 3").
+        const labels = panels.map((p) => (p.title + " " + p.badge().map((r) => r.text).join("")).trim()).join("\n");
+        const current = this.host.screen.shownIn(c.id);
+        let shown = -1;
+        for (let j = 0; j < panels.length; j++) if (panels[j].id === current) shown = j;
         const w = widths[i];
-        return key(c.id, html`<wc-column title=${tabs !== undefined ? tabs.title() : c.title} ?active=${active === c.id} left=${c.left} right=${c.right} width=${w > 0 ? w : null} flex=${w > 0 ? 0 : 1} .view=${c.view} @mousedown=${(e: MouseEvent) => this.pressColumn(i, e)} @mousemove=${(e: MouseEvent) => this.dragBorder(e)} @mouseup=${(e: MouseEvent) => this.dropBorder(e)}></wc-column>`);
+        return key(c.id, html`<wc-column column=${c.id} title=${c.title} tabs=${labels} shown=${shown} ?active=${active === c.id} drop=${drop === c.id && dragged !== null ? dragged.id : ""} left=${c.left} right=${c.right} width=${w > 0 ? w : null} flex=${w > 0 ? 0 : 1} .view=${c.view} @mousedown=${(e: MouseEvent) => this.pressColumn(i, e)} @mousemove=${(e: MouseEvent) => {
+          this.dragBorder(e);
+          this.dragColumn(e);
+        }} @mouseup=${(e: MouseEvent) => {
+          this.dropBorder(e);
+          this.dropColumn(e);
+        }}></wc-column>`);
       })}</div>
       <div direction="row" bg=${palette.bandBg}>${columns.map((c, i) => {
         const w = widths[i];
         const parts = this.host.screen.band.filter((b) => under(b) === c.id);
-        // Beside another strip, a tab column's links take the width they need.
-        const links = this.links.get(c.id);
         return html`<div direction="row" width=${w > 0 ? w : null} flex=${w > 0 ? 0 : 1}>${parts.map((b) =>
-          links !== undefined && b.view === links && parts.length > 1 ? html`<div width=${links.cells() + 1}>${b.view}</div>` : html`<div flex=1>${b.view}</div>`,
+          html`<div flex=1>${b.view}</div>`,
         )}</div>`;
       })}</div>
     </div>`;

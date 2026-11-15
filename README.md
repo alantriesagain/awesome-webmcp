@@ -87,7 +87,7 @@ Shift+Tab toggles plan mode, `@` completes a path (Tab takes it; `@image.png` at
 readline's; default, readline's alone; or vi, with insert and normal modes in the composer, Esc
 between them; kept for the next run),
 `/help`, `/quit`; F1 (chat), F2
-(files), F3 (code), F6 (tools) or Ctrl+←/→ switch columns, the wheel scrolls the column under the
+(files), F3 (code), F6 (tools) or Ctrl+←/→ switch columns, F10 opens the menu bar, the wheel scrolls the column under the
 pointer and PgUp/PgDn the active one; a pane longer than its rows has a scrollbar at its right edge
 (drag the thumb, or press the track to bring the thumb there); a drag on the border between two
 columns resizes them (kept for the next run; `/columns` says the widths, `/columns reset` forgets
@@ -118,7 +118,7 @@ to some files or asks for: in plan mode, edit and write only on plan files). A p
 all of that in the status bar. Agents: the session's subagents, where each stands and what it is
 doing or reported; a press shows one's steps in the code column, live while it runs.
 
-The files column has five tabs, their links on the band under it (a press on one, or Tab in the
+The files column has five tabs on its top edge (a press on one, or Tab in the
 column; F4 or `/resume` opens Sessions). Files: an All │ Changed switch (a press, or `c`), then the tree, changed names in their
 change's color. Sessions: the folder's sessions, ↑↓, Enter resumes (with the file the code column
 showed in it), `n` starts a new one; the terminal's title follows the session's. Git,
@@ -164,9 +164,9 @@ Under the columns, the status band, in parts as wide as the columns above. Under
 session as a table (the config's lines are its rows; cell i of each row as wide as the widest, so
 like things stack; each row's last cell, the text, grows): folder, model and effort, mode; context
 and the 5-hour and weekly limits as meters; cost, time, cache; then the title and the app's
-messages. Under the tools column, its tabs' links, and beside them what Claude is doing and for how
+messages. Under the tools column, what Claude is doing and for how
 long (✻ while it thinks), the calls by kind (read, write, run, agents), and the calls and thinking
-tokens. Under the files column, the tabs' links with their counts. Under the code column, the
+tokens. Under the code column, the
 changes (the branch among them): how many files and lines against the
 base, the open file and where its view is among its changes, then every changed file newest first
 with its lines added and removed, how long ago it changed, ● when Claude edited it; a press opens

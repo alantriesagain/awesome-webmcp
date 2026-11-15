@@ -238,7 +238,7 @@ settings), `protected-paths` (a rule on Write and Edit), `inline-bash` (`input`)
 | `composer` | the chat's composer, for a keymap plugin that edits it: `get()` (its lines, caret, whether it is empty, whether the suggestion strip shows or the request panel is open), `set(lines, row, col)`, `insert(text)`, `setLabel(text)` (its border title, a mode indicator) |
 | `on(hook, run)` | `conversationChanged`, `sessionsChanged` (a session record of the folder changed: a title, a cost), `filesLoaded`, `statusLoaded`, `folderChanged`, `folderOpened`, `baseChanged`, `fileShown`, `requestOpened` (a request opened in the request panel: its id, category, name and one-line summary), `messageSending`, `keymapChanged`, `messageChanged` (the status message set by `tell`, or cleared), `toolsChanged` (a tool added or dropped, after the runtime settled), `harnessChanged` (the project's `prompt.md` saved, or the folder trusted); a listener gets nothing and reads what changed, except `requestOpened`'s, which gets the request |
 | `tell`, `note` | a message in the status bar for a while; a line in the log |
-| `ui` | `panel({...})` a tab of a tab column (`column`: `side`, the files column, or `tools`, beside the chat; with a `badge()` for its link on the band), `band({...})` a strip of the status band under a column (`under`: `chat`, `tools`, `side`, `code`), `segment({...})` a status segment; `drawSegment` and `pressSegment` reach any plugin's segment; `bell()` rings the terminal's bell |
+| `ui` | `panel({...})` a tab of a tab column (`column`: `side`, the files column, or `tools`, beside the chat; its title on the column's top edge), `band({...})` a strip of the status band under a column (`under`: `chat`, `tools`, `side`, `code`), `segment({...})` a status segment; `drawSegment` and `pressSegment` reach any plugin's segment; `moveColumn(id, index)` puts a column at a position, kept for the next run; `bell()` rings the terminal's bell |
 | `widgets` | `chat({...})` and `code({...})` mount the core's widgets as columns, `tools({...})` the Tools tab in the tools column; the plugin that mounts one plays its role for the others |
 | `chat`, `code` | the roles: `submit`, `showChat`, `loadEarlier`; `open`, `openCommit`, `openAgent` (a subagent's steps), `openCall` (a tool call whole), `view({ id, count, rows, press })` (a view of the plugin's own rows, `show(title)` putting it in place of the file, Esc back), `markdown(title, text)` (a text rendered as the chat renders markdown, in place of the file), `path`, `inCommit`, `inAgent`, `position`, `scroll`, `moveHunk`, `setWrap` |
 | `state` | `folder()` (branch, marks, counts), `changes()` (newest first), `paths()`, `base()`, `active()`, `panels()`, `columns()`, `commands()`, `batch()` (the watcher's latest), `info()` (Claude Code's status line input), `note()`, `screen(columns)` (the screen as drawn, the named columns cropped to their cells), `log(n)` (the last lines of the log) |
@@ -269,11 +269,15 @@ colors are `#rrggbb`, `0` to `255` or a name. A tab draws only the rows its wind
 cell at the tab's right edge, where its scrollbar goes.
 
 The band under the columns is in parts, each as wide as the column above it: the status table
-under the chat, the tools column's tabs' links and the calls' status table beside them, the files
-column's tabs' links (a plugin's tab joins its column's, with its badge), the changes under the code
-column. A strip names the column it goes under. In a tab, as
+under the chat, the calls' status table under the tools column, the changes under the code
+column. A strip names the column it goes under. A column moves by dragging its title row: drop it
+over another column's left half to go before it, its right half to go after; the order is kept in
+state.json. `api.ui.moveColumn(id, index)` moves one from a plugin. In a tab, as
 in the chat and code columns, a drag selects and its release copies; a press without one is a
-press.
+press. The menu bar at the top takes rows from plugins: `api.ui.menu({ menu, label, action,
+order? })` adds `label` under menu `menu`, running the action `action` as its key would (a label
+of `-` is a separator). Menus show in the order of their lowest row, rows by their order, and F10
+opens the first.
 
 ## Keys
 

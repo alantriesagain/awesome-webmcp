@@ -96,17 +96,26 @@ const main = async (): Promise<void> => {
   const root = headless.root;
   await app.host.load();
   let lines = screen();
-  ok("the columns with their titles", has(lines, "▶ Chat") && has(lines, "Agents") && has(lines, "Files") && has(lines, "Code"));
+  ok("the columns with their titles on their top edges", lines[1].includes(" Chat ") && lines[1].includes("▁") && has(lines, "Agents") && has(lines, "Files") && has(lines, "Code"));
   ok("the chat greets a new session", has(lines, "A new session in this folder"));
-  /** A tab column's links: the band's rows under it. */
-  const links = (shown: string[], column = "side"): string => {
+  /** A tab column's tabs: its top edge, as the row reads. */
+  const tabs = (shown: string[], column = "side"): string => {
     const x = app.shell.xOf(column);
-    return shown.slice(-3).map((l) => l.slice(x, x + app.shell.widthOf(column)).trim()).filter((t) => t.length > 0).join("|");
+    return shown[1].slice(x, x + app.shell.widthOf(column)).replace(/[▁▂]/g, " ").trim().replace(/\s+/g, " ");
   };
-  eq("the tabs' links on the band under the side column, the fourth beside the first", links(lines), "Files 2      Peers|Sessions 2   Skills|Git");
+  eq("the tabs on the top edge of the side column, with their badges", tabs(lines), "Files 2 Sessions 2");
   ok("and the switch: all files, changed ones", has(lines, " All 3│ Changed 2 "));
-  const toolsBand = links(lines, "tools").split("|");
-  ok("the tools column beside the chat: its Tools, Available and Agents tabs, the calls' status beside them", app.shell.xOf("tools") === app.shell.widthOf("chat") && toolsBand[0].startsWith("Tools") && toolsBand[1].startsWith("Available") && toolsBand[1].includes("R 0 W 0 X 0 A 0") && toolsBand[2].startsWith("Agents"));
+  ok("the tools column beside the chat: its Tools, Available and Agents tabs on its top edge", app.shell.xOf("tools") === app.shell.widthOf("chat") && tabs(lines, "tools") === "Tools Available Agents");
+  ok("the calls' status beside them on the band", has(lines, "R 0 W 0 X 0 A 0"));
+  const secondTab = lines[1].indexOf("Available");
+  const tabHit = hitTest(root, secondTab, 1);
+  if (tabHit !== null) {
+    tabHit.dispatch(new MouseEvent("mousedown", secondTab, 1, 0, false, false, false));
+    tabHit.dispatch(new MouseEvent("mouseup", secondTab, 1, 0, false, false, false));
+  }
+  ok("a press on the second tab on the top edge shows that panel", app.host.screen.shownIn("tools") === "available");
+  app.host.screen.showPanel("calls");
+  app.host.screen.focus("chat");
   const filesTab = app.host.screen.findPanel("files");
   const changedOnly = (): boolean => {
     const kept = app.host.kernel.settings.state("files") as { changedOnly?: unknown } | null;
@@ -193,7 +202,7 @@ const main = async (): Promise<void> => {
 
   app.chat.submit("/resume");
   lines = screen();
-  ok("/resume opens the Sessions tab of the files column, sessions by title", links(lines).includes("Sessions") && has(lines, "2 sessions · n new") && has(lines, "Helper rename") && app.host.screen.active.peek() === "side");
+  ok("/resume opens the Sessions tab of the files column, sessions by title", tabs(lines).includes("Sessions") && has(lines, "2 sessions · n new") && has(lines, "Helper rename") && app.host.screen.active.peek() === "side");
   ok("the column widens for them", app.shell.widthOf("side") >= 24);
   ok("an untitled session shows its first prompt, cut short", has(lines, "Please look at the") && !has(lines, "only fails on Linux"));
   await wait(1500);

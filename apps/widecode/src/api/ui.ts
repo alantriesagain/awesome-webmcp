@@ -5,7 +5,7 @@ import { PreludePart } from "@light/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
 import { Language, addLanguage } from "@lightstart/highlight/registry.ts";
 import { TOKENIZERS, tokenizerFor } from "@lightstart/highlight/tokenizers.ts";
-import { BandPart, SegmentContext, SegmentDef } from "@widecode/screen/contributions.ts";
+import { BandPart, MenuEntry, SegmentContext, SegmentDef } from "@widecode/screen/contributions.ts";
 import { Command, Suggestion } from "@light/kernel/commands.ts";
 import { Action } from "@light/kernel/actions.ts";
 import { KeymapDef } from "../controllers/keymaps.ts";
@@ -139,6 +139,12 @@ export const answerUi = (rt: JsRuntime, name: string, a: unknown[]): HostAnswer 
       h.screen.addBand(owner, new BandPart(str(a[1]), str(a[2]), num(a[3]), b));
       return answer(null);
     }
+    case "ui.menu": {
+      // A row of the menu bar: entry `label` ("-" for a separator) of menu `menu`, running action `action`.
+      const owner = str(a[0]);
+      h.screen.addMenuEntry(owner, new MenuEntry(str(a[1]), str(a[2]), str(a[3]), num(a[4])));
+      return answer(null);
+    }
     case "ui.refresh": {
       const id = str(a[1]);
       for (const p of rt.views.panels) if (p.id === id && p.owner === str(a[0])) p.refresh();
@@ -200,6 +206,12 @@ export const answerUi = (rt: JsRuntime, name: string, a: unknown[]): HostAnswer 
       if (press === null) return answer(false);
       press();
       return answer(true);
+    }
+    case "ui.moveColumn": {
+      // Move column `id` to `index` among the columns, the order state.json keeps for the next run.
+      const moved = h.screen.moveColumn(str(a[1]), num(a[2]));
+      if (moved) h.kernel.settings.setState("columnOrder", h.screen.columnOrder());
+      return answer(moved);
     }
     case "ui.bell": {
       // The terminal's bell: the same write the clipboard uses, so a terminal beeps, flashes or hints.
@@ -285,7 +297,9 @@ export const NAMESPACE_UI = new PreludePart("ui", `        panel: (p) => {
         segment: (s) => {
           call("ui.segment", id, String(s.name), fn((ctx) => s.draw(ctx)), typeof s.press === "function" ? fn(() => { s.press(); }) : -1);
         },
+        menu: (m) => call("ui.menu", id, String(m.menu), String(m.label ?? ""), String(m.action ?? ""), Number(m.order ?? 50)),
         notice: (text, detail) => call("ui.notice", String(text), String(detail ?? "")),
+        moveColumn: (column, index) => call("ui.moveColumn", id, String(column), Number(index)),
         bell: () => call("ui.bell"),
         drawSegment: (name, ctx) => call("ui.drawSegment", String(name), ctx),
         pressSegment: (name) => call("ui.pressSegment", String(name)),

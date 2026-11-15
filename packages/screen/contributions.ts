@@ -91,6 +91,23 @@ export abstract class Panel {
   }
 }
 
+/** A menu bar entry: its menu's title, its label ("-" for a separator), the action it runs and where it sits. */
+export class MenuEntry {
+  readonly menu: string;
+  readonly label: string;
+  readonly action: string;
+  readonly order: number;
+  /** The plugin that added it (set by the host). */
+  owner = "";
+
+  constructor(menu: string, label: string, action: string, order: number) {
+    this.menu = menu;
+    this.label = label;
+    this.action = action;
+    this.order = order;
+  }
+}
+
 export class BandPart {
   readonly id: string;
   /** The column it sits under ("chat", "side", "code"), as wide as it; "" or a column that is not there: under the last one. */

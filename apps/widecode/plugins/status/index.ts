@@ -46,7 +46,7 @@ const DEFAULT_LINES = [
   [["model", "effort"], ["limit5h"], ["duration"], ["note"]],
   [["mode"], ["limitWeek"], ["cache"], ["peers"]],
 ];
-/** Under the tools column, beside its tabs' links: what Claude is doing and for how long, and its calls. */
+/** Under the tools column: what Claude is doing and for how long, and its calls. */
 const DEFAULT_TOOLS_LINES = [[["activity"]], [["tools"]], [["calls", "thinking"]]];
 /** The defaults earlier versions wrote, replaced by the current one where untouched: a shape of plain segments, and the lines as written. */
 const PREVIOUS_DEFAULT = "project branch model effort mode title spacer note|context limit5h limitWeek cache|activity tools calls thinking cost duration";

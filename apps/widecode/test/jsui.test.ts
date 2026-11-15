@@ -1,6 +1,6 @@
 // ffi: @light/plugins/native/ffi.json
 // What JS plugins draw (natively in QuickJS, under node through wcjs-node.mjs): a side tab from
-// their rows (fetched a window at a time), its info row, its link on the band with its badge (a
+// their rows (fetched a window at a time), its info row, its tab on the column's top edge with its badge (a
 // press on a link shows that tab), presses on both and keys in its scope; a
 // strip of the status band from their lines (a live run drawn as the spinner's frame) and a press on it; a segment the status table shows
 // where the config names it; a timer; the folder's state and the actions they take (a tab shown,
@@ -90,14 +90,18 @@ const main = async (): Promise<void> => {
   w.host.roles.chat.submit("/go");
   await wait(200);
   let lines = screen();
-  ok("its tab among the others, shown, at its width", lines.slice(-3).some((l) => l.includes(" Todo")) && w.host.screen.shownIn("side") === "todo" && w.shell.widthOf("side") === 30);
-  ok("its link on the band shows its badge", lines.slice(-3).some((l) => l.includes(" Todo 3 ")));
   const sideAt = w.shell.xOf("side");
-  const filesRow = lines.length - 3 + lines.slice(-3).findIndex((l) => l.slice(sideAt).trimStart().startsWith("Files"));
-  const filesAt = lines[filesRow].indexOf("Files", sideAt);
-  const link = hitTest(root, filesAt, filesRow);
-  if (link instanceof TElement) link.dispatch(new MouseEvent("mousedown", filesAt, filesRow, 0, false, false, false));
-  ok("a press on another tab's link shows it", w.host.screen.shownIn("side") === "files");
+  const top = (): string => screen()[1].slice(sideAt, sideAt + w.shell.widthOf("side"));
+  ok("its tab on the side column's top edge, shown, at its width", top().includes(" Todo") && w.host.screen.shownIn("side") === "todo" && w.shell.widthOf("side") === 30);
+  ok("its tab shows its badge", top().includes(" Todo 3 "));
+  // The first tab drawn on the edge, Todo kept in view however many come before it.
+  const row = top();
+  const other = row.slice(1).trimStart().split(" ")[0];
+  const otherAt = sideAt + row.indexOf(" " + other) + 1;
+  const link = hitTest(root, otherAt, 1);
+  if (link instanceof TElement) link.dispatch(new MouseEvent("mousedown", otherAt, 1, 0, false, false, false));
+  const pressed = w.host.screen.panelsIn("side").find((p) => p.title === other);
+  ok("a press on another tab shows it", other !== "Todo" && pressed !== undefined && w.host.screen.shownIn("side") === pressed.id);
   w.host.screen.showPanel("todo");
   lines = screen();
   ok("its rows and info row", has(lines, " · write the plan") && has(lines, " 0/3 done"));

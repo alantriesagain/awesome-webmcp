@@ -9,10 +9,31 @@ import { Latest } from "@light/lib/timing.ts";
 import { Hook } from "@light/lib/hook.ts";
 import { Kernel } from "@light/kernel/kernel.ts";
 import { Clipboard } from "@light/ui/clipboard.ts";
-import { BandPart, Column, Panel, Segments } from "./contributions.ts";
+import { BandPart, Column, MenuEntry, Panel, Segments } from "./contributions.ts";
 
 /** How long a message stays in the status bar before the key hints come back. */
 const MESSAGE_MS = 8000;
+
+/** Put the columns a saved order names first, in that order, in place: a saved id missing from `columns` is skipped, and the columns it does not name follow in their own order. */
+export const applySavedOrder = (columns: Column[], saved: string[]): void => {
+  let position = 0;
+  for (const id of saved) {
+    let at = -1;
+    for (let i = 0; i < columns.length; i++) if (columns[i].id === id) { at = i; break; }
+    if (at < 0) continue;
+    const column = columns.splice(at, 1)[0];
+    columns.splice(Math.min(position, columns.length), 0, column);
+    position++;
+  }
+};
+
+/** A saved order from state.json: its string ids, each once, in order. */
+export const columnOrderOf = (value: unknown): string[] => {
+  const out: string[] = [];
+  if (!Array.isArray(value)) return out;
+  for (const id of value as unknown[]) if (typeof id === "string" && !out.includes(id)) out.push(id);
+  return out;
+};
 
 export class ScreenController extends Controller {
   readonly kernel: Kernel;
@@ -22,9 +43,12 @@ export class ScreenController extends Controller {
   /** Moves when the tab a tab column shows changes; when columns, tabs or band strips come or go (the shell lays out again). */
   readonly tabs = signal(0);
   readonly layout = signal(0);
+  /** Moves when the menu bar's entries come or go. */
+  readonly menus = signal(0);
   readonly columns: Column[] = [];
   readonly panels: Panel[] = [];
   readonly band: BandPart[] = [];
+  readonly menuEntries: MenuEntry[] = [];
   readonly segments = new Segments();
   /** The system clipboard (does nothing until the entry configures it). */
   readonly clipboard = new Clipboard();
@@ -38,6 +62,8 @@ export class ScreenController extends Controller {
   private readonly shown = new Map<string, string>();
   private readonly chosen = new Set<string>();
   private readonly messages = new Latest();
+  /** The left-to-right order kept for the next run: where a column that comes back goes. */
+  private savedOrder: string[] = [];
 
   /** `active` names the column active at start. */
   constructor(kernel: Kernel, active: string) {
@@ -61,7 +87,34 @@ export class ScreenController extends Controller {
     for (let i = this.columns.length - 1; i >= 0; i--) if (this.columns[i].id === c.id) this.columns.splice(i, 1);
     this.columns.push(c);
     this.columns.sort((a, b) => a.order - b.order);
+    applySavedOrder(this.columns, this.savedOrder);
     this.relayout();
+  }
+
+  /** The columns' ids left to right. */
+  columnOrder(): string[] {
+    return this.columns.map((c) => c.id);
+  }
+
+  /** Take the order a previous run kept: the columns there now follow it, and columns added later are placed by it. */
+  setColumnOrder(ids: string[]): void {
+    this.savedOrder = ids.slice();
+    applySavedOrder(this.columns, this.savedOrder);
+    this.relayout();
+  }
+
+  /** Move column `id` to `index` among the columns; false for an unknown id or a position it is already at. */
+  moveColumn(id: string, index: number): boolean {
+    let at = -1;
+    for (let i = 0; i < this.columns.length; i++) if (this.columns[i].id === id) { at = i; break; }
+    if (at < 0) return false;
+    const to = Math.max(0, Math.min(this.columns.length - 1, Math.floor(index)));
+    if (to === at) return false;
+    const c = this.columns.splice(at, 1)[0];
+    this.columns.splice(to, 0, c);
+    this.savedOrder = this.columnOrder();
+    this.relayout();
+    return true;
   }
 
   /** Add plugin `owner`'s tab (to its column). */
@@ -84,11 +137,21 @@ export class ScreenController extends Controller {
     this.relayout();
   }
 
-  /** Drop everything plugin `owner` put on the screen: columns, tabs, band parts, segments. */
+  /** Add plugin `owner`'s menu bar entry. */
+  addMenuEntry(owner: string, entry: MenuEntry): void {
+    entry.owner = owner;
+    this.menuEntries.push(entry);
+    this.menuEntries.sort((a, b) => a.order - b.order);
+    this.menus.value = this.menus.peek() + 1;
+  }
+
+  /** Drop everything plugin `owner` put on the screen: columns, tabs, band parts, menu entries, segments. */
   removeOwner(owner: string): void {
     for (let i = this.columns.length - 1; i >= 0; i--) if (this.columns[i].owner === owner) this.columns.splice(i, 1);
     for (let i = this.panels.length - 1; i >= 0; i--) if (this.panels[i].owner === owner) this.panels.splice(i, 1);
     for (let i = this.band.length - 1; i >= 0; i--) if (this.band[i].owner === owner) this.band.splice(i, 1);
+    for (let i = this.menuEntries.length - 1; i >= 0; i--) if (this.menuEntries[i].owner === owner) this.menuEntries.splice(i, 1);
+    this.menus.value = this.menus.peek() + 1;
     this.segments.removeOwner(owner);
     for (const id of Array.from(this.chosen)) if (this.column(id) === null && this.panelsIn(id).length === 0) this.chosen.delete(id);
     for (const column of Array.from(this.shown.keys())) {
