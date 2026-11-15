@@ -89,6 +89,8 @@ export class Shell extends View {
   private columnDrag: ColumnDrag | null = null;
   /** The column the dragged column would drop on (drawn on the drop color in the dragged one's accent). */
   private readonly dropTarget = signal("");
+  /** The border the pointer is over or drags, as the column left of it (-1 for none). */
+  private readonly edge = signal(-1);
 
   constructor(host: Host) {
     super();
@@ -236,29 +238,41 @@ export class Shell extends View {
   }
 
   /** A left press on column `index`: on its border with a neighbour, a drag starts resizing them; on its title row, a drag starts moving it (and a tab column shows the tab under it); else the column becomes active. */
-  private pressColumn(index: number, e: MouseEvent): void {
-    if (e.button !== 0) return;
-    this.columnDrag = null;
+  /** The border column `index`'s cell at `x` is on, as the column left of it (-1 when `x` is on none that resizes). */
+  private borderAt(index: number, x: number): number {
     const cols = this.cols.peek();
     const widths = this.laidOut(cols);
-    // The column taking the rest is as wide as the others leave.
-    let fixed = 0;
-    for (const w of widths) fixed += w;
-    const shown = widths.map((w) => (w > 0 ? w : Math.max(0, cols - fixed)));
-    let x = 0;
-    for (let i = 0; i < index; i++) x += shown[i];
+    const shown = this.shownWidths();
+    let start = 0;
+    for (let i = 0; i < index; i++) start += shown[i];
     const columns = this.host.screen.columns;
     // The border between columns a and b: the one with a width of its own changes (the code column takes the rest).
     let a = -1;
-    if (e.x === x + shown[index] - 1 && index < columns.length - 1) a = index;
-    else if (e.x === x && index > 0) a = index - 1;
+    if (x === start + shown[index] - 1 && index < columns.length - 1) a = index;
+    else if (x === start && index > 0) a = index - 1;
+    if (a < 0) return -1;
+    return widths[widths[a] > 0 ? a : a + 1] > 0 ? a : -1;
+  }
+
+  /** The pointer over a border that resizes: the two columns draw their sides along it, so the handle shows. */
+  private hoverColumn(index: number, e: MouseEvent): void {
+    e.consume();
+    if (this.drag === null) this.edge.value = this.borderAt(index, e.x);
+  }
+
+  private pressColumn(index: number, e: MouseEvent): void {
+    if (e.button !== 0) return;
+    this.columnDrag = null;
+    const widths = this.laidOut(this.cols.peek());
+    const shown = this.shownWidths();
+    const columns = this.host.screen.columns;
+    const a = this.borderAt(index, e.x);
     if (a >= 0) {
       const left = widths[a] > 0;
       const target = left ? a : a + 1;
-      if (widths[target] > 0) {
-        this.drag = new BorderDrag(columns[target].id, e.x, shown[target], left ? 1 : -1);
-        return;
-      }
+      this.edge.value = a;
+      this.drag = new BorderDrag(columns[target].id, e.x, shown[target], left ? 1 : -1);
+      return;
     }
     const box = this.columnBox(index);
     if (box !== null && e.y === box.y) {
@@ -518,7 +532,10 @@ export class Shell extends View {
     // The band in parts as wide as the columns above them: each strip under the column it names.
     const last = columns.length > 0 ? columns[columns.length - 1].id : "";
     const under = (b: BandPart): string => (this.host.screen.column(b.under) !== null ? b.under : last);
-    return html`<div flex=1 bg=${palette.screenBg} @copy=${(e: CustomEvent) => {
+    const edge = this.edge.value;
+    return html`<div flex=1 bg=${palette.screenBg} @mousehover=${() => {
+      this.edge.value = -1;
+    }} @copy=${(e: CustomEvent) => {
       const copy = e.detail;
       if (copy instanceof LineCopy) this.host.screen.copySelection(copy.text, copy.rows);
     }}>${this.menuBar}<div height=1></div>
@@ -531,7 +548,7 @@ export class Shell extends View {
         let shown = -1;
         for (let j = 0; j < panels.length; j++) if (panels[j].id === current) shown = j;
         const w = widths[i];
-        return key(c.id, html`<wc-column column=${c.id} title=${c.title} tabs=${labels} shown=${shown} ?active=${active === c.id} drop=${drop === c.id && dragged !== null ? dragged.id : ""} left=${c.left} right=${c.right} width=${w > 0 ? w : null} flex=${w > 0 ? 0 : 1} .view=${c.view} @mousedown=${(e: MouseEvent) => this.pressColumn(i, e)} @mousemove=${(e: MouseEvent) => {
+        return key(c.id, html`<wc-column column=${c.id} title=${c.title} tabs=${labels} shown=${shown} ?active=${active === c.id} drop=${drop === c.id && dragged !== null ? dragged.id : ""} edge=${edge === i ? "right" : edge === i - 1 && i > 0 ? "left" : ""} left=${c.left} right=${c.right} width=${w > 0 ? w : null} flex=${w > 0 ? 0 : 1} .view=${c.view} @mousedown=${(e: MouseEvent) => this.pressColumn(i, e)} @mousehover=${(e: MouseEvent) => this.hoverColumn(i, e)} @mousemove=${(e: MouseEvent) => {
           this.dragBorder(e);
           this.dragColumn(e);
         }} @mouseup=${(e: MouseEvent) => {

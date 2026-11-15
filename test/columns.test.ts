@@ -1,10 +1,10 @@
 // ffi: @light/plugins/native/ffi.json
 // The columns' widths: config.json's "columns" (cells, or a percentage of the terminal; the files
 // column named "files"; the code column takes the rest, so a width for it is refused, as is
-// anything else), the others giving way when the code column would get under 20 cells; a drag on
-// the border between two columns resizes the one with a width of its own, from either side of the
-// border, and state.json keeps it for the next run, over config.json's; a press inside a column
-// still makes it active; /columns says the widths, /columns reset forgets the drags.
+// anything else), the others giving way when the code column would get under 20 cells; the pointer
+// over the border between two columns draws their sides along it, and a drag on it resizes the one
+// with a width of its own, from either side of the border, and state.json keeps it for the next
+// run, over config.json's; a press inside a column still makes it active; /columns says the widths, /columns reset forgets the drags.
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +12,7 @@ import { Conversation } from "../src/conversation/conversation.ts";
 import { openWorkspace } from "@light/workspace/workspace.ts";
 import { ColumnWidths, settingOf } from "../src/views/column-widths.ts";
 import { createWidecode } from "../src/compose.ts";
-import { DEFAULT_STYLE, MouseEvent, TElement, TRoot, frames, hitTest, layout, mount, unmount } from "@lightstart/light/native/tui";
+import { DEFAULT_STYLE, MouseEvent, TBox, TElement, TRoot, find, frames, hitTest, layout, mount, unmount } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@light/test/assert.ts";
 
 const ids = ["chat", "tools", "side", "code"];
@@ -65,6 +65,22 @@ const main = async (): Promise<void> => {
   const shell = w.shell;
   const chat = shell.widthOf("chat");
   w.host.screen.focus("code");
+  settle();
+  /** The pointer over (x, y) with no button held: the hover goes where it is, as the renderer sends it. */
+  const hover = (x: number, y: number): void => {
+    const target = hitTest(root, x, y);
+    if (target instanceof TElement) target.dispatch(new MouseEvent("mousehover", x, y, 0, false, false, false));
+    settle();
+  };
+  const sidesOf = (id: string): string => {
+    const el = find(root, (n) => n instanceof TBox && n.border && n.parent !== null && n.parent.tag === "wc-column" && n.x === shell.xOf(id));
+    return el instanceof TBox ? el.borderSides : "?";
+  };
+  eq("unfocused, the chat and the tools column draw no sides", sidesOf("chat") + " " + sidesOf("tools"), "none none");
+  hover(chat - 1, 8);
+  eq("the pointer on the border between them: the chat's right side, the tools column's left", sidesOf("chat") + " " + sidesOf("tools"), "right left");
+  hover(5, 8);
+  eq("away from it, the sides go again", sidesOf("chat") + " " + sidesOf("tools"), "none none");
   drag(chat - 1, chat + 9, 5);
   eq("a drag on the chat's right border widens it", String(shell.widthOf("chat")), String(chat + 10));
   ok("the tools column moved with it, the drag did not make the chat active", shell.xOf("tools") === chat + 10 && w.host.screen.active.peek() === "code");
