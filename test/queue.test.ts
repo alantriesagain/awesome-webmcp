@@ -10,11 +10,9 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { Item, PROMPT, TEXT, Turn } from "../src/conversation/model.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode, createWidecode, Widecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
@@ -39,10 +37,6 @@ const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-queue-"));
   const fake = join(process.cwd(), "test/fake-acp.mjs");
   const forgotten = join(folder, "forgotten.txt");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  w.host.session.agentId.value = "fake";
   const config: unknown = {
     acp: {
       agents: {
@@ -51,8 +45,15 @@ const main = async (): Promise<void> => {
       },
     },
   };
-  w.start(config, new NoStateFile(), []);
-  await w.host.load();
+  const w = await openWidecode({
+    folder,
+    plugins: config,
+    load: true,
+    before: (w: Widecode) => {
+      w.host.session.agentId.value = "fake";
+    },
+  });
+  const c = w.host.conversation;
   const idle = (): boolean => !c.model.running && c.model.pending.length === 0;
   const last = (): Turn => c.model.turns[c.model.turns.length - 1];
   const input = w.chat.pane.input;
@@ -94,14 +95,17 @@ const main = async (): Promise<void> => {
   await until(idle);
   w.host.roles.chat.submit("/btw anything?");
   eq("says so", said_(), "Old cannot fork a session for a side question");
-  w.host.kernel.stop();
-  w.js.killProcesses();
+  closeWidecode(w);
 
   // Claude Code: cancel_async_message and side_question.
-  const cc = new Conversation(ws.folder);
-  cc.executable = join(process.cwd(), "test/fake-claude.mjs");
-  cc.extraArgs.push("--fixture", join(process.cwd(), "test/fixtures/turn.ndjson"));
-  const wc = createWidecode(ws, cc, null);
+  const wc = await openWidecode({
+    folder,
+    before: (wc: Widecode) => {
+      wc.host.conversation.executable = join(process.cwd(), "test/fake-claude.mjs");
+      wc.host.conversation.extraArgs.push("--fixture", join(process.cwd(), "test/fixtures/turn.ndjson"));
+    },
+  });
+  const cc = wc.host.conversation;
   wc.host.roles.chat.submit("Reply with exactly the word PONG and nothing else.");
   ok("Claude's turn", await until(() => cc.model.turns.length === 1 && cc.model.turns[0].result !== null));
   wc.host.roles.chat.submit("a second thought");
@@ -114,11 +118,7 @@ const main = async (): Promise<void> => {
   wc.host.roles.chat.submit("/btw and before that?");
   ok("the earlier side questions are its history", await until(() => chat(wc).includes("  │ Side answer to: and before that? (after 1)")));
   ok("none of it in the conversation", cc.model.turns.length === 1 && cc.model.pending.length === 0);
-  cc.kill();
-  wc.host.kernel.stop();
-  wc.js.killProcesses();
-
-  ws.close();
+  closeWidecode(wc);
   rmSync(folder, { recursive: true, force: true });
   done();
 };
