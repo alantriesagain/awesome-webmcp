@@ -54,6 +54,8 @@ export class Config {
   log = new LogConfig();
   /** Why the file was not used as written, or what was moved in it ("" for neither). */
   notice = "";
+  /** There was no config.json: `seedConfig` writes one with the plugins' sections. */
+  missing = false;
 }
 
 /** Everything read from the store's JSON, every field `unknown`. */
@@ -256,28 +258,46 @@ export class Store {
     }
   }
 
-  /**
-   * The settings; on first run every plugin's default section (`defaults`) is written for editing.
-   * A file from before plugins (top-level "statusline", "titles", "models") has them moved under
-   * "plugins" once, into the status, sessions and models sections.
-   */
+  /** The settings, read (`readConfig`), and on first run written with every plugin's default section (`seedConfig`). */
   loadConfig(defaults: PluginDefault[]): Config {
+    const c = this.readConfig();
+    this.seedConfig(c, defaults);
+    return c;
+  }
+
+  /**
+   * On first run (no config.json when `c` was read), write one with every plugin's default
+   * section (`defaults`) for editing; `c` takes its plugins. Nothing otherwise.
+   */
+  seedConfig(c: Config, defaults: PluginDefault[]): void {
+    if (!c.missing) return;
+    c.missing = false;
+    const ids: string[] = [];
+    const values: unknown[] = [];
+    for (const d of defaults) {
+      ids.push(d.id);
+      values.push(d.value);
+    }
+    const text = configText(ids, values);
+    try {
+      this.writeText(this.configPath, text);
+      this.firstRun = true;
+    } catch (err) {
+      c.notice = "cannot write " + this.configPath + ": " + (errorMessage(err, "error"));
+    }
+    c.plugins = (JSON.parse(text) as Fields).plugins;
+  }
+
+  /**
+   * The settings as config.json has them; without one, the defaults and `missing` (the plugins'
+   * sections come with `seedConfig`, once the plugins are known). A file from before plugins
+   * (top-level "statusline", "titles", "models") has them moved under "plugins" once, into the
+   * status, sessions and models sections.
+   */
+  readConfig(): Config {
     const c = new Config();
     if (!existsSync(this.configPath)) {
-      const ids: string[] = [];
-      const values: unknown[] = [];
-      for (const d of defaults) {
-        ids.push(d.id);
-        values.push(d.value);
-      }
-      const text = configText(ids, values);
-      try {
-        this.writeText(this.configPath, text);
-        this.firstRun = true;
-      } catch (err) {
-        c.notice = "cannot write " + this.configPath + ": " + (errorMessage(err, "error"));
-      }
-      c.plugins = (JSON.parse(text) as Fields).plugins;
+      c.missing = true;
       return c;
     }
     let value: unknown = null;

@@ -1,5 +1,5 @@
 // widecode opened for a test, the one place a test builds the app: through the app layer, as the
-// binary starts it (`openApp` over the generated manifest), with the widecode controller told the
+// binary starts it (`openApp` over the generated manifest), with the run controller told the
 // test's run instead of reading the flags: the folder's workspace, its conversation, the composition
 // and the start with the plugins' config, without the log, the store or the config file. What a test
 // changes before the start (the agent chosen, the CLI and its arguments, a store, a plugin folder)
@@ -12,7 +12,9 @@ import { openApp } from "@lightstart/app/test";
 import type { OpenedApp } from "@lightstart/app/test";
 import manifest from "../../.light/app.ts";
 import type { Widecode } from "../../src/compose.ts";
-import widecode, { Run } from "../../src/controllers/widecode.ts";
+import run from "../../src/controllers/run.ts";
+import widecode from "../../src/controllers/widecode.ts";
+import { Run } from "../../src/run.ts";
 
 /** What a test opens widecode with; every field but `folder` has a default. */
 export interface OpenOptions {
@@ -43,17 +45,17 @@ export const openWidecode = async (options: OpenOptions): Promise<Widecode> => {
     await opened.stop();
     opened = null;
   }
-  const run = new Run();
-  run.real = false;
-  run.folder = options.folder;
-  run.batchMs = options.batchMs ?? 100;
-  run.plugins = options.plugins ?? null;
-  if (options.state !== undefined) run.state = options.state;
-  run.extra = options.extra ?? [];
-  run.before = options.before ?? null;
-  run.start = options.start ?? true;
-  run.load = options.load ?? false;
-  widecode.next = run;
+  const next = new Run();
+  next.real = false;
+  next.folder = options.folder;
+  next.batchMs = options.batchMs ?? 100;
+  next.plugins = options.plugins ?? null;
+  if (options.state !== undefined) next.state = options.state;
+  next.extra = options.extra ?? [];
+  next.before = options.before ?? null;
+  next.start = options.start ?? true;
+  next.load = options.load ?? false;
+  run.next = next;
   opened = await openApp(manifest, { storage: "memory" });
   return widecode.w;
 };

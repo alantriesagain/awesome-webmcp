@@ -1,131 +1,69 @@
-// widecode's one transitional controller, standing in for main.ts and startup.ts. A start is a Run:
-// the real app's, read from the flags, or the one a test describes (test/support/app.ts). Its
-// connected() composes the app over the run's folder; for the real app it first does what the entry
-// did before the terminal (the log, the signals and the crash monitor, once a process, and the
-// folder check), then the store, the config, the plugins, the keys, the columns and the watching.
-// The host makes the root view next; mounted(renderer) runs what the old pipeline did from runApp
-// on: focus, the clipboard, resizes, the frame trail, the crash hooks, load, resume, onboarding,
-// --open and a selftest. disconnected() stops what the start opened, so the app starts again clean.
-// Round 3 dissolves this into the controllers the plan names.
-import { existsSync, readFileSync, statSync } from "node:fs";
+// widecode composed over the start's folder, after the run, the log and the settings (the
+// controllers it imports). A test's run composes the folder, runs its `before` and starts the plugins
+// as it says; the real app's takes the store and config.json, the plugins' folders, the agent, the
+// keys, the columns and the watching. The host makes the root view next; mounted(renderer) runs what
+// follows the first frame: focus, the clipboard, the frame trail, the crash context, load, resume,
+// onboarding, --open and a selftest. disconnected() stops what the start opened, so the app starts
+// again clean. Round 3 dissolves this into the controllers the plan names.
+import { readFileSync } from "node:fs";
 import { errorMessage, isRecord } from "@lightstart/lib/json.ts";
-import { homedir } from "node:os";
-import { basename, join, resolve } from "node:path";
-import { log, logPath, nameLog, openLog, openLogIn, trail } from "@lightstart/lib/log.ts";
-import { installCrash, noteCrash } from "@lightstart/lib/crash.ts";
+import { basename, resolve } from "node:path";
+import { log, trail } from "@lightstart/lib/log.ts";
 import { composeWidecode, Widecode } from "../compose.ts";
 import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import type { StateFile } from "@lightstart/kernel/settings.ts";
-import type { Plugin } from "@lightstart/kernel/plugin.ts";
 import { checkSource } from "../api/plugins.ts";
 import { AgentChoice, HarnessFile, Onboarding, folderCarries, runOnboarding } from "../views/onboarding.ts";
 import { Conversation } from "../conversation/conversation.ts";
 import { FLUSH_AFTER, FLUSH_RENDER, FLUSH_VIEWS, Renderer, TInput, frames } from "@lightstart/light/native/tui";
 import { Selftest } from "../selftest.ts";
-import { Config, Store } from "../services/store.ts";
+import type { Config, Store } from "../services/store.ts";
 import { Controller } from "@lightstart/light/controller/class.ts";
 import { BUILD } from "../build.ts";
 import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { registerStoreCommands } from "../commands.ts";
 import { flushBeforeExit, QuitFlusher } from "../quit.ts";
 import app from "../app.ts";
-
-/** How long folder events gather before the screen refreshes. */
-const CHANGES_MS = 150;
+import { Carry, Run } from "../run.ts";
+import logger from "./log.ts";
+import run from "./run.ts";
+import settings from "./settings.ts";
 
 /** How often the log says the run is alive. */
 const ALIVE_MS = 5 * 60 * 1000;
 
-/**
- * How one start of the app goes: the real app's (`real`, the rest read from the flags), or a test's,
- * which opens its folder without the log, the store or the config, and starts the plugins as it says.
- */
-export class Run {
-  /** The folder the app opens. */
-  folder = "";
-  /** How long the folder's events gather, in ms. */
-  batchMs = CHANGES_MS;
-  /** The real app: the log, the signals, the store and the config. A test's run has none of them. */
-  real = true;
-  /** A test's: config.json's "plugins" (null for none), what plugins keep, compiled plugins after the JS ones. */
-  plugins: unknown = null;
-  state: StateFile = new NoStateFile();
-  extra: Plugin[] = [];
-  /** A test's: run once the app is composed, before its plugins start. */
-  before: ((w: Widecode) => void | Promise<void>) | null = null;
-  /** A test's: whether the plugins start, and whether the folder is read before the start settles. */
-  start = true;
-  load = false;
-
-  /** The same run over another folder, read once it starts (an `/open`). */
-  over(folder: string): Run {
-    const next = new Run();
-    next.folder = folder;
-    next.batchMs = this.batchMs;
-    next.real = this.real;
-    next.plugins = this.plugins;
-    next.state = this.state;
-    next.extra = this.extra;
-    next.before = this.before;
-    next.start = this.start;
-    next.load = true;
-    return next;
-  }
-}
-
-/** What carries over to another folder (`/open`): the agent chosen, its CLI and arguments, the model and the effort. */
-export class Carry {
-  agentId = "";
-  executable = "";
-  extraArgs: string[] = [];
-  modelName = "";
-  effort = "";
-  /** What the new start tells, once it runs. */
-  notice = "";
-}
-
-/** The process-wide pieces (the signal and exit handlers, the crash monitor) are installed once, whatever the restarts. */
-let installed = false;
-
 export class WidecodeController extends Controller {
   /** Everything the app's parts hold, made by connected(). */
   w!: Widecode;
-  store: Store | null = null;
-  config: Config | null = null;
-  /** Why an earlier ~/.ctui was not moved, or what was moved ("" for neither). */
-  migrated = "";
   /** What the columns, the agent and the user's keys could not use, told after load. */
   columnsNote = "";
   agentNote = "";
   keysNote = "";
-  /** The run the next start takes, set by a test; the real app's when null. */
-  next: Run | null = null;
-  /** The test's run this start took; null for the real app. */
-  private run: Run | null = null;
-  /** What the next start takes over from the one before it (an `/open`). */
-  private carry: Carry | null = null;
   /** What this start tells once it runs ("" for nothing). */
   private opened = "";
-  /** Once a process: the log opened, and what a mount wires to the terminal and the frames. */
-  private logOpened = false;
+  /** Once a process: what a mount wires to the terminal and the frames. */
   private wired = false;
   /** The session and its turn, as the log says them; the mounted app's. */
   private where: () => string = () => "";
   /** Whether what this start opened was stopped already (a test's closeWidecode, then the app's stop). */
   private closed = true;
-  /** The crash trail's context and how to put the screen back, once mounted. */
-  crashContext: (() => string) | null = null;
-  leaveScreen: (() => void) | null = null;
 
   constructor() {
     super("widecode");
   }
 
+  /** This start's store and config.json (none for a test's run). */
+  get store(): Store | null {
+    return settings.current.store;
+  }
+
+  get config(): Config | null {
+    return settings.current.config;
+  }
+
   override connected(): Promise<void> | null {
-    const run = this.next;
-    this.next = null;
-    this.run = run;
-    return run !== null ? this.connectTest(run) : this.connect();
+    const current = run.current;
+    logger.onExit = () => this.close();
+    return current.real ? this.connect(current) : this.connectTest(current);
   }
 
   override disconnected(): Promise<void> | null {
@@ -142,6 +80,7 @@ export class WidecodeController extends Controller {
     w.host.kernel.stop();
     w.js.killProcesses();
     w.host.workspace.close();
+    w.js.mcp.close();
   }
 
   /**
@@ -158,17 +97,12 @@ export class WidecodeController extends Controller {
     carry.modelName = c.modelName;
     carry.effort = c.effort;
     carry.notice = "opened " + folder;
-    this.carry = carry;
-    const run = this.run;
-    if (run !== null) this.next = run.over(folder);
-    // The new start resumes nothing, opens no file and starts no selftest: those were the first start's.
-    await app.restart({ dir: folder, resume: undefined, open: undefined, selftest: undefined });
+    await run.reopen(folder, carry);
   }
 
   /** Take over what the start before carried (an `/open`): the conversation's CLI, arguments, model and effort, and the agent chosen. */
   private takeOver(w: Widecode): void {
-    const carry = this.carry;
-    this.carry = null;
+    const carry = run.takeCarry();
     this.opened = "";
     if (carry === null) return;
     const c = w.host.conversation;
@@ -182,113 +116,47 @@ export class WidecodeController extends Controller {
   }
 
   /** A test's start: the folder composed, its `before`, the plugins as it says, the folder read if it asks. */
-  private async connectTest(run: Run): Promise<void> {
-    this.store = null;
-    this.config = null;
-    this.migrated = "";
+  private async connectTest(current: Run): Promise<void> {
     this.columnsNote = "";
     this.agentNote = "";
     this.keysNote = "";
-    const workspace = await openWorkspace(run.folder, run.batchMs);
+    const workspace = await openWorkspace(current.folder, current.batchMs);
     const w = composeWidecode(workspace, new Conversation(workspace.folder));
     this.w = w;
     this.closed = false;
     w.host.onOpen = (folder: string) => this.reopen(folder);
-    const before = run.before;
+    const before = current.before;
     if (before !== null) await before(w);
     this.takeOver(w);
-    if (run.start) w.start(run.plugins, run.state, run.extra);
-    if (run.load) await w.host.load();
+    if (current.start) w.start(current.plugins, current.state, current.extra);
+    if (current.load) await w.host.load();
     if (this.opened.length > 0) w.host.screen.tell(this.opened);
   }
 
-  /** The process's handlers, installed by the first real start. */
-  private installProcess(): void {
-    if (installed) return;
-    installed = true;
-    // Natively an error has no stack: the trail of what ran last is what places it. The runtime
-    // prints the error and exits after this, the exit listeners running (the agent's CLI stopped).
-    process.on("uncaughtExceptionMonitor", (err: Error, origin: string) => {
-      log((origin === "unhandledRejection" ? "unhandled rejection: " : "uncaught exception: ") + (err instanceof Error ? err.name + ": " + err.message : String(err)));
-      const context = this.crashContext;
-      if (context !== null)
-        try {
-          log(context());
-        } catch (e) {
-          log("the context could not be read: " + errorMessage(e, "error"));
-        }
-      const leave = this.leaveScreen;
-      if (leave !== null) leave();
-      const p = logPath();
-      process.stderr.write("widecode stopped on an error" + (p.length > 0 ? "; its log: " + p : "") + "\n");
-    });
-    process.on("exit", (code: number) => log("exit, code " + String(code)));
-    // The terminal closed: an exit, so its listeners stop the agent's CLI (the default would skip them).
-    process.on("SIGHUP", () => {
-      log("signal SIGHUP: the terminal went away");
-      process.exit(129);
-    });
-    process.on("SIGTERM", () => log("signal SIGTERM"));
-    // However the program ends (Ctrl+C, a signal, a crash), the CLI and its turn end with it.
-    process.on("exit", () => {
-      if (this.closed) return;
-      const w = this.w;
-      w.host.conversation.kill();
-      w.js.killProcesses();
-      w.js.mcp.close();
-    });
-  }
-
-  private async connect(): Promise<void> {
-    const logArg = app.args.string("log") ?? null;
-    const first = !this.logOpened;
-    this.logOpened = true;
-    if (first) {
-      nameLog("widecode");
-      openLog(logArg);
-      log(BUILD);
-    }
-    this.installProcess();
-
+  private async connect(current: Run): Promise<void> {
+    this.columnsNote = "";
+    this.agentNote = "";
+    this.keysNote = "";
     const selftest = app.args.string("selftest") ?? "";
-    const folder = resolve(app.args.string("dir") ?? process.cwd());
-    if (!existsSync(folder) || !statSync(folder).isDirectory()) {
-      console.error("widecode: not a folder: " + folder);
-      process.exit(2);
-    }
-
-    const workspace = await openWorkspace(folder, CHANGES_MS);
+    const folder = current.folder;
+    const workspace = await openWorkspace(folder, current.batchMs);
     const conversation = new Conversation(workspace.folder);
     conversation.executable = app.args.string("claude") ?? "";
     conversation.effort = app.args.string("effort") ?? "";
     const fixture = app.args.string("fake-fixture");
     if (fixture !== undefined) conversation.extraArgs.push("--fixture", resolve(fixture));
     if (app.args.flag("ephemeral")) conversation.extraArgs.push("--no-session-persistence");
-    // widecode's store, ~/.widecode: none with --ephemeral (tests, live checks), so they leave nothing behind.
-    const store = app.args.flag("ephemeral") ? null : new Store(Store.defaultRoot());
-    // An earlier version kept its data in ~/.ctui: moved over once.
-    this.migrated = store !== null && (process.env["WIDECODE_HOME"] ?? "").length === 0 ? store.migrateFrom(join(homedir(), ".ctui")) : "";
     // --model names the model of a new session; without it, the models plugin's first.
     conversation.modelName = app.args.string("model") ?? "";
     const w = composeWidecode(workspace, conversation);
     const host = w.host;
-    const config = store !== null ? store.loadConfig(w.defaults()) : null;
-    this.store = store;
-    this.config = config;
+    const store = settings.current.store;
+    const config = settings.current.config;
+    settings.seed(w.defaults());
     this.w = w;
     this.closed = false;
     host.onOpen = (next: string) => this.reopen(next);
     this.takeOver(w);
-    // The log: a file of this run's own under the store unless --log named one, config.json's "log" said otherwise or --no-log.
-    if (first && logArg === null && store !== null && config !== null && config.log.enabled && !app.args.flag("no-log")) {
-      const dir = config.log.dir;
-      openLogIn(dir.length === 0 ? join(store.root, "logs") : dir.startsWith("~/") ? join(homedir(), dir.slice(2)) : resolve(store.root, dir), config.log.keep);
-      log(BUILD);
-    }
-    log("pid " + String(process.pid) + " · " + (process.argv.length > 2 ? process.argv.slice(2).join(" ") : "no flags") + " · store " + (store !== null ? store.root : "none"));
-    // A native crash reports itself to this log and puts the terminal back; before the TUI saves raw mode.
-    if (first) installCrash(logPath(), "widecode");
-    trail.onChange = (text: string) => noteCrash(text);
     await host.useStore(store);
     host.session.userPermissions = config !== null ? config.permissions : null;
     host.session.titler.executable = conversation.executable;
@@ -431,8 +299,8 @@ export class WidecodeController extends Controller {
       }
     });
     this.where = where;
-    this.crashContext = () => "\n" + trail.text() + "\nat the error: " + where() + "\nscreen at the error\n" + renderer.screenText() + "\nend screen";
-    this.leaveScreen = () => renderer.stop();
+    logger.crashContext = () => "\n" + trail.text() + "\nat the error: " + where() + "\nscreen at the error\n" + renderer.screenText() + "\nend screen";
+    logger.leaveScreen = () => renderer.stop();
     host.screen.onScreen = (columns: string[]) => w.screenText(renderer.back, columns);
     let quitting = false;
     host.onQuit = () => {
@@ -508,9 +376,9 @@ export class WidecodeController extends Controller {
       // --trust is a run with nothing asked; the first-run questions wait for a normal launch.
       this.onboard(!app.args.flag("trust") && this.store !== null && this.store.firstRun);
       for (const e of w.js.errors) log("plugins: " + e);
-      if (this.migrated.length > 0) {
-        log(this.migrated);
-        host.screen.tell(this.migrated);
+      if (settings.current.migrated.length > 0) {
+        log(settings.current.migrated);
+        host.screen.tell(settings.current.migrated);
       }
       const open = app.args.string("open") ?? null;
       if (open !== null) host.roles.code.open(open);

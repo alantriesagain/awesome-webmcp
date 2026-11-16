@@ -11,13 +11,12 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { stringWidth } from "@lightstart/light/native/tui/width.ts";
 import { PluginSource, sourcesIn } from "@lightstart/plugins/sources.ts";
 import { NoStateFile } from "@lightstart/kernel/settings.ts";
 import { Store } from "../src/services/store.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode, Widecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
@@ -37,17 +36,20 @@ const greeter = `widecode.plugin({
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-js-"));
-  const ws = await openWorkspace(folder, 100);
+  // One state for every app below: what a plugin keeps outlives the app that kept it.
   const state = new NoStateFile();
-  const make = (sources: PluginSource[], config: string): Widecode => {
-    const w = composeWidecode(ws, new Conversation(ws.folder));
-    w.js.extra = sources;
-    w.start(JSON.parse(config), state, []);
-    return w;
-  };
+  const make = (sources: PluginSource[], config: string): Promise<Widecode> =>
+    openWidecode({
+      folder,
+      plugins: JSON.parse(config),
+      state,
+      before: (w: Widecode) => {
+        w.js.extra = sources;
+      },
+    });
   const press = (w: Widecode, name: string, text: string): boolean => w.shell.handleKey(new KeyEvent(name, text, false, false, false));
 
-  let w = make([new PluginSource("greeter.js", greeter)], '{"greeter": {"greeting": "olá"}}');
+  let w = await make([new PluginSource("greeter.js", greeter)], '{"greeter": {"greeting": "olá"}}');
   ok("a JS plugin starts beside the compiled ones", w.host.kernel.has("greeter") && w.host.kernel.has("code") && w.js.errors.length === 0);
   w.host.roles.chat.submit("/greet Ana");
   eq("its command, with its settings", w.host.screen.message.peek(), "olá Ana");
@@ -65,7 +67,7 @@ const main = async (): Promise<void> => {
   w.host.kernel.stop();
 
   const models = `widecode.plugin({ id: "models", activate(api) { api.commands.add({ name: "/model", help: "from JS", run: () => api.tell("the JS models") }); } });`;
-  w = make([new PluginSource("models.js", models)], "{}");
+  w = await make([new PluginSource("models.js", models)], "{}");
   w.host.roles.chat.submit("/model");
   eq("a plugin with a built-in's id replaces it", w.host.screen.message.peek() + " | " + String(w.host.kernel.started.filter((p) => p.id === "models").length), "the JS models | 1");
   w.host.kernel.stop();
@@ -74,7 +76,7 @@ const main = async (): Promise<void> => {
   const second = `widecode.plugin({ id: "twice", activate(api) { api.commands.add({ name: "/which", run: () => api.tell("second") }); } });`;
   const needy = `widecode.plugin({ id: "needy", requires: ["nothing-here"], activate(api) {} });`;
   const broken = `widecode.plugin({ id: "broken" activate() {} });`;
-  w = make([new PluginSource("first.js", first), new PluginSource("second.js", second), new PluginSource("needy.js", needy), new PluginSource("broken.js", broken)], "{}");
+  w = await make([new PluginSource("first.js", first), new PluginSource("second.js", second), new PluginSource("needy.js", needy), new PluginSource("broken.js", broken)], "{}");
   w.host.roles.chat.submit("/which");
   eq("a later plugin of an id replaces an earlier", w.host.screen.message.peek(), "second");
   ok("a requirement not met is reported", w.host.kernel.problems.some((p) => p === "needy: needs nothing-here, which is not built in"));
@@ -86,7 +88,7 @@ const main = async (): Promise<void> => {
     api.commands.add({ name: "/util", run: () => api.tell([u.width("日本a"), u.clip("abcdef", 4), u.clip("👨‍👩‍👧👨‍👩‍👧x", 3), u.runsWidth(u.pad([{ text: "ab" }], 5)), [12000, 200000, 8400000, 25 * 86400000].map(u.age).join(" "), u.elapsed(65000), u.tokens(1234567)].join(" ")) });
     api.commands.add({ name: "/widths", run: (list) => api.tell(JSON.stringify(JSON.parse(list).map(u.width))) });
   } });`;
-  w = make([new PluginSource("utils.js", utils)], "{}");
+  w = await make([new PluginSource("utils.js", utils)], "{}");
   w.host.roles.chat.submit("/util");
   eq("the drawing helpers: cells, clipping, padding, times, tokens", w.host.screen.message.peek(), "5 abc… 👨‍👩‍👧… 5 12s 3m 2h20m 25d 1m 1.2M");
   const samples = ["plain", "日本語", "e\u0301", "👍", "👍🏽", "👨‍👩‍👧", "🇧🇷", "🇧🇷🇺🇸x", "❤️", "☀", "⌚", "│─┌ →●▸⎇↻▰▱", "a\tb", "Ａ", "〿", "🌡", "✅ done", "한국"];
@@ -102,7 +104,7 @@ const main = async (): Promise<void> => {
   const caller = `widecode.plugin({ id: "caller", activate(api) {
     api.commands.add({ name: "/call", usage: "<command>", run: (command) => { api.commands.run(command); api.tell("caller goes on"); } });
   } });`;
-  w = make([new PluginSource("runaway.js", runaway), new PluginSource("caller.js", caller)], "{}");
+  w = await make([new PluginSource("runaway.js", runaway), new PluginSource("caller.js", caller)], "{}");
   w.host.roles.chat.submit("/call /spin");
   ok("past its time budget: switched off, with what it added", !w.host.kernel.has("runaway") && w.host.kernel.commands.find("/spin") === null && w.js.errors.some((e) => e.includes("runaway switched off")));
   ok("the plugin that ran its command goes on: a call it makes has its own budget", w.host.kernel.has("caller") && w.host.screen.message.peek() === "caller goes on");
@@ -114,7 +116,7 @@ const main = async (): Promise<void> => {
     const down = (n) => (n <= 0 ? 0 : 1 + down(n - 1));
     api.commands.add({ name: "/deep", usage: "<n>", help: "recurse", run: (n) => api.tell("deep " + down(Number(n))) });
   } });`;
-  w = make([new PluginSource("deep.js", deep)], "{}");
+  w = await make([new PluginSource("deep.js", deep)], "{}");
   /** `text` submitted from another async function (natively, on its own fiber), and the message after. */
   const elsewhere = async (text: string): Promise<string> => {
     await new Promise<void>((resolve) => setTimeout(resolve, 1));
@@ -137,7 +139,7 @@ const main = async (): Promise<void> => {
       api.tell("heard " + heard + ", then " + down(150));
     } });
   } });`;
-  w = make([new PluginSource("hooked.js", hooked)], "{}");
+  w = await make([new PluginSource("hooked.js", hooked)], "{}");
   eq("a hook fired inside an async function, and the caller after it", await elsewhere("/rebase"), "heard 100, then 150");
   w.host.kernel.stop();
 
@@ -146,10 +148,14 @@ const main = async (): Promise<void> => {
   writeFileSync(join(dir, "b.js"), `widecode.plugin({ id: "editable", activate(api) { api.commands.add({ name: "/v", run: () => api.tell("v1") }); api.commands.add({ name: "/old", run: () => api.tell("old") }); } });`);
   writeFileSync(join(dir, "a.txt"), "not a plugin");
   eq("a folder's plugin files, by name", sourcesIn(dir).map((s) => s.file.slice(dir.length + 1)).join(" "), "b.js");
-  w = composeWidecode(ws, new Conversation(ws.folder));
-  w.js.dirs = [dir];
-  w.js.extra = [new PluginSource("caller.js", caller)];
-  w.start(null, state, []);
+  w = await openWidecode({
+    folder,
+    state,
+    before: (w: Widecode) => {
+      w.js.dirs = [dir];
+      w.js.extra = [new PluginSource("caller.js", caller)];
+    },
+  });
   w.host.roles.chat.submit("/v");
   eq("loaded from the folder", w.host.screen.message.peek(), "v1");
   writeFileSync(join(dir, "b.js"), `widecode.plugin({ id: "editable", activate(api) { api.commands.add({ name: "/v", run: () => api.tell("v2") }); } });`);
@@ -196,7 +202,7 @@ widecode.plugin({ id: "second", activate(api) { api.commands.add({ name: "/s", r
   ok("a project's plugins are not trusted at first", !store.trusted(folder));
   store.trust(folder);
   ok("then trusted, and kept", new Store(home).trusted(folder) && !new Store(home).trusted("/elsewhere"));
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });
   done();
