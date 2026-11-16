@@ -7,28 +7,28 @@
 // again clean. Round 3 dissolves this into the controllers the plan names.
 import { readFileSync } from "node:fs";
 import { errorMessage, isRecord } from "@lightstart/lib/json.ts";
-import { basename, resolve } from "node:path";
+import { basename } from "node:path";
 import { log, trail } from "@lightstart/lib/log.ts";
 import { composeWidecode, Widecode } from "../compose.ts";
 import { NoStateFile } from "@lightstart/kernel/settings.ts";
 import { checkSource } from "../api/plugins.ts";
 import { AgentChoice, HarnessFile, Onboarding, folderCarries, runOnboarding } from "../views/onboarding.ts";
-import { Conversation } from "../conversation/conversation.ts";
 import { FLUSH_AFTER, FLUSH_RENDER, FLUSH_VIEWS, Renderer, TInput, frames } from "@lightstart/light/native/tui";
 import { Selftest } from "../selftest.ts";
 import type { Config, Store } from "../services/store.ts";
 import { Controller } from "@lightstart/light/controller/class.ts";
 import { BUILD } from "../build.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { registerStoreCommands } from "../commands.ts";
 import { flushBeforeExit, QuitFlusher } from "../quit.ts";
 import app from "../app.ts";
 import { Carry, Run } from "../run.ts";
+import folder from "./folder.ts";
 import kernel from "./kernel.ts";
 import keymap from "./keymap.ts";
 import logger from "./log.ts";
 import run from "./run.ts";
 import screen from "./screen.ts";
+import session from "./session.ts";
 import settings from "./settings.ts";
 
 /** How often the log says the run is alive. */
@@ -87,10 +87,10 @@ export class WidecodeController extends Controller {
   }
 
   /**
-   * Start the app again over `folder` (`/open`): the agent chosen, its CLI, the model and the effort
+   * Start the app again over `target` (`/open`): the agent chosen, its CLI, the model and the effort
    * carry over; a test's run carries over too, with the folder read once it starts.
    */
-  async reopen(folder: string): Promise<void> {
+  async reopen(target: string): Promise<void> {
     const host = this.w.host;
     const c = host.conversation;
     const carry = new Carry();
@@ -99,8 +99,8 @@ export class WidecodeController extends Controller {
     carry.extraArgs = c.extraArgs.slice();
     carry.modelName = c.modelName;
     carry.effort = c.effort;
-    carry.notice = "opened " + folder;
-    await run.reopen(folder, carry);
+    carry.notice = "opened " + target;
+    await run.reopen(target, carry);
   }
 
   /** Take over what the start before carried (an `/open`): the conversation's CLI, arguments, model and effort, and the agent chosen. */
@@ -123,11 +123,10 @@ export class WidecodeController extends Controller {
     this.columnsNote = "";
     this.agentNote = "";
     this.keysNote = "";
-    const workspace = await openWorkspace(current.folder, current.batchMs);
-    const w = composeWidecode(workspace, new Conversation(workspace.folder), kernel.current, screen.current, keymap.current);
+    const w = composeWidecode(folder.current, session.current, kernel.current, screen.current, keymap.current);
     this.w = w;
     this.closed = false;
-    w.host.onOpen = (folder: string) => this.reopen(folder);
+    w.host.onOpen = (target: string) => this.reopen(target);
     const before = current.before;
     if (before !== null) await before(w);
     this.takeOver(w);
@@ -141,17 +140,8 @@ export class WidecodeController extends Controller {
     this.agentNote = "";
     this.keysNote = "";
     const selftest = app.args.string("selftest") ?? "";
-    const folder = current.folder;
-    const workspace = await openWorkspace(folder, current.batchMs);
-    const conversation = new Conversation(workspace.folder);
-    conversation.executable = app.args.string("claude") ?? "";
-    conversation.effort = app.args.string("effort") ?? "";
-    const fixture = app.args.string("fake-fixture");
-    if (fixture !== undefined) conversation.extraArgs.push("--fixture", resolve(fixture));
-    if (app.args.flag("ephemeral")) conversation.extraArgs.push("--no-session-persistence");
-    // --model names the model of a new session; without it, the models plugin's first.
-    conversation.modelName = app.args.string("model") ?? "";
-    const w = composeWidecode(workspace, conversation, kernel.current, screen.current, keymap.current);
+    const where = current.folder;
+    const w = composeWidecode(folder.current, session.current, kernel.current, screen.current, keymap.current);
     const host = w.host;
     const store = settings.current.store;
     const config = settings.current.config;
@@ -162,7 +152,7 @@ export class WidecodeController extends Controller {
     this.takeOver(w);
     await host.useStore(store);
     host.session.userPermissions = config !== null ? config.permissions : null;
-    host.session.titler.executable = conversation.executable;
+    host.session.titler.executable = host.conversation.executable;
     // The peers daemon is this binary run again; a selftest runs none. Desktop alerts are the real
     // app's alone: a test or a selftest must not reach the user's screen.
     host.peersLauncher = selftest.length > 0 ? "" : process.execPath;
@@ -172,7 +162,7 @@ export class WidecodeController extends Controller {
     const projectPlugins = host.harness.pluginsDir();
     if (store !== null) {
       w.js.dirs.push(store.pluginsDir());
-      if (store.trusted(folder)) w.js.dirs.push(projectPlugins);
+      if (store.trusted(where)) w.js.dirs.push(projectPlugins);
     }
     // The agent: --agent, else config.json's "agent"; one a plugin brings is taken up when it registers.
     if (this.opened.length === 0) host.session.agentId.value = app.args.string("agent") ?? (config !== null && config.agent.length > 0 ? config.agent : "claude");

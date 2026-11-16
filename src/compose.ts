@@ -4,11 +4,12 @@
 // extra compiled plugins after the JS ones (the tests' and the entry's), and starts them after what
 // each requires, leaving out the ones switched off. What it returns holds the widgets for the
 // entry, the selftest and the tests; plugins never reach each other this way, only through the host.
-import { Conversation } from "./conversation/conversation.ts";
 import { Host } from "./host/host.ts";
 import type { KeymapController } from "./host/keymaps.ts";
 import type { ScreenController } from "./screen/screen.ts";
 import type { Kernel } from "@lightstart/kernel/kernel.ts";
+import type { FolderController } from "@lightstart/workspace/folder.ts";
+import type { SessionController } from "./host/session.ts";
 import { BUILTIN_PLUGINS } from "./runtime/builtin.ts";
 import { JsRuntime } from "./runtime/runtime.ts";
 import { Plugin } from "@lightstart/kernel/plugin.ts";
@@ -16,7 +17,6 @@ import type { StateFile } from "@lightstart/kernel/settings.ts";
 import { mergeColumns, mergePlugins } from "./services/harness.ts";
 import { registerShellCommands } from "./commands.ts";
 import { PluginDefault } from "./services/store.ts";
-import { Workspace } from "@lightstart/workspace/workspace.ts";
 import { ChatWidget } from "./views/chat-widget.ts";
 import { CodeWidget } from "./views/code-widget.ts";
 import { ToolsWidget } from "./views/tools-widget.ts";
@@ -201,7 +201,7 @@ export class Widecode {
 }
 
 /** widecode over `workspace` and `conversation`, not started. */
-export const composeWidecode = (workspace: Workspace, conversation: Conversation, kernel: Kernel, screen: ScreenController, keys: KeymapController): Widecode => {
-  const host = new Host(workspace, conversation, kernel, screen, keys);
+export const composeWidecode = (folder: FolderController, session: SessionController, kernel: Kernel, screen: ScreenController, keys: KeymapController): Widecode => {
+  const host = new Host(folder, session, kernel, screen, keys);
   return new Widecode(host, new Shell(host));
 };

@@ -36,8 +36,11 @@ export class Host extends ConversationHolder {
   readonly screen: ScreenController;
   /** The folder open. `/open` starts the app again over another folder, with a host of its own. */
   readonly folder: FolderController;
-  readonly folderHooks = new FolderHooks();
   readonly session: SessionController;
+  /** The folder's announcements: its files, status and base loaded or changed. */
+  get folderHooks(): FolderHooks {
+    return this.folder.hooks;
+  }
   /** The code column shows a file, a subagent's steps or a call. */
   readonly fileShown = new Hook();
   /** The keymaps, and the roles plugins play. */
@@ -75,14 +78,14 @@ export class Host extends ConversationHolder {
   private pendingOpenAt = 0;
   private opening = false;
 
-  /** Over the folder's `workspace` and `conversation`, with the start's `kernel` and the `screen` and `keys` built on it. */
-  constructor(workspace: Workspace, conversation: Conversation, kernel: Kernel, screen: ScreenController, keys: KeymapController) {
+  /** Over the start's `folder` and `session`, its `kernel` and the `screen` and `keys` built on it. */
+  constructor(folder: FolderController, session: SessionController, kernel: Kernel, screen: ScreenController, keys: KeymapController) {
     super();
     this.kernel = kernel;
     this.screen = screen;
     this.keys = keys;
-    this.folder = new FolderController(workspace, this.folderHooks);
-    this.session = new SessionController(conversation, workspace.folder);
+    this.folder = folder;
+    this.session = session;
     this.screen.onNote = (text: string) => this.note(text);
     this.folder.onNote = (text: string) => this.note(text);
     this.session.onNote = (text: string) => this.note(text);
