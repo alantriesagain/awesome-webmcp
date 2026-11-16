@@ -10,7 +10,7 @@ import { JsRuntime } from "./runtime/runtime.ts";
 import { Plugin } from "@lightstart/kernel/plugin.ts";
 import type { StateFile } from "@lightstart/kernel/settings.ts";
 import { mergeColumns, mergePlugins } from "./services/harness.ts";
-import { registerShellCommands } from "./commands.ts";
+import { Command } from "@lightstart/kernel/commands.ts";
 import { PluginDefault } from "./services/store.ts";
 import { ChatWidget } from "./views/chat-widget.ts";
 import { CodeWidget } from "./views/code-widget.ts";
@@ -74,7 +74,7 @@ export class Widecode {
     k.start();
     for (const p of k.problems) this.host.note("plugin " + p);
     this.shell.finish();
-    registerShellCommands(this);
+    k.commands.add(new Command("/reload", "", "evaluate every JS plugin again (the agent restarts and resumes the session)", "plugins", (_arg: string) => this.js.reload()));
   }
 
   /** The columns' widths: the user's config with the project's over it; answers what could not be used. */

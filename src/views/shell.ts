@@ -30,7 +30,9 @@ import { ColumnWidths } from "./column-widths.ts";
 import { TabColumn } from "./tab-column.ts";
 import "../screen/column-view.ts";
 import { palette } from "@lightstart/tui/palette.ts";
-import { trail } from "@lightstart/lib/log.ts";
+import { logPath, trail } from "@lightstart/lib/log.ts";
+import { Command, Suggestion } from "@lightstart/kernel/commands.ts";
+import { welcome } from "./onboarding.ts";
 
 /** A key as the trail names it: its modifiers and name, a character only with Ctrl or Alt (what is typed stays out of the log). */
 const keyName = (e: KeyEvent): string => (e.ctrl ? "ctrl+" : "") + (e.alt ? "alt+" : "") + (e.shift ? "shift+" : "") + (e.key === "char" ? (e.ctrl || e.alt ? "char:" + e.text : "char") : e.key);
@@ -141,12 +143,30 @@ export class Shell extends View {
     return sessionController.current.conversation;
   }
 
-  /** Once the plugins started: the /help hint last, the tab columns that have tabs, the widths a drag left. */
+  /** Once the plugins started: the /help hint last, the tab columns that have tabs, the widths a drag left, and the shell's commands. */
   finish(): void {
     this.kernel.actions.add(new Action("app.help", "", "/help", [], "shell", (_key: KeyEvent, _count: number) => false));
     this.side();
     this.screen.setColumnOrder(columnOrderOf(this.kernel.settings.state("columnOrder")));
     this.sizes.restore(this.kernel.settings.state("columns"));
+    this.addCommands();
+  }
+
+  /** The shell's commands: the help, the welcome, the keymap, the columns, the log's path. */
+  private addCommands(): void {
+    const commands = this.kernel.commands;
+    commands.add(new Command("/help", "", "this list", "shell", (_arg: string) => this.help()));
+    commands.add(new Command("/welcome", "", "the welcome: the columns, the keys and commands to start with", "shell", (_arg: string) => welcome(this.host)));
+    const keymap = new Command("/keymap", "[name]", "the keymap in use: default, or one a plugin brings (emacs, vi); kept for the next run", "shell", (arg: string) => this.keymapCommand(arg.trim()));
+    keymap.onComplete = (arg: string): Suggestion[] => this.keys.names().filter((n) => n.startsWith(arg.trim())).map((n) => new Suggestion(n, n, n === this.keys.keymap ? "now" : ""));
+    commands.add(keymap);
+    commands.add(new Command("/columns", "[reset]", "the columns' widths; reset forgets the widths borders were dragged to", "shell", (arg: string) => this.columnsCommand(arg)));
+    commands.add(
+      new Command("/log", "", "where this run's log goes (config.json's \"log\" turns it off or moves it)", "shell", (_arg: string) => {
+        const p = logPath();
+        this.screen.tell(p.length > 0 ? "log: " + p : "the log is off (config.json's \"log\", or --log <path>)");
+      }),
+    );
   }
 
   /** The tab columns, each added while plugins registered tabs for it and dropped when none are left. */
