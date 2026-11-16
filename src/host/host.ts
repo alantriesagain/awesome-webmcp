@@ -32,7 +32,7 @@ export const HOOKS = ["conversationChanged", "sessionsChanged", "filesLoaded", "
 const NOTES_KEPT = 300;
 
 export class Host extends ConversationHolder {
-  readonly kernel = new Kernel();
+  readonly kernel: Kernel;
   readonly screen: ScreenController;
   /** The folder open. `/open` starts the app again over another folder, with a host of its own. */
   readonly folder: FolderController;
@@ -75,10 +75,12 @@ export class Host extends ConversationHolder {
   private pendingOpenAt = 0;
   private opening = false;
 
-  constructor(workspace: Workspace, conversation: Conversation) {
+  /** Over the folder's `workspace` and `conversation`, with the start's `kernel` and the `screen` and `keys` built on it. */
+  constructor(workspace: Workspace, conversation: Conversation, kernel: Kernel, screen: ScreenController, keys: KeymapController) {
     super();
-    this.screen = new ScreenController(this.kernel, "chat");
-    this.keys = new KeymapController(this.kernel);
+    this.kernel = kernel;
+    this.screen = screen;
+    this.keys = keys;
     this.folder = new FolderController(workspace, this.folderHooks);
     this.session = new SessionController(conversation, workspace.folder);
     this.screen.onNote = (text: string) => this.note(text);

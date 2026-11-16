@@ -24,8 +24,11 @@ import { registerStoreCommands } from "../commands.ts";
 import { flushBeforeExit, QuitFlusher } from "../quit.ts";
 import app from "../app.ts";
 import { Carry, Run } from "../run.ts";
+import kernel from "./kernel.ts";
+import keymap from "./keymap.ts";
 import logger from "./log.ts";
 import run from "./run.ts";
+import screen from "./screen.ts";
 import settings from "./settings.ts";
 
 /** How often the log says the run is alive. */
@@ -121,7 +124,7 @@ export class WidecodeController extends Controller {
     this.agentNote = "";
     this.keysNote = "";
     const workspace = await openWorkspace(current.folder, current.batchMs);
-    const w = composeWidecode(workspace, new Conversation(workspace.folder));
+    const w = composeWidecode(workspace, new Conversation(workspace.folder), kernel.current, screen.current, keymap.current);
     this.w = w;
     this.closed = false;
     w.host.onOpen = (folder: string) => this.reopen(folder);
@@ -148,7 +151,7 @@ export class WidecodeController extends Controller {
     if (app.args.flag("ephemeral")) conversation.extraArgs.push("--no-session-persistence");
     // --model names the model of a new session; without it, the models plugin's first.
     conversation.modelName = app.args.string("model") ?? "";
-    const w = composeWidecode(workspace, conversation);
+    const w = composeWidecode(workspace, conversation, kernel.current, screen.current, keymap.current);
     const host = w.host;
     const store = settings.current.store;
     const config = settings.current.config;

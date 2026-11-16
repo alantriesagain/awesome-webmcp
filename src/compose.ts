@@ -6,10 +6,13 @@
 // entry, the selftest and the tests; plugins never reach each other this way, only through the host.
 import { Conversation } from "./conversation/conversation.ts";
 import { Host } from "./host/host.ts";
+import type { KeymapController } from "./host/keymaps.ts";
+import type { ScreenController } from "./screen/screen.ts";
+import type { Kernel } from "@lightstart/kernel/kernel.ts";
 import { BUILTIN_PLUGINS } from "./runtime/builtin.ts";
 import { JsRuntime } from "./runtime/runtime.ts";
 import { Plugin } from "@lightstart/kernel/plugin.ts";
-import { NoStateFile, StateFile } from "@lightstart/kernel/settings.ts";
+import type { StateFile } from "@lightstart/kernel/settings.ts";
 import { mergeColumns, mergePlugins } from "./services/harness.ts";
 import { registerShellCommands } from "./commands.ts";
 import { PluginDefault } from "./services/store.ts";
@@ -198,14 +201,7 @@ export class Widecode {
 }
 
 /** widecode over `workspace` and `conversation`, not started. */
-export const composeWidecode = (workspace: Workspace, conversation: Conversation): Widecode => {
-  const host = new Host(workspace, conversation);
+export const composeWidecode = (workspace: Workspace, conversation: Conversation, kernel: Kernel, screen: ScreenController, keys: KeymapController): Widecode => {
+  const host = new Host(workspace, conversation, kernel, screen, keys);
   return new Widecode(host, new Shell(host));
-};
-
-/** widecode started with config.json's "plugins" (null for none) and nothing kept (tests). */
-export const createWidecode = (workspace: Workspace, conversation: Conversation, plugins: unknown): Widecode => {
-  const w = composeWidecode(workspace, conversation);
-  w.start(plugins, new NoStateFile(), []);
-  return w;
 };
