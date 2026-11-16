@@ -22,13 +22,9 @@ import { registerStoreCommands } from "../commands.ts";
 import { flushBeforeExit, QuitFlusher } from "../quit.ts";
 import app from "../app.ts";
 import { Carry, Run } from "../run.ts";
-import folder from "./folder.ts";
-import kernel from "./kernel.ts";
-import keymap from "./keymap.ts";
+import hostController from "./host.ts";
 import logger from "./log.ts";
 import run from "./run.ts";
-import screen from "./screen.ts";
-import session from "./session.ts";
 import settings from "./settings.ts";
 
 /** How often the log says the run is alive. */
@@ -123,7 +119,7 @@ export class WidecodeController extends Controller {
     this.columnsNote = "";
     this.agentNote = "";
     this.keysNote = "";
-    const w = composeWidecode(folder.current, session.current, kernel.current, screen.current, keymap.current);
+    const w = composeWidecode(hostController.current);
     this.w = w;
     this.closed = false;
     w.host.onOpen = (target: string) => this.reopen(target);
@@ -141,7 +137,7 @@ export class WidecodeController extends Controller {
     this.keysNote = "";
     const selftest = app.args.string("selftest") ?? "";
     const where = current.folder;
-    const w = composeWidecode(folder.current, session.current, kernel.current, screen.current, keymap.current);
+    const w = composeWidecode(hostController.current);
     const host = w.host;
     const store = settings.current.store;
     const config = settings.current.config;

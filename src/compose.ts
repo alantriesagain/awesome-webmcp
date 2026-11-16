@@ -5,11 +5,6 @@
 // each requires, leaving out the ones switched off. What it returns holds the widgets for the
 // entry, the selftest and the tests; plugins never reach each other this way, only through the host.
 import { Host } from "./host/host.ts";
-import type { KeymapController } from "./host/keymaps.ts";
-import type { ScreenController } from "./screen/screen.ts";
-import type { Kernel } from "@lightstart/kernel/kernel.ts";
-import type { FolderController } from "@lightstart/workspace/folder.ts";
-import type { SessionController } from "./host/session.ts";
 import { BUILTIN_PLUGINS } from "./runtime/builtin.ts";
 import { JsRuntime } from "./runtime/runtime.ts";
 import { Plugin } from "@lightstart/kernel/plugin.ts";
@@ -201,7 +196,4 @@ export class Widecode {
 }
 
 /** widecode over `workspace` and `conversation`, not started. */
-export const composeWidecode = (folder: FolderController, session: SessionController, kernel: Kernel, screen: ScreenController, keys: KeymapController): Widecode => {
-  const host = new Host(folder, session, kernel, screen, keys);
-  return new Widecode(host, new Shell(host));
-};
+export const composeWidecode = (host: Host): Widecode => new Widecode(host, new Shell(host));
