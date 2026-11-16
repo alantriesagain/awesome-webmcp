@@ -1559,9 +1559,8 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     // The folder trusted: its skills join the list.
     if (!api.agent.started()) announceScanned();
   });
-  // The skills on disk, once the agent is registered, in each folder opened, and after /new.
+  // The skills on disk, once the agent is registered, and after /new.
   api.after(0, announceScanned);
-  api.on("folderOpened", () => api.after(0, announceScanned));
 
   /** When the limit's window resets (epoch ms; 0 when unknown): the agent's reported one, else what the message says. */
   const resetOf = (text: string): number => {

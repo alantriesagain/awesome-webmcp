@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Widecode } from "../src/compose.ts";
 import { done, eq } from "@lightstart/test/assert.ts";
-import { openWidecode } from "./support/app.ts";
+import { currentWidecode, openWidecode } from "./support/app.ts";
 
 const plugin = (name: string): string => `widecode.plugin({
   id: "agent-x",
@@ -25,13 +25,14 @@ const project = (root: string, name: string): string => {
 const main = async (): Promise<void> => {
   const folderA = mkdtempSync(join(tmpdir(), "widecode-agent-folder-a-"));
   const folderB = mkdtempSync(join(tmpdir(), "widecode-agent-folder-b-"));
-  const dirA = project(folderA, "Agent A");
+  project(folderA, "Agent A");
   project(folderB, "Agent B");
-  const w = await openWidecode({
+  // The folder's own plugins, whichever folder the app opens: an /open starts it again there.
+  let w = await openWidecode({
     folder: folderA,
     load: true,
     before: (w: Widecode) => {
-      w.js.dirs = [dirA];
+      w.js.dirs = [w.host.harness.pluginsDir()];
       w.host.session.agentId.value = "x";
     },
   });
@@ -39,6 +40,7 @@ const main = async (): Promise<void> => {
   eq("the first folder's agent", c.agent.id() + " " + c.agent.name(), "x Agent A");
 
   await w.host.openFolder(folderB);
+  w = currentWidecode();
   eq("the new folder's agent of the same id takes the chat", w.host.conversation.agent.id() + " " + w.host.conversation.agent.name(), "x Agent B");
 
   w.host.kernel.stop();

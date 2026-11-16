@@ -193,11 +193,6 @@ widecode.plugin({
     });
     api.on("baseChanged", () => band.refresh());
     api.on("fileShown", () => band.refresh());
-    api.on("folderOpened", () => {
-      files = [];
-      editSeq = -1;
-      band.refresh();
-    });
     // The ages move.
     api.every(1000, () => band.refresh());
     // In the side and code columns ([ and ] would type in the chat); from anywhere with Alt.

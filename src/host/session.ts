@@ -96,33 +96,6 @@ export class SessionController extends Controller {
   }
 
   /**
-   * Talk in `folder` from now on, through `next` (the conversation before is killed; the agent,
-   * the model and the effort carry over, and the agent chosen talks to it too; it starts once
-   * the folder is trusted).
-   */
-  async open(next: Conversation, folder: string): Promise<void> {
-    const previous = this.conversation;
-    previous.kill();
-    next.executable = previous.executable;
-    next.modelName = previous.modelName;
-    next.effort = previous.effort;
-    for (const a of previous.extraArgs) next.extraArgs.push(a);
-    this.conversation = next;
-    // Keep the agent attached until the new folder's plugins have loaded: the chosen one may be
-    // replaced by the folder, and starting it before that would start the one about to retire.
-    next.agent = previous.agent;
-    previous.agent.attach(next);
-    this.harness.stopWatching();
-    this.harness = new Harness(folder);
-    this.harness.userPromptPath = this.userPromptPath();
-    this.setTrusted(this.store === null || this.store.trusted(folder));
-    const records = this.records;
-    if (records !== null) await records.open(folder);
-    this.wire(next);
-    this.history = new PromptHistory(this.store !== null ? join(folder, ".widecode") : "");
-  }
-
-  /**
    * Show session `id`, titled `title` (or as its record keeps it), through the agent it belongs
    * to: the one its record names, chosen first when it is another; the one chosen when the record
    * names none. Answers "" or why that agent could not be chosen (nothing resumed then).

@@ -85,6 +85,26 @@
           ]
         ]
       },
+      "open": {
+        "checks": [
+          [
+            "started in the pty",
+            "started 200x40"
+          ],
+          [
+            "the folder opened",
+            "^ *[0-9]* opened /"
+          ],
+          [
+            "started again over it",
+            "selftest open: a new app true; folder true; files=1; same agent true; screen shows it true"
+          ],
+          [
+            "selftest ok",
+            "selftest ok"
+          ]
+        ]
+      },
       "fake": {
         "args": [
           "--claude",

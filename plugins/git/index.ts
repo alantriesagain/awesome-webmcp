@@ -439,11 +439,6 @@ widecode.plugin({
         panel.refresh();
       }
     });
-    api.on("folderOpened", () => {
-      base = "head";
-      baseNote = "";
-      layout();
-    });
     api.on("messageSending", () => {
       // A new session's first message: the commit it starts on, for "compare with session start".
       if (!api.agent.started() && api.agent.sessionId() === "" && api.agent.headAtStart() === "")

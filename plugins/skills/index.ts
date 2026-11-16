@@ -320,10 +320,6 @@ widecode.plugin({
     });
 
     api.on("conversationChanged", soon);
-    api.on("folderOpened", () => {
-      selected = -1;
-      soon();
-    });
     // The clocks of the runs in progress.
     api.every(1000, () => {
       if (running() > 0) panel.refresh();

@@ -20,13 +20,13 @@ import { Kernel } from "@lightstart/kernel/kernel.ts";
 import { FileChange } from "@lightstart/workspace/changes.ts";
 import { Harness } from "../services/harness.ts";
 import { Store } from "../services/store.ts";
-import { openWorkspace, Workspace } from "@lightstart/workspace/workspace.ts";
+import type { Workspace } from "@lightstart/workspace/workspace.ts";
 import { FolderController, FolderHooks } from "@lightstart/workspace/folder.ts";
 import { ScreenController } from "../screen/screen.ts";
 import { SessionController } from "./session.ts";
 
 /** The hooks' names, as plugins listen to them. */
-export const HOOKS = ["conversationChanged", "sessionsChanged", "filesLoaded", "statusLoaded", "folderChanged", "folderOpened", "baseChanged", "fileShown", "requestOpened", "messageSending", "keymapChanged", "messageChanged", "toolsChanged", "harnessChanged"];
+export const HOOKS = ["conversationChanged", "sessionsChanged", "filesLoaded", "statusLoaded", "folderChanged", "baseChanged", "fileShown", "requestOpened", "messageSending", "keymapChanged", "messageChanged", "toolsChanged", "harnessChanged"];
 
 /** How many log lines the host keeps for plugins to read. */
 const NOTES_KEPT = 300;
@@ -34,14 +34,12 @@ const NOTES_KEPT = 300;
 export class Host extends ConversationHolder {
   readonly kernel = new Kernel();
   readonly screen: ScreenController;
-  /** The folder open; `/open` replaces it, its announcements staying the host's. */
-  folder: FolderController;
+  /** The folder open. `/open` starts the app again over another folder, with a host of its own. */
+  readonly folder: FolderController;
   readonly folderHooks = new FolderHooks();
   readonly session: SessionController;
   /** The code column shows a file, a subagent's steps or a call. */
   readonly fileShown = new Hook();
-  /** Another folder was opened: its files, status and conversation are new. */
-  readonly folderOpened = new Hook();
   /** The keymaps, and the roles plugins play. */
   readonly keys: KeymapController;
   readonly roles = new Roles();
@@ -52,6 +50,8 @@ export class Host extends ConversationHolder {
   /** Called with lines worth logging; on quitting; on F12. */
   onLog: ((text: string) => void) | null = null;
   onQuit: (() => void) | null = null;
+  /** Start the app again over another folder (the widecode controller); set once the app is composed. */
+  onOpen: ((folder: string) => Promise<void>) | null = null;
   onDump: (() => void) | null = null;
   /** The last lines of the log, for a plugin's state.log. */
   readonly notes: string[] = [];
@@ -215,8 +215,6 @@ export class Host extends ConversationHolder {
         return this.folderHooks.statusLoaded;
       case "folderChanged":
         return this.folderHooks.folderChanged;
-      case "folderOpened":
-        return this.folderOpened;
       case "baseChanged":
         return this.folderHooks.baseChanged;
       case "fileShown":
@@ -280,8 +278,8 @@ export class Host extends ConversationHolder {
   }
 
   /**
-   * Switch to another folder: its files, status and sessions; the conversation starts over there
-   * (with the same CLI, model and effort). While the agent works, the first `/open` only warns.
+   * Switch to another folder: the app starts again over it, with the same agent, CLI, model and
+   * effort (the widecode controller's `reopen`). While the agent works, the first `/open` only warns.
    */
   async openFolder(path: string): Promise<void> {
     const target = resolve(this.workspace.folder, expandHome(path));
@@ -301,28 +299,14 @@ export class Host extends ConversationHolder {
       return;
     }
     this.pendingOpen = "";
+    const open = this.onOpen;
+    if (open === null) {
+      this.screen.tell("no folder can be opened here");
+      return;
+    }
     this.opening = true;
     try {
-      const old = this.folder;
-      // Read the new folder and make its conversation before closing the old one: a folder that
-      // cannot be read leaves the app where it was.
-      const workspace = await openWorkspace(target, old.workspace.watch.batchMs);
-      const next = new Conversation(workspace.folder);
-      const nextFolder = new FolderController(workspace, this.folderHooks);
-      nextFolder.onNote = (text: string) => this.note(text);
-      try {
-        old.workspace.close();
-        await old.dispose();
-      } catch (err) {
-        workspace.close();
-        throw err;
-      }
-      this.folder = nextFolder;
-      await this.session.open(next, target);
-      this.editSeq = next.model.editSeq;
-      this.folderOpened.fire();
-      await this.load();
-      this.screen.tell("opened " + target);
+      await open(target);
     } finally {
       this.opening = false;
     }

@@ -125,12 +125,6 @@ widecode.plugin({
     api.on("fileShown", () => {
       if (!api.code.inCommit() && !api.code.inAgent()) select(api.code.path());
     });
-    api.on("folderOpened", () => {
-      expanded.clear();
-      cursor = 0;
-      selected = "";
-      layout();
-    });
     const move = (step: number): boolean => {
       moveTo(Math.max(0, Math.min(rows.length - 1, cursor + step)));
       return true;

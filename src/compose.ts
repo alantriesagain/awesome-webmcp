@@ -46,8 +46,6 @@ export class Widecode {
     this.js.chat = this.chat;
     this.js.tools = this.tools;
     this.projectDir = host.harness.pluginsDir();
-    // Another folder opened: its own project plugins replace this one's, and its harness follows.
-    host.folderOpened.add("widecode", () => this.folderOpened());
   }
 
   private prepared = false;
@@ -160,35 +158,6 @@ export class Widecode {
     if (old.length === 0) return;
     this.js.forgetFolder(old);
     this.js.dirs = this.js.dirs.filter((d) => d !== old);
-  }
-
-  /**
-   * The folder changed (`/open`): the previous project's plugins go, the new folder's harness is
-   * put in use when it is trusted, and the watchers follow the new folders.
-   */
-  private folderOpened(): void {
-    const h = this.host;
-    // The agent chosen here carries over when the new folder brings it too.
-    const wanted = h.conversation.agent.id();
-    if (h.session.trusted.peek()) {
-      this.useProjectPlugins(true);
-      this.watchHarness();
-      const note = this.applyHarness();
-      if (note.length > 0) h.screen.tell(note);
-      if (wanted.length > 0 && h.conversation.agent.id() !== wanted) {
-        const why = h.session.useAgent(wanted);
-        if (why.length > 0) {
-          h.session.useAgent("");
-          h.screen.tell(why + "; " + h.conversation.agent.name() + " talks here");
-        }
-      }
-      h.conversation.prepare();
-    } else {
-      this.dropProjectPlugins();
-      this.projectDir = h.harness.pluginsDir();
-      this.js.watchFolders();
-    }
-    h.harnessChanged.fire();
   }
 
   /** Put the folder's harness in use without keeping the trust (`--trust`): its plugins, config and prompt. Answers what to tell ("" for nothing). */

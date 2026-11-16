@@ -75,7 +75,7 @@ between them; kept for the next run),
 pointer and PgUp/PgDn the active one; a pane longer than its rows has a scrollbar at its right edge
 (drag the thumb, or press the track to bring the thumb there); a drag on the border between two
 columns resizes them (kept for the next run; `/columns` says the widths, `/columns reset` forgets
-the drags); a press on a thinking line shows its words; Ctrl+C clears the message, and quits when it is empty (twice while Claude works); `/open <folder>` switches folders; F12
+the drags); a press on a thinking line shows its words; Ctrl+C clears the message, and quits when it is empty (twice while Claude works); `/open <folder>` switches folders, starting the app again there with the same agent, model and effort; F12
 writes the screen's text to the log. New sessions run on Opus 5.5 with the 1M context
 (`opus[1m]`); F5, or a press on the model in the status bar, switches to Fable (`fable[1m]`) and
 back, live (`"models": [...]` in the config lists what F5 cycles; a session resumes on the model it

@@ -13,13 +13,18 @@ import { projectDir } from "./support/claude-records.ts";
 import { Store } from "../src/services/store.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { Headless } from "@lightstart/test/headless.ts";
-import { openWidecode } from "./support/app.ts";
+import { currentWidecode, openWidecode } from "./support/app.ts";
 
 const W = 200;
 const H = 25;
-let headless: Headless;
+let headless: Headless | null = null;
 /** Flush and lay out until the line views have measured themselves, then paint. */
-const screen = (): string[] => headless.screen();
+/** The headless screen the app is drawn on. */
+const mounted = (): Headless => {
+  if (headless === null) throw new Error("the app is not mounted");
+  return headless;
+};
+const screen = (): string[] => mounted().screen();
 const has = (lines: string[], text: string): boolean => lines.some((l) => l.includes(text));
 /** The status bar: the screen's last three rows. */
 const statusOf = (lines: string[]): string => lines.slice(H - 3).join("\n");
@@ -86,7 +91,7 @@ const main = async (): Promise<void> => {
   const widecodeHome = mkdtempSync(join(tmpdir(), "code-screen-widecode-"));
   const store = new Store(widecodeHome);
   store.trust(repo);
-  const app = await openWidecode({
+  let app = await openWidecode({
     folder: repo,
     plugins: config,
     load: true,
@@ -94,10 +99,12 @@ const main = async (): Promise<void> => {
       await w.host.useStore(store);
       w.host.session.titler.executable = join(process.cwd(), "test", "fake-title.sh");
       w.shell.resize(W);
+      // An /open starts the app again: the new shell is the one drawn.
+      if (headless !== null) headless.unmount();
       headless = new Headless(w.shell, W, H);
     },
   });
-  const root = headless.root;
+  const root = mounted().root;
   let lines = screen();
   ok("the columns with their titles on their top edges, under the menu bar and a blank row", lines[1].trim() === "" && lines[2].includes(" Chat ") && has(lines, "Agents") && has(lines, "Files") && has(lines, "Code"));
   ok("the chat greets a new session", has(lines, "A new session in this folder"));
@@ -306,11 +313,13 @@ const main = async (): Promise<void> => {
   lines = screen();
   ok("/open while Claude works only warns", statusOf(lines).includes("Claude is still working here") && app.host.workspace.folder === repo);
   await app.host.openFolder(other);
+  app = currentWidecode();
   lines = screen();
   ok("/open again switches the folder: its files, outside git", has(lines, " All 1│ Changed 0 ") && has(lines, "plain.txt") && !has(lines, "app.js") && app.host.workspace.folder === other);
   ok("and the chat starts over there", has(lines, "A new session in this folder"));
   eq("and the chosen agent talks to the new conversation", app.host.conversation.agent.owner, "claude");
   await app.host.openFolder(repo);
+  app = currentWidecode();
   rmSync(other, { recursive: true, force: true });
 
   app.host.conversation.resume("aaaaaaaa-1111-2222-3333-444444444444", "Helper rename");
@@ -328,7 +337,7 @@ const main = async (): Promise<void> => {
   eq("Tab puts it in place", app.chat.pane.input.value(), "look at @src/app.js ");
   ok("and the suggestions go away", !has(lines, "› @src/app.js"));
 
-  headless.unmount();
+  mounted().unmount();
   app.host.workspace.close();
   rmSync(repo, { recursive: true, force: true });
   rmSync(projects, { recursive: true, force: true });

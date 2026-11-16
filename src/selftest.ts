@@ -19,10 +19,13 @@
 //   live-quit       quit while a 30 s Bash call runs (the script then checks no CLI is left)
 //   crash           an uncaught stack overflow once the screen is up: the log holds the error, the
 //                   trail with the entry it happened in, the screen, and the exit (code 1)
+//   open            /open a new folder: the app starts again over it, its file in the tree, the
+//                   agent the same, and quits from there
 //   segv            a native SIGSEGV once the screen is up: the crash report names what ran, the
 //                   backtrace and the log, and the terminal comes back
-import { appendFileSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { triggerCrash } from "@lightstart/lib/crash.ts";
 import { log, trail } from "@lightstart/lib/log.ts";
 import { Widecode } from "./compose.ts";
@@ -42,6 +45,8 @@ export class Selftest {
   readonly w: Widecode;
   /** The painted screen's text, for checks against what the user would see. */
   screen: (() => string) | null = null;
+  /** The app running now: after an /open, the one started again over the other folder. */
+  current: () => Widecode;
   private wroteAt = 0;
   private hunksBefore = -1;
   private step = 0;
@@ -50,6 +55,7 @@ export class Selftest {
   constructor(name: string, w: Widecode) {
     this.name = name;
     this.w = w;
+    this.current = () => w;
   }
 
   /** Calls itself until the stack runs out (the crash scenario). */
@@ -82,6 +88,10 @@ export class Selftest {
       else this.fail("no modified file");
       return;
     }
+    if (this.name === "open") {
+      void this.open();
+      return;
+    }
     this.w.host.conversationChanged.add("selftest", () => this.conversation());
     if (this.name === "fake") this.w.host.roles.chat.submit("Reply with exactly the word PONG and nothing else.");
     else if (this.name === "fake-acp") this.w.host.roles.chat.submit("ask");
@@ -103,6 +113,29 @@ export class Selftest {
     else if (this.name === "live-edit") this.w.host.roles.chat.submit("Use the Write tool to create hello.txt containing exactly the line hi. Then use the Edit tool to change hi to bye in it. Then say done.");
     else if (this.name === "live-agent") this.w.host.roles.chat.submit("Use the Agent tool (subagent_type general-purpose, not in the background) to have a subagent read README.md and report its first line. Then tell me what it reported.");
     else this.fail("unknown selftest " + this.name);
+  }
+
+  /** /open a new folder holding one file, then read the app started again over it. */
+  private async open(): Promise<void> {
+    const folder = mkdtempSync(join(tmpdir(), "widecode-selftest-open-"));
+    writeFileSync(join(folder, "only.txt"), "one\n");
+    const agent = this.w.host.session.agentId.peek();
+    this.step = 1;
+    await this.w.host.openFolder(folder);
+    const now = this.current();
+    this.step = 2;
+    await now.host.load();
+    const files = now.host.folder.paths();
+    // The new mount paints on its next frames.
+    const screen = this.screen;
+    let text = "";
+    for (let i = 0; i < 40 && !text.includes("only.txt"); i++) {
+      await new Promise<void>((settle) => setTimeout(settle, 50));
+      text = screen !== null ? screen() : "";
+    }
+    log("selftest open: a new app " + String(now !== this.w) + "; folder " + String(now.host.workspace.folder === folder) + "; files=" + String(files.length) + "; same agent " + String(now.host.session.agentId.peek() === agent) + "; screen shows it " + String(text.includes("only.txt")));
+    if (now !== this.w && now.host.workspace.folder === folder && files.length === 1 && text.includes("only.txt")) this.pass();
+    else this.fail("the app over " + folder + " is not the one shown");
   }
 
   private shown(file: CodeFile): void {
@@ -287,14 +320,14 @@ export class Selftest {
     if (this.finished) return;
     this.finished = true;
     log("selftest ok");
-    this.w.host.quit();
+    this.current().host.quit();
   }
 
   private fail(why: string): void {
     if (this.finished) return;
     this.finished = true;
     log("selftest failed: " + why);
-    this.w.host.conversation.kill();
+    this.current().host.conversation.kill();
     process.exit(1);
   }
 }

@@ -4,7 +4,8 @@
 // and the start with the plugins' config, without the log, the store or the config file. What a test
 // changes before the start (the agent chosen, the CLI and its arguments, a store, a plugin folder)
 // goes in `before`, which runs once the app is composed and before its plugins start. One app is
-// open at a time: opening another stops the one before.
+// open at a time: opening another stops the one before. An `/open` starts the app again over the
+// other folder, the test's run with it: `currentWidecode()` is the app after it.
 import type { StateFile } from "@lightstart/kernel/settings.ts";
 import type { Plugin } from "@lightstart/kernel/plugin.ts";
 import { openApp } from "@lightstart/app/test";
@@ -56,6 +57,9 @@ export const openWidecode = async (options: OpenOptions): Promise<Widecode> => {
   opened = await openApp(manifest, { storage: "memory" });
   return widecode.w;
 };
+
+/** The app open now: after an `/open`, the one started over the other folder. */
+export const currentWidecode = (): Widecode => widecode.w;
 
 /** Stop what `openWidecode` started: the agent's process, the plugins and their processes, the folder's watch. */
 export const closeWidecode = (w: Widecode): void => {

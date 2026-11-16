@@ -56,6 +56,32 @@ export class Run {
   /** A test's: whether the plugins start, and whether the folder is read before the start settles. */
   start = true;
   load = false;
+
+  /** The same run over another folder, read once it starts (an `/open`). */
+  over(folder: string): Run {
+    const next = new Run();
+    next.folder = folder;
+    next.batchMs = this.batchMs;
+    next.real = this.real;
+    next.plugins = this.plugins;
+    next.state = this.state;
+    next.extra = this.extra;
+    next.before = this.before;
+    next.start = this.start;
+    next.load = true;
+    return next;
+  }
+}
+
+/** What carries over to another folder (`/open`): the agent chosen, its CLI and arguments, the model and the effort. */
+export class Carry {
+  agentId = "";
+  executable = "";
+  extraArgs: string[] = [];
+  modelName = "";
+  effort = "";
+  /** What the new start tells, once it runs. */
+  notice = "";
 }
 
 /** The process-wide pieces (the signal and exit handlers, the crash monitor) are installed once, whatever the restarts. */
@@ -74,6 +100,17 @@ export class WidecodeController extends Controller {
   keysNote = "";
   /** The run the next start takes, set by a test; the real app's when null. */
   next: Run | null = null;
+  /** The test's run this start took; null for the real app. */
+  private run: Run | null = null;
+  /** What the next start takes over from the one before it (an `/open`). */
+  private carry: Carry | null = null;
+  /** What this start tells once it runs ("" for nothing). */
+  private opened = "";
+  /** Once a process: the log opened, and what a mount wires to the terminal and the frames. */
+  private logOpened = false;
+  private wired = false;
+  /** The session and its turn, as the log says them; the mounted app's. */
+  private where: () => string = () => "";
   /** Whether what this start opened was stopped already (a test's closeWidecode, then the app's stop). */
   private closed = true;
   /** The crash trail's context and how to put the screen back, once mounted. */
@@ -87,6 +124,7 @@ export class WidecodeController extends Controller {
   override connected(): Promise<void> | null {
     const run = this.next;
     this.next = null;
+    this.run = run;
     return run !== null ? this.connectTest(run) : this.connect();
   }
 
@@ -106,6 +144,43 @@ export class WidecodeController extends Controller {
     w.host.workspace.close();
   }
 
+  /**
+   * Start the app again over `folder` (`/open`): the agent chosen, its CLI, the model and the effort
+   * carry over; a test's run carries over too, with the folder read once it starts.
+   */
+  async reopen(folder: string): Promise<void> {
+    const host = this.w.host;
+    const c = host.conversation;
+    const carry = new Carry();
+    carry.agentId = host.session.agentId.peek();
+    carry.executable = c.executable;
+    carry.extraArgs = c.extraArgs.slice();
+    carry.modelName = c.modelName;
+    carry.effort = c.effort;
+    carry.notice = "opened " + folder;
+    this.carry = carry;
+    const run = this.run;
+    if (run !== null) this.next = run.over(folder);
+    // The new start resumes nothing, opens no file and starts no selftest: those were the first start's.
+    await app.restart({ dir: folder, resume: undefined, open: undefined, selftest: undefined });
+  }
+
+  /** Take over what the start before carried (an `/open`): the conversation's CLI, arguments, model and effort, and the agent chosen. */
+  private takeOver(w: Widecode): void {
+    const carry = this.carry;
+    this.carry = null;
+    this.opened = "";
+    if (carry === null) return;
+    const c = w.host.conversation;
+    c.executable = carry.executable;
+    c.extraArgs.length = 0;
+    for (const a of carry.extraArgs) c.extraArgs.push(a);
+    c.modelName = carry.modelName;
+    c.effort = carry.effort;
+    w.host.session.agentId.value = carry.agentId;
+    this.opened = carry.notice;
+  }
+
   /** A test's start: the folder composed, its `before`, the plugins as it says, the folder read if it asks. */
   private async connectTest(run: Run): Promise<void> {
     this.store = null;
@@ -118,10 +193,13 @@ export class WidecodeController extends Controller {
     const w = composeWidecode(workspace, new Conversation(workspace.folder));
     this.w = w;
     this.closed = false;
+    w.host.onOpen = (folder: string) => this.reopen(folder);
     const before = run.before;
     if (before !== null) await before(w);
+    this.takeOver(w);
     if (run.start) w.start(run.plugins, run.state, run.extra);
     if (run.load) await w.host.load();
+    if (this.opened.length > 0) w.host.screen.tell(this.opened);
   }
 
   /** The process's handlers, installed by the first real start. */
@@ -163,9 +241,13 @@ export class WidecodeController extends Controller {
 
   private async connect(): Promise<void> {
     const logArg = app.args.string("log") ?? null;
-    nameLog("widecode");
-    openLog(logArg);
-    log(BUILD);
+    const first = !this.logOpened;
+    this.logOpened = true;
+    if (first) {
+      nameLog("widecode");
+      openLog(logArg);
+      log(BUILD);
+    }
     this.installProcess();
 
     const selftest = app.args.string("selftest") ?? "";
@@ -195,15 +277,17 @@ export class WidecodeController extends Controller {
     this.config = config;
     this.w = w;
     this.closed = false;
+    host.onOpen = (next: string) => this.reopen(next);
+    this.takeOver(w);
     // The log: a file of this run's own under the store unless --log named one, config.json's "log" said otherwise or --no-log.
-    if (logArg === null && store !== null && config !== null && config.log.enabled && !app.args.flag("no-log")) {
+    if (first && logArg === null && store !== null && config !== null && config.log.enabled && !app.args.flag("no-log")) {
       const dir = config.log.dir;
       openLogIn(dir.length === 0 ? join(store.root, "logs") : dir.startsWith("~/") ? join(homedir(), dir.slice(2)) : resolve(store.root, dir), config.log.keep);
       log(BUILD);
     }
     log("pid " + String(process.pid) + " · " + (process.argv.length > 2 ? process.argv.slice(2).join(" ") : "no flags") + " · store " + (store !== null ? store.root : "none"));
     // A native crash reports itself to this log and puts the terminal back; before the TUI saves raw mode.
-    installCrash(logPath(), "widecode");
+    if (first) installCrash(logPath(), "widecode");
     trail.onChange = (text: string) => noteCrash(text);
     await host.useStore(store);
     host.session.userPermissions = config !== null ? config.permissions : null;
@@ -220,7 +304,7 @@ export class WidecodeController extends Controller {
       if (store.trusted(folder)) w.js.dirs.push(projectPlugins);
     }
     // The agent: --agent, else config.json's "agent"; one a plugin brings is taken up when it registers.
-    host.session.agentId.value = app.args.string("agent") ?? (config !== null && config.agent.length > 0 ? config.agent : "claude");
+    if (this.opened.length === 0) host.session.agentId.value = app.args.string("agent") ?? (config !== null && config.agent.length > 0 ? config.agent : "claude");
     // The user's key bindings (keys.json), read again on /reload.
     if (store !== null) host.keys.onRead = () => store.readKeys();
     this.keysNote = host.keys.applyUser();
@@ -287,27 +371,42 @@ export class WidecodeController extends Controller {
     runOnboarding(host, o);
   }
 
+  /** The renderer the app is mounted on now; a restart mounts another. */
+  private renderer: Renderer | null = null;
+
+  /** The screen's text as the renderer drew it last ("" before a mount). */
+  screenText(): string {
+    const renderer = this.renderer;
+    return renderer !== null ? renderer.screenText() : "";
+  }
+
   /** Everything the old pipeline did once runApp answered; the host calls this after runApp. */
   mounted(renderer: Renderer): void {
+    this.renderer = renderer;
     const w = this.w;
     const host = w.host;
     const term = renderer.term;
     renderer.setFocus(w.chat.pane.input);
     host.screen.clipboard.onWrite = (text: string) => term.write(text);
-    term.onResize(() => w.shell.resize(term.cols));
     host.screen.onFocusInput = (input: TInput | null) => renderer.setFocus(input);
-    // A frame's phases on the trail: the views' update, then the layout and paint.
-    let frameAt = 0;
-    frames.onFlush(() => {
-      trail.reset();
-      trail.frames++;
-      frameAt = trail.within("frame", "views");
-    }, FLUSH_VIEWS - 1);
-    frames.onFlush(() => {
-      trail.leave(frameAt);
-      frameAt = trail.within("frame", "paint");
-    }, FLUSH_RENDER - 1);
-    frames.onFlush(() => trail.leave(frameAt), FLUSH_AFTER + 1);
+    // Once a process, whatever the restarts: the terminal's resizes, the frames' phases, the log's pulse.
+    if (!this.wired) {
+      this.wired = true;
+      term.onResize(() => this.w.shell.resize(term.cols));
+      // A frame's phases on the trail: the views' update, then the layout and paint.
+      let frameAt = 0;
+      frames.onFlush(() => {
+        trail.reset();
+        trail.frames++;
+        frameAt = trail.within("frame", "views");
+      }, FLUSH_VIEWS - 1);
+      frames.onFlush(() => {
+        trail.leave(frameAt);
+        frameAt = trail.within("frame", "paint");
+      }, FLUSH_RENDER - 1);
+      frames.onFlush(() => trail.leave(frameAt), FLUSH_AFTER + 1);
+      setInterval(() => log("alive · " + this.where()), ALIVE_MS);
+    }
     /** The session and its turn, as the log says them. */
     let turnSince = 0;
     const where = (): string => {
@@ -331,7 +430,7 @@ export class WidecodeController extends Controller {
         turnSince = 0;
       }
     });
-    setInterval(() => log("alive · " + where()), ALIVE_MS);
+    this.where = where;
     this.crashContext = () => "\n" + trail.text() + "\nat the error: " + where() + "\nscreen at the error\n" + renderer.screenText() + "\nend screen";
     this.leaveScreen = () => renderer.stop();
     host.screen.onScreen = (columns: string[]) => w.screenText(renderer.back, columns);
@@ -375,7 +474,6 @@ export class WidecodeController extends Controller {
       term.title(t);
     };
     host.conversationChanged.add("title", syncTitle);
-    host.folderOpened.add("title", syncTitle);
     syncTitle();
     const agent = host.conversation.agent;
     log("started " + String(term.cols) + "x" + String(term.rows) + " in " + host.workspace.folder + " with " + (agent.owner.length === 0 ? w.host.conversation.executable : agent.name() + " (plugin " + agent.owner + ")"));
@@ -406,10 +504,9 @@ export class WidecodeController extends Controller {
         log(this.keysNote);
         host.screen.tell(this.keysNote);
       }
+      if (this.opened.length > 0) host.screen.tell(this.opened);
       // --trust is a run with nothing asked; the first-run questions wait for a normal launch.
       this.onboard(!app.args.flag("trust") && this.store !== null && this.store.firstRun);
-      // Another folder opened (/open): trusted already, or asked.
-      host.folderOpened.add("onboarding", () => this.onboard(false));
       for (const e of w.js.errors) log("plugins: " + e);
       if (this.migrated.length > 0) {
         log(this.migrated);
@@ -420,7 +517,8 @@ export class WidecodeController extends Controller {
       const selftest = app.args.string("selftest") ?? "";
       if (selftest.length > 0) {
         const t = new Selftest(selftest, w);
-        t.screen = () => renderer.screenText();
+        t.screen = () => this.screenText();
+        t.current = () => this.w;
         t.start();
       }
     };

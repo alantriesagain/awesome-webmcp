@@ -113,7 +113,6 @@ widecode.plugin({
     });
 
     api.on("conversationChanged", soon);
-    api.on("folderOpened", soon);
     read();
   },
 });

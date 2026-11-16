@@ -100,7 +100,12 @@ Each round leaves widecode building, its 127 tests passing (except the `pi` one,
    - the two stores;
    - `sessions`, `skills` and `history` in the project store, and `trust` and `limits` in the user store, with the old files imported once;
    - one settings merge for plugins, columns, permissions, keymap, agent and log.
-5. **Opening a folder restarts the app**, and the swap code goes.
+5. **Opening a folder restarts the app** (done, before round 3's last step: it needed only the test helper on the app layer).
+   - `/open` keeps its checks: not a folder, already opening, the agent still working.
+   - Then the `widecode` controller's `reopen` carries the agent chosen, its CLI and arguments, the model and the effort over, and calls `app.restart({ dir })`. The restart resumes no session, opens no file and starts no selftest.
+   - `SessionController.open`, `Widecode.folderOpened`, the widgets' and plugins' `folderOpened` listeners and the hook itself are gone.
+   - A test gets the app after an `/open` from `currentWidecode()`, and the `open` selftest checks it in the binary.
+   - On the way: the Tools tab redraws when the conversation changes, since it used to keep the old calls after a reset.
 6. **The extension seam:**
    - chat, code and tools become core;
    - the built-ins are still plugins in `plugins/<id>/index.ts`, with their list generated;

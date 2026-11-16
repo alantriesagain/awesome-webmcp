@@ -39,7 +39,6 @@ export class CodeWidget extends CodeTarget {
       const open = pane.path.peek();
       if (open.length > 0 && pane.commit.peek().length === 0) pane.mark.value = h.folder.markOf(open);
     });
-    h.folderOpened.add(owner, () => pane.clear());
   }
 
   override openAgent(id: string): void {

@@ -57,7 +57,7 @@ declare namespace widecode {
   }
 
   /** The hooks a plugin can listen to; most listeners get nothing and read what changed (requestOpened's gets the request). */
-  type Hook = "conversationChanged" | "sessionsChanged" | "filesLoaded" | "statusLoaded" | "folderChanged" | "folderOpened" | "baseChanged" | "fileShown" | "requestOpened" | "messageSending" | "keymapChanged" | "messageChanged" | "toolsChanged" | "harnessChanged";
+  type Hook = "conversationChanged" | "sessionsChanged" | "filesLoaded" | "statusLoaded" | "folderChanged" | "baseChanged" | "fileShown" | "requestOpened" | "messageSending" | "keymapChanged" | "messageChanged" | "toolsChanged" | "harnessChanged";
 
   /** A piece of a row in one style; colors are "#rrggbb", "0"…"255" or a name ("gray", "cyan"). */
   interface Run {

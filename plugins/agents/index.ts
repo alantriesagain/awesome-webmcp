@@ -85,11 +85,6 @@ widecode.plugin({
     });
 
     api.on("conversationChanged", soon);
-    api.on("folderOpened", () => {
-      agents = [];
-      selected = 0;
-      panel.refresh();
-    });
     const move = (step: number): boolean => {
       if (agents.length > 0) selected = Math.max(0, Math.min(agents.length - 1, selected + step));
       panel.reveal(selected * 2 + (step > 0 ? 1 : 0));

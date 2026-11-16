@@ -31,13 +31,13 @@ const main = async (): Promise<void> => {
       models: { agents: { dsh: ['["deepseek-official","deepseek-flash"]', '["deepseek-official","deepseek-v4-pro"]'] } },
       acp: { agents: { dsh: { name: "DeepSeek Harness", command: ["node", fake, "--dsh", "--log", log] } } },
     },
-    load: true,
     before: (w: Widecode) => {
       w.host.session.agentId.value = "dsh";
     },
   });
   const c = w.host.conversation;
   c.prepare();
+  await w.host.load();
   const idle = (): boolean => !c.model.running && c.model.pending.length === 0;
   const last = (): Turn => c.model.turns[c.model.turns.length - 1];
   const sent = (): string => readFileSync(log, "utf8");
