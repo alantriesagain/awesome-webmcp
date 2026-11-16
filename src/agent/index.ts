@@ -1,19 +1,3 @@
-export { AgentOptions, ClaudeAgent, claudeExecutable } from "./claude.ts";
+export { claudeExecutable } from "./executable.ts";
 export { LineSplitter } from "@lightstart/lib/ndjson.ts";
 export * from "./mcp.ts";
-export {
-  AgentEvent,
-  AssistantEvent,
-  BlockStartEvent,
-  BlockStopEvent,
-  ErrorEvent,
-  ExitEvent,
-  InitEvent,
-  MalformedEvent,
-  ResultEvent,
-  StderrEvent,
-  SystemEvent,
-  TextDeltaEvent,
-  UnknownEvent,
-  decodeEnvelope,
-} from "./envelope.ts";

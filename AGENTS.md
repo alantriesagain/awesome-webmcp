@@ -15,7 +15,7 @@ light's packages; the rest is here. The compiler is the scriptc release pinned i
 | Path | What it is |
 |---|---|
 | `light/packages/native/*`, `light/packages/tui/*` | light's packages: `@lightstart/native` (`light`, the tooling: build, run, selftest, test, coverage, typecheck, check, install), `lib`, `highlight`, `plugins`, `workspace`, `test`, `kernel`, `ui`, `markdown` (light's `packages/README.md`) |
-| `src/agent` | the `claude -p` sidecar (spawn, envelopes) and the MCP server widecode serves its own tools with |
+| `src/agent` | the MCP server widecode serves its own tools with, the session titles and the Claude CLI it runs for them |
 | `src/conversation` | the conversation with an agent, agent-neutral: the model, the events, the agent role, requests, status, the lines a view draws, the session records widecode keeps |
 | `src/screen` | the screen plugins contribute to: columns, tabs, band strips, segments, `ScreenController`, the column element |
 | `src/code` | the code column: a file with its changes in place, the view, a subagent's steps, a call's page, the `CodeTarget` role |

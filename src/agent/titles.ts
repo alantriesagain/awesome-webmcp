@@ -5,7 +5,7 @@
 // session untitled.
 import { homedir } from "node:os";
 import { ProcessRun, spawnCapped, SpawnOptions } from "@lightstart/lib/process.ts";
-import { claudeExecutable } from "./claude.ts";
+import { claudeExecutable } from "./executable.ts";
 /** `text` cut to `cells` characters (a title's text is short and single-line). */
 const clipText = (text: string, cells: number): string => (text.length <= cells ? text : text.slice(0, Math.max(0, cells - 1)) + "…");
 
