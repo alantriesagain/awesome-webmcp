@@ -92,6 +92,14 @@ ok("the host names its hooks", hooks.length > 5);
 eq("host.hook answers each of them", switched.join(","), hooks.join(","));
 eq("widecode.d.ts types them", typedHooks.join(","), hooks.join(","));
 eq("PLUGINS.md documents them", documented.join(","), hooks.join(","));
+// Each hook a built-in plugin listens to is one of them.
+const listened: string[] = [];
+for (const id of readdirSync(join(root, "plugins")).sort()) {
+  const file = join("plugins", id, "index.ts");
+  if (!existsSync(join(root, file))) continue;
+  for (const name of namesIn(read(file), /\bapi\.on\("([a-zA-Z]+)"/g)) if (!hooks.includes(name)) listened.push(id + ": " + name);
+}
+eq("the built-in plugins listen to those hooks alone", listened.join(", "), "");
 
 eq(
   "the agent functions reach the core in the table's order",
