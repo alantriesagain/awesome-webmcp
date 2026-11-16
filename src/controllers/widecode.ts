@@ -1,10 +1,12 @@
-// widecode's one transitional controller, standing in for main.ts and startup.ts. Its connected()
-// runs everything the entry did before the terminal: the log, the signals and the crash monitor,
-// the folder check, then the workspace, the conversation, the store, the config, the plugins, the
-// keys, the columns and the watching. The host makes the root view next; its mounted(renderer) runs
-// what the old pipeline did from runApp on: focus, the clipboard, resizes, the frame trail, the
-// crash hooks, load, resume, onboarding, --open and a selftest. Round 3 dissolves this into the
-// controllers the plan names.
+// widecode's one transitional controller, standing in for main.ts and startup.ts. A start is a Run:
+// the real app's, read from the flags, or the one a test describes (test/support/app.ts). Its
+// connected() composes the app over the run's folder; for the real app it first does what the entry
+// did before the terminal (the log, the signals and the crash monitor, once a process, and the
+// folder check), then the store, the config, the plugins, the keys, the columns and the watching.
+// The host makes the root view next; mounted(renderer) runs what the old pipeline did from runApp
+// on: focus, the clipboard, resizes, the frame trail, the crash hooks, load, resume, onboarding,
+// --open and a selftest. disconnected() stops what the start opened, so the app starts again clean.
+// Round 3 dissolves this into the controllers the plan names.
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { errorMessage, isRecord } from "@lightstart/lib/json.ts";
 import { homedir } from "node:os";
@@ -13,6 +15,8 @@ import { log, logPath, nameLog, openLog, openLogIn, trail } from "@lightstart/li
 import { installCrash, noteCrash } from "@lightstart/lib/crash.ts";
 import { composeWidecode, Widecode } from "../compose.ts";
 import { NoStateFile } from "@lightstart/kernel/settings.ts";
+import type { StateFile } from "@lightstart/kernel/settings.ts";
+import type { Plugin } from "@lightstart/kernel/plugin.ts";
 import { checkSource } from "../api/plugins.ts";
 import { AgentChoice, HarnessFile, Onboarding, folderCarries, runOnboarding } from "../views/onboarding.ts";
 import { Conversation } from "../conversation/conversation.ts";
@@ -32,6 +36,31 @@ const CHANGES_MS = 150;
 /** How often the log says the run is alive. */
 const ALIVE_MS = 5 * 60 * 1000;
 
+/**
+ * How one start of the app goes: the real app's (`real`, the rest read from the flags), or a test's,
+ * which opens its folder without the log, the store or the config, and starts the plugins as it says.
+ */
+export class Run {
+  /** The folder the app opens. */
+  folder = "";
+  /** How long the folder's events gather, in ms. */
+  batchMs = CHANGES_MS;
+  /** The real app: the log, the signals, the store and the config. A test's run has none of them. */
+  real = true;
+  /** A test's: config.json's "plugins" (null for none), what plugins keep, compiled plugins after the JS ones. */
+  plugins: unknown = null;
+  state: StateFile = new NoStateFile();
+  extra: Plugin[] = [];
+  /** A test's: run once the app is composed, before its plugins start. */
+  before: ((w: Widecode) => void | Promise<void>) | null = null;
+  /** A test's: whether the plugins start, and whether the folder is read before the start settles. */
+  start = true;
+  load = false;
+}
+
+/** The process-wide pieces (the signal and exit handlers, the crash monitor) are installed once, whatever the restarts. */
+let installed = false;
+
 export class WidecodeController extends Controller {
   /** Everything the app's parts hold, made by connected(). */
   w!: Widecode;
@@ -43,6 +72,10 @@ export class WidecodeController extends Controller {
   columnsNote = "";
   agentNote = "";
   keysNote = "";
+  /** The run the next start takes, set by a test; the real app's when null. */
+  next: Run | null = null;
+  /** Whether what this start opened was stopped already (a test's closeWidecode, then the app's stop). */
+  private closed = true;
   /** The crash trail's context and how to put the screen back, once mounted. */
   crashContext: (() => string) | null = null;
   leaveScreen: (() => void) | null = null;
@@ -52,15 +85,49 @@ export class WidecodeController extends Controller {
   }
 
   override connected(): Promise<void> | null {
-    return this.connect();
+    const run = this.next;
+    this.next = null;
+    return run !== null ? this.connectTest(run) : this.connect();
   }
 
-  private async connect(): Promise<void> {
-    const logArg = app.args.string("log") ?? null;
-    nameLog("widecode");
-    openLog(logArg);
-    log(BUILD);
+  override disconnected(): Promise<void> | null {
+    this.close();
+    return null;
+  }
 
+  /** Stop what this start opened: the agent's process, the plugins and their processes, the folder's watch. Once. */
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    const w = this.w;
+    w.host.conversation.kill();
+    w.host.kernel.stop();
+    w.js.killProcesses();
+    w.host.workspace.close();
+  }
+
+  /** A test's start: the folder composed, its `before`, the plugins as it says, the folder read if it asks. */
+  private async connectTest(run: Run): Promise<void> {
+    this.store = null;
+    this.config = null;
+    this.migrated = "";
+    this.columnsNote = "";
+    this.agentNote = "";
+    this.keysNote = "";
+    const workspace = await openWorkspace(run.folder, run.batchMs);
+    const w = composeWidecode(workspace, new Conversation(workspace.folder));
+    this.w = w;
+    this.closed = false;
+    const before = run.before;
+    if (before !== null) await before(w);
+    if (run.start) w.start(run.plugins, run.state, run.extra);
+    if (run.load) await w.host.load();
+  }
+
+  /** The process's handlers, installed by the first real start. */
+  private installProcess(): void {
+    if (installed) return;
+    installed = true;
     // Natively an error has no stack: the trail of what ran last is what places it. The runtime
     // prints the error and exits after this, the exit listeners running (the agent's CLI stopped).
     process.on("uncaughtExceptionMonitor", (err: Error, origin: string) => {
@@ -84,6 +151,22 @@ export class WidecodeController extends Controller {
       process.exit(129);
     });
     process.on("SIGTERM", () => log("signal SIGTERM"));
+    // However the program ends (Ctrl+C, a signal, a crash), the CLI and its turn end with it.
+    process.on("exit", () => {
+      if (this.closed) return;
+      const w = this.w;
+      w.host.conversation.kill();
+      w.js.killProcesses();
+      w.js.mcp.close();
+    });
+  }
+
+  private async connect(): Promise<void> {
+    const logArg = app.args.string("log") ?? null;
+    nameLog("widecode");
+    openLog(logArg);
+    log(BUILD);
+    this.installProcess();
 
     const selftest = app.args.string("selftest") ?? "";
     const folder = resolve(app.args.string("dir") ?? process.cwd());
@@ -111,6 +194,7 @@ export class WidecodeController extends Controller {
     this.store = store;
     this.config = config;
     this.w = w;
+    this.closed = false;
     // The log: a file of this run's own under the store unless --log named one, config.json's "log" said otherwise or --no-log.
     if (logArg === null && store !== null && config !== null && config.log.enabled && !app.args.flag("no-log")) {
       const dir = config.log.dir;
@@ -160,12 +244,6 @@ export class WidecodeController extends Controller {
     // Without a store (--ephemeral) titles would have nowhere to go.
     if (store === null) host.session.titler.allowed = false;
     for (const p of host.kernel.problems) log("plugin " + p);
-    // However the program ends (Ctrl+C, a signal, a crash), the CLI and its turn end with it.
-    process.on("exit", () => {
-      host.conversation.kill();
-      w.js.killProcesses();
-      w.js.mcp.close();
-    });
   }
 
   /** Trust the folder from now on (compose.ts), saying so. */

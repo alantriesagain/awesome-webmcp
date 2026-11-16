@@ -1,14 +1,17 @@
-// widecode opened for a test, the one place a test builds the app: the folder's workspace, its
-// conversation, the composition and the start with the plugins' config. What a test changes before
-// the start (the agent chosen, the CLI and its arguments, a store, a plugin folder) goes in `before`,
-// which runs once the app is composed and before its plugins start. The app's own startup (the
-// widecode controller) is what a selftest runs; this is the same composition without the terminal.
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
+// widecode opened for a test, the one place a test builds the app: through the app layer, as the
+// binary starts it (`openApp` over the generated manifest), with the widecode controller told the
+// test's run instead of reading the flags: the folder's workspace, its conversation, the composition
+// and the start with the plugins' config, without the log, the store or the config file. What a test
+// changes before the start (the agent chosen, the CLI and its arguments, a store, a plugin folder)
+// goes in `before`, which runs once the app is composed and before its plugins start. One app is
+// open at a time: opening another stops the one before.
 import type { StateFile } from "@lightstart/kernel/settings.ts";
 import type { Plugin } from "@lightstart/kernel/plugin.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { Conversation } from "../../src/conversation/conversation.ts";
-import { composeWidecode, Widecode } from "../../src/compose.ts";
+import { openApp } from "@lightstart/app/test";
+import type { OpenedApp } from "@lightstart/app/test";
+import manifest from "../../.light/app.ts";
+import type { Widecode } from "../../src/compose.ts";
+import widecode, { Run } from "../../src/controllers/widecode.ts";
 
 /** What a test opens widecode with; every field but `folder` has a default. */
 export interface OpenOptions {
@@ -30,21 +33,31 @@ export interface OpenOptions {
   load?: boolean;
 }
 
+/** The app open now, stopped when the next one opens. */
+let opened: OpenedApp | null = null;
+
 /** widecode over `options.folder`, composed, started and loaded as the options say. */
 export const openWidecode = async (options: OpenOptions): Promise<Widecode> => {
-  const workspace = await openWorkspace(options.folder, options.batchMs ?? 100);
-  const w = composeWidecode(workspace, new Conversation(workspace.folder));
-  const before = options.before;
-  if (before !== undefined) await before(w);
-  if (options.start ?? true) w.start(options.plugins ?? null, options.state ?? new NoStateFile(), options.extra ?? []);
-  if (options.load ?? false) await w.host.load();
-  return w;
+  if (opened !== null) {
+    await opened.stop();
+    opened = null;
+  }
+  const run = new Run();
+  run.real = false;
+  run.folder = options.folder;
+  run.batchMs = options.batchMs ?? 100;
+  run.plugins = options.plugins ?? null;
+  if (options.state !== undefined) run.state = options.state;
+  run.extra = options.extra ?? [];
+  run.before = options.before ?? null;
+  run.start = options.start ?? true;
+  run.load = options.load ?? false;
+  widecode.next = run;
+  opened = await openApp(manifest, { storage: "memory" });
+  return widecode.w;
 };
 
 /** Stop what `openWidecode` started: the agent's process, the plugins and their processes, the folder's watch. */
 export const closeWidecode = (w: Widecode): void => {
-  w.host.conversation.kill();
-  w.host.kernel.stop();
-  w.js.killProcesses();
-  w.host.workspace.close();
+  if (w === widecode.w) widecode.close();
 };
