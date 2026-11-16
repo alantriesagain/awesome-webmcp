@@ -78,17 +78,24 @@ Left out of the app layer on purpose:
 Each round leaves widecode building, its 127 tests passing (except the `pi` one, which needs `pi` on PATH), and the binary installed and run by hand.
 
 1. **light: the app layer above.** Issue, branch, pull request, gates, merge.
-2. **widecode on the app layer:**
+2. **widecode on the app layer** (done, `a2e525d`):
    - `src/app.ts` with the flags, and `native.entry` set to `.light/main.ts`;
    - the run modes in `src/modes/`;
-   - the log and the crash monitor in a `log` controller;
-   - `startup.ts` and `main.ts` removed;
-   - the test helper in place, with tests moved onto it as they're touched.
-3. **The controllers:**
-   - `Host` and `Widecode` dissolved into `settings`, `folder`, `session`, `screen`, `keymap` and `plugins`;
-   - views importing their controllers;
-   - hooks replaced by signals;
-   - `commands.ts` split, so each command lives with the controller it acts on.
+   - one transitional controller, `src/controllers/widecode.ts`, doing what `main.ts` and `startup.ts` did, and the root view `src/views/app-root.ts` around the shell;
+   - `startup.ts` and `main.ts` removed, and `Host` and the classes it builds moved to `src/host/` unchanged.
+
+   On the way, light got:
+   - the root view's `mounted(renderer)` hook (#62);
+   - arguments that a native app can read (#64): `App` is a class, read with `app.args.string(name)` and `app.args.flag(name)`, because scriptc copies a value it converts;
+   - controllers that start after the controllers they import (#66).
+3. **The controllers**, in steps that each keep the tests green:
+   1. **One test helper.** `openWidecode(options)` and `closeWidecode(w)` in `test/support/app.ts` are the only place a test builds the app. A test's tweaks go in `before(w)`. The tests are moved onto it mechanically, and the queue test is the example.
+   2. **Through the app layer.** The helper opens widecode through `@lightstart/app/test` and its controllers, one app at a time. Tests that hold two apps at once become sequential, and the process-wide pieces (signal handlers, the crash monitor, the log) are installed once.
+   3. **Controllers.**
+      - The `widecode` controller splits into `log`, `settings`, `folder`, `session`, `screen`, `keymap` and `plugins`, each reset when it starts again, so a restart is a clean start.
+      - Views import the controllers, and `Host` thins down to the facade the plugin api answers through.
+      - Hooks become signals.
+      - `commands.ts` is split, so each command lives with the controller it acts on.
 4. **Persistence:**
    - the two stores;
    - `sessions`, `skills` and `history` in the project store, and `trust` and `limits` in the user store, with the old files imported once;
