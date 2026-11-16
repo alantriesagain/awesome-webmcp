@@ -9,7 +9,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Ask } from "../conversation/requests.ts";
-import { Host } from "../controllers/host.ts";
+import { Host } from "../host/host.ts";
 
 /** A plugin file of a harness as the trust question lists it: its path from the folder, the ids it registers, why it does not load ("" when it does). */
 export class HarnessFile {

@@ -3,7 +3,7 @@
 // write carries in tests) and the notify-send command, recorded in a script of the test's; a
 // category left out of "on"; bell and notify each turned off; the plugin switched off; two
 // requests alert twice, one never twice, and a request answered at once does not alert. Alerts
-// run only in the real app (the host's flag, as startup.ts sets it), and a notification click
+// run only in the real app (the host's flag, as the widecode controller sets it), and a notification click
 // runs the section's onClick line and shows its request. A notify-send notification gets the
 // section's expire time as -t and runs under coreutils timeout, a custom notifyCommand gets no -t,
 // and a bad expireSeconds falls back to 600.
@@ -50,7 +50,7 @@ const main = async (): Promise<void> => {
     process.env["WIDECODE_ALERTS_LOG"] = log;
     const c = new Conversation(ws.folder);
     const w = createWidecode(ws, c, plugins);
-    // What startup.ts sets in the real entry alone; a test never reaches the user's desktop otherwise.
+    // What the widecode controller sets in the real app alone; a test never reaches the user's desktop otherwise.
     w.host.real = real;
     const rings: string[] = [];
     w.host.screen.clipboard.onWrite = (text: string) => rings.push(text);

@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@lightstart/app':
+        specifier: link:light/packages/app
+        version: link:light/packages/app
       '@lightstart/highlight':
         specifier: link:light/packages/highlight
         version: link:light/packages/highlight

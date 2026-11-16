@@ -20,3 +20,5 @@ const schema: ModelSchema = {
 };
 
 export const skills = defineModel("skills", schema);
+
+export default skills;

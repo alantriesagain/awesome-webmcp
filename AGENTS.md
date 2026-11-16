@@ -22,7 +22,7 @@ light's packages; the rest is here. The compiler is the scriptc release pinned i
 | `src/chat` | the chat views: the transcript with the composer, the request panel, the completion strip, the Tools tab, the `ChatTarget` and `ToolsTarget` roles, on a `ChatHost` the app provides |
 | `src/harness` | widecode's own coding agent, the harness: a daemon of the binary (`widecode --harness`) speaking ACP over stdio to the ACP plugin, talking to model APIs directly, running its own tools, keeping its own sessions |
 | `src/peers` | the LAN git bridge's daemon (`widecode --peers-daemon`): discovery, pairing, the repositories each peer has |
-| `src/` (the rest) | the app: `main.ts`, `compose.ts`, `controllers/`, `views/`, `services/`, `runtime/` (the plugin runtime), `api/` (the plugin API's answers) |
+| `src/` (the rest) | the app on `@lightstart/app`: `app.ts` (its flags), `modes/` (`--version`, `--harness`, `--peers-daemon`), `controllers/` (the app's named controllers), `host/` (`Host`, `SessionController`, the keymaps, the roles), `compose.ts`, `views/` (`app-root.ts` the root view), `services/`, `runtime/` (the plugin runtime), `api/` (the plugin API's answers) |
 | `plugins/` | the built-in plugins, `plugins/<id>/index.ts`, typed against `widecode.d.ts` (`PLUGINS.md`) |
 | `test/` | the tests (`test/*.test.ts`, the harness's and the other folders' prefixed with theirs: `harness-*.test.ts`), their fixtures and fakes |
 | `box/` | the sandbox subagents run in: a bubblewrap jail or a VM (`box/README.md`) |
@@ -74,8 +74,8 @@ light's packages; the rest is here. The compiler is the scriptc release pinned i
   imported by name (`@lightstart/light/native/tui`, `@lightstart/lib/json.ts`), the app's own files by
   relative path.
 - The layers inside `src/`, each importing only those before it: agent; conversation; harness;
-  screen; code; chat; peers; then the app (`main.ts`, `controllers/`, `views/`, `services/`,
-  `runtime/`, `api/`). Light's packages never import any of it.
+  screen; code; chat; peers; then the app (`app.ts`, `modes/`, `host/`, `controllers/`, `views/`,
+  `services/`, `runtime/`, `api/`). Light's packages never import any of it.
 - The `native` block names the entry, the binary, the FFI manifests (`@lightstart/plugins/native/ffi.json`
   for the plugins), the prepare steps (shell lines run at the root before a build, a test run,
   coverage or typecheck) and the selftest scenarios.
@@ -85,11 +85,16 @@ light's packages; the rest is here. The compiler is the scriptc release pinned i
 
 ## The app
 
-- `src/main.ts` is the entry, on light's `runApp({ app, term, focus, onKey })`. widecode is a
-  light app in the MVC shape: `src/controllers/` are `Controller` subclasses whose signal
-  fields the views read in their render and which the views call for the change they want
-  (`host.ts` is the facade its plugins and views are given, over
-  `ScreenController`, `FolderController` and its own `SessionController`); `src/views/` are light
+- widecode is an app on `@lightstart/app` (REDESIGN.md is the plan it follows). `src/app.ts`
+  declares its flags, which the terminal host parses before anything starts (`app.args.string`,
+  `app.args.flag`); `src/modes/` are the runs that are not the interface (`--version`,
+  `--harness`, `--peers-daemon`); `light app` writes the entry, `.light/main.ts`, which is the
+  `native.entry`. `src/controllers/widecode.ts` starts the app (the log, the signals, the
+  workspace, the store, the plugins) and finishes it once the root view, `src/views/app-root.ts`,
+  is mounted (focus, the trail of frames, quit, load, resume, onboarding, a selftest).
+  `src/host/` are `Controller` subclasses whose signal fields the views read in their render and
+  which the views call for the change they want (`host.ts` is the facade its plugins and views are
+  given, over `ScreenController`, `FolderController` and its own `SessionController`); `src/views/` are light
   `View`s with signals and `html` templates, composing the views of `src/chat` and `src/code`; `src/services/` is
   what it keeps (its store, its harness folder); `src/compose.ts` builds the app; a theme
   module sets the palette's fields it wants otherwise (`@lightstart/tui`'s `palette`).
@@ -140,7 +145,7 @@ part").
 - The run's log is on by default, a file per run under the store (`@lightstart/lib/log.ts`, README's
   settings paragraph). Natively an error has no stack, so the entry has `trail` around it: a key
   (`shell.ts`), a plugin's call (`runtime.ts`), the agent's events (`api/agent.ts`) and a frame's
-  phases (`main.ts`) enter and leave it, and the uncaught-exception monitor in `main.ts` logs the
+  phases (`controllers/widecode.ts`) enter and leave it, and the uncaught-exception monitor there logs the
   error with what was open, the latest entries, the session and the turn, and the screen. A new
   place work runs from (a timer's callback, a process's lines) enters the trail too. The `crash`
   selftest checks the entry.
@@ -165,7 +170,7 @@ part").
 `light` compiles with `$SCRIPTC` when it is set, else the scriptc release pinned in
 `package.json` (0.4.12), installed at the workspace root. The root's `scriptc` is
 `tools/scriptc-node`: the release's `@scriptc/compiler` run under node, since npm's native
-`scriptc` binary segfaults on `src/main.ts` (vercel-labs/scriptc#3595); switch back to
+`scriptc` binary segfaults on widecode's entry (vercel-labs/scriptc#3595); switch back to
 the npm `scriptc` package once a release fixes that. To move to another release before then,
 change the version in `tools/scriptc-node/package.json` (its own and `@scriptc/compiler`'s),
 port any change to upstream's `packages/cli/src/main.ts` between the two tags into

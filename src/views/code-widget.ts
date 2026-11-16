@@ -9,7 +9,7 @@ import { toolSummary, RenderContext } from "../conversation/render.ts";
 import { AGENT, Item } from "../conversation/model.ts";
 import { Column } from "../screen/contributions.ts";
 import { CodeTarget } from "../code/target.ts";
-import { Host } from "../controllers/host.ts";
+import { Host } from "../host/host.ts";
 import { Latest } from "@lightstart/lib/timing.ts";
 import { Commit } from "@lightstart/workspace/git-log.ts";
 import { LineSource } from "@lightstart/light/native/tui/lines.ts";

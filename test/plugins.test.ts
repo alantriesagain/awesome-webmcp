@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { languageForFence, languageForPath } from "@lightstart/highlight";
 import { Panel, SegmentContext, SegmentDef } from "../src/screen/contributions.ts";
-import { Host } from "../src/controllers/host.ts";
+import { Host } from "../src/host/host.ts";
 import { Command } from "@lightstart/kernel/commands.ts";
 import { Action } from "@lightstart/kernel/actions.ts";
 import { Plugin } from "@lightstart/kernel/plugin.ts";

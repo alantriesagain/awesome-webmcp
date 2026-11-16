@@ -2,7 +2,7 @@
 // tabs are on the column's top edge, column-view.ts). A press on the info row goes to the panel.
 // The host keeps which tab each column shows; each panel keeps its own view, so its scroll position
 // survives a switch.
-import { Host } from "../controllers/host.ts";
+import { Host } from "../host/host.ts";
 import { Panel } from "../screen/contributions.ts";
 import { type CustomEvent, type MouseEvent, View, html } from "@lightstart/light/native/tui";
 import { LinePress } from "@lightstart/tui/line-view.ts";

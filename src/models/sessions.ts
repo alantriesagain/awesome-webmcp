@@ -23,3 +23,5 @@ const schema: ModelSchema = {
 };
 
 export const sessions = defineModel("sessions", schema);
+
+export default sessions;

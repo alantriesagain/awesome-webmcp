@@ -79,7 +79,7 @@ for (const name of calls) {
 eq("every call's member is typed", untyped.join(", "), "");
 
 // The hooks: the host's list, what `host.hook()` answers, widecode.d.ts's Hook union and PLUGINS.md's `on(hook, run)` row name the same ones.
-const hostSource = read("src/controllers/host.ts");
+const hostSource = read("src/host/host.ts");
 const hooksList = /export const HOOKS = \[([^\]]*)\];/.exec(hostSource);
 const hooks = hooksList !== null ? namesIn(hooksList[1], /"([a-zA-Z]+)"/g) : [];
 const hookAt = hostSource.indexOf("  hook(name: string): Hook | null {");

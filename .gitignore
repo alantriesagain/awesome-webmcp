@@ -11,3 +11,4 @@ src/runtime/docs.ts
 src/runtime/build-info.ts
 src/runtime/generated/
 src/harness/bench/results/
+.light/

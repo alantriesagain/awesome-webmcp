@@ -14,7 +14,7 @@ import { trail } from "@lightstart/lib/log.ts";
 import { errorMessage } from "@lightstart/lib/json.ts";
 import { existsSync, readFileSync, statSync, watch } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
-import { Host } from "../controllers/host.ts";
+import { Host } from "../host/host.ts";
 import { Agent } from "../conversation/agent.ts";
 import { Plugin } from "@lightstart/kernel/plugin.ts";
 import { SegmentContext } from "../screen/contributions.ts";

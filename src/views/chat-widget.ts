@@ -4,10 +4,10 @@
 // mounts it as a column it plays the host's chat role, takes the keys its own parts use (the open
 // question or plan, the strip while it shows, the history) and follows the conversation; what a
 // line from the composer does is the plugin's (`onLine`).
-import { HostChat } from "../controllers/chat-host.ts";
+import { HostChat } from "../host/chat-host.ts";
 import { Column } from "../screen/contributions.ts";
 import { ChatTarget } from "../chat/roles.ts";
-import { Host } from "../controllers/host.ts";
+import { Host } from "../host/host.ts";
 import { Binder } from "@lightstart/kernel/actions.ts";
 import { type KeyEvent } from "@lightstart/light/native/tui";
 import { ChatPane } from "../chat/chat-pane.ts";

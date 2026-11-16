@@ -8,7 +8,7 @@ import { TOKENIZERS, tokenizerFor } from "@lightstart/highlight/tokenizers.ts";
 import { BandPart, MenuEntry, SegmentContext, SegmentDef } from "../screen/contributions.ts";
 import { Command, Suggestion } from "@lightstart/kernel/commands.ts";
 import { Action } from "@lightstart/kernel/actions.ts";
-import { KeymapDef } from "../controllers/keymaps.ts";
+import { KeymapDef } from "../host/keymaps.ts";
 import { KeyEntry, Layer, keySpec } from "@lightstart/kernel/keys.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { visibleRows } from "@lightstart/workspace/tree.ts";

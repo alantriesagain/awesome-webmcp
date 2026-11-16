@@ -8,7 +8,7 @@
 // tab column's tabs; /help, written from
 // every command and key binding registered, and /columns. The columns are as wide as column-widths.ts
 // says; a drag on the border between two resizes them, and state.json keeps what it left.
-import { Host } from "../controllers/host.ts";
+import { Host } from "../host/host.ts";
 import { BandPart, Column } from "../screen/contributions.ts";
 import { columnOrderOf } from "../screen/screen.ts";
 import { Action, Binder } from "@lightstart/kernel/actions.ts";

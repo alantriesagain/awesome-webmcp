@@ -14,12 +14,14 @@ and the agents: Claude Code, and the ones that speak ACP (opencode, the DeepSeek
   widecode.d.ts   the plugin API, for type checking and editors
   scripts/        builtin-plugins.mjs: the plugins and the docs stripped into the binary (a prepare step)
   src/
-    main.ts       the entry, on light's runApp
+    app.ts        the app on @lightstart/app: its flags; `light app` writes the entry, .light/main.ts
+    modes/        the runs that are not the interface: --version, --harness, --peers-daemon
+    controllers/  widecode.ts, the controller that starts the app and finishes it once it is mounted
     compose.ts    the app composed: the host, the widgets, the runtime, the built-in plugins
-    controllers/  Host (the facade plugins and views are given: the kernel, the screen, the folder,
+    host/         Host (the facade plugins and views are given: the kernel, the screen, the folder,
                   the session, the hooks, the roles) and SessionController; HostChat, the host as
                   the chat views see it
-    views/        the shell (the columns, the band, the keys), the tab columns, the role players
+    views/        app-root.ts (the root view), the shell (the columns, the band, the keys), the tab columns, the role players
                   (the chat, code and tools widgets), the onboarding
     runtime/      the plugin runtime: JsRuntime over @lightstart/plugins' engine, the prelude (widecode's
                   namespaces around the builder), the JS-drawn views, the agents plugins bring

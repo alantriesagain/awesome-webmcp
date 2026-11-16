@@ -1,8 +1,8 @@
 // The Tools tab's role player: the plugin-facing widget mounting the tab (src/chat's ToolsPanel)
 // on the host and playing the ToolsTarget role for the other plugins.
-import { HostChat } from "../controllers/chat-host.ts";
+import { HostChat } from "../host/chat-host.ts";
 import { ToolsTarget } from "../chat/roles.ts";
-import { Host } from "../controllers/host.ts";
+import { Host } from "../host/host.ts";
 import { Binder } from "@lightstart/kernel/actions.ts";
 import { type KeyEvent } from "@lightstart/light/native/tui";
 import { CALL, ToolsPanel } from "../chat/tools-pane.ts";
