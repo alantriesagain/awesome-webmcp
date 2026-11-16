@@ -92,7 +92,23 @@ Each round leaves widecode building, its 127 tests passing (except the `pi` one,
    1. **One test helper.** `openWidecode(options)` and `closeWidecode(w)` in `test/support/app.ts` are the only place a test builds the app. A test's tweaks go in `before(w)`. The tests are moved onto it mechanically, and the queue test is the example.
    2. **Through the app layer.** The helper opens widecode through `@lightstart/app/test` and its controllers, one app at a time. Tests that hold two apps at once become sequential, and the process-wide pieces (signal handlers, the crash monitor, the log) are installed once.
    Steps 1 and 2 are done (`bb7fc08`, `af87e07`): every test but `js.test.ts` opens widecode through the app layer, one app at a time.
-   3. **Controllers** (not started: it needs the decision below).
+   3. **Controllers.** Decided: (a), with one rule. A controller lasts, but its per-start state is one object it makes fresh in `connected()`, so a restart can't leak state.
+
+      Done:
+      - `run` (`2c64362`), the start's `Run`, and the restart over another folder;
+      - `log`, the log, the process handlers and the crash report, once a process;
+      - `settings`, the store and `config.json`: read with `readConfig`, and a first run's seeded with `seedConfig` once the plugins are known;
+      - `kernel`, `screen` and `keymap` (`12411b2`);
+      - `folder` and `session` (four commits, the last `94191ee`);
+      - `host`, the `Host` facade, made from the controllers above.
+
+      The start order follows the imports: run, folder, kernel, keymap, screen, session, host, log, settings, widecode. The `widecode` controller only composes the shell, the widgets and the plugin runtime over `host`, starts the plugins, and finishes the start once mounted.
+
+      Left:
+      - views importing the controllers instead of taking a `Host`;
+      - hooks becoming signals;
+      - commands moving to the code they act on;
+      - `Widecode` (the plugin runtime, the widgets, the harness) becoming a `plugins` controller.
 
       What's in the way:
       - Loading the config needs the plugins' defaults, which exist only once the app is composed (`store.loadConfig(w.defaults())`). The defaults only seed a new `config.json`, so `Store.loadConfig` has to separate reading from seeding before a `settings` controller can start ahead of the composition.
