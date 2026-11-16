@@ -196,4 +196,4 @@ export class Widecode {
 }
 
 /** widecode over `workspace` and `conversation`, not started. */
-export const composeWidecode = (host: Host): Widecode => new Widecode(host, new Shell(host));
+export const composeWidecode = (host: Host): Widecode => new Widecode(host, new Shell());
