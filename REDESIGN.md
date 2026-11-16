@@ -142,8 +142,21 @@ Each round leaves widecode building, its 127 tests passing (except the `pi` one,
    - `src/agent/claude.ts` and `envelope.ts` removed;
    - the Claude and ACP adapters split into transport, records and event mapping.
 
+8. **Plugins are normal files** (decided after round 3). Every built-in, the agent adapters (`claude`, `acp`, `pi`) among them, is a plugin folder on disk. The binary embeds none, and built-ins and user plugins load the same way.
+   - **light, `@lightstart/plugins`:**
+     - a plugin is ES modules: `JsEngine.addModule(file, code)` registers a plugin's files, and `evalModule(code, file)` runs its entry;
+     - the engine resolves a relative import only among the registered files, so a plugin still reaches nothing else;
+     - natively, this is quickjs-ng's module loader; under node it's `vm.SourceTextModule` in the stand-in.
+   - **widecode's runtime** loads a folder (`<id>/index.js` with its other files) or a single file, as today.
+   - **Installing:** `light install` writes the built-ins into `~/.widecode/plugins/<id>/` with their types stripped and their file names kept.
+     - It records each folder's hash, and replaces only a folder it wrote itself whose files are unchanged.
+     - A folder the user edited is left alone and named in the output.
+     - Plugins with the same id still resolve as today (the user's after the built-ins'), but a built-in edited in place is simply the user's now.
+   - **Goes away:** `src/runtime/builtin.ts` and its strings. The harness's agent parts and the tests load the same files: the repository's `plugins/`, stripped into a generated folder for a test run.
+   - **After that:** `claude` (1.9k lines) and `acp` (2.7k lines) split into files: transport, records, event mapping.
+
 ## Decided
 
-1. **Plugins stay JavaScript**, the built-ins included.
+1. **Plugins stay JavaScript**, the built-ins included, and become normal installed files (round 8).
 2. **Opening a folder restarts the app.**
 3. **Packages.** Splitting out `conversation`, `code` and the harness as packages inside widecode can come later. It's not part of these rounds.
