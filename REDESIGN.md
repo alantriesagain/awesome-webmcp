@@ -91,7 +91,18 @@ Each round leaves widecode building, its 127 tests passing (except the `pi` one,
 3. **The controllers**, in steps that each keep the tests green:
    1. **One test helper.** `openWidecode(options)` and `closeWidecode(w)` in `test/support/app.ts` are the only place a test builds the app. A test's tweaks go in `before(w)`. The tests are moved onto it mechanically, and the queue test is the example.
    2. **Through the app layer.** The helper opens widecode through `@lightstart/app/test` and its controllers, one app at a time. Tests that hold two apps at once become sequential, and the process-wide pieces (signal handlers, the crash monitor, the log) are installed once.
-   3. **Controllers.**
+   Steps 1 and 2 are done (`bb7fc08`, `af87e07`): every test but `js.test.ts` opens widecode through the app layer, one app at a time.
+   3. **Controllers** (not started: it needs the decision below).
+
+      What's in the way:
+      - Loading the config needs the plugins' defaults, which exist only once the app is composed (`store.loadConfig(w.defaults())`). The defaults only seed a new `config.json`, so `Store.loadConfig` has to separate reading from seeding before a `settings` controller can start ahead of the composition.
+      - The log opened in the store waits on that config.
+
+      The decision, the user's:
+      - **(a) Singletons that last.** Each controller keeps its instance across restarts and resets its state when it starts again. Views and the plugin api's answers import them, and `Host` and `Widecode` go. This is what the app layer means, and it's the most work: `src/api/*`, the views and the widgets all take a `Host` today.
+      - **(b) Per-start objects.** `Host` and `Widecode` stay as what one start builds, reached through the `widecode` controller (`widecode.w`), and the work is narrower: split `Widecode` (the runtime, the widgets, the harness), thin `Host`'s forwarding, and move each command to the code it acts on.
+
+      The items below are (a)'s:
       - The `widecode` controller splits into `log`, `settings`, `folder`, `session`, `screen`, `keymap` and `plugins`, each reset when it starts again, so a restart is a clean start.
       - Views import the controllers, and `Host` thins down to the facade the plugin api answers through.
       - Hooks become signals.
