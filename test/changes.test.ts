@@ -110,7 +110,7 @@ const main = async (): Promise<void> => {
   m.lastEdit = join(repo, "controllers/catalog.js");
   m.edited.add(m.lastEdit);
   m.editSeq++;
-  app.host.conversationChanged.fire();
+  app.host.session.conversationChanged.fire();
   // The code column follows the edit first: until the strip names it, or it would land after the
   // file opened next and take its place.
   for (let i = 0; i < 300; i++) {

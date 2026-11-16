@@ -81,7 +81,7 @@ const main = async (): Promise<void> => {
   const written: string[] = [];
   c2.onWrite = (line: string) => written.push(line);
   let sending = 0;
-  app2.host.messageSending.add("test", () => {
+  app2.host.session.messageSending.add("test", () => {
     sending++;
   });
   const promptOf = (line: string): string => {

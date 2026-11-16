@@ -295,7 +295,7 @@ export class WidecodeController extends Controller {
       return "session " + (sid.length > 0 ? sid : "none") + " · " + c.agent.name() + " · " + (turnSince > 0 ? "turn running for " + String(Math.round((Date.now() - turnSince) / 1000)) + " s" : "idle") + " · " + String(trail.frames) + " frames";
     };
     let loggedSession = "";
-    host.conversationChanged.add("log", () => {
+    host.session.conversationChanged.add("log", () => {
       const c = host.conversation;
       const sid = c.model.sessionId;
       if (sid.length > 0 && sid !== loggedSession) {
@@ -353,7 +353,7 @@ export class WidecodeController extends Controller {
       title = t;
       term.title(t);
     };
-    host.conversationChanged.add("title", syncTitle);
+    host.session.conversationChanged.add("title", syncTitle);
     syncTitle();
     const agent = host.conversation.agent;
     log("started " + String(term.cols) + "x" + String(term.rows) + " in " + host.workspace.folder + " with " + (agent.owner.length === 0 ? w.host.conversation.executable : agent.name() + " (plugin " + agent.owner + ")"));

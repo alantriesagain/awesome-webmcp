@@ -166,7 +166,7 @@ export const answerAgent = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
         const named = (options as { from?: unknown }).from;
         if (typeof named === "string") from = named;
       }
-      if (from.length === 0) h.messageSending.fire();
+      if (from.length === 0) h.session.messageSending.fire();
       const attached = attachImages(str(a[0]), h.workspace.folder);
       if (attached.error.length > 0) return answerText(objectText(["error", "images"], [json(attached.error), "0"]));
       const error = h.conversation.send(attached.text, attached.images, from);
@@ -193,7 +193,7 @@ export const answerAgent = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
       return answer(h.conversation.title);
     case "agent.setTitle":
       h.conversation.title = str(a[0]);
-      h.conversationChanged.fire();
+      h.session.conversationChanged.fire();
       return answer(null);
     case "agent.firstExchange": {
       const e = h.conversation.firstExchange();

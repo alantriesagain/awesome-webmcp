@@ -25,8 +25,16 @@ import { FolderController, FolderHooks } from "@lightstart/workspace/folder.ts";
 import { ScreenController } from "../screen/screen.ts";
 import { SessionController } from "./session.ts";
 
-/** The hooks' names, as plugins listen to them. */
-export const HOOKS = ["conversationChanged", "sessionsChanged", "filesLoaded", "statusLoaded", "folderChanged", "baseChanged", "fileShown", "requestOpened", "messageSending", "keymapChanged", "messageChanged", "toolsChanged", "harnessChanged"];
+/** A hook plugins listen to, and the name they listen to it under. */
+export class NamedHook {
+  readonly name: string;
+  readonly hook: Hook;
+
+  constructor(name: string, hook: Hook) {
+    this.name = name;
+    this.hook = hook;
+  }
+}
 
 /** How many log lines the host keeps for plugins to read. */
 const NOTES_KEPT = 300;
@@ -37,6 +45,8 @@ export class Host extends ConversationHolder {
   /** The folder open. `/open` starts the app again over another folder, with a host of its own. */
   readonly folder: FolderController;
   readonly session: SessionController;
+  /** The hooks plugins listen to, by name. */
+  readonly hooks: NamedHook[];
   /** The folder's announcements: its files, status and base loaded or changed. */
   get folderHooks(): FolderHooks {
     return this.folder.hooks;
@@ -86,6 +96,22 @@ export class Host extends ConversationHolder {
     this.keys = keys;
     this.folder = folder;
     this.session = session;
+    // The one list of the hooks plugins listen to (widecode.d.ts and PLUGINS.md name the same ones: test/api.test.ts).
+    this.hooks = [
+      new NamedHook("conversationChanged", session.conversationChanged),
+      new NamedHook("sessionsChanged", session.sessionsChanged),
+      new NamedHook("filesLoaded", folder.hooks.filesLoaded),
+      new NamedHook("statusLoaded", folder.hooks.statusLoaded),
+      new NamedHook("folderChanged", folder.hooks.folderChanged),
+      new NamedHook("baseChanged", folder.hooks.baseChanged),
+      new NamedHook("fileShown", this.fileShown),
+      new NamedHook("requestOpened", session.requestOpened),
+      new NamedHook("messageSending", session.messageSending),
+      new NamedHook("keymapChanged", keys.changed),
+      new NamedHook("messageChanged", screen.messageChanged),
+      new NamedHook("toolsChanged", session.toolsChanged),
+      new NamedHook("harnessChanged", session.harnessChanged),
+    ];
     this.screen.onNote = (text: string) => this.note(text);
     this.folder.onNote = (text: string) => this.note(text);
     this.session.onNote = (text: string) => this.note(text);
@@ -112,47 +138,6 @@ export class Host extends ConversationHolder {
   get harness(): Harness {
     return this.session.harness;
   }
-
-  get conversationChanged(): Hook {
-    return this.session.conversationChanged;
-  }
-
-  get messageChanged(): Hook {
-    return this.screen.messageChanged;
-  }
-
-  get filesLoaded(): Hook {
-    return this.folderHooks.filesLoaded;
-  }
-
-  get statusLoaded(): Hook {
-    return this.folderHooks.statusLoaded;
-  }
-
-  get folderChanged(): Hook {
-    return this.folderHooks.folderChanged;
-  }
-
-  get baseChanged(): Hook {
-    return this.folderHooks.baseChanged;
-  }
-
-  get requestOpened(): Hook {
-    return this.session.requestOpened;
-  }
-
-  get messageSending(): Hook {
-    return this.session.messageSending;
-  }
-
-  get toolsChanged(): Hook {
-    return this.session.toolsChanged;
-  }
-
-  get harnessChanged(): Hook {
-    return this.session.harnessChanged;
-  }
-
 
   /**
    * Announce each request that is open since the last change, from the model's own list: a request
@@ -207,37 +192,10 @@ export class Host extends ConversationHolder {
     return this.session.useStore(store, this.workspace.folder);
   }
 
-  /** Every hook, by the name plugins listen to it under; null for an unknown name. */
+  /** The hook plugins listen to under `name`; null for an unknown name. */
   hook(name: string): Hook | null {
-    switch (name) {
-      case "conversationChanged":
-        return this.session.conversationChanged;
-      case "sessionsChanged":
-        return this.session.sessionsChanged;
-      case "filesLoaded":
-        return this.folderHooks.filesLoaded;
-      case "statusLoaded":
-        return this.folderHooks.statusLoaded;
-      case "folderChanged":
-        return this.folderHooks.folderChanged;
-      case "baseChanged":
-        return this.folderHooks.baseChanged;
-      case "fileShown":
-        return this.fileShown;
-      case "requestOpened":
-        return this.session.requestOpened;
-      case "messageSending":
-        return this.session.messageSending;
-      case "keymapChanged":
-        return this.keys.changed;
-      case "toolsChanged":
-        return this.session.toolsChanged;
-      case "harnessChanged":
-        return this.session.harnessChanged;
-      case "messageChanged":
-        return this.screen.messageChanged;
-    }
-    return null;
+    const found = this.hooks.find((n) => n.name === name);
+    return found !== undefined ? found.hook : null;
   }
 
   /** The keymaps there are: default, then the plugins'. */
@@ -248,10 +206,7 @@ export class Host extends ConversationHolder {
     this.keys.removeOwner(owner);
     this.roles.removeOwner(owner);
     removeLanguages(owner);
-    for (const name of HOOKS) {
-      const h = this.hook(name);
-      if (h !== null) h.remove(owner);
-    }
+    for (const n of this.hooks) n.hook.remove(owner);
   }
 
   /** A line for the log, kept (the last NOTES_KEPT) for plugins to read. */
@@ -279,7 +234,7 @@ export class Host extends ConversationHolder {
     const store = this.session.store;
     if (store !== null) store.ignoreIn(this.workspace.folder, false);
     await this.folder.load();
-    this.conversationChanged.fire();
+    this.session.conversationChanged.fire();
   }
 
   /**

@@ -222,7 +222,7 @@ export const answerUi = (rt: JsRuntime, name: string, a: unknown[]): HostAnswer 
     case "ui.notice":
       // A notice in the chat, as /help answers: idle, after the last turn.
       h.conversation.model.notice(str(a[0]), "info", str(a[1]), "");
-      h.conversationChanged.fire();
+      h.session.conversationChanged.fire();
       return answer(null);
     case "languages.add": {
       // A language colored by one of the core's tokenizers.

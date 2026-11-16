@@ -130,7 +130,7 @@ export class Widecode {
     const permissions = this.host.session.permissions();
     if (permissions.rulesJson() !== this.lastPermissions) {
       this.lastPermissions = permissions.rulesJson();
-      this.host.harnessChanged.fire();
+      this.host.session.harnessChanged.fire();
     }
     return [cfg.notice, permissions.notice, note].filter((t) => t.length > 0).join("; ");
   }
@@ -149,7 +149,7 @@ export class Widecode {
     this.useProjectPlugins(true);
     this.watchHarness();
     const note = this.applyHarness();
-    this.host.harnessChanged.fire();
+    this.host.session.harnessChanged.fire();
     return note;
   }
 
@@ -174,7 +174,7 @@ export class Widecode {
       else if (what === "config") {
         const note = this.applyHarness();
         h.screen.tell(note.length > 0 ? note : "the harness config applied");
-      } else h.harnessChanged.fire();
+      } else h.session.harnessChanged.fire();
     };
     h.harness.watch();
   }

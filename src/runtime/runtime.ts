@@ -331,9 +331,9 @@ export class JsRuntime extends Bridge {
     const before = k.problems.length;
     k.startNew();
     for (let i = before; i < k.problems.length; i++) this.fail(k.problems[i]);
-    this.host.filesLoaded.fire();
-    this.host.statusLoaded.fire();
-    this.host.conversationChanged.fire();
+    this.host.folderHooks.filesLoaded.fire();
+    this.host.folderHooks.statusLoaded.fire();
+    this.host.session.conversationChanged.fire();
     this.flushToolsChanged();
   }
 
@@ -398,9 +398,9 @@ export class JsRuntime extends Bridge {
     for (let i = before; i < k.problems.length; i++) this.fail(k.problems[i]);
     for (const id of tabs) this.host.screen.setShown(id);
     this.host.screen.focus(active);
-    this.host.filesLoaded.fire();
-    this.host.statusLoaded.fire();
-    this.host.conversationChanged.fire();
+    this.host.folderHooks.filesLoaded.fire();
+    this.host.folderHooks.statusLoaded.fire();
+    this.host.session.conversationChanged.fire();
     this.flushToolsChanged();
     this.host.screen.tell(source === null ? "removed " + shownName(file) + (retired.length > 0 ? ": " + retired.join(", ") : "") : "reloaded " + shownName(file) + (ids.length > 0 ? ": " + ids.join(", ") : ""));
   }
@@ -436,7 +436,7 @@ export class JsRuntime extends Bridge {
   flushToolsChanged(): void {
     if (!this.toolsDirty || this.depth > 0) return;
     this.toolsDirty = false;
-    this.host.toolsChanged.fire();
+    this.host.session.toolsChanged.fire();
   }
 
   /** Stop every JS plugin, drop what they added, evaluate the sources again and start them. */
@@ -478,9 +478,9 @@ export class JsRuntime extends Bridge {
     for (const id of tabs) this.host.screen.setShown(id);
     this.host.screen.focus(active);
     // The new plugins catch up with the state the others already saw.
-    this.host.filesLoaded.fire();
-    this.host.statusLoaded.fire();
-    this.host.conversationChanged.fire();
+    this.host.folderHooks.filesLoaded.fire();
+    this.host.folderHooks.statusLoaded.fire();
+    this.host.session.conversationChanged.fire();
     this.toolsDirty = true;
     this.flushToolsChanged();
     this.host.screen.tell("plugins reloaded: " + String(this.table.plugins.length) + (this.errors.length > 0 ? ", " + String(this.errors.length) + " with problems (see the log)" : ""));

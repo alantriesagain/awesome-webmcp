@@ -78,18 +78,14 @@ for (const name of calls) {
 }
 eq("every call's member is typed", untyped.join(", "), "");
 
-// The hooks: the host's list, what `host.hook()` answers, widecode.d.ts's Hook union and PLUGINS.md's `on(hook, run)` row name the same ones.
+// The hooks: the host's table of them, widecode.d.ts's Hook union and PLUGINS.md's `on(hook, run)` row name the same ones.
 const hostSource = read("src/host/host.ts");
-const hooksList = /export const HOOKS = \[([^\]]*)\];/.exec(hostSource);
-const hooks = hooksList !== null ? namesIn(hooksList[1], /"([a-zA-Z]+)"/g) : [];
-const hookAt = hostSource.indexOf("  hook(name: string): Hook | null {");
-const switched = hookAt >= 0 ? namesIn(blockAt(hostSource, hostSource.indexOf("{", hookAt)), /case "([a-zA-Z]+)":/g) : [];
+const hooks = namesIn(hostSource, /new NamedHook\("([a-zA-Z]+)"/g);
 const hookUnion = /type Hook = ([^;]*);/.exec(dts);
 const typedHooks = hookUnion !== null ? namesIn(hookUnion[1], /"([a-zA-Z]+)"/g) : [];
 const docRow = /\| `on\(hook, run\)` \|([^\n]*)/.exec(read("PLUGINS.md"));
 const documented = docRow !== null ? namesIn(docRow[1], /`([a-zA-Z]+)`/g).filter((n: string) => hooks.includes(n) || /Changed$|Loaded$|Opened$|Shown$|Sending$/.test(n)) : [];
 ok("the host names its hooks", hooks.length > 5);
-eq("host.hook answers each of them", switched.join(","), hooks.join(","));
 eq("widecode.d.ts types them", typedHooks.join(","), hooks.join(","));
 eq("PLUGINS.md documents them", documented.join(","), hooks.join(","));
 // Each hook a built-in plugin listens to is one of them.

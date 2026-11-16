@@ -51,7 +51,7 @@ const main = async (): Promise<void> => {
     }
     c.title = "List file edits";
     c.effort = "low";
-    w.host.conversationChanged.fire();
+    w.host.session.conversationChanged.fire();
     c.info.branch = "main";
     c.info.costUsd = 0.0181;
     c.info.activity = "Bash npm test";
@@ -140,7 +140,7 @@ const main = async (): Promise<void> => {
   // Drawn at 77 cells, then run again as the session changes: COLUMNS is the bar's width.
   draw(w, 77);
   await wait(400);
-  w.host.conversationChanged.fire();
+  w.host.session.conversationChanged.fire();
   await wait(2900);
   const cmd = bandOf(w);
   const out = cmd !== null ? cmd.lines(77) : [];

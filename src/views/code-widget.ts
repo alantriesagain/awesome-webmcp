@@ -35,7 +35,7 @@ export class CodeWidget extends CodeTarget {
     h.screen.addColumn(owner, new Column("code", title, order, pane, (_cols: number) => 0, 0, 1, null, pane.view));
     this.owner = owner;
     h.roles.code = this;
-    h.statusLoaded.add(owner, () => {
+    h.folderHooks.statusLoaded.add(owner, () => {
       const open = pane.path.peek();
       if (open.length > 0 && pane.commit.peek().length === 0) pane.mark.value = h.folder.markOf(open);
     });

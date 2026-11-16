@@ -35,7 +35,7 @@ const main = async (): Promise<void> => {
     const f = JSON.parse(line) as Frame;
     if (f.dir === "out" && typeof f.raw === "string") c.receive(f.raw);
   }
-  w.host.conversationChanged.fire();
+  w.host.session.conversationChanged.fire();
   const calls = agentsOf(c.model);
   eq("the turn's subagent, done", calls.map((a) => a.name + " " + agentStatus(a)).join(", "), "Agent done");
 

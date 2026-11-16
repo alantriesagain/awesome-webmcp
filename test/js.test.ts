@@ -57,8 +57,8 @@ const main = async (): Promise<void> => {
   ok("its key, in its scope", press(w, "char", "z") && w.host.screen.message.peek() === "z pressed: char:z");
   ok("a key it passes on goes on", !press(w, "char", "q"));
   ok("its hint among the column's", w.host.screen.hints().includes("z greet"));
-  w.host.conversationChanged.fire();
-  w.host.conversationChanged.fire();
+  w.host.session.conversationChanged.fire();
+  w.host.session.conversationChanged.fire();
   const kept = w.host.kernel.settings.state("greeter") as { changes?: unknown } | null;
   ok("its hook, and the state it keeps", kept !== null && typeof kept.changes === "number" && kept.changes >= 2);
   w.host.roles.chat.submit("/boom");
