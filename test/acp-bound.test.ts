@@ -6,12 +6,10 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { request, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { Item } from "../src/conversation/model.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { Store } from "../src/services/store.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
 
@@ -46,16 +44,19 @@ const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-acp-bound-"));
   const home = mkdtempSync(join(tmpdir(), "widecode-acp-bound-home-"));
   const log = join(folder, "fake.log");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  const store = new Store(home);
-  store.trust(folder);
-  await w.host.useStore(store);
-  w.host.session.agentId.value = "fake";
-  w.start({ acp: { agents: { fake: { name: "Fake", command: ["node", fake, "--log", log] } }, tasks: { targets: { deepseek: { agent: "fake" } }, maxConcurrent: 2 } } }, new NoStateFile(), []);
+  const w = await openWidecode({
+    folder,
+    plugins: { acp: { agents: { fake: { name: "Fake", command: ["node", fake, "--log", log] } }, tasks: { targets: { deepseek: { agent: "fake" } }, maxConcurrent: 2 } } },
+    load: true,
+    before: async (w: Widecode) => {
+      const store = new Store(home);
+      store.trust(folder);
+      await w.host.useStore(store);
+      w.host.session.agentId.value = "fake";
+    },
+  });
+  const c = w.host.conversation;
   c.prepare();
-  await w.host.load();
   const url = await w.js.mcp.start();
   const token = w.js.mcp.tokenFor("acp");
   const post = (body: string): Promise<string> => send(url, token, body);
@@ -95,9 +96,7 @@ const main = async (): Promise<void> => {
   const inputs = repeatEvents.filter((e) => e.type === "input" && String(e.key).endsWith("call_repeat"));
   eq("one input event for the repeated raw input", String(inputs.length), "1");
 
-  w.host.kernel.stop();
-  w.js.killProcesses();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });
   done();

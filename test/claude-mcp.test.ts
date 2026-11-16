@@ -9,11 +9,9 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { request, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
+import { openWidecode } from "./support/app.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
@@ -55,15 +53,17 @@ const main = async (): Promise<void> => {
   const dir = join(folder, ".widecode", "plugins");
   mkdirSync(dir, { recursive: true });
   const args = join(folder, "args.txt");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  c.executable = fake;
-  c.extraArgs.push("--fixture", join(fixtures, "ask.ndjson"), "--record-args", args);
   const logs: string[] = [];
-  const w = composeWidecode(ws, c);
-  w.js.dirs = [dir];
-  w.js.extra = [new PluginSource("probe.js", probe)];
-  w.start(null, new NoStateFile(), []);
+  const w = await openWidecode({
+    folder,
+    before: (w: Widecode) => {
+      w.host.conversation.executable = fake;
+      w.host.conversation.extraArgs.push("--fixture", join(fixtures, "ask.ndjson"), "--record-args", args);
+      w.js.dirs = [dir];
+      w.js.extra = [new PluginSource("probe.js", probe)];
+    },
+  });
+  const c = w.host.conversation;
   w.host.onLog = (text: string) => logs.push(text);
   await w.host.load();
   const mcp = w.js.mcp;
@@ -95,7 +95,7 @@ const main = async (): Promise<void> => {
 
   c.kill();
   mcp.close();
-  ws.close();
+  w.host.workspace.close();
   rmSync(folder, { recursive: true, force: true });
   done();
 };

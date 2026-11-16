@@ -9,15 +9,14 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { checkSource } from "../src/api/plugins.ts";
 import { Store } from "../src/services/store.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { AgentChoice, HarnessFile, Onboarding, folderCarries, runOnboarding, welcome, welcomeText } from "../src/views/onboarding.ts";
-import { createWidecode, Widecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { Run } from "@lightstart/tui/line-view.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const chatOf = (w: Widecode): string => {
   const s = w.chat.pane.source;
@@ -39,8 +38,7 @@ const main = async (): Promise<void> => {
   writeFileSync(join(folder, ".widecode", "prompt.md"), "Be terse.\n");
   writeFileSync(join(folder, ".widecode", "config.json"), '{"plugins":{},"permissions":{"deny":["Bash(rm -rf *)"]}}');
   const store = new Store(home);
-  const ws = await openWorkspace(folder, 100);
-  const w = createWidecode(ws, new Conversation(ws.folder), null);
+  const w = await openWidecode({ folder });
   const first = store.loadConfig(w.defaults());
   ok("the store's first run: the config it had to write", store.firstRun && first.notice.length === 0);
   eq("not the second", String(new Store(home).loadConfig(w.defaults()).plugins !== null) + " " + String(new Store(home).firstRun), "true false");
@@ -144,8 +142,7 @@ const main = async (): Promise<void> => {
   eq("a config key kept, the others as they were", store.setConfigValue("agent", "opencode") + " " + String((JSON.parse(readFileSync(join(home, "config.json"), "utf8")) as { agent: string; clipboard: string }).agent) + " " + String((JSON.parse(readFileSync(join(home, "config.json"), "utf8")) as { agent: string; clipboard: string }).clipboard), " opencode auto");
   eq("and read on the next load", new Store(home).loadConfig(w.defaults()).agent, "opencode");
 
-  w.host.kernel.stop();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });
   done();

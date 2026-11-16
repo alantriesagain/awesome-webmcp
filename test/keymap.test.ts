@@ -9,13 +9,11 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const keymap = `widecode.plugin({
   id: "keymap-test",
@@ -34,12 +32,14 @@ const keymap = `widecode.plugin({
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-keymap-"));
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  w.js.extra = [new PluginSource("keymap.js", keymap)];
-  w.start(null, new NoStateFile(), []);
-  await w.host.load();
+  const w = await openWidecode({
+    folder,
+    load: true,
+    before: (w: Widecode) => {
+      w.js.extra = [new PluginSource("keymap.js", keymap)];
+    },
+  });
+  const c = w.host.conversation;
   const press = (name: string, text: string): boolean => w.shell.handleKey(new KeyEvent(name, text, false, false, false));
   const said = (): string => w.host.screen.message.peek();
   const seen = (): string => {
@@ -72,19 +72,20 @@ const main = async (): Promise<void> => {
   ok("/help lists the keys and help", help.includes("h/k hello") && help.includes("i/k two") && help.includes("Keymap: emacs"));
 
   // Switched off: its actions and layer are gone.
-  w.host.kernel.stop();
-  const c2 = new Conversation(ws.folder);
-  const w2 = composeWidecode(ws, c2);
-  w2.js.extra = [new PluginSource("keymap.js", keymap)];
+  closeWidecode(w);
   const off: unknown = { "keymap-test": false };
-  w2.start(off, new NoStateFile(), []);
-  await w2.host.load();
+  const w2 = await openWidecode({
+    folder,
+    plugins: off,
+    load: true,
+    before: (w: Widecode) => {
+      w.js.extra = [new PluginSource("keymap.js", keymap)];
+    },
+  });
   const press2 = (name: string, text: string): boolean => w2.shell.handleKey(new KeyEvent(name, text, false, false, false));
   w2.host.screen.focus("code");
   ok("switched off: no action, no layer", !press2("char", "h") && press2("f6", "") && w2.host.screen.active.peek() === "tools" && w2.host.kernel.keys.all().every((l) => l.owner !== "keymap-test"));
-  w2.host.kernel.stop();
-
-  ws.close();
+  closeWidecode(w2);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

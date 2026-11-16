@@ -11,12 +11,10 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode, Widecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
 
@@ -34,9 +32,6 @@ const tab = (w: Widecode): string => {
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-available-"));
   const fake = join(process.cwd(), "test/fake-acp.mjs");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
   const config: unknown = {
     acp: {
       agents: {
@@ -45,8 +40,8 @@ const main = async (): Promise<void> => {
       },
     },
   };
-  w.start(config, new NoStateFile(), []);
-  await w.host.load();
+  const w = await openWidecode({ folder, plugins: config, load: true });
+  const c = w.host.conversation;
   eq("before the agent says", tab(w), " 0 tools|   Known once Claude starts.");
 
   // Claude Code: its init record.
@@ -108,18 +103,13 @@ const main = async (): Promise<void> => {
   c.reset();
   w.host.roles.chat.submit("hello");
   ok("it lists none of its own", await until(() => tab(w) === " 0 tools| Old  lists none of its own"));
-  w.host.kernel.stop();
-  w.js.killProcesses();
+  closeWidecode(w);
 
-  const c2 = new Conversation(ws.folder);
-  const w2 = composeWidecode(ws, c2);
   const off: unknown = { tools: false };
-  w2.start(off, new NoStateFile(), []);
-  await w2.host.load();
+  const w2 = await openWidecode({ folder, plugins: off, load: true });
   eq("switched off: no tab", tab(w2), "none");
-  w2.host.kernel.stop();
+  closeWidecode(w2);
 
-  ws.close();
   rmSync(folder, { recursive: true, force: true });
   done();
 };

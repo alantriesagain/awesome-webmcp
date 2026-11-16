@@ -10,7 +10,6 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { languageForFence, languageForPath } from "@lightstart/highlight";
 import { Panel, SegmentContext, SegmentDef } from "../src/screen/contributions.ts";
 import { Host } from "../src/host/host.ts";
@@ -18,12 +17,12 @@ import { Command } from "@lightstart/kernel/commands.ts";
 import { Action } from "@lightstart/kernel/actions.ts";
 import { Plugin } from "@lightstart/kernel/plugin.ts";
 import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode, createWidecode, Widecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { Caret, Clip, DEFAULT_STYLE, KeyEvent, Screen, TRoot, frames, layout, mount, paint, unmount } from "@lightstart/light/native/tui";
 import { Line, LineSource, Run } from "@lightstart/tui/line-view.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { LANGUAGES } from "@lightstart/highlight/languages.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const W = 200;
 const H = 20;
@@ -87,7 +86,6 @@ class Extra extends Plugin {
 }
 
 const main = async (): Promise<void> => {
-  const ws = await openWorkspace(repo, 100);
   const root = new TRoot();
   const screen = (_w: Widecode): string[] => {
     for (let i = 0; i < 3; i++) {
@@ -98,15 +96,10 @@ const main = async (): Promise<void> => {
     paint(root, s, new Clip(0, 0, W, H), DEFAULT_STYLE, new Caret(), null);
     return s.text().split("\n");
   };
-  const show = async (w: Widecode): Promise<string[]> => {
-    w.shell.resize(W);
-    mount(w.shell, root);
-    await w.host.load();
-    return screen(w);
-  };
+  const show = (w: Widecode): string[] => screen(w);
   const end = (w: Widecode): void => {
     unmount(w.shell);
-    w.host.kernel.stop();
+    closeWidecode(w);
   };
   /** The side tabs: the files column's top edge, as the row reads. */
   const tabs = (w: Widecode, shown: string[]): string => {
@@ -115,19 +108,23 @@ const main = async (): Promise<void> => {
     return shown[2].slice(x, x + w.shell.widthOf("side")).replace(/[▏▕]/g, " ").trim().replace(/\s+/g, " ");
   };
   const press = (w: Widecode, name: string, text: string): boolean => w.shell.handleKey(new KeyEvent(name, text, false, false, false));
+  const mountApp = (w: Widecode): void => {
+    w.shell.resize(W);
+    mount(w.shell, root);
+  };
 
-  let w = createWidecode(ws, new Conversation(ws.folder), JSON.parse('{"languages": false}'));
+  let w = await openWidecode({ folder: repo, plugins: JSON.parse('{"languages": false}') });
   ok("languages off: no language, so nothing is colored", languageForPath("a.ts") === "" && !w.host.kernel.has("languages"));
   end(w);
 
-  w = createWidecode(ws, new Conversation(ws.folder), JSON.parse('{"agents": false}'));
-  let lines = await show(w);
+  w = await openWidecode({ folder: repo, plugins: JSON.parse('{"agents": false}'), load: true, before: mountApp });
+  let lines = show(w);
   eq("agents off: the side tabs stay on the top edge", tabs(w, lines), "Files 1 Sessions Git");
   ok("agents off: no Agents tab, nothing opens a subagent", !w.host.screen.panels.some((p) => p.id === "agents") && w.host.screen.panelsIn("tools").map((p) => p.id).join(" ") === "calls available");
   end(w);
 
-  w = createWidecode(ws, new Conversation(ws.folder), JSON.parse('{"git": false}'));
-  lines = await show(w);
+  w = await openWidecode({ folder: repo, plugins: JSON.parse('{"git": false}'), load: true, before: mountApp });
+  lines = show(w);
   eq("git off: no Git tab", w.host.screen.panelsIn("side").map((p) => p.id).join(" ") + " · " + tabs(w, lines), "files sessions peers skills · Files 1 Sessions");
   w.host.screen.showPanel("files");
   ok("no b, no compare row", !press(w, "char", "b") && !lines.some((l) => l.includes(" vs  HEAD ")));
@@ -135,17 +132,19 @@ const main = async (): Promise<void> => {
   ok("the tests' languages are the plugin's", LANGUAGES.every((l) => l.extensions.every((e) => languageForPath("x." + e) === l.id) && l.fences.every((f) => languageForFence(f) === l.id)));
   end(w);
 
-  w = createWidecode(ws, new Conversation(ws.folder), JSON.parse('{"changes": false}'));
-  lines = await show(w);
+  w = await openWidecode({ folder: repo, plugins: JSON.parse('{"changes": false}'), load: true, before: mountApp });
+  lines = show(w);
   ok("changes off: the band is the status table alone", !w.host.screen.band.some((b) => b.id === "changes") && !lines.some((l) => l.includes("1 file  +1 −1")));
   w.host.screen.focus("code");
   ok("and [ is no key of anyone's", !press(w, "char", "["));
   end(w);
 
-  w = composeWidecode(ws, new Conversation(ws.folder));
+  w = await openWidecode({ folder: repo, start: false });
   const extra = new Extra(w.host, ["git"]);
   w.start(JSON.parse('{"status": {"lines": [["hello", "note"]]}}'), new NoStateFile(), [extra]);
-  lines = await show(w);
+  mountApp(w);
+  await w.host.load();
+  lines = show(w);
   ok("an extra plugin's tab joins the column", w.host.screen.panelsIn("side").map((p) => p.id).includes("notes"));
   ok("its segment in the status table the config lays out", lines.some((l) => l.includes(" hello! │ ")));
   w.host.roles.chat.submit("/hello there");
@@ -158,31 +157,29 @@ const main = async (): Promise<void> => {
   ok("its tab shows its rows and info", lines.some((l) => l.includes(" 1 note")) && lines.some((l) => l.includes(" a note")));
   end(w);
 
-  w = composeWidecode(ws, new Conversation(ws.folder));
+  w = await openWidecode({ folder: repo, start: false });
   const orphan = new Extra(w.host, ["git"]);
   w.start(JSON.parse('{"git": false}'), new NoStateFile(), [orphan]);
   eq("one whose requirement is off is left out, and said so", String(w.host.kernel.has("extra")) + " | " + w.host.kernel.problems.join("; "), "false | extra: needs git, which is off");
   end(w);
 
   const state = new NoStateFile();
-  w = composeWidecode(ws, new Conversation(ws.folder));
-  w.start(null, state, []);
-  await show(w);
+  w = await openWidecode({ folder: repo, state, load: true, before: mountApp });
+  show(w);
   w.host.screen.focus("code");
   press(w, "char", "w");
   w.host.screen.showPanel("files");
   press(w, "char", "c");
   end(w);
-  w = composeWidecode(ws, new Conversation(ws.folder));
-  w.start(null, state, []);
+  w = await openWidecode({ folder: repo, state, load: true, before: mountApp });
   // The Files tab's switch: "Changed" is the bold side.
   const info = w.host.screen.findPanel("files")?.info() ?? [];
   ok("wrap and the Files switch are kept for the next run", w.code.pane.wrap.peek() && info.length === 3 && info[2].bold);
   end(w);
 
   // The code column is a native widget its JS plugin mounts: /reload mounts it again.
-  w = createWidecode(ws, new Conversation(ws.folder), null);
-  await show(w);
+  w = await openWidecode({ folder: repo, load: true, before: mountApp });
+  show(w);
   await w.code.load("a.ts");
   w.host.screen.showPanel("git");
   w.host.roles.chat.submit("/reload");
@@ -200,9 +197,10 @@ const main = async (): Promise<void> => {
   ok("Ctrl+C in the Files tab quits, the switch untouched", quits === 1 && switchInfo.length === 3 && !switchInfo[2].bold);
   end(w);
 
-  const defaults = composeWidecode(ws, new Conversation(ws.folder)).defaults();
+  const bare = await openWidecode({ folder: repo, start: false });
+  const defaults = bare.defaults();
+  closeWidecode(bare);
   eq("every built-in plugin answers its defaults", defaults.map((d) => d.id + (d.value === true ? "" : "*")).join(" "), "acp* agents alerts* ask* box changes chat claude* claude-rules code dirty-repo-guard emacs files git git-checkpoint harness inline-bash languages menus models* peers* permission-gate* pi* protected-paths* sessions* skills status* todo tools tools-switch vi");
-  ws.close();
   rmSync(repo, { recursive: true, force: true });
   done();
 };

@@ -1,5 +1,5 @@
 // ffi: @lightstart/plugins/native/ffi.json
-// The app as a test hosts it (createWidecode) names no daemon launcher, so the peers plugin, with no
+// The app as a test hosts it (openWidecode) names no daemon launcher, so the peers plugin, with no
 // daemon answering, only reports that none runs: it never starts one, not on its timer, not when the
 // tab is shown, not for /peers pair. The regression this guards: the plugin once ran the program it
 // was in with --peers-daemon, which under the test runner was the test itself.
@@ -7,12 +7,10 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createWidecode } from "../src/compose.ts";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { JsPanel } from "../src/runtime/views.ts";
 import { TRoot, mount, unmount } from "@lightstart/light/native/tui";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -30,8 +28,7 @@ writeFileSync(join(repo, "a.txt"), "one\n");
 spawnSync("sh", ["-c", "git -C '" + repo + "' add . && git -C '" + repo + "' -c user.email=t@t -c user.name=t commit -qm first"], { encoding: "utf8" });
 
 const main = async (): Promise<void> => {
-  const ws = await openWorkspace(repo, 100);
-  const app = createWidecode(ws, new Conversation(ws.folder), null);
+  const app = await openWidecode({ folder: repo });
   const tree = new TRoot();
   app.shell.resize(200);
   mount(app.shell, tree);
@@ -56,7 +53,7 @@ const main = async (): Promise<void> => {
   await wait(1500);
   ok("no daemon state appeared", !existsSync(join(store, "peers", "daemon.json")));
   unmount(app.shell);
-  ws.close();
+  closeWidecode(app);
   rmSync(root, { recursive: true, force: true });
   done();
 };

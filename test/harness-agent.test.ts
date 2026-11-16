@@ -15,13 +15,11 @@
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { Item, TEXT, THINKING, TOOL, Turn } from "../src/conversation/model.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
 import { skillRuns } from "../src/conversation/skills.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
@@ -55,10 +53,6 @@ const main = async (): Promise<void> => {
   );
   const log = join(home, "trace.log");
   const main = join(process.cwd(), "src", "harness", "main.ts");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  w.host.session.agentId.value = "harness";
   const config: unknown = {
     acp: {
       agents: {
@@ -76,7 +70,14 @@ const main = async (): Promise<void> => {
       },
     },
   };
-  w.start(config, new NoStateFile(), []);
+  const w = await openWidecode({
+    folder,
+    plugins: config,
+    before: (w: Widecode) => {
+      w.host.session.agentId.value = "harness";
+    },
+  });
+  const c = w.host.conversation;
   w.host.session.setTrusted(true);
   c.prepare();
   await w.host.load();
@@ -217,9 +218,7 @@ const main = async (): Promise<void> => {
   ok("and the session goes on from the summary", await turn("what now"));
   eq("the reply", last().body.children.filter((i: Item) => i.kind === TEXT).map((i: Item) => i.text).join("|"), "You said: what now");
 
-  w.host.kernel.stop();
-  w.js.killProcesses();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });
   done();

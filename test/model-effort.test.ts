@@ -10,12 +10,11 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { Store } from "../src/services/store.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { Widecode, composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -38,7 +37,6 @@ const main = async (): Promise<void> => {
   const log = join(folder, "fake.log");
   const forgotten = join(folder, "forgotten.txt");
   const fake = join(process.cwd(), "test/fake-acp.mjs");
-  const ws = await openWorkspace(folder, 100);
   const config = (effort: unknown): unknown => {
     const models: unknown = effort === null ? { agents: { fake: ["fake/small", "fake/large"] } } : { agents: { fake: ["fake/small", "fake/large"] }, effort };
     return { models, acp: { agents: { fake: { name: "Fake", command: ["node", fake, "--log", log], forget: ["node", fake, "--forget", "{session}", "--forgotten", forgotten] } } } };
@@ -58,8 +56,14 @@ const main = async (): Promise<void> => {
   const sessionsMade = (): number => sent().split('"method":"session/new"').length - 1;
 
   let store = new Store(home);
-  let c = new Conversation(ws.folder);
-  let w: Widecode = composeWidecode(ws, c);
+  let w: Widecode = await openWidecode({
+    folder,
+    start: false,
+    before: (app: Widecode) => {
+      app.host.session.agentId.value = "fake";
+    },
+  });
+  let c = w.host.conversation;
   /** The models plugin's state, and the sessions the acp plugin made and has not written to. */
   const kept = (path: string[]): string => field(w.host.kernel.settings.state("models"), path);
   const fresh = (): string => {
@@ -75,12 +79,9 @@ const main = async (): Promise<void> => {
     return until(() => c.model.turns.length > before && idle());
   };
   const quit = (): void => {
-    c.kill();
-    w.host.kernel.stop();
-    w.js.killProcesses();
+    closeWidecode(w);
   };
 
-  w.host.session.agentId.value = "fake";
   w.start(config(null), store.stateFile(), []);
   c.prepare();
   await w.host.load();
@@ -115,9 +116,14 @@ const main = async (): Promise<void> => {
 
   // The next widecode: the model chosen last, the effort kept for it, the session left deleted.
   store = new Store(home);
-  c = new Conversation(ws.folder);
-  w = composeWidecode(ws, c);
-  w.host.session.agentId.value = "fake";
+  w = await openWidecode({
+    folder,
+    start: false,
+    before: (app: Widecode) => {
+      app.host.session.agentId.value = "fake";
+    },
+  });
+  c = w.host.conversation;
   w.start(config(null), store.stateFile(), []);
   eq("the next widecode starts on the model chosen last", c.modelName, "fake/large");
   const made = sessionsMade();
@@ -129,11 +135,16 @@ const main = async (): Promise<void> => {
 
   // --model and --effort hold for their launch.
   store = new Store(home);
-  c = new Conversation(ws.folder);
-  c.modelName = "fake/small";
-  c.effort = "default";
-  w = composeWidecode(ws, c);
-  w.host.session.agentId.value = "fake";
+  w = await openWidecode({
+    folder,
+    start: false,
+    before: (app: Widecode) => {
+      app.host.session.agentId.value = "fake";
+      app.host.conversation.modelName = "fake/small";
+      app.host.conversation.effort = "default";
+    },
+  });
+  c = w.host.conversation;
   w.start(config(null), store.stateFile(), []);
   eq("--model holds over the model chosen last", c.modelName, "fake/small");
   const before = options();
@@ -147,9 +158,14 @@ const main = async (): Promise<void> => {
   const home2 = mkdtempSync(join(tmpdir(), "widecode-home2-"));
   store = new Store(home2);
   store.stateFile().write(JSON.stringify({ acp: { fresh: [{ agent: "fake", id: "stale-1", pid: 999999, folder }] } }));
-  c = new Conversation(ws.folder);
-  w = composeWidecode(ws, c);
-  w.host.session.agentId.value = "fake";
+  w = await openWidecode({
+    folder,
+    start: false,
+    before: (app: Widecode) => {
+      app.host.session.agentId.value = "fake";
+    },
+  });
+  c = w.host.conversation;
   w.start(config({ default: "low", providers: { fake: "high" }, models: { "fake/large": "low" } }), store.stateFile(), []);
   c.prepare();
   ok("config.json's effort for the provider, on the agent's own model", await until(() => c.info.modelId === "fake/small" && c.info.effort === "high"));
@@ -162,7 +178,6 @@ const main = async (): Promise<void> => {
   ok("the provider's chosen comes before config.json's for it", await until(() => c.info.modelId === "fake/small" && c.info.effort === "low"));
   quit();
 
-  ws.close();
   rmSync(folder, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });
   rmSync(home2, { recursive: true, force: true });

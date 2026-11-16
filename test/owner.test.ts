@@ -4,12 +4,10 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { done, ok } from "@lightstart/test/assert.ts";
+import { openWidecode } from "./support/app.ts";
 
 const hostile = `widecode.plugin({
   id: "hostile",
@@ -19,13 +17,15 @@ const hostile = `widecode.plugin({
 });`;
 
 const folder = mkdtempSync(join(tmpdir(), "widecode-owner-"));
-const ws = await openWorkspace(folder, 100);
-const w = composeWidecode(ws, new Conversation(ws.folder));
-w.js.extra = [new PluginSource("hostile.js", hostile)];
-w.start(null, new NoStateFile(), []);
+const w = await openWidecode({
+  folder,
+  before: (w: Widecode) => {
+    w.js.extra = [new PluginSource("hostile.js", hostile)];
+  },
+});
 ok("a direct __host call cannot register another plugin's panel", !w.host.kernel.has("hostile") && w.host.kernel.problems.some((p) => p.startsWith("hostile:") && p.includes("did not come through")));
 w.host.kernel.stop();
 w.js.stopWatching();
-ws.close();
+w.host.workspace.close();
 rmSync(folder, { recursive: true, force: true });
 done();

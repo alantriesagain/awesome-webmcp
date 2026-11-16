@@ -8,13 +8,11 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { request, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { AGENT, TEXT, THINKING, TOOL } from "../src/conversation/model.ts";
 import { agentsOf } from "../src/conversation/agents.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { Store } from "../src/services/store.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
@@ -50,17 +48,14 @@ const lastSessionCwd = (file: string): string => {
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-task-"));
   const log = join(folder, "fake.log");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
   const config: unknown = {
     acp: {
       agents: { fake: { name: "Fake", command: ["node", fake, "--log", log] } },
       tasks: { targets: { deepseek: { agent: "fake", model: "fake/large", description: "a test subagent" } }, maxConcurrent: 1 },
     },
   };
-  w.start(config, new NoStateFile(), []);
-  await w.host.load();
+  const w = await openWidecode({ folder, plugins: config, load: true });
+  const c = w.host.conversation;
   const url = await w.js.mcp.start();
   const token = w.js.mcp.tokenFor("claude");
   const post = (body: string): Promise<string> => send(url, token, body);
@@ -257,18 +252,21 @@ const main = async (): Promise<void> => {
   const home3 = mkdtempSync(join(tmpdir(), "widecode-task-acp-home-"));
   execFileSync("git", ["init", "-q"], { cwd: folder3 });
   execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-q", "--allow-empty", "-m", "start"], { cwd: folder3 });
-  const ws3 = await openWorkspace(folder3, 100);
-  const c3 = new Conversation(ws3.folder);
-  const w3 = composeWidecode(ws3, c3);
-  const store3 = new Store(home3);
-  store3.trust(folder3);
-  await w3.host.useStore(store3);
   const setupLines = [
     'if [ -f "$WIDECODE_FOLDER/setup" ]; then printf "%s" "$WIDECODE_FOLDER" > setup.txt; fi',
     'if [ -f "$WIDECODE_FOLDER/fail-setup" ]; then echo "setup broke" >&2; exit 1; fi',
   ];
-  w3.start({ acp: { agents: { fake: { name: "Fake", command: ["node", fake] } }, tasks: { targets: { deepseek: { agent: "fake" } }, worktreeSetup: setupLines } } }, new NoStateFile(), []);
-  await w3.host.load();
+  const w3 = await openWidecode({
+    folder: folder3,
+    plugins: { acp: { agents: { fake: { name: "Fake", command: ["node", fake] } }, tasks: { targets: { deepseek: { agent: "fake" } }, worktreeSetup: setupLines } } },
+    load: true,
+    before: async (w: Widecode) => {
+      const store3 = new Store(home3);
+      store3.trust(folder3);
+      await w.host.useStore(store3);
+    },
+  });
+  const c3 = w3.host.conversation;
   w3.host.session.useAgent("fake");
   const url3 = await w3.js.mcp.start();
   const acp = w3.js.mcp.tokenFor("acp");
@@ -355,20 +353,15 @@ const main = async (): Promise<void> => {
   }
   c3.interrupt();
   ok("the announced turn ends", await until(() => !c3.model.running, 10000));
-  w3.host.kernel.stop();
-  w3.js.killProcesses();
-  ws3.close();
+  closeWidecode(w3);
   rmSync(folder3, { recursive: true, force: true });
   rmSync(home3, { recursive: true, force: true });
 
   // Claude's own subagent tools step aside when widecode offers Task.
   const folder2 = mkdtempSync(join(tmpdir(), "widecode-task-claude-"));
   const argsFile = join(folder2, "args.txt");
-  const ws2 = await openWorkspace(folder2, 100);
-  const c2 = new Conversation(ws2.folder);
-  const w2 = composeWidecode(ws2, c2);
-  w2.start({ acp: { agents: { fake: { name: "Fake", command: ["node", fake] } }, tasks: { replaceClaudeSubagents: true, targets: { deepseek: { agent: "fake", model: "fake/large" } } } } }, new NoStateFile(), []);
-  await w2.host.load();
+  const w2 = await openWidecode({ folder: folder2, plugins: { acp: { agents: { fake: { name: "Fake", command: ["node", fake] } }, tasks: { replaceClaudeSubagents: true, targets: { deepseek: { agent: "fake", model: "fake/large" } } } } }, load: true });
+  const c2 = w2.host.conversation;
   await until(() => w2.js.mcp.url.length > 0, 5000);
   await new Promise<void>((resolve) => setTimeout(resolve, 100));
   c2.executable = fakeClaude;
@@ -382,15 +375,10 @@ const main = async (): Promise<void> => {
     }
   }, 10000);
   ok("Claude starts without its own subagent tools", disallowed);
-  c2.kill();
-  w2.host.kernel.stop();
-  w2.js.killProcesses();
-  ws2.close();
+  closeWidecode(w2);
   rmSync(folder2, { recursive: true, force: true });
 
-  w.host.kernel.stop();
-  w.js.killProcesses();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

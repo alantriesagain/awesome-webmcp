@@ -9,14 +9,12 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { KeyEvent, MouseEvent, TElement, hitTest } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { Headless } from "@lightstart/test/headless.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const W = 250;
 const H = 16;
@@ -75,10 +73,13 @@ const main = async (): Promise<void> => {
   git(["add", "."]);
   git(["commit", "-qm", "init"]);
   writeFileSync(join(repo, "a.txt"), "one\ntwo\n");
-  const ws = await openWorkspace(repo, 100);
-  const w = composeWidecode(ws, new Conversation(ws.folder));
-  w.js.extra = [new PluginSource("todo.js", todo)];
-  w.start(JSON.parse('{"status": {"lines": [["project", "todo", "note"]]}}'), new NoStateFile(), []);
+  const w = await openWidecode({
+    folder: repo,
+    plugins: JSON.parse('{"status": {"lines": [["project", "todo", "note"]]}}'),
+    before: (w: Widecode) => {
+      w.js.extra = [new PluginSource("todo.js", todo)];
+    },
+  });
   w.shell.resize(W);
   const headless = new Headless(w.shell, W, H);
   const root = headless.root;
@@ -134,8 +135,7 @@ const main = async (): Promise<void> => {
   lines = screen();
   ok("reloaded without them: tab, strip and segment gone", !has(lines, "Todo") && !has(lines, "todo: ") && w.host.screen.segments.find("todo") === null && w.host.screen.shownIn("side") === "files");
   headless.unmount();
-  w.host.kernel.stop();
-  ws.close();
+  closeWidecode(w);
   rmSync(repo, { recursive: true, force: true });
   done();
 };

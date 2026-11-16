@@ -11,13 +11,11 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { ChatModel, Item, TOOL, Turn } from "../src/conversation/model.ts";
 import { itemLines, RenderContext, turnLines } from "../src/conversation/render.ts";
 import { stamp } from "@lightstart/tui/duration.ts";
 import { findCall } from "../src/conversation/calls.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { createWidecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { Line } from "@lightstart/light/native/tui/lines.ts";
 import { budget, done, eq, ok } from "@lightstart/test/assert.ts";
 import { contentText, projectDir, rec, str } from "./support/claude-records.ts";
@@ -61,10 +59,9 @@ const folderOf = (name: string): string => {
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-chat-"));
   const projects = join(folder, ".projects");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
   const config: unknown = { claude: { projects } };
-  const w = createWidecode(ws, c, config);
+  const w = await openWidecode({ folder, plugins: config });
+  const c = w.host.conversation;
   /** A record, as if the CLI wrote it. */
   const receive = (o: unknown): void => c.receive(JSON.stringify(o));
   /** The conversation started over: the model the next records go to. */
@@ -291,9 +288,7 @@ const main = async (): Promise<void> => {
     ok("in budget (under 3 s)", ms < budget(3000));
   }
 
-  w.host.kernel.stop();
-  w.js.killProcesses();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

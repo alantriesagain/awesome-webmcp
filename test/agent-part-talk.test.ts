@@ -5,22 +5,16 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { done, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-agent-part-talk-"));
   const log = join(folder, "fake.log");
   const fake = join(process.cwd(), "test/fake-acp.mjs");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  w.host.session.agentId.value = "fake";
   const demo = [
     'widecode.plugin({ id: "demo", activate(api) {',
     '  api.agentPart.on("ping", (data) => { api.agentPart.send("pong", { echo: data.name }); });',
@@ -31,11 +25,18 @@ const main = async (): Promise<void> => {
     '  api.agentPart.on("ping", (data) => { api.agentPart.send("other", { saw: data.name }); });',
     "} });",
   ].join("\n");
-  w.js.extra = [new PluginSource("demo.js", demo), new PluginSource("other.js", other)];
   const config: unknown = { acp: { agents: { fake: { name: "Fake", command: ["node", fake, "--log", log] } } } };
-  w.start(config, new NoStateFile(), []);
+  const w = await openWidecode({
+    folder,
+    plugins: config,
+    load: true,
+    before: (w: Widecode) => {
+      w.host.session.agentId.value = "fake";
+      w.js.extra = [new PluginSource("demo.js", demo), new PluginSource("other.js", other)];
+    },
+  });
+  const c = w.host.conversation;
   c.prepare();
-  await w.host.load();
   const sent = (): string => (existsSync(log) ? readFileSync(log, "utf8") : "");
   const idle = (): boolean => !c.model.running && c.model.pending.length === 0;
   const before = c.model.turns.length;
@@ -47,9 +48,7 @@ const main = async (): Promise<void> => {
   );
   ok("another plugin's listener did not get it", !sent().includes('"type":"other"'));
 
-  w.host.kernel.stop();
-  w.js.killProcesses();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

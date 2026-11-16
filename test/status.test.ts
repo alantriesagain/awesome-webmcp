@@ -7,10 +7,8 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { modelName, StatusInfo } from "../src/conversation/status-info.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { createWidecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { projectDir } from "./support/claude-records.ts";
 
@@ -27,10 +25,9 @@ const counts = (s: StatusInfo): string =>
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-status-"));
   const projects = join(folder, ".projects");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
   const config: unknown = { claude: { projects } };
-  const w = createWidecode(ws, c, config);
+  const w = await openWidecode({ folder, plugins: config });
+  const c = w.host.conversation;
 
   /** The status after a fixture's CLI lines. */
   const live = (name: string): StatusInfo => {
@@ -82,8 +79,7 @@ const main = async (): Promise<void> => {
   big.modelId = "claude-opus-5-5[1m]";
   eq("a [1m] model's window before any result", String(big.windowSize), "1000000");
 
-  w.host.kernel.stop();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

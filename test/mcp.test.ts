@@ -16,16 +16,14 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { request, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { Item, TEXT, Turn } from "../src/conversation/model.ts";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -68,11 +66,6 @@ const main = async (): Promise<void> => {
   const log = join(folder, "fake.log");
   const oldLog = join(folder, "old.log");
   const fake = join(process.cwd(), "test/fake-acp.mjs");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  w.js.extra = [new PluginSource("probe.js", probe)];
-  w.host.session.agentId.value = "fake";
   const config: unknown = {
     acp: {
       agents: {
@@ -81,8 +74,16 @@ const main = async (): Promise<void> => {
       },
     },
   };
-  w.start(config, new NoStateFile(), []);
-  await w.host.load();
+  const w = await openWidecode({
+    folder,
+    plugins: config,
+    load: true,
+    before: (w: Widecode) => {
+      w.js.extra = [new PluginSource("probe.js", probe)];
+      w.host.session.agentId.value = "fake";
+    },
+  });
+  const c = w.host.conversation;
   const mcp = w.js.mcp;
   mcp.progressMs = 30;
 
@@ -211,17 +212,20 @@ const main = async (): Promise<void> => {
   w.host.roles.chat.typed("question");
   ok("one without MCP over HTTP is given none", (await until(() => c.model.turns.length > 0 && said(last()) === "No widecode server.")) && readFileSync(oldLog, "utf8").includes('"mcpServers":[]'));
 
-  w.host.kernel.stop();
-  w.js.killProcesses();
+  closeWidecode(w);
 
   /** An app with the ask plugin's section `section`, talking to the fake: what it says to "question", the request, the call. */
   const withSection = async (section: unknown, answer: boolean): Promise<string> => {
-    const c2 = new Conversation(ws.folder);
-    const w2 = composeWidecode(ws, c2);
-    w2.host.session.agentId.value = "fake";
     const config: unknown = { ask: section, harness: section !== false, acp: { agents: { fake: { name: "Fake", command: ["node", fake] } } } };
-    w2.start(config, new NoStateFile(), []);
-    await w2.host.load();
+    const w2 = await openWidecode({
+      folder,
+      plugins: config,
+      load: true,
+      before: (w: Widecode) => {
+        w.host.session.agentId.value = "fake";
+      },
+    });
+    const c2 = w2.host.conversation;
     const lastSaid = (): string => (c2.model.turns.length > 0 ? said(c2.model.turns[c2.model.turns.length - 1]) : "");
     w2.host.roles.chat.submit("question");
     let out = "";
@@ -234,8 +238,7 @@ const main = async (): Promise<void> => {
     }
     await until(() => !c2.model.running && lastSaid().length > 0);
     out += lastSaid();
-    w2.host.kernel.stop();
-    w2.js.killProcesses();
+    closeWidecode(w2);
     return out;
   };
 
@@ -244,7 +247,6 @@ const main = async (): Promise<void> => {
   // The ask and harness plugins switched off (no tools left): no server for the agent.
   eq("switched off: the agent gets no server", await withSection(false, false), "No widecode server.");
 
-  ws.close();
   rmSync(folder, { recursive: true, force: true });
   done();
 };

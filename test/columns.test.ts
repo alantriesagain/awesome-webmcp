@@ -8,11 +8,9 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { ColumnWidths, settingOf } from "../src/views/column-widths.ts";
-import { createWidecode } from "../src/compose.ts";
 import { DEFAULT_STYLE, MouseEvent, TBox, TElement, TRoot, find, frames, hitTest, layout, mount, unmount } from "@lightstart/light/native/tui";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const ids = ["chat", "tools", "side", "code"];
@@ -38,8 +36,7 @@ eq("no column under 12 cells", String(sizes.layout(ids, own, 200)[1]), "12");
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-columns-"));
   writeFileSync(join(folder, "a.txt"), "a\n");
-  const ws = await openWorkspace(folder, 100);
-  const w = createWidecode(ws, new Conversation(ws.folder), null);
+  const w = await openWidecode({ folder });
   const root = new TRoot();
   const W = 200;
   const H = 24;
@@ -99,8 +96,7 @@ const main = async (): Promise<void> => {
   ok("/columns reset forgets the drags", shell.widthOf("chat") === chat && JSON.stringify(w.host.kernel.settings.state("columns")) === "[]");
 
   unmount(w.shell);
-  w.host.kernel.stop();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

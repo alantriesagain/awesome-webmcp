@@ -4,10 +4,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import { openWidecode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const plugin = `widecode.plugin({
@@ -25,11 +22,7 @@ const main = async (): Promise<void> => {
   mkdirSync(join(dir, "plugins"), { recursive: true });
   writeFileSync(join(dir, "plugins", "trusted.js"), plugin);
   writeFileSync(join(dir, "config.json"), '{"plugins":{"trusted":{"greeting":"the harness"}}}');
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  w.start(null, new NoStateFile(), []);
-  await w.host.load();
+  const w = await openWidecode({ folder, load: true });
   ok("the folder starts untrusted, its harness out", !w.host.harness.trusted);
   ok("the project's plugin is out before the harness is used", !w.host.kernel.has("trusted"));
   ok("and its folder is not one of the plugin folders", !w.js.dirs.includes(join(dir, "plugins")));

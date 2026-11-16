@@ -9,13 +9,13 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { composeWidecode, createWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { modelName, StatusInfo } from "../src/conversation/status-info.ts";
 import { Store } from "../src/services/store.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const fixtures = join(process.cwd(), "test", "fixtures");
 const fake = join(process.cwd(), "test", "fake-claude.mjs");
@@ -44,15 +44,18 @@ const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-models-"));
   const home = mkdtempSync(join(tmpdir(), "widecode-home-"));
   const argsFile = join(folder, "args.txt");
-  const ws = await openWorkspace(folder, 100);
   const store = new Store(home);
-  const conversation = new Conversation(ws.folder);
-  conversation.executable = fake;
-  conversation.modelName = "opus[1m]";
-  conversation.extraArgs.push("--fixture", join(fixtures, "edit.ndjson"), "--record-args", argsFile);
   const written: string[] = [];
-  conversation.onWrite = (line: string) => written.push(line);
-  const app = createWidecode(ws, conversation, null);
+  const app = await openWidecode({
+    folder,
+    before: (app: Widecode) => {
+      app.host.conversation.executable = fake;
+      app.host.conversation.modelName = "opus[1m]";
+      app.host.conversation.extraArgs.push("--fixture", join(fixtures, "edit.ndjson"), "--record-args", argsFile);
+      app.host.conversation.onWrite = (line: string) => written.push(line);
+    },
+  });
+  const conversation = app.host.conversation;
   await app.host.useStore(store);
 
   app.shell.handleKey(key("f5"));
@@ -74,57 +77,59 @@ const main = async (): Promise<void> => {
   if (records !== null) await records.settled();
   const after = records !== null ? records.session(id, folder) : null;
   eq("the record follows the switch", after !== null ? after.model + " " + String(after.contextWindow) : "(none)", "opus[1m] 0");
-  conversation.kill();
+  closeWidecode(app);
 
   // The models plugin's list from config.json: its first for a new session, F5 through the rest.
-  const listed = (config: string): string => {
-    const c = new Conversation(ws.folder);
-    const w = createWidecode(ws, c, JSON.parse(config));
+  const listed = async (config: string): Promise<string> => {
+    const w = await openWidecode({ folder, plugins: JSON.parse(config) });
+    const c = w.host.conversation;
     const seen = [c.modelName];
     for (let i = 0; i < 2; i++) {
       w.shell.handleKey(key("f5"));
       seen.push(c.modelName);
     }
-    w.host.kernel.stop();
+    closeWidecode(w);
     return seen.join(" ");
   };
-  eq("the default models", listed("{}"), "opus[1m] fable[1m] opus[1m]");
-  eq("the config's models, names trimmed, the rest left out", listed('{"models": {"list": ["sonnet", " haiku ", 3, ""]}}'), "sonnet haiku sonnet");
-  eq("an empty list keeps the defaults", listed('{"models": {"list": []}}'), "opus[1m] fable[1m] opus[1m]");
+  eq("the default models", await listed("{}"), "opus[1m] fable[1m] opus[1m]");
+  eq("the config's models, names trimmed, the rest left out", await listed('{"models": {"list": ["sonnet", " haiku ", 3, ""]}}'), "sonnet haiku sonnet");
+  eq("an empty list keeps the defaults", await listed('{"models": {"list": []}}'), "opus[1m] fable[1m] opus[1m]");
 
   // The model chosen (F5, /model) is the agent's default for the next widecode; --model comes before it.
   const keptHome = mkdtempSync(join(tmpdir(), "widecode-home-"));
-  const chooser = new Conversation(ws.folder);
-  const chooserApp = composeWidecode(ws, chooser);
-  chooserApp.start(null, new Store(keptHome).stateFile(), []);
+  const chooserApp = await openWidecode({ folder, state: new Store(keptHome).stateFile() });
+  const chooser = chooserApp.host.conversation;
   chooserApp.shell.handleKey(key("f5"));
   eq("F5 before a start, kept", chooser.modelName, "fable[1m]");
-  chooserApp.host.kernel.stop();
-  const next = new Conversation(ws.folder);
-  const nextApp = composeWidecode(ws, next);
-  nextApp.start(null, new Store(keptHome).stateFile(), []);
+  closeWidecode(chooserApp);
+  const nextApp = await openWidecode({ folder, state: new Store(keptHome).stateFile() });
+  const next = nextApp.host.conversation;
   eq("the next widecode starts on the model chosen last", next.modelName, "fable[1m]");
-  nextApp.host.kernel.stop();
-  const flagged = new Conversation(ws.folder);
-  flagged.modelName = "haiku";
-  const flaggedApp = composeWidecode(ws, flagged);
-  flaggedApp.start(null, new Store(keptHome).stateFile(), []);
+  closeWidecode(nextApp);
+  const flaggedApp = await openWidecode({
+    folder,
+    state: new Store(keptHome).stateFile(),
+    before: (app: Widecode) => {
+      app.host.conversation.modelName = "haiku";
+    },
+  });
+  const flagged = flaggedApp.host.conversation;
   eq("--model comes before it", flagged.modelName, "haiku");
-  flaggedApp.host.kernel.stop();
+  closeWidecode(flaggedApp);
   rmSync(keptHome, { recursive: true, force: true });
 
   // A later widecode resumes the session on the model it last ran on.
-  const later = new Conversation(ws.folder);
   const laterConfig: unknown = { claude: { projects: join(folder, ".projects") } };
-  const laterApp = createWidecode(ws, later, laterConfig);
+  const laterApp = await openWidecode({ folder, plugins: laterConfig });
+  const later = laterApp.host.conversation;
   await laterApp.host.useStore(new Store(home));
   later.modelName = "fable[1m]";
   later.resume(id, "");
   eq("a resume starts with the session's model", later.modelName + " " + later.info.modelLabel + " " + String(later.info.windowSize), "opus[1m] Opus 1M 1000000");
-  laterApp.host.kernel.stop();
+  closeWidecode(laterApp);
   // A resumed session: the transcript names claude-opus-5-5 (no "[1m]"), widecode starts it with opus[1m].
-  const s = new Conversation(ws.folder);
-  const sw = createWidecode(ws, s, null);
+  const sw = await openWidecode({ folder });
+  const s = sw.host.conversation;
   /** The status after `records`, received by Claude Code's plugin, the session started on `alias`. */
   const status = (alias: string, records: unknown[]): StatusInfo => {
     s.modelName = alias;
@@ -146,7 +151,7 @@ const main = async (): Promise<void> => {
   const before = new StatusInfo();
   before.modelHint = "fable[1m]";
   eq("before any record: the alias's name", before.modelLabel, "Fable 1M");
-  sw.host.kernel.stop();
+  closeWidecode(sw);
   rmSync(folder, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });
   done();

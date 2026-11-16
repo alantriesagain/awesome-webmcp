@@ -12,13 +12,12 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createWidecode } from "../src/compose.ts";
-import { Conversation } from "../src/conversation/conversation.ts";
+import type { Widecode } from "../src/compose.ts";
 import { JsPanel } from "../src/runtime/views.ts";
 import { DaemonOptions, startDaemon } from "../src/peers/index.ts";
 import { KeyEvent, TRoot, mount, unmount } from "@lightstart/light/native/tui";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { SpawnOptions, spawnCapped } from "@lightstart/lib/process.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const wait = (ms: number): Promise<void> =>
@@ -71,13 +70,15 @@ const main = async (): Promise<void> => {
   const sharedB = await b.share(repoB, "", "live", null, null);
   ok("the other machine shares its clone", typeof sharedB !== "string");
 
-  const ws = await openWorkspace(repo, 100);
-  const conversation = new Conversation(ws.folder);
-  const app = createWidecode(ws, conversation, null);
   const tree = new TRoot();
-  app.shell.resize(200);
-  mount(app.shell, tree);
-  await app.host.load();
+  const app = await openWidecode({
+    folder: repo,
+    load: true,
+    before: (w: Widecode) => {
+      w.shell.resize(200);
+      mount(w.shell, tree);
+    },
+  });
   const until = async (check: () => boolean, steps = 300): Promise<void> => {
     for (let i = 0; i < steps && !check(); i++) await wait(20);
   };
@@ -191,7 +192,7 @@ const main = async (): Promise<void> => {
   ok("and its token no longer opens this machine's door", after.code !== 0);
 
   unmount(app.shell);
-  ws.close();
+  closeWidecode(app);
   a.stop();
   b.stop();
   rmSync(root, { recursive: true, force: true });

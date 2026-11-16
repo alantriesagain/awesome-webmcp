@@ -7,12 +7,10 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createWidecode } from "../src/compose.ts";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { JsPanel } from "../src/runtime/views.ts";
 import { DaemonPaths, Peer, Registry } from "../src/peers/index.ts";
 import { KeyEvent, TRoot, mount, unmount } from "@lightstart/light/native/tui";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
+import { openWidecode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const wait = (ms: number): Promise<void> =>
@@ -48,8 +46,7 @@ git("-C " + repo + " remote add mac " + theirs);
 git("-C " + repo + " fetch -q mac");
 
 const main = async (): Promise<void> => {
-  const ws = await openWorkspace(repo, 100);
-  const app = createWidecode(ws, new Conversation(ws.folder), null);
+  const app = await openWidecode({ folder: repo });
   const tree = new TRoot();
   app.shell.resize(200);
   mount(app.shell, tree);
@@ -102,7 +99,7 @@ const main = async (): Promise<void> => {
   await wait(200);
 
   unmount(app.shell);
-  ws.close();
+  app.host.workspace.close();
   rmSync(root, { recursive: true, force: true });
   done();
 };

@@ -5,11 +5,9 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { openWidecode } from "./support/app.ts";
 
 const plugin = `widecode.plugin({
   id: "temp-agent",
@@ -30,13 +28,15 @@ const main = async (): Promise<void> => {
   mkdirSync(dir, { recursive: true });
   const file = join(dir, "tmp.js");
   writeFileSync(file, plugin);
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  w.js.dirs = [dir];
-  w.host.session.agentId.value = "tmp";
-  w.start(null, new NoStateFile(), []);
-  await w.host.load();
+  const w = await openWidecode({
+    folder,
+    load: true,
+    before: (w: Widecode) => {
+      w.js.dirs = [dir];
+      w.host.session.agentId.value = "tmp";
+    },
+  });
+  const c = w.host.conversation;
   eq("the plugin's agent is the one talked to", c.agent.id() + " " + c.agent.name(), "tmp Tmp");
   ok("its command runs", w.host.kernel.commands.run("/tmp"));
 

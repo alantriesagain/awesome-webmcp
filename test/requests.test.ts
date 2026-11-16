@@ -7,13 +7,12 @@
 // plus an answer in the user's own words, and a plan approval that returns to bypass mode.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createWidecode, Widecode } from "../src/compose.ts";
-import { Conversation } from "../src/conversation/conversation.ts";
+import type { Widecode } from "../src/compose.ts";
 import { TOOL } from "../src/conversation/model.ts";
 import { Choice, Question } from "../src/conversation/requests.ts";
 import { Caret, Clip, DEFAULT_STYLE, KeyEvent, Screen, TRoot, frames, layout, mount, paint, unmount } from "@lightstart/light/native/tui";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const fixtures = join(process.cwd(), "test", "fixtures");
 const W = 160;
@@ -63,7 +62,6 @@ const recorded = (name: string): string => {
 };
 
 const main = async (): Promise<void> => {
-  const ws = await openWorkspace(process.cwd(), 100);
   const root = new TRoot();
   const screen = (): string => {
     for (let i = 0; i < 3; i++) {
@@ -75,14 +73,19 @@ const main = async (): Promise<void> => {
     return s.text();
   };
   const run = async (name: string, drive: (app: Widecode) => void): Promise<string> => {
-    const conversation = new Conversation(ws.folder);
-    conversation.executable = fake;
-    conversation.extraArgs.push("--fixture", join(fixtures, name + ".ndjson"));
     const written: string[] = [];
-    conversation.onWrite = (line: string) => written.push(line);
-    const app = createWidecode(ws, conversation, null);
-    app.shell.resize(W);
-    mount(app.shell, root);
+    const app = await openWidecode({
+      folder: process.cwd(),
+      before: (w: Widecode) => {
+        const c = w.host.conversation;
+        c.executable = fake;
+        c.extraArgs.push("--fixture", join(fixtures, name + ".ndjson"));
+        c.onWrite = (line: string) => written.push(line);
+        w.shell.resize(W);
+        mount(w.shell, root);
+      },
+    });
+    const conversation = app.host.conversation;
     for (const step of opening(name)) {
       if (step === "plan") conversation.setMode("plan");
       else conversation.send(step, []);
@@ -91,9 +94,7 @@ const main = async (): Promise<void> => {
     conversation.changed();
     drive(app);
     unmount(app.shell);
-    conversation.kill();
-    app.host.kernel.stop();
-    app.js.killProcesses();
+    closeWidecode(app);
     return written.length > 0 ? written[written.length - 1] : "";
   };
 
@@ -153,11 +154,15 @@ const main = async (): Promise<void> => {
     ok("the turn's end withdraws the question and closes the panel", !text.includes("Claude asks · Color") && text.includes("◆ Claude asks  withdrawn"));
   });
   // A line the user typed or queued before a request opened is a message, never its answer.
-  const c3 = new Conversation(ws.folder);
-  const app3 = createWidecode(ws, c3, null);
   const root3 = new TRoot();
-  app3.shell.resize(W);
-  mount(app3.shell, root3);
+  const app3 = await openWidecode({
+    folder: process.cwd(),
+    before: (w: Widecode) => {
+      w.shell.resize(W);
+      mount(w.shell, root3);
+    },
+  });
+  const c3 = app3.host.conversation;
   const sent3: string[] = [];
   app3.chat.onLine = (text: string) => sent3.push(text);
   const input3 = app3.chat.pane.input;
@@ -172,16 +177,18 @@ const main = async (): Promise<void> => {
   app3.chat.typed("A");
   eq("text typed while the panel is shown answers it", String(sent3.length) + " " + String(c3.model.openRequests().length), "2 0");
   unmount(app3.shell);
-  c3.kill();
-  app3.host.kernel.stop();
-  app3.js.killProcesses();
+  closeWidecode(app3);
 
   // A permission's panel offers its options alone; free words are refused, the request still open.
-  const c4 = new Conversation(ws.folder);
-  const app4 = createWidecode(ws, c4, null);
   const root4 = new TRoot();
-  app4.shell.resize(W);
-  mount(app4.shell, root4);
+  const app4 = await openWidecode({
+    folder: process.cwd(),
+    before: (w: Widecode) => {
+      w.shell.resize(W);
+      mount(w.shell, root4);
+    },
+  });
+  const c4 = app4.host.conversation;
   const paint4 = (): string => {
     for (let i = 0; i < 3; i++) {
       frames.flush();
@@ -205,17 +212,19 @@ const main = async (): Promise<void> => {
   app4.chat.typed("let it run");
   ok("free words are refused with a line, the permission still open", requested.state === "open" && app4.chat.pane.panel.active && paint4().includes("Choose one of the options"));
   unmount(app4.shell);
-  c4.kill();
-  app4.host.kernel.stop();
-  app4.js.killProcesses();
+  closeWidecode(app4);
 
   // A background subagent's question opens its panel though its card is in an earlier turn; a
   // second request says how many more wait in the title.
-  const c5 = new Conversation(ws.folder);
-  const app5 = createWidecode(ws, c5, null);
   const root5 = new TRoot();
-  app5.shell.resize(W);
-  mount(app5.shell, root5);
+  const app5 = await openWidecode({
+    folder: process.cwd(),
+    before: (w: Widecode) => {
+      w.shell.resize(W);
+      mount(w.shell, root5);
+    },
+  });
+  const c5 = app5.host.conversation;
   const paint5 = (): string => {
     for (let i = 0; i < 3; i++) {
       frames.flush();
@@ -254,11 +263,8 @@ const main = async (): Promise<void> => {
   c5.changed();
   ok("another request waits, the title says so", paint5().includes("1 more waiting"));
   unmount(app5.shell);
-  c5.kill();
-  app5.host.kernel.stop();
-  app5.js.killProcesses();
+  closeWidecode(app5);
 
-  ws.close();
   done();
 };
 

@@ -8,10 +8,8 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { DEFAULT_STYLE, KeyEvent, TRoot, frames, layout, mount } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
@@ -19,13 +17,16 @@ import { until } from "@lightstart/test/headless.ts";
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-vi-"));
   const fake = join(process.cwd(), "test/fake-acp.mjs");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  w.host.session.agentId.value = "fake";
-  w.host.keys.keymap = "vi";
   const config: unknown = { acp: { agents: { fake: { name: "Fake", command: ["node", fake] } } } };
-  w.start(config, new NoStateFile(), []);
+  const w = await openWidecode({
+    folder,
+    plugins: config,
+    before: (w: Widecode) => {
+      w.host.session.agentId.value = "fake";
+      w.host.keys.keymap = "vi";
+    },
+  });
+  const c = w.host.conversation;
   // Mounted, so the composer's submit and change events reach the pane (sending, the strip).
   const root = new TRoot();
   w.shell.resize(160);
@@ -171,9 +172,7 @@ const main = async (): Promise<void> => {
   w.host.roles.chat.submit("/keymap vi");
   eq("back to vi: insert mode", pane.label.peek(), "-- INSERT --");
 
-  w.host.kernel.stop();
-  w.js.killProcesses();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

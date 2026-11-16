@@ -8,14 +8,12 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const echo = `widecode.plugin({
   id: "echo-agent",
@@ -80,13 +78,15 @@ const wait = (ms: number): Promise<void> =>
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-agent-plugin-"));
   writeFileSync(join(folder, "a.txt"), "a\n");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  w.js.extra = [new PluginSource("echo.js", echo)];
-  w.host.session.agentId.value = "echo";
-  w.start(null, new NoStateFile(), []);
-  await w.host.load();
+  const w = await openWidecode({
+    folder,
+    load: true,
+    before: (w: Widecode) => {
+      w.js.extra = [new PluginSource("echo.js", echo)];
+      w.host.session.agentId.value = "echo";
+    },
+  });
+  const c = w.host.conversation;
   eq("the agent chosen by its id talks to the conversation", c.agent.id() + " " + c.agent.name() + " " + String(c.started), "echo Echo false");
 
   const chat = (): string[] => {
@@ -131,9 +131,7 @@ const main = async (): Promise<void> => {
   eq("Claude Code again", w.host.session.useAgent("claude") + c.agent.id(), "claude");
   eq("an agent no plugin brought: said", w.host.session.useAgent("nope"), "no agent named nope (there are opencode, dsh, harness, claude, pi, echo)");
 
-  w.host.kernel.stop();
-  w.js.killProcesses();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

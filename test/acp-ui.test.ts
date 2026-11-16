@@ -9,14 +9,12 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { request, type IncomingMessage } from "node:http";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
 import { TOOL, Turn } from "../src/conversation/model.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { SegmentContext } from "../src/screen/contributions.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { JsBand } from "../src/runtime/views.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
@@ -38,19 +36,22 @@ const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-acp-ui-"));
   const log = join(folder, "fake.log");
   const fake = join(process.cwd(), "test/fake-acp.mjs");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  w.host.session.agentId.value = "fake";
   const config: unknown = {
     acp: {
       agents: { fake: { name: "Fake", command: ["node", fake, "--log", log] } },
       tasks: { targets: { deepseek: { agent: "fake" } }, maxConcurrent: 1 },
     },
   };
-  w.start(config, new NoStateFile(), []);
+  const w = await openWidecode({
+    folder,
+    plugins: config,
+    load: true,
+    before: (w: Widecode) => {
+      w.host.session.agentId.value = "fake";
+    },
+  });
+  const c = w.host.conversation;
   c.prepare();
-  await w.host.load();
   const idle = (): boolean => !c.model.running && c.model.pending.length === 0;
   const last = (): Turn => c.model.turns[c.model.turns.length - 1];
   const sent = (): string => (existsSync(log) ? readFileSync(log, "utf8") : "");
@@ -146,9 +147,7 @@ const main = async (): Promise<void> => {
   ok("only the main client claims the UI capability", String(initializes().filter((l: string) => l.includes('"widecode":{"ui":true}')).length) === "1" && initializes().length >= 2);
   ok("the run's answer was cancelled", sent().includes('"result":{"cancelled":true}'));
 
-  w.host.kernel.stop();
-  w.js.killProcesses();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

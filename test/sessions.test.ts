@@ -11,13 +11,11 @@ import { spawn } from "node:child_process";
 import { appendFileSync, closeSync, ftruncateSync, mkdirSync, mkdtempSync, openSync, rmSync, utimesSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { NOTICE, TOOL } from "../src/conversation/model.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { readAt, readWindow } from "@lightstart/workspace/window.ts";
-import { createWidecode } from "../src/compose.ts";
 import { budget, done, eq, eqn, ok } from "@lightstart/test/assert.ts";
 import { projectDir } from "./support/claude-records.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 /** A session as the plugin lists it. */
 interface Listed {
@@ -120,10 +118,9 @@ writeFileSync(join(dir, "agent-a1fc8f3.jsonl"), user("p0", "Subagent prompt", ""
 
 // The plugin's agent, reading this projects folder.
 const home = mkdtempSync(join(tmpdir(), "code-sessions-folder-"));
-const ws = await openWorkspace(home, 100);
-const c = new Conversation(ws.folder);
 const config: unknown = { claude: { projects: root } };
-const w = createWidecode(ws, c, config);
+const w = await openWidecode({ folder: home, plugins: config });
+const c = w.host.conversation;
 const claude = w.js.agents.find((a) => a.agentId === "claude");
 const listOf = (f: string): Listed[] => (claude !== undefined ? (JSON.parse(claude.sessions(f)) as Listed[]) : []);
 eq("the folder's directory name", dir.slice(root.length + 1), "-home-someone-Projects-my-app-v2");
@@ -256,8 +253,7 @@ record(ownPid, startOf(ownPid));
 eq("widecode's own Claude, still stopping: no warning", warned(), "");
 own.kill();
 
-w.host.kernel.stop();
-ws.close();
+closeWidecode(w);
 rmSync(base, { recursive: true, force: true });
 rmSync(home, { recursive: true, force: true });
 done();

@@ -9,12 +9,10 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { Item, NOTICE, TEXT, THINKING, TOOL, Turn } from "../src/conversation/model.ts";
 import { RenderContext } from "../src/conversation/render.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
@@ -28,15 +26,18 @@ const main = async (): Promise<void> => {
   const log = join(folder, "replay.log");
   const fake = join(process.cwd(), "test/fake-acp.mjs");
   const fixture = join(process.cwd(), "test/fixtures/acp-opencode.ndjson");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  // The model the recording chose, so the plugin chooses it too.
-  c.modelName = "opencode/big-pickle";
-  const w = composeWidecode(ws, c);
-  w.host.session.agentId.value = "opencode";
   const config: unknown = { acp: { agents: { opencode: { name: "opencode", command: ["node", fake, "--replay", fixture, "--log", log] } } } };
-  w.start(config, new NoStateFile(), []);
-  await w.host.load();
+  const w = await openWidecode({
+    folder,
+    plugins: config,
+    load: true,
+    before: (w: Widecode) => {
+      // The model the recording chose, so the plugin chooses it too.
+      w.host.conversation.modelName = "opencode/big-pickle";
+      w.host.session.agentId.value = "opencode";
+    },
+  });
+  const c = w.host.conversation;
   const idle = (): boolean => !c.model.running && c.model.pending.length === 0;
   const last = (): Turn => c.model.turns[c.model.turns.length - 1];
   const chat = (): string[] => {
@@ -97,9 +98,7 @@ const main = async (): Promise<void> => {
   ctx.folder = folder;
   eq("the conversation's invariants", chatProblems(c.model, ctx, [40, 80, 120]).join("; "), "");
 
-  w.host.kernel.stop();
-  w.js.killProcesses();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

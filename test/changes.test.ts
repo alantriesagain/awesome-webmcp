@@ -9,16 +9,14 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createWidecode } from "../src/compose.ts";
 import { buildChanges, FileChange, readNumstat, UntrackedCounter } from "@lightstart/workspace/changes.ts";
 import { parseNumstat } from "@lightstart/workspace/git-parse.ts";
 import { JsBand } from "../src/runtime/views.ts";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { openRepo, readStatus } from "@lightstart/workspace/git.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { Line } from "@lightstart/light/native/tui/lines.ts";
 import { marksOf } from "@lightstart/workspace/tree.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { Headless } from "@lightstart/test/headless.ts";
 
@@ -82,9 +80,8 @@ const main = async (): Promise<void> => {
   // The app: the band under the columns.
   const W = 200;
   const H = 20;
-  const ws = await openWorkspace(repo, 100);
-  const conversation = new Conversation(ws.folder);
-  const app = createWidecode(ws, conversation, null);
+  const app = await openWidecode({ folder: repo });
+  const conversation = app.host.conversation;
   app.shell.resize(W);
   const headless = new Headless(app.shell, W, H);
   await app.host.load();
@@ -173,18 +170,15 @@ const main = async (): Promise<void> => {
   eq("] [ in the files column, Alt+↑ ↓ anywhere, wrapping", walk.join(" "), "new-feature.ts controllers/catalog.js new-feature.ts old.js new-feature.ts controllers/catalog.js");
   ok("the bar follows the open file", screen().slice(H - 3)[1].includes("▸ catalog.js"));
   headless.unmount();
-  ws.close();
+  closeWidecode(app);
 
   // Outside a repository.
   const plain = mkdtempSync(join(tmpdir(), "widecode-plain-"));
-  const pws = await openWorkspace(plain, 100);
-  const other = createWidecode(pws, new Conversation(pws.folder), null);
-  await other.host.load();
+  const other = await openWidecode({ folder: plain, load: true });
   let lines: Line[] = [];
   for (const b of other.host.screen.band) if (b.id === "changes" && b.view instanceof JsBand) lines = b.view.lines(80);
   eq("outside a repository", lines.length > 0 ? textOf(lines[0]) : "", "│ not a git repository");
-  other.host.kernel.stop();
-  pws.close();
+  closeWidecode(other);
   rmSync(plain, { recursive: true, force: true });
   rmSync(repo, { recursive: true, force: true });
   done();

@@ -7,10 +7,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { activityOf } from "../src/conversation/activity.ts";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { contentText, rec, str } from "./support/claude-records.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { createWidecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
@@ -22,10 +20,8 @@ interface Frame {
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-compact-"));
   writeFileSync(join(folder, "a.txt"), "a\n");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = createWidecode(ws, c, null);
-  await w.host.load();
+  const w = await openWidecode({ folder, load: true });
+  const c = w.host.conversation;
 
   const source = w.chat.pane.source;
   const chat = (): string[] => {
@@ -76,8 +72,7 @@ const main = async (): Promise<void> => {
   const cmd = w.host.kernel.commands.find("/compact");
   eq("/help lists /compact", cmd !== null ? cmd.usage + " · " + cmd.help : "", "[instructions] · summarize the conversation so far, freeing context");
 
-  w.host.kernel.stop();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

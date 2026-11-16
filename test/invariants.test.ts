@@ -7,11 +7,9 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { ChatModel } from "../src/conversation/model.ts";
 import { RenderContext } from "../src/conversation/render.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { createWidecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { chatProblems } from "./support/chat-invariants.ts";
 import { contentText, rec, str } from "./support/claude-records.ts";
@@ -29,9 +27,8 @@ interface Frame {
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-invariants-"));
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = createWidecode(ws, c, null);
+  const w = await openWidecode({ folder });
+  const c = w.host.conversation;
   const receive = (o: unknown): void => c.receive(JSON.stringify(o));
 
   /** A fixture's traffic through Claude Code's plugin: what the CLI wrote, and the messages sent queued as the app queues them. */
@@ -88,8 +85,7 @@ const main = async (): Promise<void> => {
   ok("a result closes the turn", !m.running && m.current === null);
   eq("and all of it holds", chatProblems(m, ctx, WIDTHS).join("; "), "");
 
-  w.host.kernel.stop();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

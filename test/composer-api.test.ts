@@ -7,11 +7,9 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { DEFAULT_STYLE, KeyEvent, TRoot, frames, layout, mount } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
@@ -36,11 +34,13 @@ const plugin = `widecode.plugin({
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-composer-api-"));
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  w.js.extra = [new PluginSource("composer.js", plugin)];
-  w.start(null, new NoStateFile(), []);
+  const w = await openWidecode({
+    folder,
+    before: (w: Widecode) => {
+      w.js.extra = [new PluginSource("composer.js", plugin)];
+    },
+  });
+  const c = w.host.conversation;
   // Mounted, so the composer's change and submit events reach the pane (the strip follows them).
   const root = new TRoot();
   w.shell.resize(160);
@@ -90,8 +90,7 @@ const main = async (): Promise<void> => {
   w.host.roles.chat.submit("/normal off");
   ok("off: the composer again", press("char", "a") && input.value() === "a" && said("/taken") === "[]");
 
-  w.host.kernel.stop();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

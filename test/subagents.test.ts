@@ -11,8 +11,8 @@ import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
 import { NoStateFile, StateFile } from "@lightstart/kernel/settings.ts";
-import { Workspace, openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { Widecode, composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { Store } from "../src/services/store.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
@@ -36,12 +36,9 @@ const taskConfig = (replace: boolean): unknown => ({
 });
 
 /** An app started on `plugins`, with Claude's CLI pointed at the fake and its arguments recorded in `argsFile`; `fixturePath` is the recording it replays. */
-const open = async (folder: string, plugins: unknown, state: StateFile, argsFile: string, withTask: boolean, fixturePath: string = fixture): Promise<{ ws: Workspace; c: Conversation; w: Widecode }> => {
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  w.start(plugins, state, []);
-  await w.host.load();
+const open = async (folder: string, plugins: unknown, state: StateFile, argsFile: string, withTask: boolean, fixturePath: string = fixture): Promise<{ c: Conversation; w: Widecode }> => {
+  const w = await openWidecode({ folder, plugins, state, load: true });
+  const c = w.host.conversation;
   c.executable = fake;
   c.extraArgs.push("--fixture", fixturePath, "--record-args", argsFile);
   if (withTask)
@@ -50,14 +47,11 @@ const open = async (folder: string, plugins: unknown, state: StateFile, argsFile
       return command !== null && command.onComplete !== null && command.onComplete("widecode").length > 0;
     }, 5000);
   else await new Promise<void>((resolve) => setTimeout(resolve, 100));
-  return { ws, c, w };
+  return { c, w };
 };
 
-const quit = (app: { ws: Workspace; c: Conversation; w: Widecode }): void => {
-  app.c.kill();
-  app.w.host.kernel.stop();
-  app.w.js.killProcesses();
-  app.ws.close();
+const quit = (app: { c: Conversation; w: Widecode }): void => {
+  closeWidecode(app.w);
 };
 
 /** The arguments the fake recorded, one per line. */

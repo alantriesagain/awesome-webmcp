@@ -13,16 +13,14 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { Item, NOTICE, TEXT, THINKING, TOOL, Turn } from "../src/conversation/model.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent, setValue } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const kinds = (items: Item[]): string => items.map((i: Item) => (i.kind === THINKING ? "thinking" : i.kind === TEXT ? "text" : i.kind === TOOL ? "tool" : i.kind === NOTICE ? "notice:" + i.text : "other")).join(",");
 
@@ -32,10 +30,6 @@ const main = async (): Promise<void> => {
   const log = join(folder, "fake.log");
   const oldLog = join(folder, "old.log");
   const fake = join(process.cwd(), "test/fake-acp.mjs");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  w.host.session.agentId.value = "fake";
   const config: unknown = {
     models: { agents: { fake: ["fake/small", "fake/large"] } },
     acp: {
@@ -45,10 +39,17 @@ const main = async (): Promise<void> => {
       },
     },
   };
-  w.start(config, new NoStateFile(), []);
+  const w = await openWidecode({
+    folder,
+    plugins: config,
+    load: true,
+    before: (w: Widecode) => {
+      w.host.session.agentId.value = "fake";
+    },
+  });
+  const c = w.host.conversation;
   // As widecode starts: an ACP agent's session starts with it.
   c.prepare();
-  await w.host.load();
   const idle = (): boolean => !c.model.running && c.model.pending.length === 0;
   const last = (): Turn => c.model.turns[c.model.turns.length - 1];
   const sent = (): string => readFileSync(log, "utf8");
@@ -232,19 +233,14 @@ const main = async (): Promise<void> => {
   w.host.roles.chat.submit("/title");
   eq("its titles are its own", said(), "Old titles its own sessions");
 
-  w.host.kernel.stop();
-  w.js.killProcesses();
+  closeWidecode(w);
 
   // Switched off: its agents are not there to choose.
-  const c2 = new Conversation(ws.folder);
-  const w2 = composeWidecode(ws, c2);
   const off: unknown = { acp: false };
-  w2.start(off, new NoStateFile(), []);
-  await w2.host.load();
+  const w2 = await openWidecode({ folder, plugins: off, load: true });
   ok("switched off: none of its agents", w2.host.session.useAgent("fake").startsWith("no agent named fake") && w2.host.session.useAgent("opencode").startsWith("no agent named opencode"));
-  w2.host.kernel.stop();
+  closeWidecode(w2);
 
-  ws.close();
   rmSync(folder, { recursive: true, force: true });
   done();
 };

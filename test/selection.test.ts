@@ -8,13 +8,12 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { createWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { Line, LineSource, Run } from "@lightstart/light/native/tui/lines.ts";
 import { copyRows, DEFAULT_STYLE, frames, hitTest, layout, MouseEvent, mount, selectRuns, TElement, TRoot, unmount } from "@lightstart/light/native/tui";
 import { wrap } from "@lightstart/tui/text.ts";
 import { done, eq } from "@lightstart/test/assert.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 class Rows extends LineSource {
   lines: Line[] = [];
@@ -45,14 +44,17 @@ const main = async (): Promise<void> => {
   const long = "export const config = { " + "name: 'x', ".repeat(30) + "};";
   writeFileSync(join(folder, "code.ts"), "const alpha = 1;\nconst beta = 2;\nconst gamma = 3;\n" + long + "\n");
   writeFileSync(join(folder, "notes.md"), "# notes\n");
-  const ws = await openWorkspace(folder, 100);
-  const w = createWidecode(ws, new Conversation(ws.folder), null);
   const root = new TRoot();
   const W = 160;
   const H = 24;
-  w.shell.resize(W);
-  mount(w.shell, root);
-  await w.host.load();
+  const w = await openWidecode({
+    folder,
+    load: true,
+    before: (w: Widecode) => {
+      w.shell.resize(W);
+      mount(w.shell, root);
+    },
+  });
   const copied: string[] = [];
   w.host.screen.clipboard.mode = "osc52";
   w.host.screen.clipboard.onWrite = (text: string) => copied.push(decoded(text));
@@ -100,8 +102,7 @@ const main = async (): Promise<void> => {
   const up = (copied[copied.length - 1] ?? "").split("\n").map((l) => l.trim());
   eq("a drag up from there selects to the end of the last line", up.join("|"), "code.ts|notes.md");
   unmount(w.shell);
-  w.host.kernel.stop();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

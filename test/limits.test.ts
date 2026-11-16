@@ -10,11 +10,11 @@ import { Conversation } from "../src/conversation/conversation.ts";
 import { Limits } from "../src/conversation/session-store.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
 import { NOTICE } from "../src/conversation/model.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { createWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { Store } from "../src/services/store.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const limit = (): string => '{"type":"result","subtype":"success","is_error":true,"result":"You\'ve hit your session limit · resets 1pm (America/Sao_Paulo)"}';
 
@@ -31,9 +31,8 @@ const choose = (c: Conversation, label: string): void => {
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-limits-"));
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const app = createWidecode(ws, c, null);
+  const app = await openWidecode({ folder });
+  const c = app.host.conversation;
   const now = Math.floor(Date.now() / 1000);
   c.receive('{"type":"rate_limit_event","rate_limit_info":{"unifiedWindows":{"five_hour":{"utilization":1,"resetsAt":' + String(now + 3600) + "}}}}");
   /** A turn open at the result, as a live one is. */
@@ -71,11 +70,14 @@ const main = async (): Promise<void> => {
   const folder2 = mkdtempSync(join(tmpdir(), "widecode-limits-task-"));
   const fixture = join(folder2, "hold.ndjson");
   writeFileSync(fixture, '{"dir":"out","raw":"{\\"type\\":\\"system\\",\\"subtype\\":\\"status\\",\\"status\\":\\"requesting\\"}"}\n');
-  const ws2 = await openWorkspace(folder2, 100);
-  const c2 = new Conversation(ws2.folder);
-  c2.executable = join(process.cwd(), "test", "fake-claude.mjs");
-  c2.extraArgs.push("--fixture", fixture);
-  const app2 = createWidecode(ws2, c2, null);
+  const app2 = await openWidecode({
+    folder: folder2,
+    before: (app2: Widecode) => {
+      app2.host.conversation.executable = join(process.cwd(), "test", "fake-claude.mjs");
+      app2.host.conversation.extraArgs.push("--fixture", fixture);
+    },
+  });
+  const c2 = app2.host.conversation;
   const written: string[] = [];
   c2.onWrite = (line: string) => written.push(line);
   let sending = 0;
@@ -100,9 +102,7 @@ const main = async (): Promise<void> => {
   eq("and does not fire messageSending", String(sending), "0");
   ok("and the retry stays scheduled", app2.host.screen.message.peek().startsWith("retrying in "));
   ok("the retry fires and resends the user's message", await until(() => written.length > 0 && promptOf(written[written.length - 1]) === "the user's message", 12000));
-  app2.host.kernel.stop();
-  app2.js.killProcesses();
-  ws2.close();
+  closeWidecode(app2);
   rmSync(folder2, { recursive: true, force: true });
 
   // The windows are the agent's: Claude Code's are not another agent's.
@@ -118,9 +118,7 @@ const main = async (): Promise<void> => {
   eq("and Claude's come back with Claude", app.host.session.useAgent("claude") + " " + String(c.info.fiveHourPct), " 99");
   rmSync(home, { recursive: true, force: true });
 
-  app.host.kernel.stop();
-  app.js.killProcesses();
-  ws.close();
+  closeWidecode(app);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

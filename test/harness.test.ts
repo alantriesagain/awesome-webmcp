@@ -11,13 +11,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { request, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
 import { mergePlugins } from "../src/services/harness.ts";
 import { Store } from "../src/services/store.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode, Widecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { Caret, Clip, DEFAULT_STYLE, Screen, TRoot, frames, layout, mount, paint, KeyEvent } from "@lightstart/light/native/tui";
 import { Run } from "@lightstart/tui/line-view.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
@@ -75,17 +73,19 @@ const main = async (): Promise<void> => {
   store.trust(folder);
   const args = join(folder, "args.txt");
 
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  c.executable = fake;
-  c.extraArgs.push("--fixture", join(fixtures, "ask.ndjson"), "--record-args", args);
   const logs: string[] = [];
-  const w = composeWidecode(ws, c);
-  await w.host.useStore(store);
-  w.js.dirs = [join(dir, "plugins")];
-  w.js.extra = [new PluginSource("probe.js", probe)];
-  w.host.session.userPermissions = { allow: ["Bash(npm test *)"], deny: ["Read(./.env)"] };
-  w.start(null, new NoStateFile(), []);
+  const w = await openWidecode({
+    folder,
+    before: async (w: Widecode) => {
+      w.host.conversation.executable = fake;
+      w.host.conversation.extraArgs.push("--fixture", join(fixtures, "ask.ndjson"), "--record-args", args);
+      await w.host.useStore(store);
+      w.js.dirs = [join(dir, "plugins")];
+      w.js.extra = [new PluginSource("probe.js", probe)];
+      w.host.session.userPermissions = { allow: ["Bash(npm test *)"], deny: ["Read(./.env)"] };
+    },
+  });
+  const c = w.host.conversation;
   w.host.onLog = (text: string) => logs.push(text);
   eq("the project's columns over the user's", w.configureColumns({ chat: "30%" }), "");
   w.watchHarness();
@@ -205,15 +205,17 @@ const main = async (): Promise<void> => {
   // The same folder without trust: nothing of the harness is in use, and the agent is told.
   const other = new Store(mkdtempSync(join(tmpdir(), "widecode-harness-home2-")));
   writeFileSync(join(other.root, "prompt.md"), "Be kind.\n");
-  const ws2 = await openWorkspace(folder, 100);
-  const c2 = new Conversation(ws2.folder);
-  c2.executable = fake;
   const args2 = join(folder, "args2.txt");
-  c2.extraArgs.push("--fixture", join(fixtures, "turn.ndjson"), "--record-args", args2);
-  const w2: Widecode = composeWidecode(ws2, c2);
-  await w2.host.useStore(other);
-  w2.start(null, new NoStateFile(), []);
-  await w2.host.load();
+  const w2: Widecode = await openWidecode({
+    folder,
+    load: true,
+    before: async (w2: Widecode) => {
+      w2.host.conversation.executable = fake;
+      w2.host.conversation.extraArgs.push("--fixture", join(fixtures, "turn.ndjson"), "--record-args", args2);
+      await w2.host.useStore(other);
+    },
+  });
+  const c2 = w2.host.conversation;
   ok("untrusted: the project's plugins and config stay out", !w2.host.kernel.has("greeter") && w2.host.kernel.has("git") && w2.host.harness.hasFolder() && !w2.host.harness.trusted);
   eq("and the folder's harness is summed up for the notice", JSON.stringify(w2.host.harness.summary()), '{"plugins":2,"prompt":true,"config":true}');
   c2.send("go", []);
@@ -231,26 +233,28 @@ const main = async (): Promise<void> => {
   ok("/harness untrusted: the chat says so, the plugin files not loaded, the config not in use", chatOf(w2).includes("not trusted (/trust runs it)") && chatOf(w2).includes("greeter.js (not loaded)") && chatOf(w2).includes("zed.js (not loaded)") && chatOf(w2).includes("config.json: present, not in use"));
 
   // Without a store (--ephemeral): no user-wide prompt, the folder's alone.
-  const ws4 = await openWorkspace(folder, 100);
-  const c4 = new Conversation(ws4.folder);
-  const w4: Widecode = composeWidecode(ws4, c4);
-  await w4.host.useStore(null);
-  w4.start(null, new NoStateFile(), []);
-  await w4.host.load();
+  const w4: Widecode = await openWidecode({
+    folder,
+    load: true,
+    before: async (w4: Widecode) => {
+      await w4.host.useStore(null);
+    },
+  });
   ok("no store: no user prompt, only the trusted folder's", w4.host.harness.userPromptPath === "" && !w4.host.harness.systemPrompt([]).includes("Be kind.") && w4.host.harness.systemPrompt([]).endsWith("Be terse. Prefer lists."));
 
   // /harness and /harness init on a folder of its own, trusted from the start.
   const folder3 = mkdtempSync(join(tmpdir(), "widecode-harness-init-"));
   store.trust(folder3);
-  const ws3 = await openWorkspace(folder3, 100);
-  const c3 = new Conversation(ws3.folder);
-  c3.executable = fake;
-  c3.extraArgs.push("--fixture", join(fixtures, "turn.ndjson"));
-  const w3: Widecode = composeWidecode(ws3, c3);
-  await w3.host.useStore(store);
-  w3.js.dirs = [join(folder3, ".widecode", "plugins")];
-  w3.start(null, new NoStateFile(), []);
-  await w3.host.load();
+  const w3: Widecode = await openWidecode({
+    folder: folder3,
+    load: true,
+    before: async (w3: Widecode) => {
+      w3.host.conversation.executable = fake;
+      w3.host.conversation.extraArgs.push("--fixture", join(fixtures, "turn.ndjson"));
+      await w3.host.useStore(store);
+      w3.js.dirs = [join(folder3, ".widecode", "plugins")];
+    },
+  });
   const run3 = (text: string): string => {
     w3.host.kernel.commands.run(text);
     return w3.host.screen.message.peek();
@@ -268,21 +272,18 @@ const main = async (): Promise<void> => {
   run3("/harness");
   const report3 = chatOf(w3);
   ok("/harness: trusted, the plugin file and its state, the prompt, the config, the tools", report3.includes("trusted. Plugins: .widecode/plugins/example.js (example running)") && report3.includes("prompt.md: ") && report3.includes("config.json: plugins, columns") && report3.includes("Tools: screen, state, log, reload, api, check, config"));
-  w3.host.kernel.stop();
-  w3.js.killProcesses();
+  closeWidecode(w3);
   rmSync(folder3, { recursive: true, force: true });
 
   c.kill();
-  c2.kill();
-  c4.kill();
+  closeWidecode(w2);
   w.host.harness.stopWatching();
   w.js.stopWatching();
   w4.host.harness.stopWatching();
   w4.host.kernel.stop();
   w4.js.killProcesses();
-  ws4.close();
-  ws.close();
-  ws2.close();
+  w4.host.workspace.close();
+  w.host.workspace.close();
   rmSync(folder, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });
   done();

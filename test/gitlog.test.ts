@@ -11,15 +11,13 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createWidecode } from "../src/compose.ts";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { ADDED, CodeFile, loadCommitFile, REMOVED } from "../src/code/diff.ts";
 import { openRepo } from "@lightstart/workspace/git.ts";
 import { JsPanel } from "../src/runtime/views.ts";
 import { Commit, parseBranches, parseLog, readBranches, readCommitAt, readCommitFiles, readDefaultBranch, readLog, readMergeBase } from "@lightstart/workspace/git-log.ts";
 import { parseNameStatus } from "@lightstart/workspace/git-parse.ts";
 import { KeyEvent, TRoot, mount, unmount } from "@lightstart/light/native/tui";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const wait = (ms: number): Promise<void> =>
@@ -101,9 +99,8 @@ const main = async (): Promise<void> => {
   eq("deleted by the commit: all removed", show(gone) + " " + String(gone.exists), "-k false");
 
   // The app: the bases, this session's commits, a commit made while the tab is open, Esc.
-  const ws = await openWorkspace(repo, 100);
-  const conversation = new Conversation(ws.folder);
-  const app = createWidecode(ws, conversation, null);
+  const app = await openWidecode({ folder: repo });
+  const conversation = app.host.conversation;
   const root = new TRoot();
   app.shell.resize(200);
   mount(app.shell, root);
@@ -194,9 +191,7 @@ const main = async (): Promise<void> => {
   eq("and all of them on demand", branchRows(), "11b fewer branches");
   unmount(app.shell);
   // The plugins stopped and their processes ended before the repository goes: a git call started after would find no folder.
-  app.host.kernel.stop();
-  app.js.killProcesses();
-  ws.close();
+  closeWidecode(app);
   rmSync(repo, { recursive: true, force: true });
   done();
 };

@@ -11,13 +11,12 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { mergePermissions } from "../src/services/harness.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { createWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const fixtures = join(process.cwd(), "test", "fixtures");
 const fake = join(process.cwd(), "test", "fake-claude.mjs");
@@ -30,14 +29,17 @@ const main = async (): Promise<void> => {
   eq("nothing set", mergePermissions(null, null).rulesJson() + " " + String(mergePermissions({ ask: "Bash" }, 7).any()), '{"allow":[],"ask":[],"deny":[]} false');
 
   const folder = mkdtempSync(join(tmpdir(), "widecode-permissions-"));
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  c.executable = fake;
-  c.extraArgs.push("--fixture", join(fixtures, "permission.ndjson"), "--strict");
   const written: string[] = [];
-  c.onWrite = (line: string) => written.push(line);
   const logs: string[] = [];
-  const w = createWidecode(ws, c, null);
+  const w = await openWidecode({
+    folder,
+    before: (w: Widecode) => {
+      w.host.conversation.executable = fake;
+      w.host.conversation.extraArgs.push("--fixture", join(fixtures, "permission.ndjson"), "--strict");
+      w.host.conversation.onWrite = (line: string) => written.push(line);
+    },
+  });
+  const c = w.host.conversation;
   w.host.onLog = (text: string) => logs.push(text);
   const panel = w.chat.pane.panel;
   const open = (): string => c.model.openRequests().map((r) => r.requestId).join(",");
@@ -149,9 +151,7 @@ const main = async (): Promise<void> => {
   ok("denied, the turn ends and the fake exits 0", await until(() => responded("req-10", '"behavior":"deny"') && !c.model.running, 10000) && (c.stop(), await until(() => logs.includes("claude exited with code 0"), 8000)));
   rmSync(repo, { recursive: true, force: true });
   rmSync(kept, { recursive: true, force: true });
-  w.host.kernel.stop();
-  w.js.killProcesses();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

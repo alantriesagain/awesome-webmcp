@@ -13,12 +13,11 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { attachImages } from "../src/conversation/attach.ts";
 import { osc52 } from "@lightstart/tui/clipboard.ts";
 import { Store } from "../src/services/store.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { createWidecode, Widecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { DEFAULT_STYLE, frames, KeyEvent, layout, mount, setValue, TRoot, unmount } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
@@ -31,8 +30,7 @@ const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-composer-"));
   writeFileSync(join(folder, "alpha.txt"), "a\n");
   const home = mkdtempSync(join(tmpdir(), "widecode-composer-home-"));
-  const ws = await openWorkspace(folder, 100);
-  const w = createWidecode(ws, new Conversation(ws.folder), null);
+  const w = await openWidecode({ folder });
   await w.host.useStore(new Store(home));
   const root = new TRoot();
   w.shell.resize(160);
@@ -182,8 +180,7 @@ const main = async (): Promise<void> => {
   eq("and goes back to its path on send", w.chat.pane.composer.expand(input.value()), code);
 
   unmount(w.shell);
-  w.host.kernel.stop();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });
   done();

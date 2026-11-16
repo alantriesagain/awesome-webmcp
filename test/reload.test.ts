@@ -7,12 +7,10 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
+import { openWidecode } from "./support/app.ts";
 
 const fixtures = join(process.cwd(), "test", "fixtures");
 const fake = join(process.cwd(), "test", "fake-claude.mjs");
@@ -29,16 +27,19 @@ const main = async (): Promise<void> => {
   const file = join(dir, "a.js");
   writeFileSync(file, plugin("v1", "echo1"));
   const args = join(folder, "args.txt");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  c.executable = fake;
-  c.extraArgs.push("--fixture", join(fixtures, "turn.ndjson"), "--record-args", args);
   const logs: string[] = [];
-  const w = composeWidecode(ws, c);
-  w.js.dirs = [dir];
-  w.start(null, new NoStateFile(), []);
-  w.host.onLog = (text: string) => logs.push(text);
-  await w.host.load();
+  const w = await openWidecode({
+    folder,
+    load: true,
+    before: (w: Widecode) => {
+      const c = w.host.conversation;
+      c.executable = fake;
+      c.extraArgs.push("--fixture", join(fixtures, "turn.ndjson"), "--record-args", args);
+      w.js.dirs = [dir];
+      w.host.onLog = (text: string) => logs.push(text);
+    },
+  });
+  const c = w.host.conversation;
   w.js.watchFolders();
   const names = (): string => w.js.mcp.tools.map((t) => t.name).filter((n) => n.startsWith("echo")).join(",");
   w.host.roles.chat.submit("/v");
@@ -79,7 +80,7 @@ const main = async (): Promise<void> => {
 
   c.kill();
   w.js.stopWatching();
-  ws.close();
+  w.host.workspace.close();
   rmSync(folder, { recursive: true, force: true });
   done();
 };

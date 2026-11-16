@@ -7,14 +7,13 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createWidecode } from "../src/compose.ts";
-import { Conversation } from "../src/conversation/conversation.ts";
+import type { Widecode } from "../src/compose.ts";
 import { KeyEvent, MouseEvent, hitTest, insertText } from "@lightstart/light/native/tui";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { projectDir } from "./support/claude-records.ts";
 import { Store } from "../src/services/store.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { Headless } from "@lightstart/test/headless.ts";
+import { openWidecode } from "./support/app.ts";
 
 const W = 200;
 const H = 25;
@@ -81,20 +80,24 @@ utimesSync(join(sessionDir, "bbbbbbbb-1111-2222-3333-444444444444.jsonl"), 1000,
 writeFileSync(join(sessionDir, "aaaaaaaa-1111-2222-3333-444444444444", "subagents", "agent-x1.meta.json"), JSON.stringify({ agentType: "Explore", description: "Find callers", toolUseId: "toolu_A" }));
 
 const main = async (): Promise<void> => {
-  const ws = await openWorkspace(repo, 100);
   // Claude Code's config folder, empty: the Skills tab lists none of this machine's.
   const configDir = mkdtempSync(join(tmpdir(), "widecode-screen-config-"));
   const config: unknown = { claude: { projects, configDir }, sessions: { terminal: false } };
-  const app = createWidecode(ws, new Conversation(ws.folder), config);
   const widecodeHome = mkdtempSync(join(tmpdir(), "code-screen-widecode-"));
   const store = new Store(widecodeHome);
   store.trust(repo);
-  await app.host.useStore(store);
-  app.host.session.titler.executable = join(process.cwd(), "test", "fake-title.sh");
-  app.shell.resize(W);
-  headless = new Headless(app.shell, W, H);
+  const app = await openWidecode({
+    folder: repo,
+    plugins: config,
+    load: true,
+    before: async (w: Widecode) => {
+      await w.host.useStore(store);
+      w.host.session.titler.executable = join(process.cwd(), "test", "fake-title.sh");
+      w.shell.resize(W);
+      headless = new Headless(w.shell, W, H);
+    },
+  });
   const root = headless.root;
-  await app.host.load();
   let lines = screen();
   ok("the columns with their titles on their top edges, under the menu bar and a blank row", lines[1].trim() === "" && lines[2].includes(" Chat ") && has(lines, "Agents") && has(lines, "Files") && has(lines, "Code"));
   ok("the chat greets a new session", has(lines, "A new session in this folder"));

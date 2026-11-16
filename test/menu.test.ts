@@ -5,14 +5,12 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { KeyEvent, MouseEvent, TElement, hitTestLayers } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { Headless } from "@lightstart/test/headless.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const W = 200;
 const H = 24;
@@ -30,10 +28,12 @@ const menus = `widecode.plugin({
 const main = async (): Promise<void> => {
   const repo = mkdtempSync(join(tmpdir(), "widecode-menu-"));
   writeFileSync(join(repo, "a.txt"), "a\n");
-  const ws = await openWorkspace(repo, 100);
-  const w = composeWidecode(ws, new Conversation(ws.folder));
-  w.js.extra = [new PluginSource("test-menus.js", menus)];
-  w.start(null, new NoStateFile(), []);
+  const w = await openWidecode({
+    folder: repo,
+    before: (w: Widecode) => {
+      w.js.extra = [new PluginSource("test-menus.js", menus)];
+    },
+  });
   w.shell.resize(W);
   const headless = new Headless(w.shell, W, H);
   const root = headless.root;
@@ -92,8 +92,7 @@ const main = async (): Promise<void> => {
   ok("a plugin removed leaves no menu", !lines[0].includes(" Test") && !w.host.screen.menuEntries.some((e) => e.menu === "Test"));
 
   headless.unmount();
-  w.host.kernel.stop();
-  ws.close();
+  closeWidecode(w);
   rmSync(repo, { recursive: true, force: true });
   done();
 };

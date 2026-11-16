@@ -9,18 +9,14 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { osc52 } from "@lightstart/tui/clipboard.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { createWidecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-editor-"));
-  const ws = await openWorkspace(folder, 100);
-  const w = createWidecode(ws, new Conversation(ws.folder), null);
-  await w.host.load();
+  const w = await openWidecode({ folder, load: true });
   const copied: string[] = [];
   w.host.screen.clipboard.mode = "osc52";
   w.host.screen.clipboard.onWrite = (text: string) => copied.push(text);
@@ -158,8 +154,7 @@ const main = async (): Promise<void> => {
   press("left", "", false, true);
   eq("Alt+← moved by a word", state(), '["tab"] @0:0');
 
-  w.host.kernel.stop();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

@@ -5,10 +5,8 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
+import { openWidecode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const plugin = (id: string): string => `widecode.plugin({
@@ -35,13 +33,14 @@ const main = async (): Promise<void> => {
   const folderB = mkdtempSync(join(tmpdir(), "widecode-switch-b-"));
   const dirA = project(folderA, "pa");
   const dirB = project(folderB, "pb");
-  const ws = await openWorkspace(folderA, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  await w.host.useStore(null);
-  w.js.dirs = [dirA];
-  w.start(null, new NoStateFile(), []);
-  await w.host.load();
+  const w = await openWidecode({
+    folder: folderA,
+    load: true,
+    before: async (w: Widecode) => {
+      await w.host.useStore(null);
+      w.js.dirs = [dirA];
+    },
+  });
 
   const tell = (text: string): string => {
     w.host.kernel.commands.run(text);

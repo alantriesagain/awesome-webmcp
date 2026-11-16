@@ -6,12 +6,10 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { request, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { TOOL } from "../src/conversation/model.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { Store } from "../src/services/store.ts";
+import type { Widecode } from "../src/compose.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
 
@@ -43,20 +41,23 @@ const startedId = (text: string): string => (/subagent started: ([^\s"]+)/.exec(
 
 /** An app whose main agent and subagents are the fake ACP agent; `agentArgs` reach the subagent's process, and `home` gives it a store. */
 const open = async (folder: string, log: string, agentArgs: string[], home = "") => {
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  if (home.length > 0) {
-    const store = new Store(home);
-    store.trust(folder);
-    await w.host.useStore(store);
-  }
-  w.start({ acp: { agents: { main: { name: "Main", command: ["node", fake, "--log", log] }, fake: { name: "Fake", command: ["node", fake, "--log", log, ...agentArgs] } }, tasks: { targets: { deepseek: { agent: "fake" } }, maxConcurrent: 2 } } }, new NoStateFile(), []);
-  await w.host.load();
+  const plugins = { acp: { agents: { main: { name: "Main", command: ["node", fake, "--log", log] }, fake: { name: "Fake", command: ["node", fake, "--log", log, ...agentArgs] } }, tasks: { targets: { deepseek: { agent: "fake" } }, maxConcurrent: 2 } } };
+  const w = await openWidecode({
+    folder,
+    plugins,
+    load: true,
+    before: async (w: Widecode) => {
+      if (home.length > 0) {
+        const store = new Store(home);
+        store.trust(folder);
+        await w.host.useStore(store);
+      }
+    },
+  });
   w.host.session.useAgent("main");
   const url = await w.js.mcp.start();
   const token = w.js.mcp.tokenFor("acp");
-  return { ws, c, w, post: (body: string): Promise<string> => send(url, token, body) };
+  return { c: w.host.conversation, w, post: (body: string): Promise<string> => send(url, token, body) };
 };
 
 const main = async (): Promise<void> => {
@@ -78,9 +79,7 @@ const main = async (): Promise<void> => {
   ok("its card fails", await until(() => broken.task !== null && broken.task.status === "failed", 15000));
   ok("the failure names the error", broken.task !== null && broken.task.summary.includes("injected update failure"));
   ok("the parent hears that the background subagent failed", await until(() => a.c.model.turns.some((t) => t.prompt !== null && t.prompt.text.includes("background subagent " + brokenId + " failed")), 15000));
-  a.w.host.kernel.stop();
-  a.w.js.killProcesses();
-  a.ws.close();
+  closeWidecode(a.w);
   rmSync(folderA, { recursive: true, force: true });
   delete process.env.WIDECODE_ACP_TEST_CRASH;
 
@@ -107,9 +106,7 @@ const main = async (): Promise<void> => {
   eq("only one result is reported", String(heard.length), "1");
   ok("and it is the finish", heard[0] !== undefined && heard[0].prompt !== null && heard[0].prompt.text.includes("finished"));
   eq("the card still says done", leaving.task !== null ? leaving.task.status : "none", "done");
-  b.w.host.kernel.stop();
-  b.w.js.killProcesses();
-  b.ws.close();
+  closeWidecode(b.w);
   rmSync(folderB, { recursive: true, force: true });
 
   // A run of a session left since it started stops its process.
@@ -135,9 +132,7 @@ const main = async (): Promise<void> => {
   c3.c.reset();
   ok("leaving the session stops its run's process", await until(() => !alive(pid), 10000));
   ok("its kept transcript says it stopped because its session was left", existsSync(taskFile) && readFileSync(taskFile, "utf8").includes('"status":"stopped"') && readFileSync(taskFile, "utf8").includes('"summary":"stopped: its session was left"'));
-  c3.w.host.kernel.stop();
-  c3.w.js.killProcesses();
-  c3.ws.close();
+  closeWidecode(c3.w);
   rmSync(folderC, { recursive: true, force: true });
   rmSync(homeC, { recursive: true, force: true });
 

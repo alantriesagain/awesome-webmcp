@@ -14,10 +14,9 @@ import { readFileSync, rmSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { JsBand } from "../src/runtime/views.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { createWidecode, Widecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { Line, Run } from "@lightstart/light/native/tui/lines.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
@@ -41,11 +40,10 @@ interface Frame {
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "demo-"));
-  const ws = await openWorkspace(folder, 100);
   /** widecode with `config`, a recorded session fed to it, and the session's status filled in. */
-  const make = (config: string): Widecode => {
-    const c = new Conversation(ws.folder);
-    const w = createWidecode(ws, c, JSON.parse(config));
+  const make = async (config: string): Promise<Widecode> => {
+    const w = await openWidecode({ folder, plugins: JSON.parse(config) });
+    const c = w.host.conversation;
     for (const line of readFileSync(join(process.cwd(), "test", "fixtures", "edit.ndjson"), "utf8").split("\n")) {
       if (line.length === 0) continue;
       const f = JSON.parse(line) as Frame;
@@ -68,7 +66,7 @@ const main = async (): Promise<void> => {
     return b !== null ? b.lines(width).map(textOf) : [];
   };
 
-  let w = make("{}");
+  let w = await make("{}");
   const table = draw(w, 164);
   eq("the default table: three rows", String(table.length), "3");
   ok("row 1: folder, context, cost, the title last", table[0].startsWith(" ◆ demo-") && table[0].replace(/ +/g, " ").endsWith("│ ctx ▰▱▱▱▱▱▱▱ 10% 21k/200k │ $0.02 │ List file edits"));
@@ -93,53 +91,52 @@ const main = async (): Promise<void> => {
   const clipped = draw(w, 74);
   ok("a last cell longer than the bar ends in an ellipsis inside it", clipped[0].endsWith("…") && clipped.every((r) => r.length <= 70));
   ok("narrow: columns dropped before the text", !clipped[0].includes("cache"));
-  w.host.kernel.stop();
+  closeWidecode(w);
 
-  w = make('{"status": {"separator": " · ", "lines": [["cost", "model"], [{"segment": "calls", "fg": "#ff0000", "label": "n"}, "spacer", "nope"]]}}');
+  w = await make('{"status": {"separator": " · ", "lines": [["cost", "model"], [{"segment": "calls", "fg": "#ff0000", "label": "n"}, "spacer", "nope"]]}}');
   const custom = draw(w, 44);
   eq("a custom layout: its order and separator", custom[0], " $0.02 · Haiku 4.5");
   ok("a label, the spacer, an unknown name shown as ?name", custom[1].startsWith(" n 2 calls   ") && custom[1].endsWith("?nope") && custom[1].length === 39);
   const b = bandOf(w);
   const recolored = b !== null ? b.lines(44)[1].runs.filter((r) => r.text === "2" || r.text === " calls") : [];
   ok("a segment recolored", recolored.length === 2 && recolored.every((r) => r.fg === "#ff0000"));
-  w.host.kernel.stop();
-  w = make('{"status": {"lines": [["cost", "activity"], ["cost", "calls"]]}}');
+  closeWidecode(w);
+  w = await make('{"status": {"lines": [["cost", "activity"], ["cost", "calls"]]}}');
   w.host.conversation.info.activity = "";
   const quiet = draw(w, 84);
   eq("an empty last cell leaves no dangling rule", quiet[0] + " /" + quiet[1], " $0.02 / $0.02 │ 2 calls");
-  w.host.kernel.stop();
-  w = make('{"status": {"lines": [["queued", "cost", "title"], ["queued", "calls", "note"]]}}');
+  closeWidecode(w);
+  w = await make('{"status": {"lines": [["queued", "cost", "title"], ["queued", "calls", "note"]]}}');
   eq("a column blank in every row is left out", draw(w, 84).map((l) => l.replace(/ +$/, "")).join(" / ").replace(/│ [^/]*$/, "│ note"), " $0.02   │ List file edits /  2 calls │ note");
-  w.host.kernel.stop();
-  w = make('{"status": {"lines": [[["cost", "calls", "queued"]], [{"segment": "cost", "fg": "salmon"}]]}}');
+  closeWidecode(w);
+  w = await make('{"status": {"lines": [[["cost", "calls", "queued"]], [{"segment": "cost", "fg": "salmon"}]]}}');
   const listed = draw(w, 84);
   eq("a list cell joins its segments", listed[0], " $0.02 · 2 calls");
   const salmon = bandOf(w);
   ok("an unknown color is ignored, not fatal", salmon !== null && salmon.lines(84)[1].runs.every((r) => r.fg !== "salmon"));
-  w.host.kernel.stop();
+  closeWidecode(w);
 
-  w = make("{}");
+  w = await make("{}");
   const pressed = bandOf(w);
   const row3 = draw(w, 164)[2];
   if (pressed !== null) pressed.pressAt(1, 2);
   eq("a press on the model cell switches the model", w.host.conversation.modelName, "fable[1m]");
   if (pressed !== null) pressed.pressAt(2, row3.indexOf("bypass") + 1);
   eq("a press on the mode toggles plan mode", w.host.conversation.model.permissionMode, "plan");
-  w.host.conversation.kill();
-  w.host.kernel.stop();
+  closeWidecode(w);
 
-  w = make('{"status": {"separator": " │ ", "lines": [["project","branch","model","effort","mode","title","spacer","note"],["context","limit5h","limitWeek","cache"],["activity","tools","calls","thinking","cost","duration"]]}}');
+  w = await make('{"status": {"separator": " │ ", "lines": [["project","branch","model","effort","mode","title","spacer","note"],["context","limit5h","limitWeek","cache"],["activity","tools","calls","thinking","cost","duration"]]}}');
   eq("the previous default becomes the table", rules(draw(w, 164)[0]).split(",").length >= 3 ? "table" : "old", "table");
-  w.host.kernel.stop();
-  w = make('{"status": {"separator": " │ ", "lines": [["project", "context", "cache", "cost", "title"], ["branch", "limit5h", "tools", "duration", "activity"], [["model", "effort"], "limitWeek", ["calls", "thinking"], "mode", "note"]]}}');
+  closeWidecode(w);
+  w = await make('{"status": {"separator": " │ ", "lines": [["project", "context", "cache", "cost", "title"], ["branch", "limit5h", "tools", "duration", "activity"], [["model", "effort"], "limitWeek", ["calls", "thinking"], "mode", "note"]]}}');
   ok("an earlier default, as written, becomes the current one", draw(w, 164)[1].startsWith(" Haiku 4.5 · low │ 5h"));
-  w.host.kernel.stop();
-  w = make('{"status": {"separator": " │ ", "lines": [["project", "context", "cache", "cost", "title"], ["branch", "limit5h", "tools", "duration", "activity"], [["model", "effort"], "limitWeek", "calls", "mode", "note"]]}}');
+  closeWidecode(w);
+  w = await make('{"status": {"separator": " │ ", "lines": [["project", "context", "cache", "cost", "title"], ["branch", "limit5h", "tools", "duration", "activity"], [["model", "effort"], "limitWeek", "calls", "mode", "note"]]}}');
   ok("the last default, as written, too: no branch, no calls", draw(w, 164)[1].startsWith(" Haiku 4.5 · low │ 5h") && !draw(w, 164).join("|").includes("calls"));
-  w.host.kernel.stop();
+  closeWidecode(w);
 
   const reader = JSON.stringify("calls=$(grep -o '\"calls\":[0-9]*'); printf '\\033[1;32m%s\\033[0m cols=%s\\nsecond line\\n' \"$calls\" \"$COLUMNS\"");
-  w = make('{"status": {"lines": [[{"command": ' + reader + '}], [{"command": "sleep 5"}], [{"command": "echo broken >&2; exit 3"}]]}}');
+  w = await make('{"status": {"lines": [[{"command": ' + reader + '}], [{"command": "sleep 5"}], [{"command": "echo broken >&2; exit 3"}]]}}');
   // Drawn at 77 cells, then run again as the session changes: COLUMNS is the bar's width.
   draw(w, 77);
   await wait(400);
@@ -150,8 +147,7 @@ const main = async (): Promise<void> => {
   eq("a command reads the JSON on stdin and prints colored lines, COLUMNS set", out.slice(0, 2).map((l) => styled(l.runs.slice(1))).join(" | "), '[2b]"calls":2 cols=77 | second line');
   ok("a slow one is stopped, with a note", out.length > 2 && textOf(out[2]).includes("took over 2 s"));
   ok("a failing one says why", out.length > 3 && textOf(out[3]).includes("status command exited 3: broken"));
-  w.host.kernel.stop();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

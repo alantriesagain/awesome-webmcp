@@ -10,12 +10,9 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { request, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { TOOL } from "../src/conversation/model.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
 import { SegmentContext } from "../src/screen/contributions.ts";
-import { openWorkspace, Workspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode, Widecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { palette } from "@lightstart/tui/palette.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
@@ -72,18 +69,8 @@ const reads = (state: string): { running: boolean; projects: string[]; proxy: bo
 };
 
 const open = async (folder: string, config: unknown) => {
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  w.start(config, new NoStateFile(), []);
-  await w.host.load();
-  return { ws, c, w };
-};
-
-const close = (ws: Workspace, w: Widecode): void => {
-  w.host.kernel.stop();
-  w.js.killProcesses();
-  ws.close();
+  const w = await openWidecode({ folder, plugins: config, load: true });
+  return { c: w.host.conversation, w };
 };
 
 const main = async (): Promise<void> => {
@@ -109,7 +96,7 @@ const main = async (): Promise<void> => {
       },
     },
   };
-  const { ws, c, w } = await open(folder, config);
+  const { c, w } = await open(folder, config);
   const url = await w.js.mcp.start();
   const token = w.js.mcp.tokenFor("claude");
   const post = (body: string): Promise<string> => send(url, token, body);
@@ -184,7 +171,7 @@ const main = async (): Promise<void> => {
   ok("another project list fails with the box's message", mismatch.includes("the project list changed, so run down, then up again"));
   c.model.closeTurn(null);
 
-  close(ws, w);
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   rmSync(other, { recursive: true, force: true });
   rmSync(boxDir, { recursive: true, force: true });
@@ -201,7 +188,7 @@ const main = async (): Promise<void> => {
   const boxedSeg = allBoxed.w.host.screen.segments.find("box");
   const boxed = boxedSeg !== null ? boxedSeg.draw(new SegmentContext()) : [];
   eq("every target boxed on the default kind says boxed: bwrap", boxed.map((r) => r.text).join(""), "boxed: bwrap");
-  close(allBoxed.ws, allBoxed.w);
+  closeWidecode(allBoxed.w);
   rmSync(allBoxedFolder, { recursive: true, force: true });
 
   const noTargetsFolder = mkdtempSync(join(tmpdir(), "widecode-task-no-targets-"));
@@ -209,7 +196,7 @@ const main = async (): Promise<void> => {
   const noneSeg = none.w.host.screen.segments.find("box");
   const empty = noneSeg !== null ? noneSeg.draw(new SegmentContext()) : [];
   eq("no targets draw nothing", String(empty.length), "0");
-  close(none.ws, none.w);
+  closeWidecode(none.w);
   rmSync(noTargetsFolder, { recursive: true, force: true });
 
   const bwrapFolder = mkdtempSync(join(tmpdir(), "widecode-task-bwrap-"));
@@ -252,7 +239,7 @@ const main = async (): Promise<void> => {
   ok("and runs the entry's command", bwrapJail.length === 1 && bwrapJail[0].args.includes(fake));
   eq("bwrap starts the proxy", String(bwrapCalls.filter((x) => x.cmd === "proxy").length), "1");
   eq("bwrap never starts a VM", String(bwrapCalls.filter((x) => x.cmd === "up").length), "0");
-  close(bwrapApp.ws, bwrapApp.w);
+  closeWidecode(bwrapApp.w);
   rmSync(bwrapFolder, { recursive: true, force: true });
   rmSync(bwrapOther, { recursive: true, force: true });
   rmSync(bwrapDir, { recursive: true, force: true });
@@ -289,7 +276,7 @@ const main = async (): Promise<void> => {
   eq("a per-target vm overrides the bwrap default with an ssh call", String(mixedCalls.filter((x) => x.cmd === "ssh").length), "1");
   eq("and starts the box", String(mixedCalls.filter((x) => x.cmd === "up").length), "1");
   eq("and does not use the jail", String(mixedCalls.filter((x) => x.cmd === "jail").length), "0");
-  close(mixedApp.ws, mixedApp.w);
+  closeWidecode(mixedApp.w);
   rmSync(mixedFolder, { recursive: true, force: true });
   rmSync(mixedDir, { recursive: true, force: true });
   delete process.env.FAKE_BOX_DIR;
@@ -329,7 +316,7 @@ const main = async (): Promise<void> => {
   eq("the idle box is stopped once after the last run", String(downs.length), "1");
   ok("through down --if-idle", downs.length === 1 && downs[0].args.includes("--if-idle"));
   eq("the VM had started", String(calls(idleLog).filter((x) => x.cmd === "up").length), "1");
-  close(idleApp.ws, idleApp.w);
+  closeWidecode(idleApp.w);
   rmSync(idleFolder, { recursive: true, force: true });
   rmSync(idleDir, { recursive: true, force: true });
   delete process.env.FAKE_BOX_DIR;

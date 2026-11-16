@@ -11,12 +11,9 @@ import { request, type IncomingMessage } from "node:http";
 import * as net from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { TOOL } from "../src/conversation/model.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
 
@@ -43,11 +40,8 @@ const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-box-"));
   const marker = join(folder, "marker.txt");
   const run = "printf 'hello\\n' > marker.txt; echo done; echo err >&2";
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  w.start({ box: { hostActions: { install: { run: run, description: "install the build", timeoutMs: 5000 } } } }, new NoStateFile(), []);
-  await w.host.load();
+  const w = await openWidecode({ folder, plugins: { box: { hostActions: { install: { run: run, description: "install the build", timeoutMs: 5000 } } } }, load: true });
+  const c = w.host.conversation;
   const url = await w.js.mcp.start();
   const token = w.js.mcp.tokenFor("claude");
   const post = (body: string): Promise<string> => send(url, token, body);
@@ -100,39 +94,25 @@ const main = async (): Promise<void> => {
   w.host.roles.chat.submit("/box");
   eq("/box lists the actions", w.host.screen.message.peek(), "host actions: install");
 
-  w.host.kernel.stop();
-  w.js.killProcesses();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
 
   const emptyFolder = mkdtempSync(join(tmpdir(), "widecode-box-empty-"));
-  const emptyWs = await openWorkspace(emptyFolder, 100);
-  const emptyC = new Conversation(emptyWs.folder);
-  const empty = composeWidecode(emptyWs, emptyC);
-  empty.start({ box: { hostActions: {} } }, new NoStateFile(), []);
-  await empty.host.load();
+  const empty = await openWidecode({ folder: emptyFolder, plugins: { box: { hostActions: {} } }, load: true });
   const emptyUrl = await empty.js.mcp.start();
   const emptyListed = await send(emptyUrl, empty.js.mcp.tokenFor("claude"), '{"jsonrpc":"2.0","id":0,"method":"tools/list"}');
   ok("no actions configured: no tool", !emptyListed.includes('"name":"HostAction"'));
   empty.host.roles.chat.submit("/box");
   eq("/box says there are none", empty.host.screen.message.peek(), "no host actions configured");
-  empty.host.kernel.stop();
-  empty.js.killProcesses();
-  emptyWs.close();
+  closeWidecode(empty);
   rmSync(emptyFolder, { recursive: true, force: true });
 
   const offFolder = mkdtempSync(join(tmpdir(), "widecode-box-off-"));
-  const offWs = await openWorkspace(offFolder, 100);
-  const offC = new Conversation(offWs.folder);
-  const off = composeWidecode(offWs, offC);
-  off.start({ box: false }, new NoStateFile(), []);
-  await off.host.load();
+  const off = await openWidecode({ folder: offFolder, plugins: { box: false }, load: true });
   const offUrl = await off.js.mcp.start();
   const offListed = await send(offUrl, off.js.mcp.tokenFor("claude"), '{"jsonrpc":"2.0","id":0,"method":"tools/list"}');
   ok("the plugin switched off offers no tool", !offListed.includes('"name":"HostAction"'));
-  off.host.kernel.stop();
-  off.js.killProcesses();
-  offWs.close();
+  closeWidecode(off);
   rmSync(offFolder, { recursive: true, force: true });
 
   // The jail's bwrap argv, the proxy's unix socket and down --if-idle. The jail is checked with

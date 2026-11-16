@@ -7,13 +7,11 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentsOf, agentStatus } from "../src/conversation/agents.ts";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { itemLines, RenderContext } from "../src/conversation/render.ts";
 import { JsPanel } from "../src/runtime/views.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { createWidecode } from "../src/compose.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 interface Frame {
@@ -29,10 +27,8 @@ const wait = (ms: number): Promise<void> =>
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-agents-"));
   writeFileSync(join(folder, "a.txt"), "a\n");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = createWidecode(ws, c, null);
-  await w.host.load();
+  const w = await openWidecode({ folder, load: true });
+  const c = w.host.conversation;
   await w.code.load("a.txt");
   for (const line of readFileSync(join(process.cwd(), "test", "fixtures", "subagent.ndjson"), "utf8").split("\n")) {
     if (line.length === 0) continue;
@@ -71,8 +67,7 @@ const main = async (): Promise<void> => {
   const nested = itemLines(call, new RenderContext(), [], 80).map((l) => l.runs.map((r: Run) => r.text).join(""));
   ok("the chat still draws its steps nested under the call", nested.some((l) => l.startsWith("│ ● Read ")));
 
-  w.host.kernel.stop();
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

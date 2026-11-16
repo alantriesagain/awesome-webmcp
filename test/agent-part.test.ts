@@ -4,12 +4,10 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode, Widecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { done, ok } from "@lightstart/test/assert.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const gate = `widecode.plugin({
   id: "gate",
@@ -20,24 +18,24 @@ const gate = `widecode.plugin({
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-agent-part-"));
-  const ws = await openWorkspace(folder, 100);
-  const make = (config: string): Widecode => {
-    const w = composeWidecode(ws, new Conversation(ws.folder));
-    w.js.extra = [new PluginSource("gate.js", gate)];
-    w.start(JSON.parse(config), new NoStateFile(), []);
-    return w;
-  };
+  const make = (config: string): Promise<Widecode> =>
+    openWidecode({
+      folder,
+      plugins: JSON.parse(config),
+      before: (w: Widecode) => {
+        w.js.extra = [new PluginSource("gate.js", gate)];
+      },
+    });
 
-  let w = make("{}");
+  let w = await make("{}");
   ok("a plugin with only an agent part loads and is on", w.host.kernel.has("gate") && w.host.kernel.problems.length === 0 && w.js.errors.length === 0);
   ok("it registers nothing in the app", w.host.kernel.commands.find("/gate") === null);
-  w.host.kernel.stop();
+  closeWidecode(w);
 
-  w = make('{"gate": false}');
+  w = await make('{"gate": false}');
   ok("switched off by its section, without an error", !w.host.kernel.has("gate") && w.host.kernel.problems.length === 0 && w.js.errors.length === 0);
-  w.host.kernel.stop();
+  closeWidecode(w);
 
-  ws.close();
   rmSync(folder, { recursive: true, force: true });
   done();
 };

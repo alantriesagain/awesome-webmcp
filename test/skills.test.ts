@@ -14,10 +14,8 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { composeWidecode, Widecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { Store } from "../src/services/store.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent, setValue } from "@lightstart/light/native/tui";
@@ -45,9 +43,6 @@ const main = async (): Promise<void> => {
   const fake = join(process.cwd(), "test/fake-acp.mjs");
   // Claude Code's config folder, empty: no user skills of this machine's in the list.
   const configDir = mkdtempSync(join(tmpdir(), "widecode-skills-config-"));
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
   const config: unknown = {
     claude: { configDir },
     acp: {
@@ -57,7 +52,8 @@ const main = async (): Promise<void> => {
       },
     },
   };
-  w.start(config, new NoStateFile(), []);
+  const w = await openWidecode({ folder, plugins: config });
+  const c = w.host.conversation;
   // A store: the folder's records keep the skill runs.
   const home = mkdtempSync(join(tmpdir(), "widecode-skills-home-"));
   await w.host.useStore(new Store(home));
@@ -174,18 +170,13 @@ const main = async (): Promise<void> => {
   c.reset();
   w.host.roles.chat.submit("hello");
   ok("it lists none", await until(() => tab(w) === " 0 skills| Old  lists no skills"));
-  w.host.kernel.stop();
-  w.js.killProcesses();
+  closeWidecode(w);
 
-  const c2 = new Conversation(ws.folder);
-  const w2 = composeWidecode(ws, c2);
   const off: unknown = { skills: false };
-  w2.start(off, new NoStateFile(), []);
-  await w2.host.load();
+  const w2 = await openWidecode({ folder, plugins: off, load: true });
   eq("switched off: no tab", tab(w2), "none");
-  w2.host.kernel.stop();
+  closeWidecode(w2);
 
-  ws.close();
   rmSync(folder, { recursive: true, force: true });
   rmSync(plugin, { recursive: true, force: true });
   rmSync(configDir, { recursive: true, force: true });

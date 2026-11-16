@@ -7,10 +7,8 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { contentText, rec, str } from "./support/claude-records.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { createWidecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
@@ -33,12 +31,11 @@ const wait = (ms: number): Promise<void> =>
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-busy-"));
   writeFileSync(join(folder, "a.txt"), "a\n");
-  const ws = await openWorkspace(folder, 100);
 
   /** Replays a fixture into a fresh conversation, calling `at` after each record with the chat's lines. */
-  const replay = (name: string, at: (record: string, lines: string[]) => void): void => {
-    const c = new Conversation(ws.folder);
-    const w = createWidecode(ws, c, null);
+  const replay = async (name: string, at: (record: string, lines: string[]) => void): Promise<void> => {
+    const w = await openWidecode({ folder });
+    const c = w.host.conversation;
     const source = w.chat.pane.source;
     const chat = (): string[] => {
       source.prepare(80);
@@ -72,11 +69,12 @@ const main = async (): Promise<void> => {
       }
       at(what, chat());
     }
+    closeWidecode(w);
   };
 
   const seen = new Map<string, string[]>();
   let sent = 0;
-  replay("midtool", (what: string, lines: string[]) => {
+  await replay("midtool", (what: string, lines: string[]) => {
     if (what === "sent") sent++;
     const key = what === "sent" ? "sent" + String(sent) : what;
     if (!seen.has(key)) seen.set(key, lines);
@@ -94,15 +92,15 @@ const main = async (): Promise<void> => {
   eq("the turn over: nothing says Claude is busy", activity(at("result")), "");
 
   const asked = new Map<string, string[]>();
-  replay("ask", (what: string, lines: string[]) => {
+  await replay("ask", (what: string, lines: string[]) => {
     if (!asked.has(what)) asked.set(what, lines);
   });
   ok("Claude about to ask: busy", activity(asked.get("assistant:AskUserQuestion") ?? []).length > 0);
   eq("waiting for the user's answer: not busy", activity(asked.get("control_request:AskUserQuestion") ?? []), "");
 
   // The clock runs from the moment the message was sent.
-  const c = new Conversation(ws.folder);
-  const w = createWidecode(ws, c, null);
+  const w = await openWidecode({ folder });
+  const c = w.host.conversation;
   const source = w.chat.pane.source;
   c.model.send("hello", 0);
   source.prepare(80);
@@ -115,7 +113,7 @@ const main = async (): Promise<void> => {
   }
   eq("a second later, its clock says so", line, "Sending… 1s");
 
-  ws.close();
+  closeWidecode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

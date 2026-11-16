@@ -10,14 +10,12 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { Limits } from "../src/conversation/session-store.ts";
 import { SessionRecords } from "../src/services/sessions.ts";
 import { PluginDefault, Store } from "../src/services/store.ts";
 import { Hook } from "@lightstart/lib/hook.ts";
 import { cleanTitle, shownTitle, Titler } from "../src/agent/titles.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
-import { createWidecode } from "../src/compose.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const home = mkdtempSync(join(tmpdir(), "widecode-home-"));
@@ -154,11 +152,10 @@ const main = async (): Promise<void> => {
 
   // A conversation's turns: cost across processes, the first turn's title.
   const repo = mkdtempSync(join(tmpdir(), "widecode-repo-"));
-  const ws = await openWorkspace(repo, 100);
-  const conv = new Conversation(ws.folder);
   // Claude Code's plugin reads the records and keeps the session's record; the CLI ran on its own default model.
-  const app = createWidecode(ws, conv, null);
+  const app = await openWidecode({ folder: repo });
   await app.host.useStore(store);
+  const conv = app.host.conversation;
   conv.modelName = "";
   const t2 = app.host.session.titler;
   t2.executable = stub;
@@ -177,8 +174,7 @@ const main = async (): Promise<void> => {
   eq("cost added up across processes, thinking summed", s9 !== null ? s9.costUsd.toFixed(2) + " " + String(s9.thinkingTokens) + " " + s9.model : "none", "0.05 50 claude-haiku-4-5");
   await wait(1500);
   eq("the first turn asked for a title, once", titles.join(","), "s-9=Rename the helper");
-  app.host.kernel.stop();
-  ws.close();
+  closeWidecode(app);
   rmSync(repo, { recursive: true, force: true });
   rmSync(project, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });

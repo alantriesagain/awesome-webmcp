@@ -8,18 +8,16 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Conversation } from "../src/conversation/conversation.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
 import { Item, NOTICE, TEXT, THINKING, TOOL, Turn } from "../src/conversation/model.ts";
-import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import { SegmentContext } from "../src/screen/contributions.ts";
-import { composeWidecode } from "../src/compose.ts";
+import type { Widecode } from "../src/compose.ts";
 import { JsBand } from "../src/runtime/views.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
+import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const kinds = (items: Item[]): string => items.map((i: Item) => (i.kind === THINKING ? "thinking" : i.kind === TEXT ? "text" : i.kind === TOOL ? "tool" : i.kind === NOTICE ? "notice:" + i.text : "other")).join(",");
 
@@ -39,12 +37,15 @@ const main = async (): Promise<void> => {
   );
   const log = join(folder, "fake.log");
   const fake = join(process.cwd(), "test/fake-pi.mjs");
-  const ws = await openWorkspace(folder, 100);
-  const c = new Conversation(ws.folder);
-  const w = composeWidecode(ws, c);
-  w.host.session.agentId.value = "pi";
   const config: unknown = { pi: { name: "pi", command: ["node", fake, "--log", log] } };
-  w.start(config, new NoStateFile(), []);
+  const w = await openWidecode({
+    folder,
+    plugins: config,
+    before: (w: Widecode) => {
+      w.host.session.agentId.value = "pi";
+    },
+  });
+  const c = w.host.conversation;
   c.prepare();
   await w.host.load();
   const idle = (): boolean => !c.model.running && c.model.pending.length === 0;
@@ -186,18 +187,13 @@ const main = async (): Promise<void> => {
   ok("resumed with --session", sent().includes('"--session"'));
   ok("a message goes to it", (await turn("hi")) && chat().some((l: string) => l.includes("You said: hi")));
 
-  w.host.kernel.stop();
-  w.js.killProcesses();
+  closeWidecode(w);
 
-  const c2 = new Conversation(ws.folder);
-  const w2 = composeWidecode(ws, c2);
   const absent: unknown = { pi: { command: ["no-such-pi-binary", "--mode", "rpc"] } };
-  w2.start(absent, new NoStateFile(), []);
-  await w2.host.load();
+  const w2 = await openWidecode({ folder, plugins: absent, load: true });
   ok("absent when no pi is on PATH", w2.host.session.useAgent("pi").startsWith("no agent named pi"));
-  w2.host.kernel.stop();
+  closeWidecode(w2);
 
-  ws.close();
   rmSync(folder, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });
   if (oldHome === undefined) delete process.env.HOME;
