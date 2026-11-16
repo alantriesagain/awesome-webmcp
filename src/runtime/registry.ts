@@ -86,11 +86,6 @@ export class PluginTable {
     this.loaded = this.loaded.filter((s) => s.file !== file);
   }
 
-  /** Forget every loaded source under `dir`. */
-  forgetUnder(dir: string): void {
-    this.loaded = this.loaded.filter((s) => !s.file.startsWith(dir + "/"));
-  }
-
   /** The loaded sources under `dir`. */
   loadedIn(dir: string): PluginSource[] {
     return this.loaded.filter((s) => s.file.startsWith(dir + "/"));

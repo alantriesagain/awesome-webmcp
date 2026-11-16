@@ -314,19 +314,6 @@ export class JsRuntime extends Bridge {
     this.fail("agent " + owner + " went away; " + why);
   }
 
-  /**
-   * Stop the plugins a folder brought and forget its sources: the folder was closed (another
-   * opened). A plugin the folder replaced comes back.
-   */
-  forgetFolder(dir: string): void {
-    if (dir.length === 0) return;
-    const files: string[] = [];
-    for (const d of this.table.defs) if (d.file.startsWith(dir + "/") && !files.includes(d.file)) files.push(d.file);
-    for (const file of files) this.reloadFile(file, null);
-    this.table.forgetUnder(dir);
-    this.dirs = this.dirs.filter((d) => d !== dir);
-  }
-
   /** Start the registration of `id` that comes last among the files still there (a replacement gone brings the built-in back); one switched off in the config stays out. */
   private revive(id: string): void {
     const found = this.table.lastDef(id, (file) => file.startsWith("builtin:") || existsSync(file) || this.extra.some((s) => s.file === file));

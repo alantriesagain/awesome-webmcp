@@ -1,6 +1,6 @@
-// widecode put together: the host, the shell, the native widgets the plugins mount (the chat and
-// code columns, the Tools tab) and the JS plugins, built-in (plugins, in the binary), the user's and
-// the project's. `start` hands the kernel config.json's "plugins" and the state file, adds any
+// One start of widecode put together over the start's Host (controllers/host.ts): the shell, the
+// native widgets the plugins mount (the chat and code columns, the Tools tab) and the JS plugins,
+// built-in (plugins, in the binary), the user's and the project's, with the project's harness. `start` hands the kernel config.json's "plugins" and the state file, adds any
 // extra compiled plugins after the JS ones (the tests' and the entry's), and starts them after what
 // each requires, leaving out the ones switched off. What it returns holds the widgets for the
 // entry, the selftest and the tests; plugins never reach each other this way, only through the host.
@@ -29,8 +29,6 @@ export class Widecode {
   readonly tools: ToolsWidget;
   /** The JS plugins: built-in, the user's, the project's. */
   readonly js: JsRuntime;
-  /** The project plugins folder in `js.dirs` ("" before one is): a folder switch replaces it. */
-  private projectDir = "";
 
   constructor(host: Host, shell: Shell) {
     this.host = host;
@@ -43,7 +41,6 @@ export class Widecode {
     this.js.code = this.code;
     this.js.chat = this.chat;
     this.js.tools = this.tools;
-    this.projectDir = host.harness.pluginsDir();
   }
 
   private prepared = false;
@@ -138,24 +135,12 @@ export class Widecode {
     return [cfg.notice, permissions.notice, note].filter((t) => t.length > 0).join("; ");
   }
 
-  /** The project's own plugins folder among the plugin folders, watched; `sync` loads its files now. A folder switch drops the folder before it. */
+  /** The project's own plugins folder among the plugin folders, watched; `sync` loads its files now. */
   useProjectPlugins(sync: boolean): void {
     const dir = this.host.harness.pluginsDir();
-    if (dir !== this.projectDir) {
-      this.dropProjectPlugins();
-      this.projectDir = dir;
-    }
     if (!this.js.dirs.includes(dir)) this.js.dirs.push(dir);
     this.js.watchFolders();
     if (sync) this.js.syncFolder(dir);
-  }
-
-  /** Stop the plugins of the project folder before this one and forget the folder. */
-  private dropProjectPlugins(): void {
-    const old = this.projectDir;
-    if (old.length === 0) return;
-    this.js.forgetFolder(old);
-    this.js.dirs = this.js.dirs.filter((d) => d !== old);
   }
 
   /** Put the folder's harness in use without keeping the trust (`--trust`): its plugins, config and prompt. Answers what to tell ("" for nothing). */
@@ -195,5 +180,5 @@ export class Widecode {
   }
 }
 
-/** widecode over `workspace` and `conversation`, not started. */
+/** widecode over the start's `host`, not started. */
 export const composeWidecode = (host: Host): Widecode => new Widecode(host, new Shell());
