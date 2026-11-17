@@ -6,6 +6,7 @@
 // goes in `before`, which runs once the app is composed and before its plugins start. One app is
 // open at a time: opening another stops the one before. An `/open` starts the app again over the
 // other folder, the test's run with it: `currentWidecode()` is the app after it.
+import { join } from "node:path";
 import type { StateFile } from "@lightstart/kernel/settings.ts";
 import type { Plugin } from "@lightstart/kernel/plugin.ts";
 import { openApp } from "@lightstart/app/test";
@@ -55,6 +56,8 @@ export const openWidecode = async (options: OpenOptions): Promise<Widecode> => {
   next.before = options.before ?? null;
   next.start = options.start ?? true;
   next.load = options.load ?? false;
+  // The built-in plugins as normal files, which the prepare step writes for a run.
+  next.builtinDir = join(process.cwd(), "dist", "plugins");
   run.next = next;
   opened = await openApp(manifest, { storage: "memory" });
   return widecode.w;

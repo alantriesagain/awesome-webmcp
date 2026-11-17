@@ -3,7 +3,7 @@
 // it starts first, and read `current`. `reopen` starts the app again over another folder, with what
 // carries over for the next start to take (`takeCarry`).
 import { existsSync, statSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { Controller } from "@lightstart/light/controller/class.ts";
 import app from "../app.ts";
 import { Carry, Run } from "../run.ts";
@@ -35,6 +35,9 @@ export class RunController extends Controller {
       console.error("widecode: not a folder: " + run.folder);
       process.exit(2);
     }
+    // A development build's built-in plugins, beside it (dist/plugins); an installed binary's are in the plugin folder.
+    const beside = join(dirname(process.execPath), "plugins");
+    if (existsSync(beside)) run.builtinDir = beside;
     return run;
   }
 

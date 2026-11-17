@@ -28,6 +28,8 @@ export class Run {
   /** A test's: whether the plugins start, and whether the folder is read before the start settles. */
   start = true;
   load = false;
+  /** Where the built-in plugins are read from ("" for the ones the binary carries). */
+  builtinDir = "";
 
   /** The same run over another folder, read once it starts (an `/open`). */
   over(folder: string): Run {
@@ -41,6 +43,7 @@ export class Run {
     next.before = this.before;
     next.start = this.start;
     next.load = true;
+    next.builtinDir = this.builtinDir;
     return next;
   }
 }

@@ -7,15 +7,20 @@
 // The build's version (git describe of the workspace, else the package's version) and time go into
 // src/runtime/build-info.ts, so a running binary says which build it is.
 //
+// The same plugins go into dist/plugins/<id>/ as normal files: each .ts of the plugin's folder as
+// .js with its types stripped (its relative imports of .ts files naming the .js), so the runtime
+// loads them as modules, the way it loads the user's plugin folders; the binary beside them, a
+// development build, takes its built-ins from there.
+//
 // For a test run (light's LIGHT_NATIVE_COMMAND is "test") the three modules are written so
 // their text stays the same while plugins, the docs and the clock change: builtin.ts names the
 // plugins and reads their stripped code from src/runtime/generated/ when the program starts,
 // docs.ts reads PLUGINS.md and widecode.d.ts, and build-info.ts says "test". scriptc's cache keys a
 // program by its text, so a plugin's change or a minute passing compiles no test again.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 const forTest = process.env.LIGHT_NATIVE_COMMAND === "test";
 /** Write `text` to `path` only when it changes, so its time moves only then. */
@@ -72,6 +77,30 @@ if (forTest) {
     "];\n";
 }
 keep(out, text);
+
+/** A plugin's files under `dir`, relative, by name (its subfolders' too). */
+const filesIn = (dir, base = dir) => {
+  const found = [];
+  for (const name of readdirSync(dir).sort()) {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) found.push(...filesIn(path, base));
+    else if (name.endsWith(".ts") && !name.endsWith(".d.ts")) found.push(relative(base, path));
+  }
+  return found;
+};
+const tree = "dist/plugins";
+for (const f of files) {
+  const folder = f.path.endsWith("/index.ts") ? dirname(f.path) : null;
+  const names = folder !== null ? filesIn(folder) : [f.path.slice(dir.length + 1)];
+  for (const name of names) {
+    let source = readFileSync(folder !== null ? join(folder, name) : f.path, "utf8");
+    if (f.id === "languages" && name === "index.ts") source = languagesOf(source);
+    const code = stripTypeScriptTypes(source).replace(/(from\s+|import\s+|import\()(["'])(\.{1,2}\/[^"']*)\.ts\2/g, "$1$2$3.js$2");
+    const target = join(tree, f.id, folder !== null ? name.replace(/\.ts$/, ".js") : "index.js");
+    mkdirSync(dirname(target), { recursive: true });
+    keep(target, code);
+  }
+}
 
 const docsOut = "src/runtime/docs.ts";
 const docs = forTest

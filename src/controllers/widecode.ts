@@ -120,6 +120,7 @@ export class WidecodeController extends Controller {
     this.agentNote = "";
     this.keysNote = "";
     const w = composeWidecode(hostController.current);
+    w.js.builtinDir = current.builtinDir;
     this.w = w;
     this.closed = false;
     w.host.onOpen = (target: string) => this.reopen(target);
@@ -138,6 +139,7 @@ export class WidecodeController extends Controller {
     const selftest = app.args.string("selftest") ?? "";
     const where = current.folder;
     const w = composeWidecode(hostController.current);
+    w.js.builtinDir = current.builtinDir;
     const host = w.host;
     const store = settings.current.store;
     const config = settings.current.config;
