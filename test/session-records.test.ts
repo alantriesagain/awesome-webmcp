@@ -9,6 +9,7 @@ import { Hook } from "@lightstart/lib/hook.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { SessionRecords } from "../src/services/sessions.ts";
 import { Store } from "../src/services/store.ts";
+import { openFolderStore } from "./support/records.ts";
 
 const home = mkdtempSync(join(tmpdir(), "widecode-records-home-"));
 const project = mkdtempSync(join(tmpdir(), "widecode-records-"));
@@ -21,6 +22,8 @@ let fired = 0;
 changed.add("test", () => {
   fired++;
 });
+// The folder's store, as the app's main store holds it.
+let db = await openFolderStore(project);
 const records = new SessionRecords(store, changed);
 await records.open(project);
 ok("an earlier record file is imported when the folder opens", (() => {
@@ -42,16 +45,21 @@ m.baseCommit = "abc123";
 records.saveSession(m);
 await records.settled();
 await records.close();
+await db.close();
+db = await openFolderStore(project);
 const again = new SessionRecords(store, new Hook());
 await again.open(project);
 const back = again.session("s-1", project);
 eq("a record round trip from fresh records", back !== null ? String(back.folder === project) + "|" + back.title + "|" + back.titleBy + "|" + String(back.costUsd) + "|" + String(back.contextWindow) + "|" + back.baseCommit : "none", "true|Fix the parser|user|0.5|1000000|abc123");
 eq("the records newest first, the imported one among them", again.all().map((r) => r.id).join(","), "s-1,old-1");
 ok("the hook fired as rows landed", fired > 0);
+await db.close();
+db = await openFolderStore(other);
 await again.open(other);
 ok("another folder's records are its own", again.session("s-1", other) === null && again.all().length === 0);
 eq("the limits are the store's", String(again.limits("claude").fiveHour.usedPercent), "-1");
 await again.close();
+await db.close();
 rmSync(home, { recursive: true, force: true });
 rmSync(project, { recursive: true, force: true });
 rmSync(other, { recursive: true, force: true });

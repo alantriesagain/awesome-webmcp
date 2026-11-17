@@ -10,6 +10,7 @@ import { join } from "node:path";
 import type { StateFile } from "@lightstart/kernel/settings.ts";
 import type { Plugin } from "@lightstart/kernel/plugin.ts";
 import { openApp } from "@lightstart/app/test";
+import { JsonlKind } from "@lightstart/app/tui";
 import type { OpenedApp } from "@lightstart/app/test";
 import manifest from "../../.light/app.ts";
 import type { Widecode } from "../../src/compose.ts";
@@ -59,7 +60,8 @@ export const openWidecode = async (options: OpenOptions): Promise<Widecode> => {
   // The built-in plugins as normal files, which the prepare step writes for a run.
   next.builtinDir = join(process.cwd(), "dist", "plugins");
   run.next = next;
-  opened = await openApp(manifest);
+  // The folder is the app's --dir too, so its main store is that folder's .widecode, as JSONL files as in the app.
+  opened = await openApp(manifest, { args: { dir: options.folder }, kinds: [new JsonlKind()] });
   return widecode.w;
 };
 

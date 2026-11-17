@@ -1,22 +1,20 @@
-// The folder's session records (the conversation's SessionStore) over the sessions model: one JSONL
-// store per folder, opened when a folder opens, the rows followed live, and the synchronous answers
-// the conversation and the plugin API take read from them. A save goes through the model in order,
+// The folder's session records (the conversation's SessionStore) over the sessions model, in the
+// app's `main` store (src/app.ts: the folder's `.widecode/` as JSONL files, memory with --ephemeral
+// and in a test), which the run opened before any controller: the rows followed live, and the
+// synchronous answers the conversation and the plugin API take read from them. A save goes through the model in order,
 // its record answered from a pending map until the row lands. The records an earlier widecode kept
 // as `.widecode/sessions/<id>.json` are imported the first time their folder opens, and left there.
 // The account's limits stay the store's (limits.json). The skill runs of the folder's sessions are a
 // second model beside them (`.widecode/skills.jsonl`), summed per skill for the Skills tab.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { openJsonl } from "@lightstart/light/model/jsonl";
 import { LiveRows, modelQuery } from "@lightstart/light/model/binder";
-import type { Store as ModelStore } from "@lightstart/light/model/types.ts";
 import { effect } from "@lightstart/light/signals";
 import { recordOf, text } from "@lightstart/lib/json.ts";
 import { Hook } from "@lightstart/lib/hook.ts";
 import { Limits, SessionMeta, SessionStore } from "../conversation/session-store.ts";
 import { sessions } from "../models/sessions.ts";
 import { skills } from "../models/skills.ts";
-import { fileIO } from "./file-io.ts";
 import { Store } from "./store.ts";
 
 /** A skill run as the folder keeps it. */
@@ -70,7 +68,6 @@ export class SessionRecords extends SessionStore {
   /** The folder whose records these are ("" before one opens). */
   folder = "";
   onNote: ((text: string) => void) | null = null;
-  private db: ModelStore | null = null;
   private rows: LiveRows<Record<string, unknown>> | null = null;
   private skillRows: LiveRows<Record<string, unknown>> | null = null;
   private readonly skillPending = new Map<string, SkillRunRow>();
@@ -84,13 +81,11 @@ export class SessionRecords extends SessionStore {
     this.changed = changed;
   }
 
-  /** The records of `folder`: its store opened (the one before closed), the old files imported, the rows followed. */
+  /** The records of `folder` (the app's store holds them): the old files imported, the rows followed. */
   async open(folder: string): Promise<void> {
     await this.close();
     this.folder = folder;
-    const dir = join(folder, ".widecode");
-    this.db = await openJsonl({ name: "widecode", dir, io: fileIO(), models: [sessions, skills] });
-    await this.importOld(join(dir, "sessions"), folder);
+    await this.importOld(join(folder, ".widecode", "sessions"), folder);
     const rows = new LiveRows<Record<string, unknown>>();
     rows.use(modelQuery<Record<string, unknown>>(sessions, { order: "-updatedMs" }));
     this.rows = rows;
@@ -231,9 +226,6 @@ export class SessionRecords extends SessionStore {
     if (kept !== null) kept.dispose();
     this.skillRows = null;
     this.skillPending.clear();
-    const db = this.db;
-    this.db = null;
-    if (db !== null) await db.close();
     this.pending.clear();
   }
 

@@ -17,6 +17,7 @@ import { Hook } from "@lightstart/lib/hook.ts";
 import { cleanTitle, shownTitle, Titler } from "../src/agent/titles.ts";
 import { closeWidecode, openWidecode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { openFolderStore } from "./support/records.ts";
 
 const home = mkdtempSync(join(tmpdir(), "widecode-home-"));
 const stub = join(process.cwd(), "test", "fake-title.sh");
@@ -97,11 +98,13 @@ const main = async (): Promise<void> => {
   eq("a flat limits file is Claude Code's, not another agent's", String(after.limits("opencode").fiveHour.usedPercent), "-1");
   const kept = JSON.parse(readFileSync(join(fresh, "config.json"), "utf8")) as { clipboard?: unknown; columns?: unknown; permissions?: unknown; agent?: unknown; keymap?: unknown };
   ok("the migration keeps the keys it did not move", kept.clipboard === "osc52" && JSON.stringify(kept.columns) === '{"chat":40}' && JSON.stringify(kept.permissions) === '{"ask":["Bash(rm *)"]}' && kept.agent === "opencode" && kept.keymap === "vi");
+  const db = await openFolderStore(project);
   const afterRecords = new SessionRecords(after, new Hook());
   await afterRecords.open(project);
   const moved = afterRecords.session("old-1", project);
   ok("a record moved into its project, read by the folder's records", moved !== null && moved.title === "From ctui");
   await afterRecords.close();
+  await db.close();
   ok("the old folder stays with the record it could not move", existsSync(old) && existsSync(join(old, "sessions", "gone.json")));
   eq("a second run does nothing", new Store(fresh).migrateFrom(old), "");
   const movedOther = new Limits();
