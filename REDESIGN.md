@@ -123,7 +123,13 @@ Each round leaves widecode building, its 127 tests passing (except the `pi` one,
       - Views import the controllers, and `Host` thins down to the facade the plugin api answers through.
       - Hooks become signals.
       - `commands.ts` is split, so each command lives with the controller it acts on.
-4. **Persistence:**
+4. **Persistence** (done in part, `648699d`, after light #74, #76 and #78):
+   - The session and skill records live in the app's `main` store: the folder's `.widecode/` as JSONL, memory with `--ephemeral`, reopened by the run after an `/open`. `SessionRecords` no longer opens a store.
+   - Kept as they are, on purpose:
+     - the prompt history, a log rotated past 4 MB and read lazily, which a model store would load whole;
+     - trust, limits, config, state and keys: JSON files the user may edit, which moving would mean a migration.
+
+   The original plan for this round:
    - the two stores;
    - `sessions`, `skills` and `history` in the project store, and `trust` and `limits` in the user store, with the old files imported once;
    - one settings merge for plugins, columns, permissions, keymap, agent and log.
