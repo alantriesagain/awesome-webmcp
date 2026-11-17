@@ -1,11 +1,11 @@
-// node-only
+// ffi: @lightstart/plugins/native/ffi.json
 // The app's built-in plugin sources evaluate at top level under the harness's prelude: they read
 // widecode.util, widecode.theme and widecode.version without throwing, so the daemon can load the
-// same files the app does. The test reads the sources the app's prepare step wrote (a test run of
-// the app leaves them under src/runtime/generated); without them it strips the plugins' TypeScript.
+// same files the app does. The test reads them as the app's prepare step wrote them, dist/plugins/<id>/,
+// and evaluates each as the harness does: its folder's files registered, its index.js an ES module.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { stripTypeScriptTypes } from "node:module";
 import { join } from "node:path";
+import { moduleFilesOf } from "@lightstart/plugins/sources.ts";
 import { HostAnswer, HostHandler, JsEngine, OK } from "@lightstart/plugins/engine.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { EXT_PRELUDE } from "../src/harness/ext/prelude.ts";
@@ -29,26 +29,20 @@ class BuiltinSource {
 }
 
 const main = async (): Promise<void> => {
-  // The node stand-in for the engine's native calls, as the FFI manifest's node preload binds it.
-  await import(["@lightstart/plugins", "native", "wcjs-node.mjs"].join("/"));
-  const generated = join("src", "runtime", "generated");
-  const plugins = join("plugins");
+  const built = join(process.cwd(), "dist", "plugins");
   const sources: BuiltinSource[] = [];
-  if (existsSync(generated)) {
-    for (const name of readdirSync(generated).filter((n) => n.endsWith(".js.txt")).sort()) sources.push(new BuiltinSource(name, readFileSync(join(generated, name), "utf8")));
-  } else {
-    for (const name of readdirSync(plugins).sort()) {
-      const path = name.endsWith(".ts") ? join(plugins, name) : join(plugins, name, "index.ts");
-      if (existsSync(path)) sources.push(new BuiltinSource(name, stripTypeScriptTypes(readFileSync(path, "utf8")).replace(/^export \{\};\s*$/m, "")));
-    }
+  for (const id of existsSync(built) ? readdirSync(built).sort() : []) {
+    const index = join(built, id, "index.js");
+    if (existsSync(index)) sources.push(new BuiltinSource(index, readFileSync(index, "utf8")));
   }
   const engine = new JsEngine(new Quiet(), 32, 1000);
-  const built = engine.eval(EXT_PRELUDE, "harness:plugin-prelude");
-  eq("the prelude evaluates", String(built.status), String(OK));
+  const prelude = engine.eval(EXT_PRELUDE, "harness:plugin-prelude");
+  eq("the prelude evaluates", String(prelude.status), String(OK));
   let failed = "";
   for (const source of sources) {
     engine.eval("__extFile(" + JSON.stringify(source.name) + ")", "harness:plugin-file");
-    const evaluated = engine.eval("(function () {\n" + source.code + "\n})();", source.name);
+    for (const f of moduleFilesOf(source.name)) engine.addModule(f.file, f.code);
+    const evaluated = engine.evalModule(source.code, source.name + "#1");
     if (evaluated.status !== OK && failed.length === 0) failed = source.name + ": " + evaluated.message();
   }
   ok("there are built-in plugins to evaluate", sources.length > 0);
