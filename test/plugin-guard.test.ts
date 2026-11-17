@@ -37,6 +37,13 @@ const failing = `widecode.plugin({
   },
 });`;
 
+const hungry = `widecode.plugin({
+  id: "hungry",
+  activate(api) {
+    api.commands.add({ name: "/hungry", help: "fill the engine", run: () => { throw new Error("InternalError: out of memory"); } });
+  },
+});`;
+
 const main = async (): Promise<void> => {
   const logFile = join(folder, "guard.log");
   mkdirSync(folder, { recursive: true });
@@ -65,6 +72,20 @@ const main = async (): Promise<void> => {
   });
   for (let i = 0; i < 20; i++) w.host.roles.chat.submit("/fail");
   ok("a plugin failing repeatedly is switched off, saying why", !w.host.kernel.has("failing") && w.js.errors.some((e) => e.includes("plugin failing switched off: it kept failing: Error: nope")));
+  w.host.kernel.stop();
+  w.js.stopWatching();
+  w.host.workspace.close();
+
+  w = await openWidecode({
+    folder,
+    before: (app: Widecode) => {
+      app.js.extra = [new PluginSource("hungry.js", hungry)];
+    },
+  });
+  w.host.roles.chat.submit("/hungry");
+  ok("an engine out of memory starts the plugins again instead of switching them off", w.host.kernel.has("hungry") && w.js.errors.some((e) => e.includes("ran out of their 64 MB and were started again")));
+  for (let i = 0; i < 20; i++) w.host.roles.chat.submit("/hungry");
+  ok("running out again soon after counts as any failure, and switches the plugin off", !w.host.kernel.has("hungry"));
   w.host.kernel.stop();
   w.js.stopWatching();
   w.host.workspace.close();

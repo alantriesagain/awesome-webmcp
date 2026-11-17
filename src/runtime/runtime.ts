@@ -45,6 +45,10 @@ const ERRORS_KEPT = 100;
 /** A plugin whose calls fail this many times within `FAIL_WINDOW_MS` is switched off. */
 const FAILURES_MAX = 20;
 const FAIL_WINDOW_MS = 10_000;
+/** What QuickJS says when the engine reached its memory limit. */
+const OUT_OF_MEMORY = "out of memory";
+/** The engine is started again for running out of memory at most once in this long. */
+const MEMORY_RELOAD_MS = 10 * 60 * 1000;
 
 /** A plugin a JS source registered, run through the runtime; `reg` is its registration in the prelude (the functions it made), `gen` the instance started last. */
 /** A plugin source as the status bar names it: a file's name, a folder plugin's folder (`notes/`). */
@@ -135,6 +139,10 @@ export class JsRuntime extends Bridge {
   errors: string[] = [];
   /** When each owner's recent calls failed, for switching off one that keeps failing. */
   private readonly failures = new Map<string, number[]>();
+  /** When the engine was last started again for running out of memory (0: never). */
+  private memoryReloadAt = 0;
+  /** Why the next reload happens, said once it is done ("" for a reload the user asked for). */
+  private reloadedFor = "";
   private engine: JsEngine | null = null;
   private file = "";
   /** The file being evaluated again on its own, and what it registered meanwhile. */
@@ -506,6 +514,9 @@ export class JsRuntime extends Bridge {
     if (old !== null) old.free();
     this.errors = [];
     this.load();
+    const why = this.reloadedFor;
+    this.reloadedFor = "";
+    if (why.length > 0) this.fail(why);
     const keysNote = this.host.keys.applyUser();
     if (keysNote.length > 0) this.fail(keysNote);
     const before = k.problems.length;
@@ -667,6 +678,24 @@ export class JsRuntime extends Bridge {
   }
 
   /** Stop plugin `owner` and drop what it added, saying why. */
+  /**
+   * The engine reached its memory limit: every plugin's call fails now, whichever plugin grew, so
+   * start them all again in a fresh engine (what they keep in state.json stays) rather than
+   * switching them off one by one. At most once in `MEMORY_RELOAD_MS`: past that, the failures
+   * count as any others and switch the plugins off. Answers whether it reloads.
+   */
+  private reloadForMemory(): boolean {
+    const now = Date.now();
+    if (this.memoryReloadAt > 0 && now - this.memoryReloadAt < MEMORY_RELOAD_MS) return false;
+    this.memoryReloadAt = now;
+    this.failures.clear();
+    const text = "the plugins ran out of their " + String(this.memoryMb) + " MB and were started again (config.json's \"pluginMemoryMb\" raises it)";
+    // Said once the plugins are back, the reload starting the error list anew (after the call, when a plugin's call is running).
+    this.reloadedFor = text;
+    this.reload();
+    return true;
+  }
+
   /** The bytes the plugins' engine holds, what its `memoryMb` limit counts; 0 without an engine. */
   memoryBytes(): number {
     return this.engine === null ? 0 : this.engine.memory();
@@ -679,6 +708,7 @@ export class JsRuntime extends Bridge {
 
   /** Report a failed call, and switch `owner` off once its calls fail too often in a short window. */
   private failing(owner: string, message: string): void {
+    if (message.includes(OUT_OF_MEMORY) && this.reloadForMemory()) return;
     const now = Date.now();
     let times = this.failures.get(owner);
     if (times === undefined) {

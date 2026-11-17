@@ -42,6 +42,14 @@ const main = async (): Promise<void> => {
   eq("the clipboard's way as set", new Store(home).loadConfig(defaults).clipboard, "osc52");
   writeFileSync(join(home, "config.json"), readFileSync(join(home, "config.json"), "utf8").replace('"clipboard"', '"keymap": "vi",\n  "clipboard"'));
   eq("the keymap as set", new Store(home).loadConfig(defaults).keymap, "vi");
+  const withKeymap = readFileSync(join(home, "config.json"), "utf8");
+  eq("the plugins' engine holds 64 MB by default", String(new Store(home).loadConfig(defaults).pluginMemoryMb), "64");
+  writeFileSync(join(home, "config.json"), withKeymap.replace('"keymap": "vi"', '"keymap": "vi",\n  "pluginMemoryMb": 128'));
+  eq("pluginMemoryMb as set", String(new Store(home).loadConfig(defaults).pluginMemoryMb), "128");
+  writeFileSync(join(home, "config.json"), withKeymap.replace('"keymap": "vi"', '"keymap": "vi",\n  "pluginMemoryMb": 4'));
+  const tooSmall = new Store(home).loadConfig(defaults);
+  ok("a pluginMemoryMb under 16 keeps the default and says so", tooSmall.pluginMemoryMb === 64 && tooSmall.notice.includes("pluginMemoryMb"));
+  writeFileSync(join(home, "config.json"), withKeymap);
   const logOf = (value: string): string => {
     const text = readFileSync(join(home, "config.json"), "utf8");
     const at = text.indexOf('"log": ');

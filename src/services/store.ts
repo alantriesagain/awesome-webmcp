@@ -52,6 +52,8 @@ export class Config {
   permissions: unknown = null;
   /** This run's log: `"log": false`, `true`, or `{ "enabled", "dir", "keep" }`. */
   log = new LogConfig();
+  /** The memory the plugins' engine may hold, in MB: `"pluginMemoryMb"`, at least 16. */
+  pluginMemoryMb = 64;
   /** Why the file was not used as written, or what was moved in it ("" for neither). */
   notice = "";
   /** There was no config.json: `seedConfig` writes one with the plugins' sections. */
@@ -70,6 +72,7 @@ interface Fields {
   keep?: unknown;
   agent?: unknown;
   keymap?: unknown;
+  pluginMemoryMb?: unknown;
   titles?: unknown;
   models?: unknown;
   statusline?: unknown;
@@ -318,6 +321,10 @@ export class Store {
     if (typeof root.keymap === "string") c.keymap = root.keymap;
     if (root.permissions !== undefined) c.permissions = root.permissions;
     c.log = logConfigOf(root.log);
+    if (root.pluginMemoryMb !== undefined) {
+      if (typeof root.pluginMemoryMb === "number" && Number.isFinite(root.pluginMemoryMb) && root.pluginMemoryMb >= 16) c.pluginMemoryMb = Math.floor(root.pluginMemoryMb);
+      else c.notice = "config.json's \"pluginMemoryMb\" is a number of megabytes, at least 16; using " + String(c.pluginMemoryMb);
+    }
     if (root.statusline === undefined && root.titles === undefined && root.models === undefined) {
       c.plugins = root.plugins === undefined ? null : root.plugins;
       return c;

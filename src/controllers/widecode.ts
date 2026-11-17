@@ -159,6 +159,7 @@ export class WidecodeController extends Controller {
     const host = w.host;
     const store = settings.current.store;
     const config = settings.current.config;
+    if (config !== null) w.js.memoryMb = config.pluginMemoryMb;
     // JS plugins, before anything loads them (a first run's config takes their sections): the user's
     // folder (the built-ins `light install` wrote among them, read with --ephemeral too), and the
     // project's own once the user trusts it.

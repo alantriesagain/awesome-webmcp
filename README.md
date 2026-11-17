@@ -161,7 +161,9 @@ the languages),
 running in an embedded QuickJS. Each can be switched off in config.json or replaced: a `.js` file in
 `~/.widecode/plugins/` with a built-in's id overrides it, a new one adds a feature, and a project's
 own `.widecode/plugins/` run once the folder is trusted. Saving a plugin reloads the plugins, as
-`/reload` does. `PLUGINS.md` has the API and how to write one, and `widecode.d.ts`
+`/reload` does. The plugins share one engine of 64 MB (config.json's `"pluginMemoryMb"`, at least 16);
+when it fills, they are started again in a fresh one, at most once in ten minutes, and the log's
+`alive` line says how much it holds. `PLUGINS.md` has the API and how to write one, and `widecode.d.ts`
 types it.
 
 The conversation talks to an agent a plugin brings, Claude Code's by default (`plugins/claude/index.ts`,
