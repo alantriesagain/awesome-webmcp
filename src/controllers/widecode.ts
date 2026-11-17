@@ -30,6 +30,11 @@ import settings from "./settings.ts";
 
 /** How often the log says the run is alive. */
 const ALIVE_MS = 5 * 60 * 1000;
+/** The share of the plugins' engine's memory limit past which the log says so, once. */
+const MEMORY_WARN = 0.75;
+
+/** Bytes as megabytes with one decimal. */
+const megabytes = (bytes: number): string => (bytes / (1024 * 1024)).toFixed(1);
 
 export class WidecodeController extends Controller {
   /** Everything the app's parts hold, made by connected(). */
@@ -44,6 +49,8 @@ export class WidecodeController extends Controller {
   private wired = false;
   /** The session and its turn, as the log says them; the mounted app's. */
   private where: () => string = () => "";
+  /** Whether the log said the plugins' engine passed `MEMORY_WARN` of its limit. */
+  private memoryWarned = false;
   /** Whether what this start opened was stopped already (a test's closeWidecode, then the app's stop). */
   private closed = true;
 
@@ -101,6 +108,14 @@ export class WidecodeController extends Controller {
   }
 
   /** Take over what the start before carried (an `/open`): the conversation's CLI, arguments, model and effort, and the agent chosen. */
+  /** Say once in the log when the plugins' engine passes `MEMORY_WARN` of its limit. */
+  private watchMemory(): void {
+    const js = this.w.js;
+    if (this.memoryWarned || js.memoryBytes() < js.memoryMb * 1024 * 1024 * MEMORY_WARN) return;
+    this.memoryWarned = true;
+    log("plugins: the engine holds " + megabytes(js.memoryBytes()) + " MB of its " + String(js.memoryMb) + " MB");
+  }
+
   private takeOver(w: Widecode): void {
     const carry = run.takeCarry();
     this.opened = "";
@@ -292,14 +307,17 @@ export class WidecodeController extends Controller {
         frameAt = trail.within("frame", "paint");
       }, FLUSH_RENDER - 1);
       frames.onFlush(() => trail.leave(frameAt), FLUSH_AFTER + 1);
-      setInterval(() => log("alive · " + this.where()), ALIVE_MS);
+      setInterval(() => {
+        log("alive · " + this.where());
+        this.watchMemory();
+      }, ALIVE_MS);
     }
     /** The session and its turn, as the log says them. */
     let turnSince = 0;
     const where = (): string => {
       const c = host.conversation;
       const sid = c.model.sessionId.length > 0 ? c.model.sessionId : c.resumeId;
-      return "session " + (sid.length > 0 ? sid : "none") + " · " + c.agent.name() + " · " + (turnSince > 0 ? "turn running for " + String(Math.round((Date.now() - turnSince) / 1000)) + " s" : "idle") + " · " + String(trail.frames) + " frames";
+      return "session " + (sid.length > 0 ? sid : "none") + " · " + c.agent.name() + " · " + (turnSince > 0 ? "turn running for " + String(Math.round((Date.now() - turnSince) / 1000)) + " s" : "idle") + " · " + String(trail.frames) + " frames · plugins " + megabytes(this.w.js.memoryBytes()) + "/" + String(this.w.js.memoryMb) + " MB";
     };
     let loggedSession = "";
     host.session.conversationChanged.add("log", () => {

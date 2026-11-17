@@ -667,6 +667,11 @@ export class JsRuntime extends Bridge {
   }
 
   /** Stop plugin `owner` and drop what it added, saying why. */
+  /** The bytes the plugins' engine holds, what its `memoryMb` limit counts; 0 without an engine. */
+  memoryBytes(): number {
+    return this.engine === null ? 0 : this.engine.memory();
+  }
+
   switchOff(owner: string, why: string): void {
     for (const p of this.table.plugins.slice()) if (p.id === owner) this.retire(p, "the plugin " + owner + " was switched off");
     this.fail("plugin " + owner + " switched off: " + why);
