@@ -142,7 +142,7 @@ Each round leaves widecode building, its 127 tests passing (except the `pi` one,
    - `src/agent/claude.ts` and `envelope.ts` removed;
    - the Claude and ACP adapters split into transport, records and event mapping.
 
-8. **Plugins are normal files** (decided after round 3). Every built-in, the agent adapters (`claude`, `acp`, `pi`) among them, is a plugin folder on disk. The binary embeds none, and built-ins and user plugins load the same way.
+8. **Plugins are normal files** (decided after round 3; done but the split: light #68, #70 and #72; widecode `80fef98`, `c80a645` and `df1b920`). Every built-in, the agent adapters (`claude`, `acp`, `pi`) among them, is a plugin folder on disk. The binary embeds none, and built-ins and user plugins load the same way.
    - **light, `@lightstart/plugins`:**
      - a plugin is ES modules: `JsEngine.addModule(file, code)` registers a plugin's files, and `evalModule(code, file)` runs its entry;
      - the engine resolves a relative import only among the registered files, so a plugin still reaches nothing else;
