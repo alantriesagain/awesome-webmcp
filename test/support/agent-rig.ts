@@ -1,7 +1,7 @@
 // A rig for the agent part of a built-in plugin: an AcpAgent over the fake model, the test playing
-// the ACP client. The plugin sources are the ones the app's prepare step wrote for a test run
-// (src/runtime/generated/<id>.js.txt: the plugin's index.ts with its types stripped), which keeps
-// these tests free of node's type stripper and runnable natively as well as under node. Settings and
+// the ACP client. The plugin sources are the ones the app's prepare step wrote (dist/plugins/<id>/:
+// the plugin's files with their types stripped), which keeps these tests free of node's type
+// stripper and runnable natively as well as under node. Settings and
 // switches are the store's config.json, as the daemon reads them.
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,23 +19,16 @@ import { HarnessPaths } from "../../src/harness/paths.ts";
 import { ToolSet, builtInTools } from "../../src/harness/tools/tool.ts";
 
 /** The folder holding the generated sources, from the member's folder or the repository's root. */
-const generatedDir = (): string => {
-  const local = join("src", "runtime", "generated");
-  if (existsSync(local)) return local;
-  const root = join("apps", "widecode", "src", "runtime", "generated");
-  if (existsSync(root)) return root;
-  return local;
-};
+/** The built-in plugins as the app's prepare step wrote them: dist/plugins/<id>/. */
+const builtinDir = (): string => join(process.cwd(), "dist", "plugins");
 
 /** The built-in plugins' sources, as the app's prepare step wrote them. */
 export const builtinSources = (ids: string[]): PluginSource[] => {
-  const dir = generatedDir();
   const out: PluginSource[] = [];
   for (const id of ids) {
-    const path = join(dir, id + ".js.txt");
+    const path = join(builtinDir(), id, "index.js");
     if (!existsSync(path)) throw new Error("agent-rig: no " + path + "; run the app's prepare step (node --no-warnings scripts/builtin-plugins.mjs)");
-    const name = "builtin:" + id + ".js";
-    out.push(new PluginSource(name, readFileSync(path, "utf8")));
+    out.push(new PluginSource(path, readFileSync(path, "utf8")));
   }
   return out;
 };

@@ -15,10 +15,10 @@ import { listOf, num, parseJson, recordOf, str } from "@lightstart/lib/json.ts";
 import { log, trail } from "@lightstart/lib/log.ts";
 import { Closer } from "@lightstart/lib/timing.ts";
 import { FAILED, HostAnswer, HostHandler, JsEngine, JsResult, OVER_BUDGET, OK } from "@lightstart/plugins/engine.ts";
-import { PluginSource, sourcesIn } from "@lightstart/plugins/sources.ts";
+import { PluginSource, isFolderPlugin, moduleFilesOf, sourcesIn } from "@lightstart/plugins/sources.ts";
 import { Abort } from "../loop/abort.ts";
 import { Message } from "../model/message.ts";
-import { HarnessPaths } from "../paths.ts";
+import { HarnessPaths, INSTALLED } from "../paths.ts";
 import { ExecProcess } from "../tools/proc.ts";
 import { ExtraTool, Tool, ToolContext, ToolOutcome } from "../tools/tool.ts";
 import { ExtContext } from "./context.ts";
@@ -52,6 +52,20 @@ class Pending {
 class Waiter {
   resolve: ((r: CallResult) => void) | null = null;
 }
+
+/** A source as the engine evaluates it: a folder plugin's entry as it is (an ES module), a file's in a scope of its own. */
+const scriptOf = (source: PluginSource): string => (isFolderPlugin(source.file) ? source.code : "(function () {\n" + source.code + "\n})();");
+
+/** The generation the next folder plugin's modules are named with. */
+let moduleGen = 0;
+
+/** Evaluate a plugin's `code` from `file`: a folder plugin's as ES modules (its files registered, its entry a new generation), a file's as the script `scriptOf` made. */
+const evalPlugin = (engine: JsEngine, file: string, code: string): JsResult => {
+  if (!isFolderPlugin(file)) return engine.eval(code, file);
+  for (const f of moduleFilesOf(file)) engine.addModule(f.file, f.code);
+  moduleGen++;
+  return engine.evalModule(code, file + "#" + String(moduleGen));
+};
 
 export class ExtEntry {
   readonly id: string;
@@ -223,6 +237,13 @@ export class Extensions extends HostHandler {
     this.key = folder + "\u0000" + (trusted ? "1" : "0");
   }
 
+  /** A plugin folder's sources, an installed copy of a built-in left out while the built-ins come from beside the binary. */
+  private sourcesOf(dir: string): PluginSource[] {
+    const all = sourcesIn(dir);
+    if (this.builtins.length === 0) return all;
+    return all.filter((s) => !(isFolderPlugin(s.file) && existsSync(join(dirname(s.file), INSTALLED))));
+  }
+
   /** The folders the plugin files are read from: the store's, and a trusted folder's. */
   private pluginDirs(): string[] {
     const out: string[] = [this.paths.pluginsDir()];
@@ -230,14 +251,14 @@ export class Extensions extends HostHandler {
     return out;
   }
 
-  /** Evaluate `file`'s wrapped code in the engine, logging a failure. */
+  /** Evaluate `file`'s code in the engine (a folder plugin's as ES modules, its files registered and its entry a new generation; a file's wrapped), logging a failure. */
   private evaluate(engine: JsEngine, file: string, code: string): boolean {
     const begin = engine.eval("__extFile(" + JSON.stringify(file) + ")", "harness:plugin-file");
     if (begin.status !== OK) {
       log("plugin " + file + ": " + begin.message());
       return false;
     }
-    const evaluated = engine.eval(code, file);
+    const evaluated = evalPlugin(engine, file, code);
     if (evaluated.status !== OK) {
       log("plugin " + file + ": " + evaluated.message());
       return false;
@@ -328,9 +349,9 @@ export class Extensions extends HostHandler {
     const sources: PluginSource[] = [];
     for (const source of this.builtins) sources.push(source);
     for (const dir of this.pluginDirs()) {
-      const list = sourcesIn(dir);
+      const list = this.sourcesOf(dir);
       const loaded: LoadedSource[] = [];
-      for (const source of list) loaded.push(new LoadedSource(source.file, "(function () {\n" + source.code + "\n})();"));
+      for (const source of list) loaded.push(new LoadedSource(source.file, scriptOf(source)));
       this.dirSources.set(dir, loaded);
       for (const source of list) sources.push(source);
     }
@@ -352,7 +373,7 @@ export class Extensions extends HostHandler {
     if (pluginDispatchId.status === OK) this.pluginDispatchId = num(parseJson(pluginDispatchId.text), -1);
     engine.eval("__extReset()", "harness:plugin-prelude");
     for (const source of sources) {
-      const code = "(function () {\n" + source.code + "\n})();";
+      const code = scriptOf(source);
       if (!this.evaluate(engine, source.file, code)) continue;
       this.sources.push(new LoadedSource(source.file, code));
       this.idsByFile.set(source.file, this.activeIdsFor(engine, source.file));
@@ -426,7 +447,7 @@ export class Extensions extends HostHandler {
     const nowFiles: string[] = [];
     for (const dir of dirs) {
       const loaded: LoadedSource[] = [];
-      for (const source of sourcesIn(dir)) loaded.push(new LoadedSource(source.file, "(function () {\n" + source.code + "\n})();"));
+      for (const source of this.sourcesOf(dir)) loaded.push(new LoadedSource(source.file, scriptOf(source)));
       nowByDir.set(dir, loaded);
       for (const source of loaded) nowFiles.push(source.file);
     }
@@ -445,7 +466,7 @@ export class Extensions extends HostHandler {
     this.dirSources.clear();
     for (const dir of dirs) this.dirSources.set(dir, nowByDir.get(dir) ?? []);
     this.sources.length = 0;
-    for (const source of this.builtins) this.sources.push(new LoadedSource(source.file, "(function () {\n" + source.code + "\n})();"));
+    for (const source of this.builtins) this.sources.push(new LoadedSource(source.file, scriptOf(source)));
     for (const dir of dirs) for (const source of this.dirSources.get(dir) ?? []) this.sources.push(source);
     const fresh: string[] = [];
     for (const file of changed) {
@@ -502,7 +523,7 @@ export class Extensions extends HostHandler {
     for (const dir of this.pluginDirs()) {
       if (!existsSync(dir)) continue;
       this.watchOne(dir);
-      for (const source of sourcesIn(dir)) if (source.file.endsWith("/index.js") && dirname(dirname(source.file)) === dir) this.watchOne(dirname(source.file));
+      for (const source of this.sourcesOf(dir)) if (source.file.endsWith("/index.js") && dirname(dirname(source.file)) === dir) this.watchOne(dirname(source.file));
     }
   }
 
@@ -1023,7 +1044,7 @@ export class ExtSession {
         log("plugin " + source.file + ": " + begin.message());
         continue;
       }
-      const evaluated = engine.eval(source.code, source.file);
+      const evaluated = evalPlugin(engine, source.file, source.code);
       if (evaluated.status !== OK) {
         log("plugin " + source.file + ": " + evaluated.message());
         continue;
@@ -1042,7 +1063,7 @@ export class ExtSession {
       log("plugin " + source.file + ": " + begin.message());
       return;
     }
-    const evaluated = engine.eval(source.code, source.file);
+    const evaluated = evalPlugin(engine, source.file, source.code);
     if (evaluated.status !== OK) log("plugin " + source.file + ": " + evaluated.message());
   }
 

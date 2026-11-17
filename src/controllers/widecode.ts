@@ -7,7 +7,7 @@
 // again clean. Round 3 dissolves this into the controllers the plan names.
 import { readFileSync } from "node:fs";
 import { errorMessage, isRecord } from "@lightstart/lib/json.ts";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 import { log, trail } from "@lightstart/lib/log.ts";
 import { composeWidecode, Widecode } from "../compose.ts";
 import { NoStateFile } from "@lightstart/kernel/settings.ts";
@@ -15,7 +15,8 @@ import { checkSource } from "../api/plugins.ts";
 import { AgentChoice, HarnessFile, Onboarding, folderCarries, runOnboarding } from "../views/onboarding.ts";
 import { FLUSH_AFTER, FLUSH_RENDER, FLUSH_VIEWS, Renderer, TInput, frames } from "@lightstart/light/native/tui";
 import { Selftest } from "../selftest.ts";
-import type { Config, Store } from "../services/store.ts";
+import { Store } from "../services/store.ts";
+import type { Config } from "../services/store.ts";
 import { Controller } from "@lightstart/light/controller/class.ts";
 import { BUILD } from "../build.ts";
 import { Command } from "@lightstart/kernel/commands.ts";
@@ -156,12 +157,11 @@ export class WidecodeController extends Controller {
     host.peersLauncher = selftest.length > 0 ? "" : process.execPath;
     host.real = selftest.length === 0;
     host.onLog = (text: string) => log(text);
-    // JS plugins: the user's folder, and the project's own once the user trusts it.
+    // JS plugins: the user's folder (the built-ins `light install` wrote among them, read with --ephemeral
+    // too), and the project's own once the user trusts it.
     const projectPlugins = host.harness.pluginsDir();
-    if (store !== null) {
-      w.js.dirs.push(store.pluginsDir());
-      if (store.trusted(where)) w.js.dirs.push(projectPlugins);
-    }
+    w.js.dirs.push(join(Store.defaultRoot(), "plugins"));
+    if (store !== null && store.trusted(where)) w.js.dirs.push(projectPlugins);
     // The agent: --agent, else config.json's "agent"; one a plugin brings is taken up when it registers.
     if (this.opened.length === 0) host.session.agentId.value = app.args.string("agent") ?? (config !== null && config.agent.length > 0 ? config.agent : "claude");
     // The user's key bindings (keys.json), read again on /reload.
@@ -187,6 +187,11 @@ export class WidecodeController extends Controller {
     // Without a store (--ephemeral) titles would have nowhere to go.
     if (store === null) host.session.titler.allowed = false;
     for (const p of host.kernel.problems) log("plugin " + p);
+    // Without the built-ins there is no chat to type in: say where they come from.
+    if (!host.kernel.has("chat")) {
+      const why = "no chat plugin: the built-in plugins are not installed (light install in widecode's folder writes them into " + join(Store.defaultRoot(), "plugins") + ")";
+      host.screen.tell(why);
+    }
   }
 
   /** The commands that need the user's store: the folder's trust, and the agent to talk to kept in config.json. */

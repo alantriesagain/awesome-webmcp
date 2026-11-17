@@ -2,6 +2,9 @@
 // sessions by folder, its skills and context file, and the keys file beside the store's config.
 import { join } from "node:path";
 
+/** The file `light install` keeps in each built-in plugin's folder it writes (the hash of its files). */
+export const INSTALLED = ".widecode-installed";
+
 export class HarnessPaths {
   readonly storeRoot: string;
   /** The user's home, whose `.agents/skills` and `.claude/skills` hold the user's skills ("" for none). */
@@ -15,7 +18,7 @@ export class HarnessPaths {
     return join(this.storeRoot, "harness");
   }
 
-  /** The user's plugins, the app's (`~/.widecode/plugins`). */
+  /** The user's plugins, the app's (`~/.widecode/plugins`), the built-ins `light install` wrote among them. */
   pluginsDir(): string {
     return join(this.storeRoot, "plugins");
   }

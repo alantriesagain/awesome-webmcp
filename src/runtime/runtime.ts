@@ -12,7 +12,7 @@
 // stops every JS plugin, drops what they added, and evaluates the sources again in a fresh context.
 import { trail } from "@lightstart/lib/log.ts";
 import { errorMessage } from "@lightstart/lib/json.ts";
-import { existsSync, readdirSync, readFileSync, statSync, watch } from "node:fs";
+import { existsSync, readFileSync, statSync, watch } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { Host } from "../host/host.ts";
 import { Agent } from "../conversation/agent.ts";
@@ -25,7 +25,8 @@ import { ToolsWidget } from "../views/tools-widget.ts";
 import { Bridge, FAILED, HostAnswer, JsEngine, JsResult, OK, OVER_BUDGET } from "@lightstart/plugins/engine.ts";
 import { JsAgent } from "./agent.ts";
 import { PluginProcess } from "@lightstart/plugins/process.ts";
-import { PluginSource, sourcesIn } from "@lightstart/plugins/sources.ts";
+import { INSTALLED } from "../harness/paths.ts";
+import { PluginSource, foldersOf, isFolderPlugin, moduleFilesOf, printOf, sourcesIn } from "@lightstart/plugins/sources.ts";
 import { PRELUDE } from "./prelude.ts";
 import { PluginTable } from "./registry.ts";
 import { ProcessTable } from "./processes.ts";
@@ -45,56 +46,6 @@ const ERRORS_KEPT = 100;
 /** A plugin a JS source registered, run through the runtime; `reg` is its registration in the prelude (the functions it made), `gen` the instance started last. */
 /** A plugin source as the status bar names it: a file's name, a folder plugin's folder (`notes/`). */
 const shownName = (file: string): string => (basename(file) === "index.js" ? basename(dirname(file)) + "/" : basename(file));
-
-/** The file `light install` keeps in each built-in plugin's folder it writes (the files' hash). */
-export const INSTALLED = ".widecode-installed";
-
-/** Whether `file` is a plugin of its own folder: its `index.js`. */
-const isFolderPlugin = (file: string): boolean => file.endsWith("/index.js") && existsSync(file);
-
-/** The `.js` files under `dir`, its subfolders' too, by path. */
-const filesUnder = (dir: string): PluginSource[] => {
-  const out: PluginSource[] = [];
-  let names: string[] = [];
-  try {
-    names = readdirSync(dir).sort();
-  } catch {
-    return out;
-  }
-  for (const name of names) {
-    const path = join(dir, name);
-    try {
-      if (statSync(path).isDirectory()) for (const f of filesUnder(path)) out.push(f);
-      else if (name.endsWith(".js")) out.push(new PluginSource(path, readFileSync(path, "utf8")));
-    } catch {
-      continue;
-    }
-  }
-  return out;
-};
-
-/** `dir` and the folders under it. */
-const foldersUnder = (dir: string): string[] => {
-  const out = [dir];
-  let names: string[] = [];
-  try {
-    names = readdirSync(dir).sort();
-  } catch {
-    return out;
-  }
-  for (const name of names) {
-    const path = join(dir, name);
-    try {
-      if (statSync(path).isDirectory()) for (const f of foldersUnder(path)) out.push(f);
-    } catch {
-      continue;
-    }
-  }
-  return out;
-};
-
-/** What a folder plugin's files are now, to tell a change in any of them. */
-const printOf = (files: PluginSource[]): string => files.map((f) => f.file + "\n" + f.code).join("\n\u0000\n");
 
 export class JsPlugin extends Plugin {
   readonly runtime: JsRuntime;
@@ -312,7 +263,7 @@ export class JsRuntime extends Bridge {
     engine.eval("__file(" + JSON.stringify(s.file) + ")", "widecode:file");
     let r: JsResult;
     if (isFolderPlugin(s.file)) {
-      const files = filesUnder(dirname(s.file));
+      const files = moduleFilesOf(s.file);
       for (const f of files) engine.addModule(f.file, f.code);
       this.prints.set(s.file, printOf(files));
       this.moduleGen++;
@@ -492,7 +443,7 @@ export class JsRuntime extends Bridge {
     for (const s of before) if (!now.some((n) => n.file === s.file)) this.reloadFile(s.file, null);
     for (const n of now) {
       const prev = before.find((s) => s.file === n.file);
-      const changed = prev === undefined || prev.code !== n.code || (isFolderPlugin(n.file) && this.prints.get(n.file) !== printOf(filesUnder(dirname(n.file))));
+      const changed = prev === undefined || prev.code !== n.code || (isFolderPlugin(n.file) && this.prints.get(n.file) !== printOf(moduleFilesOf(n.file)));
       if (changed) this.reloadFile(n.file, n);
     }
   }
@@ -613,7 +564,7 @@ export class JsRuntime extends Bridge {
       if (!existsSync(d)) continue;
       this.watchOne(d);
       // A plugin of its own folder: its index.js changes inside it, which the folder's watch does not hear.
-      for (const s of sourcesIn(d)) if (isFolderPlugin(s.file) && dirname(dirname(s.file)) === d) for (const sub of foldersUnder(dirname(s.file))) this.watchOne(sub);
+      for (const s of sourcesIn(d)) if (isFolderPlugin(s.file) && dirname(dirname(s.file)) === d) for (const sub of foldersOf(s.file)) this.watchOne(sub);
     }
   }
 

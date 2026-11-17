@@ -5,7 +5,6 @@
 // each requires, leaving out the ones switched off. What it returns holds the widgets for the
 // entry, the selftest and the tests; plugins never reach each other this way, only through the host.
 import { Host } from "./host/host.ts";
-import { BUILTIN_PLUGINS } from "./runtime/builtin.ts";
 import { JsRuntime } from "./runtime/runtime.ts";
 import { Plugin } from "@lightstart/kernel/plugin.ts";
 import type { StateFile } from "@lightstart/kernel/settings.ts";
@@ -37,7 +36,6 @@ export class Widecode {
     this.code = new CodeWidget(host);
     this.tools = new ToolsWidget(host);
     this.js = new JsRuntime(host);
-    this.js.builtins = BUILTIN_PLUGINS.slice();
     this.js.code = this.code;
     this.js.chat = this.chat;
     this.js.tools = this.tools;
