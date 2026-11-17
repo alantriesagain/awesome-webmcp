@@ -59,7 +59,7 @@ const main = async (): Promise<void> => {
         harness: {
           name: "harness",
           command: ["node", main, "--harness", "--harness-home", home, "--log", log, "--harness-fake", fixture],
-          tools: ["node", main, "--harness-tools", "{mode}"],
+          tools: ["node", main, "--harness-tools", "{mode}", "--harness-home", home],
           // The user's skills from a home of the test's, so the machine's own stay out.
           skills: ["env", "HOME=" + home, "node", main, "--harness-skills", "--harness-home", home],
           sessions: ["node", main, "--harness-sessions", "--harness-home", home],
