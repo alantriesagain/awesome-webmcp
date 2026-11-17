@@ -42,6 +42,9 @@ const PROCESS_OUT_MAX = 64 * 1024 * 1024;
 const RELOAD_MS = 300;
 /** Plugin errors kept for `plugins.list` and the log. */
 const ERRORS_KEPT = 100;
+/** A plugin whose calls fail this many times within `FAIL_WINDOW_MS` is switched off. */
+const FAILURES_MAX = 20;
+const FAIL_WINDOW_MS = 10_000;
 
 /** A plugin a JS source registered, run through the runtime; `reg` is its registration in the prelude (the functions it made), `gen` the instance started last. */
 /** A plugin source as the status bar names it: a file's name, a folder plugin's folder (`notes/`). */
@@ -130,6 +133,8 @@ export class JsRuntime extends Bridge {
   readonly table = new PluginTable();
   /** What went wrong loading or running plugins (also told and logged). */
   errors: string[] = [];
+  /** When each owner's recent calls failed, for switching off one that keeps failing. */
+  private readonly failures = new Map<string, number[]>();
   private engine: JsEngine | null = null;
   private file = "";
   /** The file being evaluated again on its own, and what it registered meanwhile. */
@@ -629,9 +634,22 @@ export class JsRuntime extends Bridge {
     this.depth--;
     let over = r.status === OVER_BUDGET;
     for (const e of jobs) if (e.status === OVER_BUDGET) over = true;
-    if (over) this.switchOff(owner, "it ran past its time budget (" + String(this.budgetMs) + " ms)");
-    else if (r.status !== OK) this.fail(owner + ": " + r.message());
-    for (const e of jobs) if (e.status !== OVER_BUDGET) this.fail(owner + ": " + e.message());
+    if (over) {
+      this.failures.delete(owner);
+      this.switchOff(owner, "it ran past its time budget (" + String(this.budgetMs) + " ms)");
+    } else {
+      let bad = false;
+      if (r.status !== OK) {
+        bad = true;
+        this.failing(owner, r.message());
+      }
+      for (const e of jobs) {
+        if (e.status === OVER_BUDGET) continue;
+        bad = true;
+        this.failing(owner, e.message());
+      }
+      if (!bad) this.failures.delete(owner);
+    }
     if (this.depth === 0) {
       if (this.reloadAfter) {
         this.reloadAfter = false;
@@ -652,6 +670,22 @@ export class JsRuntime extends Bridge {
   switchOff(owner: string, why: string): void {
     for (const p of this.table.plugins.slice()) if (p.id === owner) this.retire(p, "the plugin " + owner + " was switched off");
     this.fail("plugin " + owner + " switched off: " + why);
+  }
+
+  /** Report a failed call, and switch `owner` off once its calls fail too often in a short window. */
+  private failing(owner: string, message: string): void {
+    const now = Date.now();
+    let times = this.failures.get(owner);
+    if (times === undefined) {
+      times = [];
+      this.failures.set(owner, times);
+    }
+    while (times.length > 0 && now - times[0] > FAIL_WINDOW_MS) times.shift();
+    times.push(now);
+    this.fail(owner + ": " + message);
+    if (times.length < FAILURES_MAX) return;
+    this.failures.delete(owner);
+    if (this.host.kernel.has(owner)) this.switchOff(owner, "it kept failing: " + message);
   }
 
   private fail(text: string): void {

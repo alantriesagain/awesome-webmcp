@@ -25,6 +25,61 @@ const OWNER_FIRST = [
   "conversation.apply",
 ];
 
+/** How many times a listener's own run may fire its hook again before the rest are dropped. */
+const RERUN_MAX = 8;
+
+/** A hook listener that does not run nested: a fire during its own run waits for it, payload-less fires coalesce, and one outer call re-runs it at most `RERUN_MAX` times. */
+class HookListener {
+  private readonly rt: JsRuntime;
+  private readonly owner: string;
+  private readonly name: string;
+  private readonly fn: number;
+  private running = false;
+  private queue: unknown[] = [];
+  private queuedEmpty = false;
+
+  constructor(rt: JsRuntime, owner: string, name: string, fn: number) {
+    this.rt = rt;
+    this.owner = owner;
+    this.name = name;
+    this.fn = fn;
+  }
+
+  fire(value?: unknown): void {
+    if (this.running) {
+      if (value === undefined) {
+        if (this.queuedEmpty) return;
+        this.queuedEmpty = true;
+      }
+      this.queue.push(value);
+      return;
+    }
+    this.running = true;
+    try {
+      let reruns = 0;
+      let dropped = 0;
+      this.run(value);
+      while (this.queue.length > 0 && this.rt.host.kernel.has(this.owner)) {
+        const next = this.queue.shift();
+        if (next === undefined) this.queuedEmpty = false;
+        if (reruns >= RERUN_MAX) {
+          dropped++;
+          continue;
+        }
+        reruns++;
+        this.run(next);
+      }
+      if (dropped > 0) log("plugins: " + this.owner + ": dropped " + String(dropped) + " re-entrant \"" + this.name + "\" fires past " + String(RERUN_MAX) + " re-runs");
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private run(value: unknown): void {
+    this.rt.invoke(this.owner, this.fn, value === undefined ? "[]" : "[" + json(value) + "]");
+  }
+}
+
 /** A call's arguments for the log: its length, and its first and last 200 characters. */
 export function argsExcerpt(args: string): string {
   if (args.length === 0) return "an empty string";
@@ -64,12 +119,12 @@ export class HostRouter {
         return this.rt.register(str(a[0]), strs(a[1]), a[2], num(a[3]), num(a[4]), str(a[5]), num(a[6]));
       case "on": {
         const owner = str(a[0]);
-        const hook = h.hook(str(a[1]));
+        const name = str(a[1]);
+        const hook = h.hook(name);
         const fn = num(a[2]);
-        if (hook === null) return refuse("no hook named " + str(a[1]));
-        hook.add(owner, (value?: unknown) => {
-          this.rt.invoke(owner, fn, value === undefined ? "[]" : "[" + json(value) + "]");
-        });
+        if (hook === null) return refuse("no hook named " + name);
+        const listener = new HookListener(this.rt, owner, name, fn);
+        hook.add(owner, (value?: unknown) => listener.fire(value));
         return answer(null);
       }
       case "tell":

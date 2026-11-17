@@ -250,11 +250,12 @@ export class ScreenController extends Controller {
     return error;
   }
 
-  /** Show `text` in the status bar for a while (and in the log). */
+  /** Show `text` in the status bar for a while (and in the log); the same text already shown is noted again without firing the hook. */
   tell(text: string): void {
     const ticket = this.messages.next();
+    const same = this.message.value === text;
     this.message.value = text;
-    this.messageChanged.fire();
+    if (!same) this.messageChanged.fire();
     this.note(text);
     setTimeout(() => {
       if (!this.messages.is(ticket)) return;
