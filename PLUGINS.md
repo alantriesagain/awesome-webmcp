@@ -12,7 +12,8 @@ and the agents: Claude Code, and the ones that speak ACP (opencode, the DeepSeek
 
   plugins/        the built-in plugins, a folder each: <id>/index.ts (TypeScript checked against widecode.d.ts)
   widecode.d.ts   the plugin API, for type checking and editors
-  scripts/        builtin-plugins.mjs: the plugins and the docs stripped into the binary (a prepare step)
+  scripts/        builtin-plugins.mjs: the plugins as files in dist/plugins and the docs into the binary (a prepare step);
+                  install-plugins.mjs: the plugins into ~/.widecode/plugins (light install's step)
   src/
     app.ts        the app on @lightstart/app: its flags; `light app` writes the entry, .light/main.ts
     modes/        the runs that are not the interface: --version, --harness, --peers-daemon
@@ -35,19 +36,25 @@ packages/         what the core builds on: @lightstart/kernel, @lightstart/plugi
 
 ## Where plugins come from
 
-1. The built-in plugins, `plugins/<id>/index.ts`. The build strips their types
-   (`scripts/builtin-plugins.mjs`, node's `stripTypeScriptTypes`) into the binary.
-2. The user's, in `~/.widecode/plugins/` (or `$WIDECODE_HOME/plugins`).
+1. The built-in plugins, `plugins/<id>/` in widecode's repository, normal files once built: the
+   prepare step strips their types (`scripts/builtin-plugins.mjs`, node's `stripTypeScriptTypes`)
+   into `dist/plugins/<id>/`, and `light install` writes them into `~/.widecode/plugins/`, each
+   folder with `.widecode-installed` (what was written): an install replaces a folder it wrote
+   that is unchanged, and leaves one you edited, or one of yours with a built-in's id, as it is. A
+   development build (`dist/widecode`) reads the ones beside it instead, and an installed copy
+   gives way to them.
+2. The user's, in `~/.widecode/plugins/` (or `$WIDECODE_HOME/plugins`), the installed built-ins among them.
 3. The project's, in `<folder>/.widecode/plugins/`, once the folder is trusted (the question on
    the first launch there, or `/trust`). A cloned repository could carry one, so until then widecode
    only says what the files register. The folder is the project's harness ("The harness", below).
 
-A plugin is a file, `plugins/<name>.js`, or a folder, `plugins/<name>/` with its `index.js` and
-what else the plugin keeps beside it (a README, its `skills/`, its `prompts/`): the harness offers
+A plugin is a file, `plugins/<name>.js` (a script), or a folder, `plugins/<name>/` with its
+`index.js` (an ES module, which may `import` the folder's other `.js` files by relative path, and
+nothing else) and what else the plugin keeps beside it (a README, its `skills/`, its `prompts/`): the harness offers
 the folder's skills as skills and its prompts as prompt templates. They load in that order, each in
 name order. A plugin with the id of an earlier one replaces
 it, so a file named for a built-in plugin's id (`status`, `git`) overrides it. Saving a file in a
-plugin folder, or a plugin folder's `index.js`, reloads that file alone: its new source is evaluated first (a file that fails to
+plugin folder, or any file of a plugin's own folder, reloads that plugin alone: its new source is evaluated first (a file that fails to
 evaluate keeps its previous plugins running and says why), then the plugins it defined are stopped,
 what they registered dropped and their functions freed, and the new ones started; the other plugins,
 the agent and its conversation go on, so a plugin the agent writes takes effect while its turn runs.

@@ -48,6 +48,9 @@
       "node --no-warnings scripts/builtin-plugins.mjs",
       "light app"
     ],
+    "install": [
+      "node --no-warnings scripts/install-plugins.mjs"
+    ],
     "selftests": {
       "shell": {
         "checks": [

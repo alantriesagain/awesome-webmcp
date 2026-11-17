@@ -144,6 +144,11 @@ export class WidecodeController extends Controller {
     const host = w.host;
     const store = settings.current.store;
     const config = settings.current.config;
+    // JS plugins, before anything loads them (a first run's config takes their sections): the user's
+    // folder (the built-ins `light install` wrote among them, read with --ephemeral too), and the
+    // project's own once the user trusts it.
+    w.js.dirs.push(join(Store.defaultRoot(), "plugins"));
+    if (store !== null && store.trusted(where)) w.js.dirs.push(w.host.harness.pluginsDir());
     settings.seed(w.defaults());
     this.w = w;
     this.closed = false;
@@ -157,11 +162,6 @@ export class WidecodeController extends Controller {
     host.peersLauncher = selftest.length > 0 ? "" : process.execPath;
     host.real = selftest.length === 0;
     host.onLog = (text: string) => log(text);
-    // JS plugins: the user's folder (the built-ins `light install` wrote among them, read with --ephemeral
-    // too), and the project's own once the user trusts it.
-    const projectPlugins = host.harness.pluginsDir();
-    w.js.dirs.push(join(Store.defaultRoot(), "plugins"));
-    if (store !== null && store.trusted(where)) w.js.dirs.push(projectPlugins);
     // The agent: --agent, else config.json's "agent"; one a plugin brings is taken up when it registers.
     if (this.opened.length === 0) host.session.agentId.value = app.args.string("agent") ?? (config !== null && config.agent.length > 0 ? config.agent : "claude");
     // The user's key bindings (keys.json), read again on /reload.

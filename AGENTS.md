@@ -121,9 +121,12 @@ widecode is a native core and JS plugins (`PLUGINS.md`). The core is compiled: t
 packages above, and in the app its controllers, views, the plugin runtime (`src/runtime/`: the
 `JsRuntime` over `@lightstart/plugins`' engine, the JS-drawn views, the agents plugins bring, the prelude)
 and the API's answers (`src/api/`, a file per namespace). Every feature is a plugin running in
-QuickJS: the built-in ones are `plugins/<id>/index.ts`, type-checked against
-`widecode.d.ts` and stripped into the binary by `scripts/builtin-plugins.mjs` (the app's prepare
-step); the user's and a trusted project's are `.js` files or plugin folders (`plugins/<name>/index.js`
+QuickJS: the built-in ones are `plugins/<id>/`, type-checked against `widecode.d.ts`, and
+normal files once built: `scripts/builtin-plugins.mjs` (the app's prepare step) writes each into
+`dist/plugins/<id>/` with its types stripped, a development build and the tests read them there,
+and `light install` writes them into the user's plugin folder (`scripts/install-plugins.mjs`,
+leaving a folder the user edited); the binary carries none. A plugin folder runs as ES modules
+(`index.js` imports its other files); the user's and a trusted project's are `.js` files or plugin folders (`plugins/<name>/index.js`
 beside its `skills/` and `prompts/`) that reload on save, each alone, the agent and the other plugins
 untouched. A plugin's `agent(agent)` part runs in the harness daemon's loop (PLUGINS.md, "The agent
 part").

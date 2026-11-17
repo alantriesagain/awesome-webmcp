@@ -48,7 +48,7 @@ reshapes widecode from inside through widecode's own tools (`PLUGINS.md`, "The
 harness"):
 
 ```
-pnpm light install                      # builds it and installs it as `widecode` in ~/.local/bin; then `widecode` in any folder
+pnpm light install                      # builds it, installs it as `widecode` in ~/.local/bin and its plugins in ~/.widecode/plugins; then `widecode` in any folder
 pnpm widecode                                  # builds dist/widecode, then runs it in the current folder
 pnpm widecode -- --no-build --resume ID        # resume a session of the folder
 pnpm widecode -- --agent opencode              # talk to opencode over ACP instead of Claude Code
