@@ -59,7 +59,7 @@ export const openWidecode = async (options: OpenOptions): Promise<Widecode> => {
   // The built-in plugins as normal files, which the prepare step writes for a run.
   next.builtinDir = join(process.cwd(), "dist", "plugins");
   run.next = next;
-  opened = await openApp(manifest, { storage: "memory" });
+  opened = await openApp(manifest);
   return widecode.w;
 };
 

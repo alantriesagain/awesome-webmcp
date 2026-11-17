@@ -1,7 +1,7 @@
-// widecode's app config: the name, the terminal host, the flags the interface takes and the store.
+// widecode's app config: the name, the terminal host, the flags the interface takes and its stores.
 // The host parses the flags strictly before any controller starts, and a controller reads them
-// from `app.args`. The session records still open their own JSONL store per folder; the app's own
-// store stays in memory this round.
+// from `app.args`. The session records still open their own JSONL store per folder, so the app's
+// `main` store is memory.
 import { defineApp } from "@lightstart/app";
 
 export default defineApp({
@@ -23,5 +23,5 @@ export default defineApp({
     ephemeral: { flag: true, description: "Sessions are not saved (--no-session-persistence)" },
     trust: { flag: true, description: "Trust the folder for this run" },
   },
-  storage: { kind: "memory" },
+  stores: { main: { kind: "memory" } },
 });
