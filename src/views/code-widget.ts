@@ -47,7 +47,9 @@ export class CodeWidget extends CodeTarget {
     this.owner = owner;
     h.roles.code = this;
     const bind = new Binder(h.kernel.actions, owner, "code");
-    bind.add("code.tab.next", ["tab"], "next tab", (_key: KeyEvent) => {
+    // Tab shows the next tab once a call or subagent is open beside Code; no hint, the tab bar shows them.
+    bind.add("code.tab.next", ["tab"], "", (_key: KeyEvent) => {
+      if (this.tabs.items.peek().length === 0) return false;
       this.tabs.show((this.tabs.activeIndex() + 1) % this.tabs.labels().length);
       return true;
     });
