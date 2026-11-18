@@ -259,6 +259,8 @@ const MAX_TOOLS = 2000;
 const MAX_TASKS = 200;
 const MAX_REQUESTS = 500;
 const MAX_ASIDES = 200;
+/** Log lines (a subagent process's stderr) kept under one call. */
+const MAX_LOG_LINES = 200;
 
 export class ChatModel {
   turns: Turn[] = [];
@@ -554,6 +556,24 @@ export class ChatModel {
     n.tone = tone;
     n.detail = detail;
     this.place(n, parent);
+    if (tone === "log") this.trimLogs(n.parent);
+  }
+
+  /** Keep the newest `MAX_LOG_LINES` log notices under a call, dropping the oldest first. */
+  private trimLogs(call: Item | null): void {
+    if (call === null) return;
+    let logs = 0;
+    for (const c of call.children) if (c.kind === NOTICE && c.tone === "log") logs++;
+    let drop = logs - MAX_LOG_LINES;
+    if (drop <= 0) return;
+    call.children = call.children.filter((c) => {
+      if (drop > 0 && c.kind === NOTICE && c.tone === "log") {
+        drop--;
+        return false;
+      }
+      return true;
+    });
+    this.touch(call);
   }
 
   /** An item said by the app or the agent aside: while the agent is idle, after the last turn, no turn opened for it. */

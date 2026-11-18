@@ -33,6 +33,8 @@ export class RenderContext {
   agent = "the agent";
   /** Whether a turn's prompt and reply carry their "[stamp] <who>: " label (a caller that wants the plain transcript turns it off). */
   stamps = true;
+  /** Whether thinking is drawn whole (a subagent's view), instead of its first line until a press opens it (the chat). */
+  thinkingWhole = false;
 }
 
 const line = (indent: Run[], text: string, fg: string): Line => {
@@ -162,6 +164,7 @@ export const callPage = (item: Item, ctx: RenderContext, width: number, state: s
 export const itemLines = (item: Item, ctx: RenderContext, indent: Run[], width: number, label?: Run[]): Line[] => {
   let key = "";
   for (const r of indent) key += r.text;
+  if (ctx.thinkingWhole) key += "|whole";
   if (label === undefined && item.cacheRev === item.rev && item.cacheWidth === width && item.cacheIndent === key) return item.cache;
   const out: Line[] = [];
   if (item.kind === TEXT) pushAll(out, renderMarkdown(item.text, width, indent, palette.messageFg, label ?? []));
@@ -169,11 +172,21 @@ export const itemLines = (item: Item, ctx: RenderContext, indent: Run[], width: 
     // Words only: a size alone says nothing worth a line.
     const words = item.text.trim();
     if (words.length > 0) {
-      const l = line(indent.concat([new Run("✻ ", palette.dim)]), clipText(firstLine(words).replace(/\s+/g, " "), Math.max(8, width - 4)) + (item.done ? "" : "…"), palette.dim);
-      l.runs[l.runs.length - 1].italic = true;
-      l.tag = item;
-      out.push(l);
-      if (item.expanded) pushAll(out, renderMarkdown(words, width, indent.concat([new Run("  ", "")]), palette.dim));
+      if (ctx.thinkingWhole) {
+        // A subagent's view has room for it all: each line wrapped, dim and italic.
+        const open = indent.concat([new Run("✻ ", palette.dim)]);
+        const rest = indent.concat([new Run("  ", "")]);
+        for (const l of wrap([new Run(words, palette.dim)], width, open, rest, "")) {
+          for (const r of l.runs) r.italic = true;
+          out.push(l);
+        }
+      } else {
+        const l = line(indent.concat([new Run("✻ ", palette.dim)]), clipText(firstLine(words).replace(/\s+/g, " "), Math.max(8, width - 4)) + (item.done ? "" : "…"), palette.dim);
+        l.runs[l.runs.length - 1].italic = true;
+        l.tag = item;
+        out.push(l);
+        if (item.expanded) pushAll(out, renderMarkdown(words, width, indent.concat([new Run("  ", "")]), palette.dim));
+      }
     }
   } else if (item.kind === TOOL) {
     const head = new Line();
@@ -212,7 +225,8 @@ export const itemLines = (item: Item, ctx: RenderContext, indent: Run[], width: 
     if (out.length > 0) out[0].tag = item;
   } else if (item.kind === NOTICE) {
     const fg = item.tone === "error" ? palette.bad : palette.dim;
-    pushAll(out, wrap([new Run(item.text, fg)], width, indent.concat([new Run(item.tone === "command" ? "› " : "· ", fg)]), indent.concat([new Run("  ", "")]), ""));
+    const mark = item.tone === "command" ? "› " : item.tone === "log" ? "log " : "· ";
+    pushAll(out, wrap([new Run(item.text, fg)], width, indent.concat([new Run(mark, fg)]), indent.concat([new Run("  ", "")]), ""));
     if (item.detail.length > 0 && (item.expanded || item.tone === "error")) pushAll(out, renderMarkdown(item.detail, width, indent.concat([new Run("  ", "")]), palette.dim));
     if (out.length > 0) out[0].tag = item;
   } else if (item.kind === REQUEST) {

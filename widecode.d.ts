@@ -416,7 +416,7 @@ declare namespace widecode {
     | { type: "result"; id: string; text?: string; images?: number; error?: boolean; size?: number; truncated?: "agent" | "widecode"; patch?: { oldStart: number; newStart: number; lines: string[] }[] }
     | { type: "edited"; path: string }
     | { type: "prompt"; parent?: string; text: string; images?: number; imagePaths?: string[]; notice?: boolean }
-    | { type: "notice"; text: string; tone?: "info" | "error" | "command"; detail?: string; parent?: string; once?: boolean; ifOpen?: boolean }
+    | { type: "notice"; text: string; tone?: "info" | "error" | "command" | "log"; detail?: string; parent?: string; once?: boolean; ifOpen?: boolean }
     | { type: "task"; id: string; taskId?: string; description?: string; agentType?: string; background?: boolean }
     | { type: "taskUpdate"; id: string; taskId?: string; status?: string; lastTool?: string; description?: string; summary?: string; done?: boolean }
     | { type: "thinkingTokens"; parent?: string; key: string; tokens: number }

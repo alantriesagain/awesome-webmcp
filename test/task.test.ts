@@ -8,7 +8,8 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { request, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AGENT, TEXT, THINKING, TOOL } from "../src/conversation/model.ts";
+import { AGENT, NOTICE, TEXT, THINKING, TOOL } from "../src/conversation/model.ts";
+import { itemLines, RenderContext } from "../src/conversation/render.ts";
 import { agentsOf } from "../src/conversation/agents.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
 import type { Widecode } from "../src/compose.ts";
@@ -73,6 +74,17 @@ const main = async (): Promise<void> => {
   eq("the call is a subagent, done", call.category + " " + (call.task !== null ? call.task.status : "none"), AGENT + " done");
   eq("the Agents tab lists the run", String(agentsOf(c.model).length), "1");
   ok("the target's model was chosen", readFileSync(log, "utf8").includes('"configId":"model","value":"fake/large"'));
+
+  c.model.closeTurn(null);
+  c.model.openTurn("main", 0, true);
+  const logsCall = c.model.block("", "tclogs", TOOL, "toolu-logs", "Task", "");
+  ok("the logs call is made", logsCall !== null);
+  if (logsCall === null) return;
+  const logsReply = await post('{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"Task","arguments":{"description":"write logs","prompt":"logs","subagent_type":"deepseek"},"_meta":{"claudecode/toolUseId":"toolu-logs"}}}');
+  const logs = logsCall.children.filter((i) => i.kind === NOTICE && i.tone === "log");
+  eq("its stderr lines are kept under the call, in order, the last 200", String(logs.length) + " " + (logs.length > 0 ? logs[0].text : "") + " " + (logs.length > 0 ? logs[logs.length - 1].text : ""), "200 line 2 line 201");
+  const drawn = logs.length > 0 ? itemLines(logs[logs.length - 1], new RenderContext(), [], 80).map((l) => l.runs.map((r) => r.text).join("")).join("") : "";
+  ok("and its view draws one with a log marker", logsReply.includes("Logged.") && drawn.startsWith("log line 201"));
 
   c.model.closeTurn(null);
   c.model.openTurn("main", 0, true);

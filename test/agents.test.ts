@@ -7,6 +7,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { agentsOf, agentStatus } from "../src/conversation/agents.ts";
+import { THINKING } from "../src/conversation/model.ts";
 import { itemLines, RenderContext } from "../src/conversation/render.ts";
 import { JsPanel } from "../src/runtime/views.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
@@ -54,12 +55,17 @@ const main = async (): Promise<void> => {
   eq("the tab's label is its type and its task, clipped", w.code.tabs.labels().join("|"), "Code|general-purpose: Read n… ×");
   w.host.roles.code.openAgent(agentId);
   eq("opening the same subagent twice keeps one tab", String(w.code.tabs.labels().length), "2");
+  const thinking = c.model.block(agentId, "think-agent", THINKING, "", "thinking", "first thought\nsecond thought");
+  if (thinking !== null) c.model.finish(thinking);
   const steps: string[] = [];
   const view = w.code.shownPane().view;
   view.source.prepare(80);
   for (let i = 0; i < view.source.count(); i++) steps.push(view.source.line(i, 80).runs.map((r: Run) => r.text).join(""));
   ok("what it was told first, then its calls, flat", steps[0].startsWith("› ") && steps.some((l) => l.startsWith("● Read ")) && !steps.some((l) => l.startsWith("│ ")));
   ok("and what it handed back", steps.some((l) => l.startsWith("↳ handed back")));
+  ok("its thinking is drawn whole in its view", steps.some((l) => l.includes("first thought")) && steps.some((l) => l.includes("second thought")));
+  const collapsed = thinking !== null ? itemLines(thinking, new RenderContext(), [], 80).map((l) => l.runs.map((r: Run) => r.text).join("")) : [];
+  ok("the chat draws it collapsed until pressed", collapsed.length === 1 && collapsed[0].includes("first thought") && collapsed[0].includes("…") && !collapsed[0].includes("second thought"));
 
   w.shell.handleKey(new KeyEvent("escape", "", false, false, false));
   await wait(100);

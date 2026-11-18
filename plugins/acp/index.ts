@@ -47,6 +47,8 @@ import { acpAgent } from "./acp-agent.ts";
 /** Sizes a run logs while it keeps its events, to diagnose memory growth. */
 const EVENT_LOG_CHARS = 1024 * 1024;
 const HISTORY_LOG_CHARS = 8 * 1024 * 1024;
+/** Log lines a run keeps in its persisted transcript, as the conversation keeps them under its call. */
+const MAX_LOG_LINES = 200;
 
 /** A test seam: an update handler failure injected to exercise the run's failure path. */
 let crashOnUpdate = false;
@@ -120,6 +122,8 @@ class SubagentRun {
   /** The characters kept in `history`, and the size at which the next line is logged. */
   private historyChars = 0;
   private historyLoggedAt = HISTORY_LOG_CHARS;
+  /** The log notices kept in `history`, dropped oldest first past `MAX_LOG_LINES`. */
+  private logLines = 0;
   private reply = "";
   /** The title of a permission this prompt's run refused, while it has not reported its end. */
   private refused = "";
@@ -127,6 +131,8 @@ class SubagentRun {
   private closed = false;
   /** Whether this call has a result reported to the parent, so a later process exit does not report it again. */
   private reported = false;
+  /** The last part of its stderr without a newline, until the rest arrives. */
+  private stderrTail = "";
   private timeoutGen = 0;
   private resolve: (text: string) => void = () => {};
   private reject: (error: Error) => void = () => {};
@@ -159,6 +165,19 @@ class SubagentRun {
     if (line.length > EVENT_LOG_CHARS) this.api.note("acp: task " + this.callId + " event " + str(obj(e)?.type) + " " + String(line.length) + " characters");
     this.history.push(line);
     this.historyChars += line.length;
+    const value = obj(e);
+    if (value !== null && str(value.type) === "notice" && str(value.tone) === "log") {
+      this.logLines++;
+      if (this.logLines > MAX_LOG_LINES) {
+        // The oldest log notice goes; the line just kept is the newest.
+        const at = this.history.findIndex((kept) => kept.startsWith('{"type":"notice"') && kept.includes('"tone":"log"'));
+        if (at >= 0) {
+          this.historyChars -= this.history[at].length;
+          this.history.splice(at, 1);
+          this.logLines--;
+        }
+      }
+    }
     while (this.historyChars >= this.historyLoggedAt) {
       this.api.note("acp: task " + this.callId + " history " + String(this.historyChars) + " characters");
       this.historyLoggedAt += HISTORY_LOG_CHARS;
@@ -283,8 +302,7 @@ class SubagentRun {
           this.flush();
         }),
       exit: (code) => this.guard("its exit", () => this.exited(code)),
-      error: (text) =>
-        this.guard("its error output", () => this.api.note(this.entry.name + ": " + text.trimEnd())),
+      error: (text) => this.guard("its error output", () => this.stderr(text)),
     });
     if (!p.started) {
       this.releaseVm();
@@ -477,6 +495,30 @@ class SubagentRun {
   }
 
   /** Tell the main agent a background run finished or failed, when it is running to hear it. */
+  /** A chunk of its stderr: each line goes into the log and under the call as a log notice. */
+  private stderr(text: string): void {
+    this.api.note(this.entry.name + ": " + text.trimEnd());
+    const parts = (this.stderrTail + text).split("\n");
+    this.stderrTail = parts.pop() ?? "";
+    for (const l of parts) this.logLine(l);
+    if (parts.length > 0) this.flush();
+  }
+
+  /** The last part of its stderr, if a line: the process ended. */
+  private flushStderr(): void {
+    const last = this.stderrTail;
+    this.stderrTail = "";
+    this.logLine(last);
+    this.flush();
+  }
+
+  private logLine(text: string): void {
+    const t = text.trimEnd();
+    if (t.length === 0) return;
+    // A notice with tone "log": the model keeps the last 200 under the call, and the subagent view draws them.
+    this.emit({ type: "notice", parent: this.callId, tone: "log", text: t });
+  }
+
   private notify(text: string, error: boolean): void {
     const status = error ? "failed" : "finished";
     // A run of a session left since it started tells only the log: the agent now running never started it.
@@ -636,6 +678,7 @@ class SubagentRun {
     this.releaseVm();
     this.proc = null;
     if (this.closed) return;
+    this.flushStderr();
     if (this.reported) {
       // Its result already reached the parent: this exit only cleans up a process kept for SendMessage.
       this.closed = true;

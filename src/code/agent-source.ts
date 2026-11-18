@@ -19,6 +19,7 @@ export class AgentSource extends ModelSource {
   constructor(holder: ConversationHolder, id: string) {
     super(holder);
     this.id = id;
+    this.ctx.thinkingWhole = true;
   }
 
   protected rebuild(model: ChatModel, width: number): void {

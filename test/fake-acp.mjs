@@ -27,6 +27,7 @@
  * - `taskcall`: a call of widecode's Task tool announced as opencode announces it (`widecode_Task`,
  *   its `description`, `prompt` and `subagent_type` in the input), left in flight until the turn is
  *   cancelled;
+ * - `logs`: 201 lines on stderr, then "Logged.";
  * - `skill`: a `skill` tool call loading the skill "alpha" (its `name` in the input), then a command
  *   and a message, as a skill's run goes on;
  * - `unknown`: a request of a method widecode does not offer, then a message with the error it
@@ -339,6 +340,12 @@ const prompt = (id, sessionId, params) => {
     update(sessionId, { sessionUpdate: "tool_call", toolCallId: "call_widecode_task", title: "widecode_Task", kind: "other", status: "in_progress", rawInput: input });
     // The turn stays open, as opencode's does while the call runs.
     slow = { id, session: sessionId };
+  } else if (first === "logs") {
+    const lines = [];
+    for (let i = 1; i <= 201; i++) lines.push("line " + String(i));
+    process.stderr.write(lines.join("\n") + "\n");
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Logged.") });
+    end("end_turn");
   } else if (first === "skill") {
     // As opencode 1.19 sends it (recorded October 2026): announced with an empty input, the skill's name in the next update, retitled when done.
     update(sessionId, { sessionUpdate: "tool_call", toolCallId: "call_skill", title: "skill", kind: "other", status: "pending", locations: [], rawInput: {} });
