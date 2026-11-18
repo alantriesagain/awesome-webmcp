@@ -80,8 +80,8 @@ const main = async (): Promise<void> => {
   press("down");
   ok("↓ selects the calls in turn", panel.source.selected === 4);
   press("enter");
-  ok("Enter shows the call in the code column", w.host.roles.code.inAgent() && w.code.pane.agent.peek() === "Bash · Echo STEP-TWO");
-  const view = w.code.pane.view;
+  ok("Enter shows the call in a tab beside Code", w.host.roles.code.inAgent() && w.code.tabs.active().title === "Bash" && w.code.tabs.active().id === (panel.source.rows[panel.source.selected].item?.id ?? ""));
+  const view = w.code.shownPane().view;
   view.source.prepare(80);
   const page: string[] = [];
   for (let i = 0; i < view.source.count(); i++) page.push(view.source.line(i, 80).runs.map((r: Run) => r.text).join(""));
@@ -92,7 +92,7 @@ const main = async (): Promise<void> => {
   await new Promise<void>((resolve) => {
     setTimeout(() => resolve(), 100);
   });
-  ok("Esc goes back to the file", !w.host.roles.code.inAgent() && w.host.roles.code.path() === "a.txt");
+  ok("Esc closes the call tab and shows the file", !w.host.roles.code.inAgent() && w.code.tabs.active().id === "code" && w.host.roles.code.path() === "a.txt");
 
   const first = findCall(c.model, panel.source.rows[1].item?.id ?? "");
   w.host.screen.showPanel("agents");

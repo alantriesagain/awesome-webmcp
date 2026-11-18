@@ -82,6 +82,7 @@ widecode.plugin({
       api.tell(following ? "following Claude's edits" : "not following Claude's edits");
     });
     bind("code.back", "escape", "", () => {
+      if (code.closeTab()) return true;
       if (!code.inCommit() && !code.inAgent()) return false;
       code.open(code.path());
     });

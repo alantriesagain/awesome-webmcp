@@ -255,11 +255,14 @@ const main = async (): Promise<void> => {
   ok("a press on it shows it in the Tools tab, selected", app.host.screen.shownIn("tools") === "calls" && picked !== null && picked.name === "Agent" && has(lines, "● Agent Explore"));
   app.host.screen.focus("tools");
   app.shell.handleKey(key("enter", ""));
+  await wait(100);
   lines = screen();
-  ok("Enter there shows the subagent's own transcript in the code column", has(lines, "› Find the callers of helper") && has(lines, "Found two callers in src.") && app.host.roles.code.inAgent());
+  const subTab = app.code.tabs.active();
+  ok("Enter there shows the subagent's own transcript in a tab of its own", has(lines, "› Find the callers of helper") && has(lines, "Found two callers in src.") && app.host.roles.code.inAgent() && picked !== null && subTab.id === picked.id && subTab.title.startsWith("Explore: Find callers"));
   app.host.screen.focus("code");
   app.shell.handleKey(key("escape", ""));
   await wait(100);
+  ok("Esc closes the subagent tab and shows the file again", app.code.tabs.active().id === "code" && !app.host.roles.code.inAgent() && app.host.roles.code.path() === "src/app.js");
   app.chat.submit("/help");
   // The chat's lines, all of them (the list is longer than the screen), joined.
   const chatLines: string[] = [];

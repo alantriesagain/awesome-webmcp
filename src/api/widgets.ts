@@ -82,6 +82,8 @@ export const answerWidgets = (rt: JsRuntime, name: string, a: unknown[]): HostAn
       return answer(null);
     case "code.inAgent":
       return answer(h.roles.code.inAgent());
+    case "code.closeTab":
+      return answer(h.roles.code.closeTab());
     case "code.view": {
       // A view plugin `owner` draws in the code column: its rows come from the plugin as a tab's do; shown with code.show.
       const owner = str(a[0]);
@@ -183,6 +185,7 @@ export const NAMESPACE_CODE = new PreludePart("code", `        open: (path) => c
         openAgent: (agent) => call("code.openAgent", String(agent)),
         openCall: (call_) => call("code.openCall", String(call_)),
         inAgent: () => call("code.inAgent"),
+        closeTab: () => call("code.closeTab"),
         markdown: (title, text) => call("code.markdown", String(title), String(text)),
         view: (v) => {
           const vid = String(v.id);

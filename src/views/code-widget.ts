@@ -17,7 +17,9 @@ import { AgentSource } from "../code/agent-source.ts";
 import { CallSource } from "../code/call-source.ts";
 import { CodePane } from "../code/code-view.ts";
 import { CodeFile, loadCode, loadCommitFile } from "../code/diff.ts";
-import { CodeTabHost } from "../code/tabs.ts";
+import { CodeTab, CodeTabHost } from "../code/tabs.ts";
+import { afterChange } from "../host/after-change.ts";
+import { computed } from "@lightstart/light/signals";
 import { Binder } from "@lightstart/kernel/actions.ts";
 import { type KeyEvent } from "@lightstart/light/native/tui";
 
@@ -30,6 +32,9 @@ export class CodeWidget extends CodeTarget {
   constructor(host: Host) {
     super();
     this.host = host;
+    const active = computed(() => this.tabs.active());
+    afterChange(active, () => this.activeChanged(active.peek()));
+    this.tabs.onClose = (tab: CodeTab) => this.closed(tab);
   }
 
   /** Show it as plugin `owner`'s column named `title`, at `order`, and play the code role; what the owner added goes when it does. */
@@ -59,14 +64,21 @@ export class CodeWidget extends CodeTarget {
       h.screen.tell("no such subagent in this session");
       return;
     }
+    const found = this.tabs.indexOf(id);
+    if (found >= 0) {
+      this.tabs.show(found);
+      return;
+    }
     // From a resumed session its steps are in its own transcript, read once.
     if (item.children.length === 0 && item.task === null) h.conversation.loadSubagent(item);
+    const type = agentType(item);
     const description = agentDescription(item);
     const source = new AgentSource(h, id);
-    this.pane.showAgent(source, "Agent · " + agentType(item) + (description.length > 0 ? ": " + description : ""), agentStatus(item) === "running");
-    this.pane.onPress = (index: number) => this.toggle(index);
+    const pane = new CodePane();
+    pane.showAgent(source, "Agent · " + type + (description.length > 0 ? ": " + description : ""), agentStatus(item) === "running");
+    pane.onPress = (index: number) => this.toggle(pane, index);
     h.note("agent " + id);
-    h.shown.value = source;
+    this.tabs.open(new CodeTab(id, description.length > 0 ? type + ": " + description : type, true, pane, source));
   }
 
   override openCall(id: string): void {
@@ -80,29 +92,64 @@ export class CodeWidget extends CodeTarget {
       this.openAgent(id);
       return;
     }
+    const found = this.tabs.indexOf(id);
+    if (found >= 0) {
+      this.tabs.show(found);
+      return;
+    }
     const ctx = new RenderContext();
     ctx.folder = h.workspace.folder;
     const summary = toolSummary(item, ctx).replace(/\s+/g, " ");
     const source = new CallSource(h, id);
-    this.pane.showAgent(source, item.name + (summary.length > 0 ? " · " + summary : ""), false);
-    this.pane.onPress = null;
+    const pane = new CodePane();
+    pane.showAgent(source, item.name + (summary.length > 0 ? " · " + summary : ""), false);
+    pane.onPress = null;
     h.note("call " + id);
-    h.shown.value = source;
+    this.tabs.open(new CodeTab(id, item.name, true, pane, source));
   }
 
   override inAgent(): boolean {
-    return this.pane.agent.peek().length > 0;
+    return this.tabs.active() !== this.tabs.code || this.pane.agent.peek().length > 0;
+  }
+
+  override closeTab(): boolean {
+    return this.tabs.closeActive();
   }
 
   override openView(source: LineSource, title: string, onPress: ((row: number) => void) | null): void {
     this.pane.showAgent(source, title, false);
     this.pane.onPress = onPress;
-    this.host.shown.value = source;
+    this.tabs.show(0);
+  }
+
+  /** The pane of the tab shown (Code's when it is). Item tabs each have one. */
+  shownPane(): CodePane {
+    const view = this.tabs.active().view;
+    return view instanceof CodePane ? view : this.pane;
+  }
+
+  /** The active tab changed: catch its view up and tell the host what it shows. */
+  private activeChanged(tab: CodeTab): void {
+    const h = this.host;
+    if (tab !== this.tabs.code) {
+      const view = tab.view;
+      if (view instanceof CodePane) view.view.refresh();
+      h.shown.value = tab.source;
+      return;
+    }
+    h.shown.value = this.pane.agent.peek().length > 0 ? this.pane.view.source : this.pane.source.file;
+  }
+
+  /** A tab closed: drop its source and its press callback. */
+  private closed(tab: CodeTab): void {
+    const view = tab.view;
+    if (view instanceof CodePane) view.onPress = null;
+    tab.source = null;
   }
 
   /** A press on a subagent's step opens or closes it, as in the chat. */
-  private toggle(index: number): void {
-    const line = this.pane.view.lineAt(index);
+  private toggle(pane: CodePane, index: number): void {
+    const line = pane.view.lineAt(index);
     const tag = line !== null ? line.tag : null;
     if (!(tag instanceof Item)) return;
     const why = this.host.conversation.toggle(tag);

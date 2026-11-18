@@ -4,23 +4,27 @@
 // cells of a closable label close it); its view draws the active tab's view.
 import { ColumnTabHost } from "../screen/contributions.ts";
 import { View, batch, html, signal } from "@lightstart/light/native/tui";
+import { LineSource } from "@lightstart/light/native/tui/lines.ts";
 import { clipText } from "@lightstart/tui/text.ts";
 
 /** Cells a closable tab's title keeps before its close mark. */
 const LABEL_CELLS = 24;
 
-/** One tab of the code column: its id, its label, whether it closes, and the view it shows. */
+/** One tab of the code column: its id, its label, whether it closes, the view it shows and, for an item tab, its source. */
 export class CodeTab {
   readonly id: string;
   readonly title: string;
   readonly closeable: boolean;
   readonly view: View;
+  /** What an item tab shows; null for Code, and dropped when the tab closes. */
+  source: LineSource | null;
 
-  constructor(id: string, title: string, closeable: boolean, view: View) {
+  constructor(id: string, title: string, closeable: boolean, view: View, source: LineSource | null = null) {
     this.id = id;
     this.title = title;
     this.closeable = closeable;
     this.view = view;
+    this.source = source;
   }
 }
 
@@ -33,6 +37,8 @@ export class CodeTabHost extends ColumnTabHost {
   readonly shown = signal(0);
   /** The view the column draws: the active tab's. */
   readonly view: View;
+  /** Called with a tab as it closes. */
+  onClose: ((tab: CodeTab) => void) | null = null;
 
   constructor(pane: View) {
     super();
@@ -60,7 +66,8 @@ export class CodeTabHost extends ColumnTabHost {
 
   /** Show tab `index` (0 is Code). */
   show(index: number): void {
-    if (this.at(index) !== null) this.shown.value = index;
+    if (this.at(index) === null) return;
+    this.shown.value = index;
   }
 
   /** Close the closable tab at `index`, showing the tab before it (Code when it was the first item). */
@@ -71,6 +78,16 @@ export class CodeTabHost extends ColumnTabHost {
       this.items.value = this.items.peek().filter((_, i) => i !== index - 1);
       this.shown.value = Math.max(0, index - 1);
     });
+    const fn = this.onClose;
+    if (fn !== null) fn(tab);
+  }
+
+  /** Close the tab shown; false when it is Code (or there is nothing to close). */
+  closeActive(): boolean {
+    const tab = this.active();
+    if (tab === this.code || !tab.closeable) return false;
+    this.close(this.shown.value);
+    return true;
   }
 
   /** Open `tab`: show it when its id is open already, else add it after the others and show it. */
@@ -91,7 +108,8 @@ export class CodeTabHost extends ColumnTabHost {
     return this.at(this.shown.value) ?? this.code;
   }
 
-  private indexOf(id: string): number {
+  /** Where `id` sits (0 is Code); -1 when no tab has it. */
+  indexOf(id: string): number {
     if (this.code.id === id) return 0;
     const items = this.items.peek();
     for (let i = 0; i < items.length; i++) if (items[i].id === id) return i + 1;

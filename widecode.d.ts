@@ -757,12 +757,14 @@ declare namespace widecode {
       inCommit(): boolean;
       /** Where the view is among the file's changes ("change 2/5 · L40"). */
       position(): string;
-      /** Show the steps of the subagent called by tool use `id` in place of the file (Esc goes back). */
+      /** Show the steps of the subagent called by tool use `id` in its own tab beside Code, focusing it when it is open already. Esc closes it. */
       openAgent(id: string): void;
-      /** Show tool call `id` whole in place of the file: its input and output (a subagent's call: its steps). Esc goes back. */
+      /** Show tool call `id` whole in its own tab beside Code: its input and output (a subagent's call: its steps). Esc closes it. */
       openCall(id: string): void;
-      /** Whether it shows a subagent's steps or a call rather than a file. */
+      /** Whether the tab shown is not Code. */
       inAgent(): boolean;
+      /** Close the call or subagent tab shown; false when Code is (true when one closed). */
+      closeTab(): boolean;
       /**
        * A view of this plugin's own rows for the code column, drawn as a tab's are (`count`, `rows`,
        * a `press` on a row); `show(title)` puts it in place of the file (Esc goes back), `refresh()`

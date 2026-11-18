@@ -49,9 +49,13 @@ const main = async (): Promise<void> => {
 
   if (tab !== null) tab.press(0, 3);
   await wait(50);
-  ok("a press shows its steps in the code column", w.host.roles.code.inAgent() && w.code.pane.agent.peek() === "Agent · general-purpose: Read notes.txt and report first line" && w.host.screen.active.peek() === "code");
+  const agentId = calls[0].id;
+  ok("a press shows its steps in a tab beside Code", w.host.roles.code.inAgent() && w.code.tabs.active().id === agentId && w.host.screen.active.peek() === "code");
+  eq("the tab's label is its type and its task, clipped", w.code.tabs.labels().join("|"), "Code|general-purpose: Read n… ×");
+  w.host.roles.code.openAgent(agentId);
+  eq("opening the same subagent twice keeps one tab", String(w.code.tabs.labels().length), "2");
   const steps: string[] = [];
-  const view = w.code.pane.view;
+  const view = w.code.shownPane().view;
   view.source.prepare(80);
   for (let i = 0; i < view.source.count(); i++) steps.push(view.source.line(i, 80).runs.map((r: Run) => r.text).join(""));
   ok("what it was told first, then its calls, flat", steps[0].startsWith("› ") && steps.some((l) => l.startsWith("● Read ")) && !steps.some((l) => l.startsWith("│ ")));
@@ -59,7 +63,17 @@ const main = async (): Promise<void> => {
 
   w.shell.handleKey(new KeyEvent("escape", "", false, false, false));
   await wait(100);
-  eq("Esc goes back to the file", String(w.host.roles.code.inAgent()) + " " + w.host.roles.code.path(), "false a.txt");
+  eq("Esc closes the subagent tab and shows Code", w.code.tabs.active().id + " " + String(w.host.roles.code.inAgent()) + " " + w.host.roles.code.path(), "code false a.txt");
+
+  c.receive(JSON.stringify({ type: "assistant", message: { id: "msg-tab-call", content: [{ type: "tool_use", id: "toolu_tab_call", name: "Bash", input: { command: "echo hi" } }] } }));
+  w.host.session.conversationChanged.fire();
+  w.host.roles.code.openAgent(agentId);
+  w.host.roles.code.openCall("toolu_tab_call");
+  eq("a call and a subagent: two tabs beside Code, the call shown", w.code.tabs.labels().join("|") + " " + w.code.tabs.active().id, "Code|general-purpose: Read n… ×|Bash × toolu_tab_call");
+  w.shell.handleKey(new KeyEvent("escape", "", false, false, false));
+  eq("closing the call shows the tab before it", w.code.tabs.active().id + " " + String(w.code.tabs.labels().length), agentId + " 2");
+  w.shell.handleKey(new KeyEvent("escape", "", false, false, false));
+  eq("then Esc closes the subagent and shows Code", w.code.tabs.active().id + " " + String(w.host.roles.code.inAgent()) + " " + w.host.roles.code.path(), "code false a.txt");
 
   const call = calls[0];
   call.expanded = true;

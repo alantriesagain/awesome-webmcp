@@ -30,14 +30,19 @@ export class CodeTarget {
     return false;
   }
 
-  /** Show the steps of the subagent called by tool use `id` in place of the file. */
+  /** Show the steps of the subagent called by tool use `id` in its own tab beside Code (focusing it when it is open). */
   openAgent(_id: string): void {}
 
-  /** Show tool call `id` whole in place of the file: its input and output (a subagent's call: its steps). */
+  /** Show tool call `id` whole in its own tab beside Code: its input and output (a subagent's call: its steps). */
   openCall(_id: string): void {}
 
-  /** Whether it shows a subagent's steps or a call rather than a file. */
+  /** Whether the tab shown is not Code. */
   inAgent(): boolean {
+    return false;
+  }
+
+  /** Close the call or subagent tab shown; false when Code is (true when one closed). */
+  closeTab(): boolean {
     return false;
   }
 
