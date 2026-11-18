@@ -23,7 +23,7 @@ import { BandPart, Column } from "../screen/contributions.ts";
 import { columnOrderOf } from "../screen/screen.ts";
 import { Action, Binder } from "@lightstart/kernel/actions.ts";
 import { joinLabels } from "@lightstart/kernel/keys.ts";
-import { type CustomEvent, KeyEvent, type MouseEvent, TBox, TElement, TNode, View, html, signal, key, tabAt } from "@lightstart/light/native/tui";
+import { type CustomEvent, KeyEvent, type MouseEvent, TBox, TElement, TNode, View, html, signal, key, tabAt, tabSpanAt } from "@lightstart/light/native/tui";
 import { LineCopy } from "@lightstart/tui/line-view.ts";
 import { Menu, MenuBar, MenuItem } from "@lightstart/tui/menu-bar.ts";
 import { ColumnWidths } from "./column-widths.ts";
@@ -326,7 +326,11 @@ export class Shell extends View {
     }
     const box = this.columnBox(index);
     if (box !== null && e.y === box.y) {
-      if (this.tabs.get(columns[index].id) !== undefined) {
+      const host = columns[index].tabHost;
+      if (host !== null) {
+        const span = tabSpanAt(box, e.x);
+        if (span !== null) host.press(span.index, e.x, span.end);
+      } else if (this.tabs.get(columns[index].id) !== undefined) {
         const at = tabAt(box, e.x);
         const panels = this.screen.panelsIn(columns[index].id);
         if (at >= 0 && at < panels.length) this.screen.showPanel(panels[at].id);
@@ -586,13 +590,18 @@ export class Shell extends View {
       if (copy instanceof LineCopy) this.screen.copySelection(copy.text, copy.rows);
     }}>${this.menuBar}<div height=1></div>
       <div flex=1 direction="row">${columns.map((c, i) => {
+        const host = c.tabHost;
         const tabs = this.tabs.get(c.id);
         const panels = tabs !== undefined ? this.screen.panelsIn(c.id) : [];
-        // A tab's label is its title and its badge's text ("Todo 3").
-        const labels = panels.map((p) => (p.title + " " + p.badge().map((r) => r.text).join("")).trim()).join("\n");
+        // A tab's label is its title and its badge's text ("Todo 3"); a column with its own tabs names theirs.
+        let labels = panels.map((p) => (p.title + " " + p.badge().map((r) => r.text).join("")).trim()).join("\n");
         const current = this.screen.shownIn(c.id);
         let shown = -1;
         for (let j = 0; j < panels.length; j++) if (panels[j].id === current) shown = j;
+        if (host !== null) {
+          labels = host.labels().join("\n");
+          shown = host.activeIndex();
+        }
         const w = widths[i];
         return key(c.id, html`<wc-column column=${c.id} title=${c.title} tabs=${labels} shown=${shown} ?active=${active === c.id} drop=${drop === c.id && dragged !== null ? dragged.id : ""} edge=${edge === i ? "right" : edge === i - 1 && i > 0 ? "left" : ""} left=${c.left} right=${c.right} width=${w > 0 ? w : null} flex=${w > 0 ? 0 : 1} .view=${c.view} @mousedown=${(e: MouseEvent) => this.pressColumn(i, e)} @mousehover=${(e: MouseEvent) => this.hoverColumn(i, e)} @mousemove=${(e: MouseEvent) => {
           this.dragBorder(e);

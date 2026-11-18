@@ -8,6 +8,16 @@ import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { TInput, View, signal } from "@lightstart/light/native/tui";
 import { Keyed } from "@lightstart/kernel/registry.ts";
 
+/** What a column's own tabs answer instead of its panels (the code column's Code tab and the calls and subagents beside it); its labels and active tab read signals, so the shell draws again when they change. */
+export abstract class ColumnTabHost {
+  /** The labels on the column's top edge, left to right. */
+  abstract labels(): string[];
+  /** The tab shown. */
+  abstract activeIndex(): number;
+  /** A press on tab `index` at screen column `x`; `end` is where that label ends (exclusive). */
+  abstract press(index: number, x: number, end: number): void;
+}
+
 export class Column {
   readonly id: string;
   readonly title: string;
@@ -25,6 +35,8 @@ export class Column {
   readonly lines: LineView | null;
   /** The plugin that added it (set by the host). */
   owner = "";
+  /** Its own tabs, drawn instead of its panels' (null: the panel tabs, or its title). */
+  tabHost: ColumnTabHost | null = null;
 
   constructor(id: string, title: string, order: number, view: View, widthAt: (cols: number) => number, left: number, right: number, input: TInput | null, lines: LineView | null) {
     this.id = id;

@@ -17,10 +17,14 @@ import { AgentSource } from "../code/agent-source.ts";
 import { CallSource } from "../code/call-source.ts";
 import { CodePane } from "../code/code-view.ts";
 import { CodeFile, loadCode, loadCommitFile } from "../code/diff.ts";
+import { CodeTabHost } from "../code/tabs.ts";
+import { Binder } from "@lightstart/kernel/actions.ts";
+import { type KeyEvent } from "@lightstart/light/native/tui";
 
 export class CodeWidget extends CodeTarget {
   readonly host: Host;
   readonly pane = new CodePane();
+  readonly tabs = new CodeTabHost(this.pane);
   private readonly loads = new Latest();
 
   constructor(host: Host) {
@@ -32,9 +36,16 @@ export class CodeWidget extends CodeTarget {
   mount(owner: string, title: string, order: number): void {
     const h = this.host;
     const pane = this.pane;
-    h.screen.addColumn(owner, new Column("code", title, order, pane, (_cols: number) => 0, 0, 1, null, pane.view));
+    const column = new Column("code", title, order, this.tabs.view, (_cols: number) => 0, 0, 1, null, pane.view);
+    column.tabHost = this.tabs;
+    h.screen.addColumn(owner, column);
     this.owner = owner;
     h.roles.code = this;
+    const bind = new Binder(h.kernel.actions, owner, "code");
+    bind.add("code.tab.next", ["tab"], "next tab", (_key: KeyEvent) => {
+      this.tabs.show((this.tabs.activeIndex() + 1) % this.tabs.labels().length);
+      return true;
+    });
     h.folderHooks.statusLoaded.add(owner, () => {
       const open = pane.path.peek();
       if (open.length > 0 && pane.commit.peek().length === 0) pane.mark.value = h.folder.markOf(open);

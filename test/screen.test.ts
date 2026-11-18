@@ -124,6 +124,14 @@ const main = async (): Promise<void> => {
     tabHit.dispatch(new MouseEvent("mouseup", secondTab, 2, 0, false, false, false));
   }
   ok("a press on the second tab on the top edge shows that panel", app.host.screen.shownIn("tools") === "available");
+  const codeX = app.shell.xOf("code");
+  ok("the code column's top edge draws its permanent Code tab", lines[2].indexOf("Code", codeX) === codeX + 1);
+  const codeHit = hitTest(root, codeX + 1, 2);
+  if (codeHit !== null) {
+    codeHit.dispatch(new MouseEvent("mousedown", codeX + 1, 2, 0, false, false, false));
+    codeHit.dispatch(new MouseEvent("mouseup", codeX + 1, 2, 0, false, false, false));
+  }
+  ok("a press on it keeps it shown and makes the column active", app.code.tabs.activeIndex() === 0 && app.code.tabs.labels()[0] === "Code" && app.host.screen.active.peek() === "code");
   app.host.screen.showPanel("calls");
   app.host.screen.focus("chat");
   const filesTab = app.host.screen.findPanel("files");
