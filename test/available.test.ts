@@ -7,11 +7,13 @@
 // own tools under widecode's server, read again when the mode changes, what the mode's permission
 // rules deny, limit or ask for said, and a call of widecode's tool counted; one with no tools
 // command, which lists none of its own; before the agent says, a line saying so. A press on a tool
-// says all of it in the status bar. Switched off, there is no tab.
-import { mkdtempSync, rmSync } from "node:fs";
+// says all of it in the status bar. A subagent tab names that subagent and its task and says it
+// reports no tools, and closing it shows the main list again. Switched off, there is no tab.
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Widecode } from "../src/compose.ts";
+import { agentsOf } from "../src/conversation/agents.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { closeWidecode, openWidecode } from "./support/app.ts";
@@ -75,7 +77,7 @@ const main = async (): Promise<void> => {
       },
     }),
   );
-  ok("its calls counted, an MCP tool's by its whole name, the programs its commands ran after them", await until(() => tab(w).endsWith("Claude|   Bash  ×2|   Read| claude.ai Claude Docs  MCP|   query  ×1|   read| broken  MCP · failed| gone  MCP|   ping| Programs|   ls  ×1|   pwd  ×1")));
+  ok("its calls counted, an MCP tool's by its whole name, and no programs: the tab lists tools", await until(() => tab(w).endsWith("Claude|   Bash  ×2|   Read| claude.ai Claude Docs  MCP|   query  ×1|   read| broken  MCP · failed| gone  MCP|   ping")));
   eq("and how many were used", tab(w).split("|")[0], " 5 tools · 2 used");
   eq("as the model keeps them", c.model.available.map((t) => (t.server.length > 0 ? t.server + "/" : "") + t.name).join(",") + " " + c.model.servers.map((s) => s.name + ":" + s.status).join(","), "Bash,Read,claude.ai Claude Docs/query,claude.ai Claude Docs/read,gone/ping claude.ai Claude Docs:connected,broken:failed");
 
@@ -104,6 +106,28 @@ const main = async (): Promise<void> => {
   w.host.roles.chat.submit("hello");
   ok("it lists none of its own", await until(() => tab(w) === " 0 tools| Old  lists none of its own"));
   closeWidecode(w);
+
+  // A subagent tab: Available names it and its task and says it reports no tools; closing it
+  // shows the main agent's list again.
+  const w3 = await openWidecode({ folder, load: true });
+  const c3 = w3.host.conversation;
+  for (const line of readFileSync(join(process.cwd(), "test", "fixtures", "subagent.ndjson"), "utf8").split("\n")) {
+    if (line.length === 0) continue;
+    const f = JSON.parse(line) as { dir?: unknown; raw?: unknown };
+    if (f.dir === "out" && typeof f.raw === "string") c3.receive(f.raw);
+  }
+  w3.host.session.conversationChanged.fire();
+  ok("the main agent's list", await until(() => tab(w3).includes("Claude|")));
+  const before = tab(w3);
+  const sub = agentsOf(c3.model)[0];
+  w3.host.roles.code.openAgent(sub.id);
+  ok(
+    "a subagent tab: its type and task, and that it reports no tools",
+    await until(() => tab(w3).startsWith(" 0 tools| general-purpose  subagent|   Read notes.txt and report first line|   This subagent does not report")),
+  );
+  w3.host.roles.code.closeTab();
+  ok("closing it shows the main agent's list again", await until(() => tab(w3) === before));
+  closeWidecode(w3);
 
   const off: unknown = { tools: false };
   const w2 = await openWidecode({ folder, plugins: off, load: true });

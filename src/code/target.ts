@@ -46,6 +46,11 @@ export class CodeTarget {
     return false;
   }
 
+  /** The tab shown: its id (the call id for a subagent or call tab), what it is, and its short title. */
+  activeTab(): { id: string; kind: "code" | "agent" | "call"; title: string } {
+    return { id: "", kind: "code", title: "Code" };
+  }
+
   /** Show a plugin's own rows (`source`) in place of the file, titled `title`; a press on a row goes to `onPress`. Esc goes back. */
   openView(_source: LineSource, _title: string, _onPress: ((row: number) => void) | null): void {}
 

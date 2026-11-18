@@ -4,7 +4,8 @@
 // Beside it the Available tab: the tools the agent has, its own first, then each MCP server's
 // (widecode's own tools among them) with where the server stands, as the agent's plugin says; a
 // tool the mode denies, limits or asks for says so, and one called says how many times; a press on
-// a tool says all of it in the status bar.
+// a tool says all of it in the status bar. While a subagent tab is shown, it names that subagent
+// and its task and says it does not report its tools.
 
 type Run = widecode.Run;
 
@@ -41,6 +42,23 @@ widecode.plugin({
 
     /** The agent's tools as groups: its own, then each MCP server's, a server without tools (yet) a header alone. */
     const read = (): void => {
+      const tab = api.code.activeTab();
+      if (tab.kind === "agent") {
+        // A subagent reports no tool list, so name it and say so rather than show the main agent's.
+        const agent = api.agent.agents().find((a) => a.id === tab.id);
+        const out: Line[] = [];
+        if (agent === undefined) out.push({ head: false, text: "This subagent is not in this session.", source: "", fg: DIM, note: "", noteFg: "", calls: 0 });
+        else {
+          out.push({ head: true, text: agent.type, source: "", fg: "", note: "subagent", noteFg: DIM, calls: 0 });
+          if (agent.description.length > 0) out.push({ head: false, text: agent.description, source: "", fg: "", note: "", noteFg: "", calls: 0 });
+          out.push({ head: false, text: "This subagent does not report its tools.", source: "", fg: DIM, note: "", noteFg: "", calls: 0 });
+        }
+        lines = out;
+        count = 0;
+        used = 0;
+        panel.refresh();
+        return;
+      }
       const got = api.agent.tools();
       const name = api.agent.info().name;
       const out: Line[] = [];
@@ -108,6 +126,7 @@ widecode.plugin({
     });
 
     api.on("conversationChanged", soon);
+    api.on("fileShown", soon);
     read();
   },
 });

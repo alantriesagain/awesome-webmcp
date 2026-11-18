@@ -10,21 +10,26 @@ import { clipText } from "@lightstart/tui/text.ts";
 /** Cells a closable tab's title keeps before its close mark. */
 const LABEL_CELLS = 24;
 
-/** One tab of the code column: its id, its label, whether it closes, the view it shows and, for an item tab, its source. */
+/** What a tab shows: the file (Code), a subagent's steps, or a tool call whole. */
+export type CodeTabKind = "code" | "agent" | "call";
+
+/** One tab of the code column: its id, its label, whether it closes, the view it shows and, for an item tab, its kind and source. */
 export class CodeTab {
   readonly id: string;
   readonly title: string;
   readonly closeable: boolean;
   readonly view: View;
+  readonly kind: CodeTabKind;
   /** What an item tab shows; null for Code, and dropped when the tab closes. */
   source: LineSource | null;
 
-  constructor(id: string, title: string, closeable: boolean, view: View, source: LineSource | null = null) {
+  constructor(id: string, title: string, closeable: boolean, view: View, source: LineSource | null = null, kind: CodeTabKind = "code") {
     this.id = id;
     this.title = title;
     this.closeable = closeable;
     this.view = view;
     this.source = source;
+    this.kind = kind;
   }
 }
 
@@ -106,6 +111,12 @@ export class CodeTabHost extends ColumnTabHost {
   /** The tab shown. */
   active(): CodeTab {
     return this.at(this.shown.value) ?? this.code;
+  }
+
+  /** The tab shown, as other plugins read it: its id (the call id for an item tab), what it is, and its short title. */
+  activeTab(): { id: string; kind: CodeTabKind; title: string } {
+    const tab = this.active();
+    return { id: tab.id, kind: tab.kind, title: tab.title };
   }
 
   /** Where `id` sits (0 is Code); -1 when no tab has it. */

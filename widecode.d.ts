@@ -765,6 +765,8 @@ declare namespace widecode {
       inAgent(): boolean;
       /** Close the call or subagent tab shown; false when Code is (true when one closed). */
       closeTab(): boolean;
+      /** The tab shown: its id (the call id for a subagent or call tab), what it is, and its short title. */
+      activeTab(): { id: string; kind: "code" | "agent" | "call"; title: string };
       /**
        * A view of this plugin's own rows for the code column, drawn as a tab's are (`count`, `rows`,
        * a `press` on a row); `show(title)` puts it in place of the file (Esc goes back), `refresh()`

@@ -78,7 +78,7 @@ export class CodeWidget extends CodeTarget {
     pane.showAgent(source, "Agent · " + type + (description.length > 0 ? ": " + description : ""), agentStatus(item) === "running");
     pane.onPress = (index: number) => this.toggle(pane, index);
     h.note("agent " + id);
-    this.tabs.open(new CodeTab(id, description.length > 0 ? type + ": " + description : type, true, pane, source));
+    this.tabs.open(new CodeTab(id, description.length > 0 ? type + ": " + description : type, true, pane, source, "agent"));
   }
 
   override openCall(id: string): void {
@@ -105,7 +105,7 @@ export class CodeWidget extends CodeTarget {
     pane.showAgent(source, item.name + (summary.length > 0 ? " · " + summary : ""), false);
     pane.onPress = null;
     h.note("call " + id);
-    this.tabs.open(new CodeTab(id, item.name, true, pane, source));
+    this.tabs.open(new CodeTab(id, item.name, true, pane, source, "call"));
   }
 
   override inAgent(): boolean {
@@ -114,6 +114,10 @@ export class CodeWidget extends CodeTarget {
 
   override closeTab(): boolean {
     return this.tabs.closeActive();
+  }
+
+  override activeTab(): { id: string; kind: "code" | "agent" | "call"; title: string } {
+    return this.tabs.activeTab();
   }
 
   override openView(source: LineSource, title: string, onPress: ((row: number) => void) | null): void {
