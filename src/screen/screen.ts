@@ -6,7 +6,6 @@
 import { type Signal, type TInput, signal } from "@lightstart/light/native/tui";
 import { Controller } from "@lightstart/light/controller/class.ts";
 import { Latest } from "@lightstart/lib/timing.ts";
-import { Hook } from "@lightstart/lib/hook.ts";
 import { Kernel } from "@lightstart/kernel/kernel.ts";
 import { Clipboard } from "@lightstart/tui/clipboard.ts";
 import { BandPart, Column, MenuEntry, Panel, Segments } from "./contributions.ts";
@@ -52,8 +51,6 @@ export class ScreenController extends Controller {
   readonly segments = new Segments();
   /** The system clipboard (does nothing until the entry configures it). */
   readonly clipboard = new Clipboard();
-  /** The status message was set (tell) or cleared. */
-  readonly messageChanged = new Hook();
   /** Called with the input that takes the terminal's focus; with the named columns (every column for []) of the screen as drawn, set by what owns the renderer (null where nothing draws); with a line worth logging. */
   onFocusInput: ((input: TInput | null) => void) | null = null;
   onScreen: ((columns: string[]) => string) | null = null;
@@ -250,17 +247,14 @@ export class ScreenController extends Controller {
     return error;
   }
 
-  /** Show `text` in the status bar for a while (and in the log); the same text already shown is noted again without firing the hook. */
+  /** Show `text` in the status bar for a while (and in the log); the same text already shown is noted again without changing the message. */
   tell(text: string): void {
     const ticket = this.messages.next();
-    const same = this.message.value === text;
     this.message.value = text;
-    if (!same) this.messageChanged.fire();
     this.note(text);
     setTimeout(() => {
       if (!this.messages.is(ticket)) return;
       this.message.value = "";
-      this.messageChanged.fire();
     }, MESSAGE_MS);
   }
 

@@ -66,7 +66,7 @@ export class Widecode {
     this.lastPermissions = this.host.session.permissions().rulesJson();
     k.settings.useStateFile(state);
     const kept = k.settings.state("keymap");
-    if (typeof kept === "string" && kept.length > 0) this.host.keys.keymap = kept;
+    if (typeof kept === "string" && kept.length > 0) this.host.keys.keymap.value = kept;
     this.prepare();
     for (const p of extra) k.use(p);
     k.start();

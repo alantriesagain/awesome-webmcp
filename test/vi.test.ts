@@ -23,7 +23,7 @@ const main = async (): Promise<void> => {
     plugins: config,
     before: (w: Widecode) => {
       w.host.session.agentId.value = "fake";
-      w.host.keys.keymap = "vi";
+      w.host.keys.keymap.value = "vi";
     },
   });
   const c = w.host.conversation;

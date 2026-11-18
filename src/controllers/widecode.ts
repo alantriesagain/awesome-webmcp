@@ -184,7 +184,7 @@ export class WidecodeController extends Controller {
     if (store !== null) host.keys.onRead = () => store.readKeys();
     this.keysNote = host.keys.applyUser();
     // The keymap: config.json's "keymap" (the one /keymap kept comes before it, read as the app starts).
-    if (config !== null && config.keymap.length > 0) host.keys.keymap = config.keymap;
+    if (config !== null && config.keymap.length > 0) host.keys.keymap.value = config.keymap;
     w.start(config !== null ? config.plugins : null, store !== null ? store.stateFile() : new NoStateFile(), []);
     // --trust: the folder trusted for this run, nothing asked and nothing kept (scripts, selftests).
     // Its harness goes in use now: start loaded the plugins and config while the folder was untrusted.

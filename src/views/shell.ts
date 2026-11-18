@@ -93,7 +93,6 @@ export class Shell extends View {
   /** The columns' widths: config.json's, a drag's; `resized` moves when a drag changes one. */
   readonly sizes = new ColumnWidths();
   private readonly resized = signal(0);
-  private readonly keymapVersion = signal(0);
   /** The menu entries, the keymap and the actions last built into the bar. */
   private menuSignature = "";
   private drag: BorderDrag | null = null;
@@ -107,9 +106,6 @@ export class Shell extends View {
     super();
     this.box.flex = 1;
     this.menuBar.brand.value = "◆ widecode";
-    this.keys.changed.add("shell", () => {
-      this.keymapVersion.value = this.keymapVersion.peek() + 1;
-    });
     for (const spec of TAB_COLUMNS) {
       this.tabs.set(spec.id, new TabColumn(spec.id));
     }
@@ -158,7 +154,7 @@ export class Shell extends View {
     commands.add(new Command("/help", "", "this list", "shell", (_arg: string) => this.help()));
     commands.add(new Command("/welcome", "", "the welcome: the columns, the keys and commands to start with", "shell", (_arg: string) => welcome(this.host)));
     const keymap = new Command("/keymap", "[name]", "the keymap in use: default, or one a plugin brings (emacs, vi); kept for the next run", "shell", (arg: string) => this.keymapCommand(arg.trim()));
-    keymap.onComplete = (arg: string): Suggestion[] => this.keys.names().filter((n) => n.startsWith(arg.trim())).map((n) => new Suggestion(n, n, n === this.keys.keymap ? "now" : ""));
+    keymap.onComplete = (arg: string): Suggestion[] => this.keys.names().filter((n) => n.startsWith(arg.trim())).map((n) => new Suggestion(n, n, n === this.keys.keymap.value ? "now" : ""));
     commands.add(keymap);
     commands.add(new Command("/columns", "[reset]", "the columns' widths; reset forgets the widths borders were dragged to", "shell", (arg: string) => this.columnsCommand(arg)));
     commands.add(
@@ -495,7 +491,7 @@ export class Shell extends View {
   /** Build the bar's menus from the entries, with each item's key as the keymap binds it now. */
   private buildMenus(): void {
     const entries = this.screen.menuEntries;
-    const parts: string[] = [this.keys.keymap];
+    const parts: string[] = [this.keys.keymap.value];
     for (const e of entries) parts.push(e.owner + "\n" + e.menu + "\n" + e.label + "\n" + e.action + "\n" + String(e.order) + "\n" + this.kernel.keys.label(e.action) + "\n" + String(this.kernel.actions.find(e.action) !== null));
     const signature = parts.join("\n");
     if (signature === this.menuSignature) return;
@@ -545,7 +541,7 @@ export class Shell extends View {
     for (const scope of scopes) for (const hint of k.keys.hints(scope)) if (!hints.includes(hint)) hints.push(hint);
     const composer = k.keys.hints("input");
     const text =
-      "Commands: " + commands.join(", ") + ". Keys: " + columns + ", " + hints.join(", ") + ". In the composer: " + composer.join(", ") + ". Keymap: " + this.keys.keymap + " (/keymap lists them; ~/.widecode/keys.json rebinds). A press on a \"· N tools\" line shows those calls in the Tools tab, on a call there shows it whole.";
+      "Commands: " + commands.join(", ") + ". Keys: " + columns + ", " + hints.join(", ") + ". In the composer: " + composer.join(", ") + ". Keymap: " + this.keys.keymap.value + " (/keymap lists them; ~/.widecode/keys.json rebinds). A press on a \"· N tools\" line shows those calls in the Tools tab, on a call there shows it whole.";
     this.conversation.model.notice(text, "info", "", "");
     this.session.conversationChanged.fire();
   }
@@ -554,7 +550,7 @@ export class Shell extends View {
   keymapCommand(name: string): void {
     const names = this.keys.names();
     if (name.length === 0) {
-      this.screen.tell("keymap " + this.keys.keymap + " (" + names.join(", ") + "); /keymap <name> switches");
+      this.screen.tell("keymap " + this.keys.keymap.value + " (" + names.join(", ") + "); /keymap <name> switches");
       return;
     }
     if (!names.includes(name)) {
@@ -568,7 +564,7 @@ export class Shell extends View {
   override render(): unknown {
     this.screen.layout.value;
     this.screen.menus.value;
-    this.keymapVersion.value;
+    this.keys.keymap.value;
     this.buildMenus();
     this.side();
     const cols = this.cols.value;

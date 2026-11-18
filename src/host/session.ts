@@ -17,6 +17,7 @@ import { PromptHistory } from "../conversation/history.ts";
 import { SessionRecords } from "../services/sessions.ts";
 import { Store } from "../services/store.ts";
 import { Titler } from "../agent/titles.ts";
+import type { McpTool } from "../agent/mcp.ts";
 
 export class SessionController extends Controller {
   conversation: Conversation;
@@ -46,8 +47,8 @@ export class SessionController extends Controller {
   readonly requestOpened = new Hook();
   /** A message is about to be sent to the agent (`conversation` not started yet for a new session). */
   readonly messageSending = new Hook();
-  /** The tools plugins offer the agents changed: one added, or its plugin gone. */
-  readonly toolsChanged = new Hook();
+  /** The tools plugins offer the agents: one added, or its plugin gone. */
+  readonly tools = signal<readonly McpTool[]>([]);
   /** The project's harness changed what the agent gets (its prompt, its trust). */
   readonly harnessChanged = new Hook();
   /** Called with a line worth logging. */

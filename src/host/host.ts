@@ -15,6 +15,7 @@ import { Conversation } from "../conversation/conversation.ts";
 import { removeLanguages } from "@lightstart/highlight/registry.ts";
 import { Hook } from "@lightstart/lib/hook.ts";
 import { KeymapController } from "./keymaps.ts";
+import { hookOn } from "./after-change.ts";
 import { Roles } from "./roles.ts";
 import { Kernel } from "@lightstart/kernel/kernel.ts";
 import { FileChange } from "@lightstart/workspace/changes.ts";
@@ -107,9 +108,9 @@ export class Host extends ConversationHolder {
       new NamedHook("fileShown", this.fileShown),
       new NamedHook("requestOpened", session.requestOpened),
       new NamedHook("messageSending", session.messageSending),
-      new NamedHook("keymapChanged", keys.changed),
-      new NamedHook("messageChanged", screen.messageChanged),
-      new NamedHook("toolsChanged", session.toolsChanged),
+      new NamedHook("keymapChanged", hookOn("keymapChanged", keys.keymap)),
+      new NamedHook("messageChanged", hookOn("messageChanged", screen.message)),
+      new NamedHook("toolsChanged", hookOn("toolsChanged", session.tools)),
       new NamedHook("harnessChanged", session.harnessChanged),
     ];
     this.screen.onNote = (text: string) => this.note(text);

@@ -41,7 +41,7 @@ const start = async (folder: string, home: string, config: unknown): Promise<Wid
       const read = store.loadConfig(w.defaults());
       w.host.keys.onRead = () => store.readKeys();
       w.host.keys.applyUser();
-      if (read.keymap.length > 0) w.host.keys.keymap = read.keymap;
+      if (read.keymap.length > 0) w.host.keys.keymap.value = read.keymap;
       plugins = config !== null ? config : read.plugins;
     },
   });
@@ -77,7 +77,7 @@ const main = async (): Promise<void> => {
   ok("/reload reads keys.json again", press(w, "f6") && w.host.screen.active.peek() === "side");
 
   // /keymap.
-  eq("the keymaps there are, emacs in use", w.host.keys.names().join(",") + " " + w.host.keys.keymap, "default,emacs,vi emacs");
+  eq("the keymaps there are, emacs in use", w.host.keys.names().join(",") + " " + w.host.keys.keymap.value, "default,emacs,vi emacs");
   w.host.roles.chat.submit("/keymap");
   eq("/keymap says", said(w), "keymap emacs (default, emacs, vi); /keymap <name> switches");
   w.host.roles.chat.submit("/keymap nope");
@@ -92,14 +92,14 @@ const main = async (): Promise<void> => {
   // The next start: the choice kept in state.json comes before config.json's "keymap".
   writeFileSync(join(home, "config.json"), '{ "keymap": "emacs", "plugins": {} }\n');
   const w2 = await start(folder, home, null);
-  ok("kept for the next run, before config.json's", w2.host.keys.keymap === "vi" && press(w2, "f9") && w2.host.screen.active.peek() === "code");
+  ok("kept for the next run, before config.json's", w2.host.keys.keymap.value === "vi" && press(w2, "f9") && w2.host.screen.active.peek() === "code");
   closeWidecode(w2);
 
   // config.json's "keymap" when nothing is kept.
   const home2 = mkdtempSync(join(tmpdir(), "widecode-keys-json-home2-"));
   writeFileSync(join(home2, "config.json"), '{ "keymap": "vi", "plugins": {} }\n');
   const w3 = await start(folder, home2, null);
-  ok("config.json chooses the keymap at start", w3.host.keys.keymap === "vi" && press(w3, "f9") && w3.host.screen.active.peek() === "code");
+  ok("config.json chooses the keymap at start", w3.host.keys.keymap.value === "vi" && press(w3, "f9") && w3.host.screen.active.peek() === "code");
   closeWidecode(w3);
 
   rmSync(folder, { recursive: true, force: true });

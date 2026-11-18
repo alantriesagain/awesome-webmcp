@@ -150,7 +150,7 @@ export class JsRuntime extends Bridge {
   private registered: JsPlugin[] = [];
   /** Files whose reload waits for the running call into JS to return. */
   private pendingFiles: string[] = [];
-  /** The tools changed since toolsChanged last fired. */
+  /** The tools changed since the session's list was last written. */
   toolsDirty = false;
   /** The tabs, band strips and code views JS plugins draw. */
   readonly views = new ViewTable();
@@ -377,7 +377,7 @@ export class JsRuntime extends Bridge {
     this.host.folderHooks.filesLoaded.fire();
     this.host.folderHooks.statusLoaded.fire();
     this.host.session.conversationChanged.fire();
-    this.flushToolsChanged();
+    this.flushTools();
   }
 
   /** The source of `file` as it is on disk now, null when it is gone. */
@@ -444,7 +444,7 @@ export class JsRuntime extends Bridge {
     this.host.folderHooks.filesLoaded.fire();
     this.host.folderHooks.statusLoaded.fire();
     this.host.session.conversationChanged.fire();
-    this.flushToolsChanged();
+    this.flushTools();
     this.host.screen.tell(source === null ? "removed " + shownName(file) + (retired.length > 0 ? ": " + retired.join(", ") : "") : "reloaded " + shownName(file) + (ids.length > 0 ? ": " + ids.join(", ") : ""));
   }
 
@@ -476,11 +476,11 @@ export class JsRuntime extends Bridge {
     return "";
   }
 
-  /** Fire toolsChanged once for the tools that changed, outside any call into JS. */
-  flushToolsChanged(): void {
+  /** Write the session's list once for the tools that changed, outside any call into JS. */
+  flushTools(): void {
     if (!this.toolsDirty || this.depth > 0) return;
     this.toolsDirty = false;
-    this.host.session.toolsChanged.fire();
+    this.host.session.tools.value = this.mcp.tools.slice();
   }
 
   /** Stop every JS plugin, drop what they added, evaluate the sources again and start them. */
@@ -529,7 +529,7 @@ export class JsRuntime extends Bridge {
     this.host.folderHooks.statusLoaded.fire();
     this.host.session.conversationChanged.fire();
     this.toolsDirty = true;
-    this.flushToolsChanged();
+    this.flushTools();
     this.host.screen.tell("plugins reloaded: " + String(this.table.plugins.length) + (this.errors.length > 0 ? ", " + String(this.errors.length) + " with problems (see the log)" : ""));
   }
 
@@ -671,7 +671,7 @@ export class JsRuntime extends Bridge {
         const file = this.pendingFiles.shift() ?? "";
         this.reloadFile(file, this.readSource(file));
       }
-      this.flushToolsChanged();
+      this.flushTools();
     }
     trail.leave(at);
     return r;

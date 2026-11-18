@@ -1,7 +1,7 @@
 // ffi: @lightstart/plugins/native/ffi.json
-// A hook listener's own run firing its hook again waits for it, coalesces payload-less fires, and
-// stops after a bound; a plugin whose calls keep failing is switched off; the same message told
-// again is noted without firing messageChanged.
+// A hook listener's own change of the state it hears is heard after it returns, never nested, and
+// one turn delivers it at most nine times; a plugin whose calls keep failing is switched off; the same message told again is noted without changing
+// the message.
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +10,7 @@ import { PluginSource } from "@lightstart/plugins/sources.ts";
 import type { Widecode } from "../src/compose.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { openWidecode } from "./support/app.ts";
+import { afterChange } from "../src/host/after-change.ts";
 
 const folder = mkdtempSync(join(tmpdir(), "widecode-guard-"));
 
@@ -54,10 +55,10 @@ const main = async (): Promise<void> => {
       app.js.extra = [new PluginSource("reenter.js", reenter)];
     },
   });
-  w.host.screen.messageChanged.fire();
+  w.host.screen.message.value = "start";
   const state = w.host.kernel.settings.state("reenter") as { nested?: unknown; n?: unknown } | null;
-  eq("a re-entrant fire runs after the listener returns, once per outer call at most", String(state?.nested) + " " + String(state?.n), "0 9");
-  eq("the last re-run's message is the one shown", w.host.screen.message.peek(), "loop 9");
+  eq("a listener's own change is heard after it returns, never nested, nine times in one turn at most", String(state?.nested) + " " + String(state?.n), "0 9");
+  eq("the last delivered run's message is the one shown", w.host.screen.message.peek(), "loop 9");
   const dropped = existsSync(logFile) ? readFileSync(logFile, "utf8").split("\n").filter((l) => l.includes("dropped") && l.includes("re-entrant")) : [];
   eq("past the bound, one line says what was dropped", String(dropped.length), "1");
   w.host.kernel.stop();
@@ -93,12 +94,12 @@ const main = async (): Promise<void> => {
   w = await openWidecode({ folder });
   const fired: string[] = [];
   const noted: string[] = [];
-  w.host.screen.messageChanged.add("guard", () => fired.push(w.host.screen.message.peek()));
+  afterChange(w.host.screen.message, () => fired.push(w.host.screen.message.peek()));
   w.host.onLog = (text: string) => noted.push(text);
   w.host.screen.tell("same");
   w.host.screen.tell("same");
   w.host.screen.tell("other");
-  eq("the same message told twice fires messageChanged once", fired.join(" | "), "same | other");
+  eq("the same message told twice is heard once", fired.join(" | "), "same | other");
   eq("and both tells are still noted", String(noted.filter((t) => t === "same").length), "2");
   w.host.kernel.stop();
   w.js.stopWatching();

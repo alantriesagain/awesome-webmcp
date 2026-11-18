@@ -22,7 +22,7 @@ export const answerState = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
     case "state.note":
       return answer(h.screen.noteText());
     case "state.keymap":
-      return answer(h.keys.keymap);
+      return answer(h.keys.keymap.value);
     case "state.folder": {
       const marks: string[] = [];
       const markValues: string[] = [];

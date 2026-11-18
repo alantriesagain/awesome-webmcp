@@ -1,10 +1,10 @@
 // The keymaps: the one in use (emacs unless config.json's "keymap", /keymap or the onboarding says
 // otherwise, kept in state.json), the ones plugins bring (/keymap lists them; a keymap plugin turns
 // its layers on when the state names it), and the user's keys.json over the keymap, read by
-// `onRead` and applied as the kernel's user layer. `changed` fires when the keymap in use changes.
+// `onRead` and applied as the kernel's user layer. `keymap` is the keymap in use, a signal.
 import { errorMessage } from "@lightstart/lib/json.ts";
 import { Controller } from "@lightstart/light/controller/class.ts";
-import { Hook } from "@lightstart/lib/hook.ts";
+import { signal } from "@lightstart/light/signals";
 import { Kernel } from "@lightstart/kernel/kernel.ts";
 import { keyEntriesOf } from "@lightstart/kernel/keys.ts";
 
@@ -25,13 +25,11 @@ export class KeymapDef {
 export class KeymapController extends Controller {
   readonly kernel: Kernel;
   /** The keymap in use. */
-  keymap = "emacs";
+  readonly keymap = signal("emacs");
   /** The keymaps plugins brought, for /keymap's list. */
   keymaps: KeymapDef[] = [];
   /** Answers the user's keys.json text ("" for none); null without a store. */
   onRead: (() => string) | null = null;
-  /** The keymap in use changed. */
-  readonly changed = new Hook();
 
   constructor(kernel: Kernel) {
     super("keymaps");
@@ -47,9 +45,8 @@ export class KeymapController extends Controller {
 
   /** Use keymap `name` from now on, kept for the next run. */
   set(name: string): void {
-    this.keymap = name;
+    this.keymap.value = name;
     this.kernel.settings.setState("keymap", name);
-    this.changed.fire();
   }
 
   /** A keymap plugin `def.owner` brings; a later one of the id replaces the earlier. */

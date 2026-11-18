@@ -98,7 +98,7 @@ const main = async (): Promise<void> => {
   panel.key(new KeyEvent("char", "3", false, false, false), true);
   const chat = chatOf(w);
   ok("the questions opened no turn: nothing runs, no turn the agent started, no working line", !w.host.conversation.model.running && !w.chat.pane.source.busy() && !chat.includes("continued on its own") && !chat.includes("Working…"));
-  eq("each answer did its thing, in order; the keymap in use and kept", did.join(" | ") + " / " + w.host.keys.keymap + " " + String(w.host.kernel.settings.state("keymap")) + " " + open(), "agent claude | model fable[1m] | trust / vi vi ");
+  eq("each answer did its thing, in order; the keymap in use and kept", did.join(" | ") + " / " + w.host.keys.keymap.value + " " + String(w.host.kernel.settings.state("keymap")) + " " + open(), "agent claude | model fable[1m] | trust / vi vi ");
 
   // A later launch in a folder not trusted: the folder alone; Look only and Exit.
   const later = (): Onboarding => {

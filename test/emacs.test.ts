@@ -18,7 +18,7 @@ const main = async (): Promise<void> => {
   const state = (): string => JSON.stringify(input.lines) + " @" + String(input.row) + ":" + String(input.col);
   w.host.screen.focus("chat");
 
-  eq("the keymap in use, unasked: emacs", w.host.keys.keymap + " " + w.host.keys.names().join(","), "emacs default,emacs,vi");
+  eq("the keymap in use, unasked: emacs", w.host.keys.keymap.value + " " + w.host.keys.names().join(","), "emacs default,emacs,vi");
   w.chat.pane.composer.set(["one two", "three"], 0, 7);
   press("char", "b", true);
   press("char", "b", true);
