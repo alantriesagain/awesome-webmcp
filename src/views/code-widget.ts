@@ -51,10 +51,11 @@ export class CodeWidget extends CodeTarget {
     // From a resumed session its steps are in its own transcript, read once.
     if (item.children.length === 0 && item.task === null) h.conversation.loadSubagent(item);
     const description = agentDescription(item);
-    this.pane.showAgent(new AgentSource(h, id), "Agent · " + agentType(item) + (description.length > 0 ? ": " + description : ""), agentStatus(item) === "running");
+    const source = new AgentSource(h, id);
+    this.pane.showAgent(source, "Agent · " + agentType(item) + (description.length > 0 ? ": " + description : ""), agentStatus(item) === "running");
     this.pane.onPress = (index: number) => this.toggle(index);
     h.note("agent " + id);
-    h.fileShown.fire();
+    h.shown.value = source;
   }
 
   override openCall(id: string): void {
@@ -75,7 +76,7 @@ export class CodeWidget extends CodeTarget {
     this.pane.showAgent(source, item.name + (summary.length > 0 ? " · " + summary : ""), false);
     this.pane.onPress = null;
     h.note("call " + id);
-    h.fileShown.fire();
+    h.shown.value = source;
   }
 
   override inAgent(): boolean {
@@ -85,7 +86,7 @@ export class CodeWidget extends CodeTarget {
   override openView(source: LineSource, title: string, onPress: ((row: number) => void) | null): void {
     this.pane.showAgent(source, title, false);
     this.pane.onPress = onPress;
-    this.host.fileShown.fire();
+    this.host.shown.value = source;
   }
 
   /** A press on a subagent's step opens or closes it, as in the chat. */
@@ -127,7 +128,7 @@ export class CodeWidget extends CodeTarget {
     const ticket = this.loads.next();
     if (path.length === 0) {
       this.pane.clear();
-      h.fileShown.fire();
+      h.shown.value = null;
       return;
     }
     const mark = h.folder.markOf(path);
@@ -135,7 +136,7 @@ export class CodeWidget extends CodeTarget {
     if (!this.loads.is(ticket)) return;
     this.pane.show(file, h.folder.markOf(path));
     h.note("code " + path + " hunks=" + String(file.hunks.length));
-    h.fileShown.fire();
+    h.shown.value = file;
   }
 
   /** Show `path` as `commit` changed it. */
@@ -146,6 +147,6 @@ export class CodeWidget extends CodeTarget {
     if (!this.loads.is(ticket)) return;
     this.pane.showCommit(file, mark, commit.short + " " + commit.subject);
     h.note("commit " + commit.short + " " + path + " hunks=" + String(file.hunks.length));
-    h.fileShown.fire();
+    h.shown.value = file;
   }
 }

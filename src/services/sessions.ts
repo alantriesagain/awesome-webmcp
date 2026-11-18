@@ -11,7 +11,6 @@ import { join } from "node:path";
 import { LiveRows, modelQuery } from "@lightstart/light/model/binder";
 import { effect } from "@lightstart/light/signals";
 import { recordOf, text } from "@lightstart/lib/json.ts";
-import { Hook } from "@lightstart/lib/hook.ts";
 import { Limits, SessionMeta, SessionStore } from "../conversation/session-store.ts";
 import { sessions } from "../models/sessions.ts";
 import { skills } from "../models/skills.ts";
@@ -61,10 +60,13 @@ export class SkillUsage {
   }
 }
 
+/** A signal the records write their rows into (the session controller's). */
+export interface RowSignal {
+  value: readonly Record<string, unknown>[];
+}
+
 export class SessionRecords extends SessionStore {
   readonly store: Store;
-  /** Fires when the folder's records changed (a row landed). */
-  readonly changed: Hook;
   /** The folder whose records these are ("" before one opens). */
   folder = "";
   onNote: ((text: string) => void) | null = null;
@@ -74,11 +76,14 @@ export class SessionRecords extends SessionStore {
   private following: (() => void) | null = null;
   private readonly pending = new Map<string, SessionMeta>();
   private chain: Promise<void> = Promise.resolve();
+  private readonly rowSink: RowSignal;
+  private readonly skillRowSink: RowSignal;
 
-  constructor(store: Store, changed: Hook) {
+  constructor(store: Store, sessions: RowSignal, skills: RowSignal) {
     super();
     this.store = store;
-    this.changed = changed;
+    this.rowSink = sessions;
+    this.skillRowSink = skills;
   }
 
   /** The records of `folder` (the app's store holds them): the old files imported, the rows followed. */
@@ -90,15 +95,13 @@ export class SessionRecords extends SessionStore {
     rows.use(modelQuery<Record<string, unknown>>(sessions, { order: "-updatedMs" }));
     this.rows = rows;
     const run = effect(() => {
-      rows.value;
-      this.changed.fire();
+      this.rowSink.value = rows.value;
     });
     const kept = new LiveRows<Record<string, unknown>>();
     kept.use(modelQuery<Record<string, unknown>>(skills, {}));
     this.skillRows = kept;
     const keptRun = effect(() => {
-      kept.value;
-      this.changed.fire();
+      this.skillRowSink.value = kept.value;
     });
     this.following = () => {
       run.dispose();
@@ -227,6 +230,9 @@ export class SessionRecords extends SessionStore {
     this.skillRows = null;
     this.skillPending.clear();
     this.pending.clear();
+    const none: Record<string, unknown>[] = [];
+    this.rowSink.value = none;
+    this.skillRowSink.value = none;
   }
 
   /** The records an earlier widecode kept as one JSON file per session, into the model once (the files stay). */

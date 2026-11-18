@@ -5,6 +5,7 @@
 // each requires, leaving out the ones switched off. What it returns holds the widgets for the
 // entry, the selftest and the tests; plugins never reach each other this way, only through the host.
 import { Host } from "./host/host.ts";
+import { AgentHarness } from "./host/session.ts";
 import { JsRuntime } from "./runtime/runtime.ts";
 import { Plugin } from "@lightstart/kernel/plugin.ts";
 import type { StateFile } from "@lightstart/kernel/settings.ts";
@@ -42,8 +43,6 @@ export class Widecode {
   }
 
   private prepared = false;
-  /** The permission rules as the agent last got them, so a change fires harnessChanged. */
-  private lastPermissions = "";
 
   /** The JS plugins in the kernel, not started. */
   private prepare(): void {
@@ -63,7 +62,7 @@ export class Widecode {
     const k = this.host.kernel;
     this.host.session.userPlugins = plugins;
     k.settings.load(mergePlugins(plugins, this.host.harness.config().plugins));
-    this.lastPermissions = this.host.session.permissions().rulesJson();
+    this.noteHarness();
     k.settings.useStateFile(state);
     const kept = k.settings.state("keymap");
     if (typeof kept === "string" && kept.length > 0) this.host.keys.keymap.value = kept;
@@ -126,11 +125,14 @@ export class Widecode {
     const note = this.shell.sizes.configure(mergeColumns(this.host.session.userColumns, cfg.columns));
     this.host.screen.layout.value = this.host.screen.layout.peek() + 1;
     const permissions = this.host.session.permissions();
-    if (permissions.rulesJson() !== this.lastPermissions) {
-      this.lastPermissions = permissions.rulesJson();
-      this.host.session.harnessChanged.fire();
-    }
+    this.noteHarness();
     return [cfg.notice, permissions.notice, note].filter((t) => t.length > 0).join("; ");
+  }
+
+  /** Note what the harness gives the agent now; plugins hear harnessChanged when any of it changed. */
+  private noteHarness(): void {
+    const h = this.host.harness;
+    this.host.session.useHarness(new AgentHarness(this.host.session.permissions().rulesJson(), h.userPrompt(), h.prompt(), this.host.session.trusted.peek()));
   }
 
   /** The project's own plugins folder among the plugin folders, watched; `sync` loads its files now. */
@@ -147,7 +149,6 @@ export class Widecode {
     this.useProjectPlugins(true);
     this.watchHarness();
     const note = this.applyHarness();
-    this.host.session.harnessChanged.fire();
     return note;
   }
 
@@ -172,7 +173,7 @@ export class Widecode {
       else if (what === "config") {
         const note = this.applyHarness();
         h.screen.tell(note.length > 0 ? note : "the harness config applied");
-      } else h.session.harnessChanged.fire();
+      } else this.noteHarness();
     };
     h.harness.watch();
   }

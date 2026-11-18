@@ -16,6 +16,7 @@ import { removeLanguages } from "@lightstart/highlight/registry.ts";
 import { Hook } from "@lightstart/lib/hook.ts";
 import { KeymapController } from "./keymaps.ts";
 import { hookOn } from "./after-change.ts";
+import { computed, signal } from "@lightstart/light/signals";
 import { Roles } from "./roles.ts";
 import { Kernel } from "@lightstart/kernel/kernel.ts";
 import { FileChange } from "@lightstart/workspace/changes.ts";
@@ -52,8 +53,8 @@ export class Host extends ConversationHolder {
   get folderHooks(): FolderHooks {
     return this.folder.hooks;
   }
-  /** The code column shows a file, a subagent's steps or a call. */
-  readonly fileShown = new Hook();
+  /** What the code column shows: a file, a subagent's steps or a call (null for nothing). */
+  readonly shown = signal<object | null>(null);
   /** The keymaps, and the roles plugins play. */
   readonly keys: KeymapController;
   readonly roles = new Roles();
@@ -100,18 +101,18 @@ export class Host extends ConversationHolder {
     // The one list of the hooks plugins listen to (widecode.d.ts and PLUGINS.md name the same ones: test/api.test.ts).
     this.hooks = [
       new NamedHook("conversationChanged", session.conversationChanged),
-      new NamedHook("sessionsChanged", session.sessionsChanged),
+      new NamedHook("sessionsChanged", hookOn("sessionsChanged", computed(() => [session.sessionRows.value, session.skillRows.value]))),
       new NamedHook("filesLoaded", folder.hooks.filesLoaded),
       new NamedHook("statusLoaded", folder.hooks.statusLoaded),
       new NamedHook("folderChanged", folder.hooks.folderChanged),
       new NamedHook("baseChanged", folder.hooks.baseChanged),
-      new NamedHook("fileShown", this.fileShown),
+      new NamedHook("fileShown", hookOn("fileShown", this.shown)),
       new NamedHook("requestOpened", session.requestOpened),
       new NamedHook("messageSending", session.messageSending),
       new NamedHook("keymapChanged", hookOn("keymapChanged", keys.keymap)),
       new NamedHook("messageChanged", hookOn("messageChanged", screen.message)),
       new NamedHook("toolsChanged", hookOn("toolsChanged", session.tools)),
-      new NamedHook("harnessChanged", session.harnessChanged),
+      new NamedHook("harnessChanged", hookOn("harnessChanged", session.harnessState)),
     ];
     this.screen.onNote = (text: string) => this.note(text);
     this.folder.onNote = (text: string) => this.note(text);

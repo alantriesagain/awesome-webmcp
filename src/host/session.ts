@@ -19,6 +19,26 @@ import { Store } from "../services/store.ts";
 import { Titler } from "../agent/titles.ts";
 import type { McpTool } from "../agent/mcp.ts";
 
+/** What the harness gives the agent: the permission rules, the user's prompt, the project's prompt and the trust. */
+export class AgentHarness {
+  readonly rules: string;
+  readonly userPrompt: string;
+  readonly prompt: string;
+  readonly trusted: boolean;
+
+  constructor(rules: string, userPrompt: string, prompt: string, trusted: boolean) {
+    this.rules = rules;
+    this.userPrompt = userPrompt;
+    this.prompt = prompt;
+    this.trusted = trusted;
+  }
+
+  /** Whether `other` gives the agent the same. */
+  same(other: AgentHarness): boolean {
+    return this.rules === other.rules && this.userPrompt === other.userPrompt && this.prompt === other.prompt && this.trusted === other.trusted;
+  }
+}
+
 export class SessionController extends Controller {
   conversation: Conversation;
   /** The project's harness, `.widecode/` in the folder. */
@@ -33,8 +53,10 @@ export class SessionController extends Controller {
   store: Store | null = null;
   /** The folder's session records over the sessions model (null without a store). */
   records: SessionRecords | null = null;
-  /** The folder's session records changed (a row landed). */
-  readonly sessionsChanged = new Hook();
+  /** The folder's session rows, newest first (the records write them as they land). */
+  readonly sessionRows = signal<readonly Record<string, unknown>[]>([]);
+  /** The folder's skill run rows (the records write them as they land). */
+  readonly skillRows = signal<readonly Record<string, unknown>[]>([]);
   readonly titler = new Titler();
   /** The messages written in this folder (src/conversation/history.ts); this run's only without a store. */
   history = new PromptHistory("");
@@ -49,8 +71,8 @@ export class SessionController extends Controller {
   readonly messageSending = new Hook();
   /** The tools plugins offer the agents: one added, or its plugin gone. */
   readonly tools = signal<readonly McpTool[]>([]);
-  /** The project's harness changed what the agent gets (its prompt, its trust). */
-  readonly harnessChanged = new Hook();
+  /** What the project's harness gives the agent (its rules, its prompt, its trust). */
+  readonly harnessState = signal(new AgentHarness("", "", "", false));
   /** Called with a line worth logging. */
   onNote: ((text: string) => void) | null = null;
 
@@ -79,7 +101,7 @@ export class SessionController extends Controller {
     this.harness.userPromptPath = this.userPromptPath();
     this.setTrusted(store === null || store.trusted(folder));
     if (store !== null) {
-      const records = new SessionRecords(store, this.sessionsChanged);
+      const records = new SessionRecords(store, this.sessionRows, this.skillRows);
       records.onNote = (text: string) => this.note(text);
       this.records = records;
       await records.open(folder);
@@ -94,6 +116,11 @@ export class SessionController extends Controller {
   setTrusted(on: boolean): void {
     this.trusted.value = on;
     this.harness.trusted = on;
+  }
+
+  /** Note what the harness gives the agent, kept only when some of it changed. */
+  useHarness(next: AgentHarness): void {
+    if (!next.same(this.harnessState.peek())) this.harnessState.value = next;
   }
 
   /**

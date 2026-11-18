@@ -5,8 +5,9 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Hook } from "@lightstart/lib/hook.ts";
+import { signal } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { afterChange } from "../src/host/after-change.ts";
 import { SessionRecords } from "../src/services/sessions.ts";
 import { Store } from "../src/services/store.ts";
 import { openFolderStore } from "./support/records.ts";
@@ -17,14 +18,13 @@ const other = mkdtempSync(join(tmpdir(), "widecode-records-other-"));
 mkdirSync(join(project, ".widecode", "sessions"), { recursive: true });
 writeFileSync(join(project, ".widecode", "sessions", "old-1.json"), JSON.stringify({ id: "old-1", folder: project, title: "From before", titleBy: "claude", costUsd: 0.25 }));
 const store = new Store(home);
-const changed = new Hook();
 let fired = 0;
-changed.add("test", () => {
-  fired++;
-});
 // The folder's store, as the app's main store holds it.
 let db = await openFolderStore(project);
-const records = new SessionRecords(store, changed);
+const rows = signal<readonly Record<string, unknown>[]>([]);
+const skills = signal<readonly Record<string, unknown>[]>([]);
+afterChange(rows, () => fired++);
+const records = new SessionRecords(store, rows, skills);
 await records.open(project);
 ok("an earlier record file is imported when the folder opens", (() => {
   const m = records.session("old-1", project);
@@ -47,7 +47,7 @@ await records.settled();
 await records.close();
 await db.close();
 db = await openFolderStore(project);
-const again = new SessionRecords(store, new Hook());
+const again = new SessionRecords(store, signal<readonly Record<string, unknown>[]>([]), signal<readonly Record<string, unknown>[]>([]));
 await again.open(project);
 const back = again.session("s-1", project);
 eq("a record round trip from fresh records", back !== null ? String(back.folder === project) + "|" + back.title + "|" + back.titleBy + "|" + String(back.costUsd) + "|" + String(back.contextWindow) + "|" + back.baseCommit : "none", "true|Fix the parser|user|0.5|1000000|abc123");

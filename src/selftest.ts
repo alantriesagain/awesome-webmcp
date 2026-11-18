@@ -29,6 +29,7 @@ import { join, resolve } from "node:path";
 import { triggerCrash } from "@lightstart/lib/crash.ts";
 import { log, trail } from "@lightstart/lib/log.ts";
 import { Widecode } from "./compose.ts";
+import { afterChange } from "./host/after-change.ts";
 import { AGENT, Item, NOTICE, RUN, TEXT, TOOL, Turn } from "./conversation/model.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { CodeFile } from "./code/diff.ts";
@@ -51,6 +52,8 @@ export class Selftest {
   private hunksBefore = -1;
   private step = 0;
   private finished = false;
+  /** Stops the check of what the code column shows (the shell scenario). */
+  private stopShown: (() => void) | null = null;
 
   constructor(name: string, w: Widecode) {
     this.name = name;
@@ -81,7 +84,7 @@ export class Selftest {
     }
     setTimeout(() => this.fail("timed out at step " + String(this.step)), this.name.startsWith("live") ? 120000 : 30000);
     if (this.name === "shell") {
-      this.w.host.fileShown.add("selftest", () => this.shown(this.w.host.roles.code.file()));
+      this.stopShown = afterChange(this.w.host.shown, () => this.shown(this.w.host.roles.code.file()));
       let first = "";
       for (const [path, mark] of this.w.host.folder.marks()) if (mark === "M" && (first.length === 0 || path < first)) first = path;
       if (first.length > 0) this.w.host.roles.code.open(first);
@@ -319,6 +322,7 @@ export class Selftest {
   private pass(): void {
     if (this.finished) return;
     this.finished = true;
+    this.stopShown?.();
     log("selftest ok");
     this.current().host.quit();
   }
@@ -326,6 +330,7 @@ export class Selftest {
   private fail(why: string): void {
     if (this.finished) return;
     this.finished = true;
+    this.stopShown?.();
     log("selftest failed: " + why);
     this.current().host.conversation.kill();
     process.exit(1);
