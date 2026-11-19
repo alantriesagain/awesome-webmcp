@@ -17,6 +17,17 @@ import { limitMessage } from "./status.ts";
 
 /** Calls kept for a later subagent read by id (their input and diff are released at the turn's end). */
 const CALLS_MAX = 2000;
+/** Message ids and block keys kept to recognise a record seen before. */
+const SEEN_MAX = 20000;
+
+/** Drop the oldest entries of `map` past `max`. */
+const dropOldest = <K, V>(map: Map<K, V>, max: number): void => {
+  while (map.size > max) {
+    const oldest = map.keys().next();
+    if (oldest.done === true) return;
+    map.delete(oldest.value);
+  }
+};
 const COMMAND_PREFIXES = ["<command-name>", "<command-message>", "<local-command-stdout>", "<local-command-stderr>", "<local-command-caveat>"];
 const INTERRUPTED = "[Request interrupted by user";
 
@@ -111,9 +122,9 @@ export class Reader {
       call.patch = [];
     }
     this.turnCalls = [];
-    // The message ids and block keys a transcript names only within its turn: a new turn starts new ones.
-    this.lineCounts.clear();
-    this.blocks.clear();
+    // The message ids and block keys seen: a later record may name one again (a replayed message), so they stay, the oldest dropped past a bound.
+    dropOldest(this.lineCounts, SEEN_MAX);
+    dropOldest(this.blocks, SEEN_MAX);
     while (this.calls.size > CALLS_MAX) {
       const oldest = this.calls.keys().next();
       if (oldest.done === true) break;
