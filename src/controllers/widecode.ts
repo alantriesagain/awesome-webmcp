@@ -145,7 +145,10 @@ export class WidecodeController extends Controller {
     const before = current.before;
     if (before !== null) await before(w);
     this.takeOver(w);
-    if (current.start) w.start(current.plugins, current.state, current.extra);
+    if (current.start) {
+      w.start(current.plugins, current.state, current.extra);
+      logger.registerCommands(w.host.kernel);
+    }
     if (current.load) await w.host.load();
     if (this.opened.length > 0) w.host.screen.tell(this.opened);
   }
@@ -188,6 +191,7 @@ export class WidecodeController extends Controller {
     // The keymap: config.json's "keymap" (the one /keymap kept comes before it, read as the app starts).
     if (config !== null && config.keymap.length > 0) host.keys.keymap.value = config.keymap;
     w.start(config !== null ? config.plugins : null, store !== null ? store.stateFile() : new NoStateFile(), []);
+    logger.registerCommands(host.kernel);
     // --trust: the folder trusted for this run, nothing asked and nothing kept (scripts, selftests).
     // Its harness goes in use now: start loaded the plugins and config while the folder was untrusted.
     if (app.args.flag("trust")) {

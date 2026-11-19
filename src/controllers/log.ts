@@ -9,9 +9,12 @@ import { errorMessage } from "@lightstart/lib/json.ts";
 import { log, logPath, nameLog, openLog, openLogIn, trail } from "@lightstart/lib/log.ts";
 import { installCrash, noteCrash } from "@lightstart/lib/crash.ts";
 import { Controller } from "@lightstart/light/controller/class.ts";
+import { Command } from "@lightstart/kernel/commands.ts";
+import type { Kernel } from "@lightstart/kernel/kernel.ts";
 import app from "../app.ts";
 import { BUILD } from "../build.ts";
 import type { Config, Store } from "../services/store.ts";
+import screen from "./screen.ts";
 import run from "./run.ts";
 
 export class LogController extends Controller {
@@ -50,6 +53,16 @@ export class LogController extends Controller {
     // A native crash reports itself to this log and puts the terminal back; before the TUI saves raw mode.
     installCrash(logPath(), "widecode");
     trail.onChange = (text: string) => noteCrash(text);
+  }
+
+  /** The /log command, per start (the kernel is new each start); the widecode controller calls it after the shell's own. */
+  registerCommands(kernel: Kernel): void {
+    kernel.commands.add(
+      new Command("/log", "", "where this run's log goes (config.json's \"log\" turns it off or moves it)", "shell", (_arg: string) => {
+        const p = logPath();
+        screen.current.tell(p.length > 0 ? "log: " + p : "the log is off (config.json's \"log\", or --log <path>)");
+      }),
+    );
   }
 
   private watchProcess(): void {

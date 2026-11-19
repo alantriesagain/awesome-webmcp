@@ -31,7 +31,7 @@ import { ColumnWidths } from "./column-widths.ts";
 import { TabColumn } from "./tab-column.ts";
 import "../screen/column-view.ts";
 import { palette } from "@lightstart/tui/palette.ts";
-import { logPath, trail } from "@lightstart/lib/log.ts";
+import { trail } from "@lightstart/lib/log.ts";
 import { Command, Suggestion } from "@lightstart/kernel/commands.ts";
 import { welcome } from "./onboarding.ts";
 
@@ -186,7 +186,7 @@ export class Shell extends View {
     this.addCommands();
   }
 
-  /** The shell's commands: the help, the welcome, the keymap, the columns, the log's path. */
+  /** The shell's commands: the help, the welcome, the keymap and the columns. */
   private addCommands(): void {
     const commands = this.kernel.commands;
     commands.add(new Command("/help", "", "this list", "shell", (_arg: string) => this.help()));
@@ -195,12 +195,6 @@ export class Shell extends View {
     keymap.onComplete = (arg: string): Suggestion[] => this.keys.names().filter((n) => n.startsWith(arg.trim())).map((n) => new Suggestion(n, n, n === this.keys.keymap.value ? "now" : ""));
     commands.add(keymap);
     commands.add(new Command("/columns", "[reset]", "the columns' widths; reset forgets the widths borders were dragged to", "shell", (arg: string) => this.columnsCommand(arg)));
-    commands.add(
-      new Command("/log", "", "where this run's log goes (config.json's \"log\" turns it off or moves it)", "shell", (_arg: string) => {
-        const p = logPath();
-        this.screen.tell(p.length > 0 ? "log: " + p : "the log is off (config.json's \"log\", or --log <path>)");
-      }),
-    );
   }
 
   /** The tab columns, each added while plugins registered tabs for it and dropped when none are left. */
