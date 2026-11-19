@@ -106,10 +106,18 @@ Each round leaves widecode building, its 127 tests passing (except the `pi` one,
 
       Hooks became signals (`fe60cf3` to `5c33841`). Each piece of state is a signal holding its value: the keymap, the status message, the tools, the session rows, the harness, what the code column shows, the folder's files, status and base (light #136), and the conversation's revision. Plugins still hear them by name: `hookOn` fires after each change. An occurrence (a request opened, a message about to be sent, the watcher's batch) is light's `event()` (light #134), which also keeps a listener's owner. `Hook` left light (#137).
 
-      Left:
-      - views importing the controllers instead of taking a `Host`;
-      - commands moving to the code they act on;
-      - `Widecode` (the plugin runtime, the widgets, the harness) becoming a `plugins` controller.
+      The rest of round 3 is done too (`5dce326` to `5f1b993`):
+      - **The plugins controller.** `plugins` owns each start's `Plugins` (src/plugins.ts): the plugin runtime, the chat, code and tools widgets, the plugins' defaults and start, and the harness operations. `Widecode` (src/compose.ts) is now a read-only view of the start, for the tests and the selftest. The shell owns its column sizes and screen text.
+      - **Views.** The widgets, onboarding and the shell reach the controllers through their holders, and none takes a `Host`. The hook list is src/host/hooks.ts, and what the code column shows is the screen's. `Host` is the plugin api's door only. Loading and the store are the session's; quitting and opening a folder are src/host/actions.ts.
+      - **Commands.** Each lives with what it acts on:
+        - `/log`: the log controller;
+        - `/keymap`: the keymap controller;
+        - `/welcome`: onboarding;
+        - `/reload` and `/trust`: the plugins;
+        - `/agent`: the session;
+        - `/help` and `/columns`: the shell.
+
+        Each command registers at each start, in the order `/help` lists them.
 
       What's in the way:
       - Loading the config needs the plugins' defaults, which exist only once the app is composed (`store.loadConfig(w.defaults())`). The defaults only seed a new `config.json`, so `Store.loadConfig` has to separate reading from seeding before a `settings` controller can start ahead of the composition.
