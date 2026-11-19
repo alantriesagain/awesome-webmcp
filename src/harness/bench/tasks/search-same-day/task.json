@@ -1,0 +1,1 @@
+{"prompt":"Find on the web the day version 1.5.2 of the npm package @earendil-works/pi-coding-agent was published, then the Node.js release published on that same day. Do not use npm or another package manager. Write just that Node.js version, such as v20.9.0, into answer.txt.","timeoutMs":300000,"web":true}

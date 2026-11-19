@@ -99,6 +99,9 @@ export const pricesFromConfig = (path: string): PriceTable => {
   return table;
 };
 
+/** Exa's hosted MCP server: the web search every agent of a run searches with. */
+export const EXA_MCP = "https://mcp.exa.ai/mcp";
+
 /** A task: its name, its prompt, the folder holding `repo/` and `check.mjs`, its time. */
 export class BenchTask {
   readonly name: string;
@@ -461,12 +464,15 @@ const runPiTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult> => 
   git(work, ["add", "-A"]);
   git(work, ["-c", "user.email=bench@widecode", "-c", "user.name=bench", "commit", "-qm", "the task"]);
   // A folder of its own, so the user's pi settings and extensions never load; the key is pi's to run.
+  // Its one MCP server is Exa's, whose web search the harness and opencode use too, its tools
+  // declared to the model as the others' are.
   const agentDir = mkdtempSync(join(tmpdir(), "harness-bench-pi-"));
   const home = process.env["HOME"] ?? "";
   writeFileSync(
     join(agentDir, "auth.json"),
     JSON.stringify({ opencode: { type: "api_key", key: "!jq -r .opencode.key " + join(home, ".widecode", "auth.json") } }),
   );
+  writeFileSync(join(agentDir, "mcp.json"), JSON.stringify({ mcpServers: { exa: { url: EXA_MCP, exposure: "direct" } } }));
   const env: Record<string, string> = {};
   for (const k of Object.keys(spec.env)) env[k] = spec.env[k];
   env["PI_CODING_AGENT_DIR"] = agentDir;

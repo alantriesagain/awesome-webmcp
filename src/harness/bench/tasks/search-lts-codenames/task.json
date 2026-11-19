@@ -1,0 +1,1 @@
+{"prompt":"src/lts.mjs stops at Node.js 22. Bring codename() up to date with every Node.js release line that has reached LTS status today, looking the names up on the web, and keep newestLts() right.","timeoutMs":300000,"web":true}

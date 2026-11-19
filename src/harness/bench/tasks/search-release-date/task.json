@@ -1,0 +1,1 @@
+{"prompt":"On what day (UTC) was version 1.5.2 of the npm package @earendil-works/pi-coding-agent published? Find it on the web, not through npm or another package manager. Write just the date, as YYYY-MM-DD, into answer.txt.","timeoutMs":300000,"web":true}

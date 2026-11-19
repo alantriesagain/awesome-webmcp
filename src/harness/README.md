@@ -23,7 +23,7 @@ Google refuses searches from a fresh headless profile as unusual traffic on some
 
 ## The benchmark
 
-`bench/` measures agents on real models: sixteen tasks, eight small ones and eight that test what a harness does (a precise edit in a long file, a test's noisy output, a misleading stack, a change across six callers, a value traced through config, existing tests kept green, a tab-indented file, a bug seen only by running the program) (`bench/tasks/<name>/`: a repository, a
+`bench/` measures agents on real models: twenty tasks: eight small ones, eight that test what a harness does (a precise edit in a long file, a test's noisy output, a misleading stack, a change across six callers, a value traced through config, existing tests kept green, a tab-indented file, a bug seen only by running the program), and four that need the web (facts published after the models' training, one found through another, and a module brought up to date from them; `"web": true` in their task.json). Every agent searches through Exa's hosted MCP server: the harness's WebSearch, opencode's websearch (`OPENCODE_ENABLE_EXA=1`), and pi through an `mcp.json` in its agent folder naming the server with its tools declared directly (`bench/tasks/<name>/`: a repository, a
 prompt, a check the agent never sees, and a solution the test checks the check against), so the
 harness, opencode and the DeepSeek Harness run over ACP and pi over its RPC mode. A run copies the
 task into a temp git repository, starts the agent there, chooses the model and effort (through the

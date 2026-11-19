@@ -15,7 +15,7 @@ import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const main = async (): Promise<void> => {
   const tasks = loadTasks(join(process.cwd(), "src", "harness", "bench", "tasks"), []);
-  eq("the tasks", tasks.map((t) => t.name).join(","), "add-flag,answer-from-code,csv-quotes,edit-json,fix-bug,implement-slug,keep-tests-green,limit-concurrency,long-file-edit,misleading-failure,noisy-output,rename-symbol,run-to-see,signature-change,trace-config,whitespace-exact");
+  eq("the tasks", tasks.map((t) => t.name).join(","), "add-flag,answer-from-code,csv-quotes,edit-json,fix-bug,implement-slug,keep-tests-green,limit-concurrency,long-file-edit,misleading-failure,noisy-output,rename-symbol,run-to-see,search-first-lts,search-lts-codenames,search-release-date,search-same-day,signature-change,trace-config,whitespace-exact");
   const verdicts: string[] = [];
   for (const t of tasks) {
     const dir = mkdtempSync(join(tmpdir(), "bench-check-"));

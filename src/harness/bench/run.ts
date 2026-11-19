@@ -70,6 +70,8 @@ if (args.includes("--command")) {
   }
 } else if (agent === "opencode") {
   base.command = ["opencode", "acp"];
+  // opencode's websearch, which calls Exa as the harness's does, is off unless this says otherwise.
+  base.env = { OPENCODE_ENABLE_EXA: "1" };
   base.usage = ["opencode", "export", "{session}"];
   base.forget = ["opencode", "session", "delete", "{session}"];
 } else if (agent === "dsh") base.command = ["dsh", "--profile", "acp"];
@@ -113,6 +115,7 @@ const run = async (): Promise<void> => {
         spec.command = base.command;
         spec.usage = base.usage;
         spec.forget = base.forget;
+        spec.env = base.env;
         spec.effort = base.effort;
         spec.keep = base.keep;
         spec.userStore = base.userStore;
