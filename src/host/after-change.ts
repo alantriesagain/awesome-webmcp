@@ -42,3 +42,10 @@ export const hookOn = (name: string, state: { readonly value: unknown }): Hook =
   });
   return hook;
 };
+
+/** A hook fired for each value `occurrence` emits, for the plugins that listen under its name (the event's own queue keeps a listener's emits from nesting). */
+export const hookOnEvent = (occurrence: { on(listener: () => void): () => void }): Hook => {
+  const hook = new Hook();
+  occurrence.on(() => hook.fire());
+  return hook;
+};

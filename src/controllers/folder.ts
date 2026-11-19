@@ -2,7 +2,7 @@
 // run's batch), and the FolderController over it (the files, the git status, the compare base, the
 // tree), a new one each start. Disposing closes the watcher.
 import { Controller } from "@lightstart/light/controller/class.ts";
-import { FolderController, FolderHooks } from "@lightstart/workspace/folder.ts";
+import { FolderController } from "@lightstart/workspace/folder.ts";
 import { openWorkspace } from "@lightstart/workspace/workspace.ts";
 import run from "./run.ts";
 
@@ -20,7 +20,7 @@ export class FolderHolder extends Controller {
 
   private async open(): Promise<void> {
     const workspace = await openWorkspace(run.current.folder, run.current.batchMs);
-    this.current = new FolderController(workspace, new FolderHooks());
+    this.current = new FolderController(workspace);
   }
 
   override disconnected(): Promise<void> | null {

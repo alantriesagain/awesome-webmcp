@@ -16,7 +16,7 @@ import { removeLanguages } from "@lightstart/highlight/registry.ts";
 import { Hook } from "@lightstart/lib/hook.ts";
 import { KeymapController } from "./keymaps.ts";
 import { ApprovalController } from "./approval.ts";
-import { hookOn } from "./after-change.ts";
+import { hookOn, hookOnEvent } from "./after-change.ts";
 import { computed, signal } from "@lightstart/light/signals";
 import { Roles } from "./roles.ts";
 import { Kernel } from "@lightstart/kernel/kernel.ts";
@@ -24,7 +24,7 @@ import { FileChange } from "@lightstart/workspace/changes.ts";
 import { Harness } from "../services/harness.ts";
 import { Store } from "../services/store.ts";
 import type { Workspace } from "@lightstart/workspace/workspace.ts";
-import { FolderController, FolderHooks } from "@lightstart/workspace/folder.ts";
+import { FolderController } from "@lightstart/workspace/folder.ts";
 import { ScreenController } from "../screen/screen.ts";
 import { SessionController } from "./session.ts";
 
@@ -50,9 +50,9 @@ export class Host extends ConversationHolder {
   readonly session: SessionController;
   /** The hooks plugins listen to, by name. */
   readonly hooks: NamedHook[];
-  /** The folder's announcements: its files, status and base loaded or changed. */
-  get folderHooks(): FolderHooks {
-    return this.folder.hooks;
+  /** Fire hook `name` again, so plugins started since catch up with the state the others saw. */
+  replay(name: string): void {
+    this.hook(name)?.fire();
   }
   /** What the code column shows: a file, a subagent's steps or a call (null for nothing). */
   readonly shown = signal<object | null>(null);
@@ -106,10 +106,10 @@ export class Host extends ConversationHolder {
     this.hooks = [
       new NamedHook("conversationChanged", session.conversationChanged),
       new NamedHook("sessionsChanged", hookOn("sessionsChanged", computed(() => [session.sessionRows.value, session.skillRows.value]))),
-      new NamedHook("filesLoaded", folder.hooks.filesLoaded),
-      new NamedHook("statusLoaded", folder.hooks.statusLoaded),
-      new NamedHook("folderChanged", folder.hooks.folderChanged),
-      new NamedHook("baseChanged", folder.hooks.baseChanged),
+      new NamedHook("filesLoaded", hookOn("filesLoaded", folder.files)),
+      new NamedHook("statusLoaded", hookOn("statusLoaded", folder.status)),
+      new NamedHook("folderChanged", hookOnEvent(folder.changed)),
+      new NamedHook("baseChanged", hookOn("baseChanged", folder.base)),
       new NamedHook("fileShown", hookOn("fileShown", this.shown)),
       new NamedHook("requestOpened", session.requestOpened),
       new NamedHook("messageSending", session.messageSending),

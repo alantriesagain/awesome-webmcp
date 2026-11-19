@@ -374,8 +374,8 @@ export class JsRuntime extends Bridge {
     const before = k.problems.length;
     k.startNew();
     for (let i = before; i < k.problems.length; i++) this.fail(k.problems[i]);
-    this.host.folderHooks.filesLoaded.fire();
-    this.host.folderHooks.statusLoaded.fire();
+    this.host.replay("filesLoaded");
+    this.host.replay("statusLoaded");
     this.host.session.conversationChanged.fire();
     this.flushTools();
   }
@@ -441,8 +441,8 @@ export class JsRuntime extends Bridge {
     for (let i = before; i < k.problems.length; i++) this.fail(k.problems[i]);
     for (const id of tabs) this.host.screen.setShown(id);
     this.host.screen.focus(active);
-    this.host.folderHooks.filesLoaded.fire();
-    this.host.folderHooks.statusLoaded.fire();
+    this.host.replay("filesLoaded");
+    this.host.replay("statusLoaded");
     this.host.session.conversationChanged.fire();
     this.flushTools();
     this.host.screen.tell(source === null ? "removed " + shownName(file) + (retired.length > 0 ? ": " + retired.join(", ") : "") : "reloaded " + shownName(file) + (ids.length > 0 ? ": " + ids.join(", ") : ""));
@@ -525,8 +525,8 @@ export class JsRuntime extends Bridge {
     for (const id of tabs) this.host.screen.setShown(id);
     this.host.screen.focus(active);
     // The new plugins catch up with the state the others already saw.
-    this.host.folderHooks.filesLoaded.fire();
-    this.host.folderHooks.statusLoaded.fire();
+    this.host.replay("filesLoaded");
+    this.host.replay("statusLoaded");
     this.host.session.conversationChanged.fire();
     this.toolsDirty = true;
     this.flushTools();
