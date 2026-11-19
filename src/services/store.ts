@@ -53,7 +53,7 @@ export class Config {
   /** This run's log: `"log": false`, `true`, or `{ "enabled", "dir", "keep" }`. */
   log = new LogConfig();
   /** The memory the plugins' engine may hold, in MB: `"pluginMemoryMb"`, at least 16. */
-  pluginMemoryMb = 64;
+  pluginMemoryMb = 256;
   /** Why the file was not used as written, or what was moved in it ("" for neither). */
   notice = "";
   /** There was no config.json: `seedConfig` writes one with the plugins' sections. */

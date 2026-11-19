@@ -15,6 +15,8 @@ import { limitMessage } from "./status.ts";
 // replay of a message sent to it, or a transcript record), or on Claude's own output when none is
 // open (a background task reporting); a `result` closes it.
 
+/** Calls kept for a later subagent read by id (their input and diff are released at the turn's end). */
+const CALLS_MAX = 2000;
 const COMMAND_PREFIXES = ["<command-name>", "<command-message>", "<local-command-stdout>", "<local-command-stderr>", "<local-command-caveat>"];
 const INTERRUPTED = "[Request interrupted by user";
 
@@ -97,11 +99,26 @@ export class Reader {
     return parent.length === 0 && this.nested.length > 0 ? this.nested : parent;
   }
 
-  /** A turn closed (or another opened): what it was streaming goes with it. */
+  /** A turn closed (or another opened): what it was streaming goes with it, and the turn's calls keep only what a later subagent read needs. */
   private turnChanged(): void {
     this.streams.clear();
     this.thinking = null;
+    for (const id of this.turnCalls) {
+      const call = this.calls.get(id);
+      if (call === undefined) continue;
+      call.input = null;
+      call.partial = "";
+      call.patch = [];
+    }
     this.turnCalls = [];
+    // The message ids and block keys a transcript names only within its turn: a new turn starts new ones.
+    this.lineCounts.clear();
+    this.blocks.clear();
+    while (this.calls.size > CALLS_MAX) {
+      const oldest = this.calls.keys().next();
+      if (oldest.done === true) break;
+      this.calls.delete(oldest.value);
+    }
   }
 
   /** One record: a live line or a transcript record, parsed. */

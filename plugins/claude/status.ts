@@ -17,6 +17,8 @@ export const limitMessage = (r: Rec): string => {
   return LIMIT_WORDS.test(text) ? text : "";
 };
 
+/** Message ids remembered so one message's usage is counted once; long past ones can be forgotten. */
+const MESSAGES_MAX = 5000;
 const unitMs = (unit: string): number => {
   const c = unit.charAt(0).toLowerCase();
   return c === "d" ? 86400000 : c === "h" ? 3600000 : c === "m" ? 60000 : 1000;
@@ -94,6 +96,11 @@ export class Status {
       const id = str(msg.id);
       if (id.length === 0 || this.messages.has(id)) return;
       this.messages.add(id);
+      while (this.messages.size > MESSAGES_MAX) {
+        const oldest = this.messages.values().next();
+        if (oldest.done === true) break;
+        this.messages.delete(oldest.value);
+      }
       const usage = rec(msg.usage);
       if (usage === null) return;
       const input = num(usage.input_tokens);

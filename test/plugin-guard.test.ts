@@ -84,7 +84,7 @@ const main = async (): Promise<void> => {
     },
   });
   w.host.roles.chat.submit("/hungry");
-  ok("an engine out of memory starts the plugins again instead of switching them off", w.host.kernel.has("hungry") && w.js.errors.some((e) => e.includes("ran out of their 64 MB and were started again")));
+  ok("an engine out of memory starts the plugins again instead of switching them off", w.host.kernel.has("hungry") && w.js.errors.some((e) => e.includes("ran out of their 256 MB and were started again")));
   for (let i = 0; i < 20; i++) w.host.roles.chat.submit("/hungry");
   ok("running out again soon after counts as any failure, and switches the plugin off", !w.host.kernel.has("hungry"));
   w.host.kernel.stop();

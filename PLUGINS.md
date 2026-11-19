@@ -724,7 +724,7 @@ files wait for `/trust`.
   widecode says so; the time the core spends answering does not count, and a command one plugin
   runs for another has a budget of its own.
 - An error in a plugin's function is reported (the log, the status bar) and the plugin goes on.
-- The plugins share 64 MB, and a plugin can recurse about 230 calls deep before a RangeError.
+- The plugins share 256 MB, and a plugin can recurse about 230 calls deep before a RangeError.
 - Heavy work stays native: diffs, the tree, git, rendering the conversation. A plugin decides what
   to show and when, and draws rows for the visible window.
 

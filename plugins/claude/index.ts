@@ -43,9 +43,23 @@ const HISTORY_BYTES = 4 * 1024 * 1024;
 const FRONTMATTER_BYTES = 8192;
 /** What Claude Code puts before a synced skill's name (those under ~/.claude/skills/synced/<id>/). */
 const SYNCED_PREFIX = "anthropic-skills:";
-/** Lines kept of the live stream and of the loaded history; the model is rebuilt from them. */
-const LIVE_MAX = 8000;
-const HISTORY_MAX = 40000;
+/** What the live stream and the loaded history keep, in bytes (UTF-16 units counted as two): they are only what a rebuild reads, and the model keeps the turns itself. Past it the oldest lines go. */
+const LIVE_MAX_BYTES = 2 * 1024 * 1024;
+const HISTORY_MAX_BYTES = 8 * 1024 * 1024;
+/** The side questions kept as the next one's history: enough context, never the whole session. */
+const SIDES_MAX = 50;
+/** The newest of `lines` under `maxBytes`; an oversized last line is kept alone. */
+const capLines = (lines: string[], maxBytes: number): string[] => {
+  let bytes = 0;
+  let from = lines.length;
+  while (from > 0) {
+    const next = bytes + lines[from - 1].length * 2;
+    if (next > maxBytes) break;
+    bytes = next;
+    from--;
+  }
+  return from === 0 ? lines : lines.slice(from);
+};
 /** A process's /proc stat fields from the third (its state) on, past its name, which may hold spaces: [1] the parent's pid, [19] when it started. */
 const statFields = (stat: string): string[] => stat.slice(stat.lastIndexOf(")") + 2).split(" ");
 /** Records never shown nor linked: left out of history windows. */
@@ -93,6 +107,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
   /** The loaded windows' lines and the CLI's lines since, kept as text and parsed while applied. */
   let history: string[] = [];
   let live: string[] = [];
+  let liveBytes = 0;
   let requestSeq = 0;
   /** The control requests waiting for their answer, by request id: the answer's body, or why it failed. */
   const answers = new Map<string, (response: Rec | null, error: string) => void>();
@@ -323,7 +338,12 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
       return;
     }
     live.push(l);
-    if (live.length > LIVE_MAX) live = live.slice(live.length - LIVE_MAX);
+    liveBytes += l.length * 2;
+    if (liveBytes > LIVE_MAX_BYTES) {
+      live = capLines(live, LIVE_MAX_BYTES);
+      liveBytes = 0;
+      for (const kept of live) liveBytes += kept.length * 2;
+    }
     if (r.type === "control_response") {
       const res = rec(r.response);
       const then = answers.get(str(res?.request_id));
@@ -818,6 +838,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
         const answer = res !== null ? res.response : null;
         if (typeof answer === "string") {
           sides.push({ question, response: answer });
+          if (sides.length > SIDES_MAX) sides = sides.slice(sides.length - SIDES_MAX);
           emit({ type: "aside", id: sid, text: answer, done: true });
         } else emit({ type: "aside", id: sid, error: error.length > 0 ? error : "Claude gave no answer" });
         flush();
@@ -885,8 +906,9 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
       sides = [];
       allowAll = false;
       const w = windowOf(sid, -1);
-      history = w.lines.length > HISTORY_MAX ? w.lines.slice(w.lines.length - HISTORY_MAX) : w.lines;
+      history = capLines(w.lines, HISTORY_MAX_BYTES);
       live = [];
+      liveBytes = 0;
       historyStart = w.start;
       rebuild();
       const other = runningElsewhere(sid);
@@ -899,8 +921,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
       if (resumed.length === 0 || historyStart <= 0) return false;
       const w = windowOf(resumed, historyStart);
       if (w.end === w.start) return false;
-      history = w.lines.concat(history);
-      if (history.length > HISTORY_MAX) history = history.slice(history.length - HISTORY_MAX);
+      history = capLines(w.lines.concat(history), HISTORY_MAX_BYTES);
       historyStart = w.start;
       rebuild();
       flush();
@@ -951,6 +972,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
       historyStart = 0;
       history = [];
       live = [];
+      liveBytes = 0;
       reader = new Reader(emit, readFile, skillsOf);
       reader.folder = folder;
       status = new Status();

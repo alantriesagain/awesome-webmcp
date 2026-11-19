@@ -136,7 +136,7 @@ export class JsRuntime extends Bridge {
   dirs: string[] = [];
   /** Sources added after all the others (tests). */
   extra: PluginSource[] = [];
-  memoryMb = 64;
+  memoryMb = 256;
   budgetMs = 250;
   /** The plugins' registrations, the ones running, and their loaded sources. */
   readonly table = new PluginTable();
