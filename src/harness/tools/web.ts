@@ -14,6 +14,10 @@ import { ToolContext, ToolOutcome } from "./tool.ts";
 
 /** What a fetch gives the model, at most. */
 const PAGE_MAX = 50000;
+/** A page up to this long is handed to the model as it is; a longer one with a prompt is read by it. */
+export const FETCH_DIRECT = 10000;
+/** What the model reads of a page when it answers a prompt from it, at most. */
+export const FETCH_READ = 100000;
 const SEARCH_MS = 20000;
 const EXA_URL = "https://mcp.exa.ai/mcp";
 export const DEFAULT_ORDER = ["searxng", "brave", "tavily", "exa", "google"];
@@ -322,16 +326,42 @@ const viewerText = (html: string): string | null => {
   return m !== null ? decodeEntities(m[1]) : null;
 };
 
-export const webFetchTool = async (input: Record<string, unknown>, ctx: ToolContext, abort: Abort): Promise<ToolOutcome> => {
-  const url = str(input["url"]).trim();
-  if (!/^https?:\/\/[^\s/]+/i.test(url)) return ToolOutcome.failed("WebFetch takes an http or https address");
+/** A page as fetched: its title for HTML, its content as markdown or text, and how it came. */
+export class FetchedPage {
+  url = "";
+  title = "";
+  markdown = "";
+  /** Whether the server gave a text document rather than HTML (JSON, text, a file's text). */
+  plain = false;
+  how = "";
+  /** Why there is no page ("" when it came). */
+  error = "";
+
+  /** The page as the model reads it, the title line of an HTML page first. */
+  text(): string {
+    if (this.plain) return this.markdown;
+    return (this.title.length > 0 ? "# " + this.title + "\n" : "") + "\n" + this.markdown;
+  }
+}
+
+/** Fetch `url` (its scripts run through the browser when there is one, else curl), cut by none of the tool's limits. */
+export const fetchPage = async (url: string, ctx: ToolContext, abort: Abort): Promise<FetchedPage> => {
+  const p = new FetchedPage();
+  p.url = url;
+  if (!/^https?:\/\/[^\s/]+/i.test(url)) {
+    p.error = "WebFetch takes an http or https address";
+    return p;
+  }
   const s = ctx.web;
   let html = "";
   let text: string | null = null;
   let how = "";
   if (s.browser.length > 0) {
     const d = await dumpDom(s.browser, url, s.profileRoot, abort);
-    if (abort.aborted) return ToolOutcome.failed("interrupted");
+    if (abort.aborted) {
+      p.error = "interrupted";
+      return p;
+    }
     if (d.out.trim().length > 0) {
       html = d.out;
       text = viewerText(html);
@@ -341,28 +371,53 @@ export const webFetchTool = async (input: Record<string, unknown>, ctx: ToolCont
   if (how.length === 0) {
     const marker = "\n--widecode--";
     const c = await runProgram("curl", ["-sSL", "--compressed", "--max-time", "30", "-A", USER_AGENT, "-w", marker + "%{http_code} %{content_type}", url], 35000, 8 * 1024 * 1024, abort);
-    if (abort.aborted) return ToolOutcome.failed("interrupted");
+    if (abort.aborted) {
+      p.error = "interrupted";
+      return p;
+    }
     const at = c.out.lastIndexOf(marker);
-    if (c.error.length > 0 || at < 0) return ToolOutcome.failed("the page could not be fetched" + (c.error.length > 0 ? ": " + c.error : c.timedOut ? ": it took too long" : ""));
+    if (c.error.length > 0 || at < 0) {
+      p.error = "the page could not be fetched" + (c.error.length > 0 ? ": " + c.error : c.timedOut ? ": it took too long" : "");
+      return p;
+    }
     const tail = c.out.slice(at + marker.length).trim();
     const status = Number(tail.split(" ")[0]);
     const type = tail.slice(tail.indexOf(" ") + 1).toLowerCase();
     const body = c.out.slice(0, at);
-    if (!(status >= 200 && status < 400)) return ToolOutcome.failed("the server answered " + String(status));
+    if (!(status >= 200 && status < 400)) {
+      p.error = "the server answered " + String(status);
+      return p;
+    }
     if (type.includes("html") || (type.length === 0 && /<html/i.test(body.slice(0, 2000)))) html = body;
     else text = body;
     how = "curl";
   }
-  const asked = str(input["prompt"]).trim();
-  const head = (asked.length > 0 ? "Fetched for: " + asked + "\n" : "") + "URL: " + url + "\n";
-  let content = "";
-  if (text !== null) content = head + "\n" + text;
-  else {
+  p.how = how;
+  if (text !== null) {
+    p.plain = true;
+    p.markdown = text;
+  } else {
     const page = htmlToMarkdown(html, url);
-    content = (page.title.length > 0 ? "# " + page.title + "\n" : "") + head + "\n" + page.markdown;
+    p.title = page.title;
+    p.markdown = page.markdown;
   }
+  return p;
+};
+
+/** The tool's text for a fetched page, cut at PAGE_MAX: what was asked, the address, then the page. */
+export const pageOutcome = (p: FetchedPage, asked: string): ToolOutcome => {
+  const head = (asked.length > 0 ? "Fetched for: " + asked + "\n" : "") + "URL: " + p.url + "\n";
+  let content = "";
+  if (p.plain) content = head + "\n" + p.markdown;
+  else content = (p.title.length > 0 ? "# " + p.title + "\n" : "") + head + "\n" + p.markdown;
   const o = new ToolOutcome();
   o.text = content.length > PAGE_MAX ? content.slice(0, PAGE_MAX) + "\n\n[… cut at " + String(PAGE_MAX) + " characters]" : content;
-  o.rawOutputJson = '{"via":' + JSON.stringify(how) + "}";
+  o.rawOutputJson = '{"via":' + JSON.stringify(p.how) + "}";
   return o;
+};
+
+export const webFetchTool = async (input: Record<string, unknown>, ctx: ToolContext, abort: Abort): Promise<ToolOutcome> => {
+  const page = await fetchPage(str(input["url"]).trim(), ctx, abort);
+  if (page.error.length > 0) return ToolOutcome.failed(page.error);
+  return pageOutcome(page, str(input["prompt"]).trim());
 };

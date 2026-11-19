@@ -3,7 +3,7 @@
 // start. The project's prompt and trust do not come from here: the ACP client passes them with
 // each session and prompt.
 //
-//   "harness": { "model": "anthropic/claude-sonnet-5", "effort": "high", "compactAt": 200000, "http": "node",
+//   "harness": { "model": "anthropic/claude-sonnet-5", "effort": "high", "fetchModel": "anthropic/claude-haiku-4-5", "compactAt": 200000, "http": "node",
 //     (a provider with "api": "openai" speaks chat completions; a model's "api", "baseUrl", "thinking": "toggle" | "effort", "reasoningField")
 //     "search": { "order": ["searxng", "brave", "tavily", "exa", "google"], "searxng": "http://127.0.0.1:8080" },
 //     "browser": { "command": "" },
@@ -18,6 +18,8 @@ export class HarnessConfig {
   /** `provider/model`; "" for the first model the registry offers. */
   model = "";
   effort = "";
+  /** The model WebFetch's page reading uses (`provider/model`); "" for the session's. */
+  fetchModel = "";
   /** The context size, in tokens, past which the session is compacted. */
   compactAt = 200000;
   /** "node" or "curl": how a model is streamed. */
@@ -40,6 +42,7 @@ export class HarnessConfig {
     if (section === null) return c;
     c.model = str(section["model"]);
     c.effort = str(section["effort"]);
+    c.fetchModel = str(section["fetchModel"]);
     const at = num(section["compactAt"], 0);
     if (at > 0) c.compactAt = at;
     const http = str(section["http"]);

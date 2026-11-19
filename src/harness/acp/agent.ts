@@ -184,6 +184,7 @@ export class AcpAgent {
     this.server = server;
     this.loop = new AgentLoop(client, tools);
     this.loop.compactAt = config.compactAt;
+    this.loop.fetchModel = config.fetchModel;
     this.registry = registry;
     this.config = config;
     this.build = build;
