@@ -5,12 +5,11 @@
 // each requires, leaving out the ones switched off. What it returns holds the widgets for the
 // entry, the selftest and the tests; plugins never reach each other this way, only through the host.
 import { Host } from "./host/host.ts";
-import { AgentHarness } from "./host/session.ts";
+import pluginsController from "./controllers/plugins.ts";
 import { JsRuntime } from "./runtime/runtime.ts";
 import { Plugin } from "@lightstart/kernel/plugin.ts";
 import type { StateFile } from "@lightstart/kernel/settings.ts";
 import { mergeColumns, mergePlugins } from "./services/harness.ts";
-import { Command } from "@lightstart/kernel/commands.ts";
 import { PluginDefault } from "./services/store.ts";
 import { ChatWidget } from "./views/chat-widget.ts";
 import { CodeWidget } from "./views/code-widget.ts";
@@ -28,7 +27,9 @@ export class Widecode {
   /** The tools column's Tools tab, mounted by the tools plugin. */
   readonly tools: ToolsWidget;
   /** The JS plugins: built-in, the user's, the project's. */
-  readonly js: JsRuntime;
+  get js(): JsRuntime {
+    return pluginsController.current.js;
+  }
 
   constructor(host: Host, shell: Shell) {
     this.host = host;
@@ -36,44 +37,20 @@ export class Widecode {
     this.chat = new ChatWidget(host);
     this.code = new CodeWidget(host);
     this.tools = new ToolsWidget(host);
-    this.js = new JsRuntime(host);
     this.js.code = this.code;
     this.js.chat = this.chat;
     this.js.tools = this.tools;
   }
 
-  private prepared = false;
-
-  /** The JS plugins in the kernel, not started. */
-  private prepare(): void {
-    if (this.prepared) return;
-    this.prepared = true;
-    this.js.load();
-  }
-
   /** Each plugin's section as a new config.json gets it, the JS plugins' included. */
   defaults(): PluginDefault[] {
-    this.prepare();
-    return this.host.kernel.plugins.map((p) => new PluginDefault(p.id, p.defaults()));
+    return pluginsController.current.defaults();
   }
 
   /** Start: `plugins` is config.json's "plugins" (null for none), `state` what plugins keep, `extra` compiled plugins added after the JS ones. The keymap /keymap kept comes before the one the host was given (config.json's), before any plugin reads it. */
   start(plugins: unknown, state: StateFile, extra: Plugin[]): void {
-    const k = this.host.kernel;
-    this.host.session.userPlugins = plugins;
-    k.settings.load(mergePlugins(plugins, this.host.harness.config().plugins));
-    this.noteHarness();
-    k.settings.useStateFile(state);
-    const kept = k.settings.state("keymap");
-    if (typeof kept === "string" && kept.length > 0) this.host.keys.keymap.value = kept;
-    const mode = k.settings.state("approval");
-    if (typeof mode === "string") this.host.approval.set(mode);
-    this.prepare();
-    for (const p of extra) k.use(p);
-    k.start();
-    for (const p of k.problems) this.host.note("plugin " + p);
+    pluginsController.current.start(plugins, state, extra);
     this.shell.finish();
-    k.commands.add(new Command("/reload", "", "evaluate every JS plugin again (the agent restarts and resumes the session)", "plugins", (_arg: string) => this.js.reload()));
   }
 
   /** The columns' widths: the user's config with the project's over it; answers what could not be used. */
@@ -133,16 +110,12 @@ export class Widecode {
 
   /** Note what the harness gives the agent now; plugins hear harnessChanged when any of it changed. */
   private noteHarness(): void {
-    const h = this.host.harness;
-    this.host.session.useHarness(new AgentHarness(this.host.session.permissions().rulesJson(), h.userPrompt(), h.prompt(), this.host.session.trusted.peek()));
+    pluginsController.current.noteHarness();
   }
 
   /** The project's own plugins folder among the plugin folders, watched; `sync` loads its files now. */
   useProjectPlugins(sync: boolean): void {
-    const dir = this.host.harness.pluginsDir();
-    if (!this.js.dirs.includes(dir)) this.js.dirs.push(dir);
-    this.js.watchFolders();
-    if (sync) this.js.syncFolder(dir);
+    pluginsController.current.useProjectPlugins(sync);
   }
 
   /** Put the folder's harness in use without keeping the trust (`--trust`): its plugins, config and prompt. Answers what to tell ("" for nothing). */

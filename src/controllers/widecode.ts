@@ -25,6 +25,7 @@ import app from "../app.ts";
 import { Carry, Run } from "../run.ts";
 import { afterChange } from "../host/after-change.ts";
 import hostController from "./host.ts";
+import plugins from "./plugins.ts";
 import logger from "./log.ts";
 import run from "./run.ts";
 import settings from "./settings.ts";
@@ -86,9 +87,8 @@ export class WidecodeController extends Controller {
     const w = this.w;
     w.host.conversation.kill();
     w.host.kernel.stop();
-    w.js.killProcesses();
+    plugins.current.close();
     w.host.workspace.close();
-    w.js.mcp.close();
   }
 
   /**
@@ -166,7 +166,7 @@ export class WidecodeController extends Controller {
     // project's own once the user trusts it.
     w.js.dirs.push(join(Store.defaultRoot(), "plugins"));
     if (store !== null && store.trusted(where)) w.js.dirs.push(w.host.harness.pluginsDir());
-    settings.seed(w.defaults());
+    plugins.seed();
     this.w = w;
     this.closed = false;
     host.onOpen = (next: string) => this.reopen(next);
