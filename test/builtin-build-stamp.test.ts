@@ -16,7 +16,7 @@ const main = async (): Promise<void> => {
   for (const name of ["plugins", "node_modules", "PLUGINS.md", "widecode.d.ts", "package.json"]) symlinkSync(join(root, name), join(folder, name));
   mkdirSync(join(folder, "src", "runtime"), { recursive: true });
   execFileSync(process.execPath, [join(root, "scripts", "builtin-plugins.mjs")], { cwd: folder, env: { ...process.env, LIGHT_NATIVE_COMMAND: "test" }, stdio: "ignore" });
-  const tree = join(folder, "dist", "plugins");
+  const tree = join(folder, "dist", "plugins-test");
   const ids = readdirSync(tree)
     .filter((id) => statSync(join(tree, id)).isDirectory())
     .sort();

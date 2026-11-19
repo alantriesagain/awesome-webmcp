@@ -2,15 +2,18 @@
 // with the rest of the repository) goes into dist/plugins/<id>/, every .ts of it as .js with its
 // types stripped by node and its relative imports of .ts files naming the .js, so the runtime loads
 // it as ES modules, the way it loads the user's plugin folders. A development build takes its
-// built-ins from there, beside it; `light install` writes them into the user's plugin folder; the
-// tests read them there. The plugin guide (PLUGINS.md) and the API's types (widecode.d.ts) go into
+// built-ins from there, beside it; `light install` writes them into the user's plugin folder. A test
+// run writes them into dist/plugins-test/ instead, and the tests read them there, so a test's prepare
+// never restamps the tree a build installs. The plugin guide (PLUGINS.md) and the API's types (widecode.d.ts) go into
 // src/runtime/docs.ts, for the harness plugin's api tool: the installed binary has no repository.
 // The build's version (git describe of the workspace, else the package's version) and time go into
 // src/runtime/build-info.ts, so a running binary says which build it is.
 //
 // For a test run (light's LIGHT_NATIVE_COMMAND is "test") docs.ts reads PLUGINS.md and widecode.d.ts
-// and build-info.ts says "test", so their text stays the same while the docs and the clock change:
-// scriptc's cache keys a program by its text, so a minute passing compiles no test again.
+// and, while no build has written build-info.ts, it says "test", so their text stays the same while
+// the docs and the clock change: scriptc's cache keys a program by its text, so a minute passing
+// compiles no test again. A build's build-info.ts is left as it is, so a test run cannot report "test"
+// for a binary a build is compiling.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
@@ -53,8 +56,17 @@ const versionOf = () => {
   }
 };
 /** The build these plugins belong to: the binary's own (src/runtime/build-info.ts), stamped into each folder. */
-const buildVersion = forTest ? "test" : versionOf();
-const tree = "dist/plugins";
+const versionIn = () => {
+  try {
+    const m = /export const BUILD_VERSION: string = ("(?:[^"\\]|\\.)*");/.exec(readFileSync("src/runtime/build-info.ts", "utf8"));
+    return m !== null ? JSON.parse(m[1]) : "";
+  } catch {
+    return "";
+  }
+};
+const existingVersion = forTest ? versionIn() : "";
+const buildVersion = forTest ? (existingVersion.length > 0 ? existingVersion : "test") : versionOf();
+const tree = forTest ? "dist/plugins-test" : "dist/plugins";
 for (const f of files) {
   const folder = f.path.endsWith("/index.ts") ? dirname(f.path) : null;
   const names = folder !== null ? filesIn(folder) : [f.path.slice(dir.length + 1)];
@@ -91,4 +103,5 @@ const info =
   "export const BUILD_VERSION: string = " + JSON.stringify(buildVersion) + ";\n\n" +
   "/** When it was built (ISO, to the minute). */\n" +
   "export const BUILD_TIME: string = " + JSON.stringify(forTest ? "test" : new Date().toISOString().slice(0, 16) + "Z") + ";\n";
-keep(infoOut, info);
+// A test run leaves a build's build-info.ts alone: its stamps take that build's version, and a build compiling beside the test keeps reporting its own.
+if (!forTest || !existsSync(infoOut)) keep(infoOut, info);

@@ -1,5 +1,6 @@
 // A rig for the agent part of a built-in plugin: an AcpAgent over the fake model, the test playing
-// the ACP client. The plugin sources are the ones the app's prepare step wrote (dist/plugins/<id>/:
+// the ACP client. The plugin sources are the ones the app's prepare step wrote for a test run
+// (dist/plugins-test/<id>/:
 // the plugin's files with their types stripped), which keeps these tests free of node's type
 // stripper and runnable natively as well as under node. Settings and
 // switches are the store's config.json, as the daemon reads them.
@@ -19,8 +20,8 @@ import { HarnessPaths } from "../../src/harness/paths.ts";
 import { ToolSet, builtInTools } from "../../src/harness/tools/tool.ts";
 
 /** The folder holding the generated sources, from the member's folder or the repository's root. */
-/** The built-in plugins as the app's prepare step wrote them: dist/plugins/<id>/. */
-const builtinDir = (): string => join(process.cwd(), "dist", "plugins");
+/** The built-in plugins as the app's prepare step wrote them for a test run: dist/plugins-test/<id>/. */
+const builtinDir = (): string => join(process.cwd(), "dist", "plugins-test");
 
 /** The built-in plugins' sources, as the app's prepare step wrote them. */
 export const builtinSources = (ids: string[]): PluginSource[] => {

@@ -1,7 +1,8 @@
 // ffi: @lightstart/plugins/native/ffi.json
 // The app's built-in plugin sources evaluate at top level under the harness's prelude: they read
 // widecode.util, widecode.theme and widecode.version without throwing, so the daemon can load the
-// same files the app does. The test reads them as the app's prepare step wrote them, dist/plugins/<id>/,
+// same files the app does. The test reads them as the app's prepare step wrote them for a test run,
+// dist/plugins-test/<id>/,
 // and evaluates each as the harness does: its folder's files registered, its index.js an ES module.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -29,7 +30,7 @@ class BuiltinSource {
 }
 
 const main = async (): Promise<void> => {
-  const built = join(process.cwd(), "dist", "plugins");
+  const built = join(process.cwd(), "dist", "plugins-test");
   const sources: BuiltinSource[] = [];
   for (const id of existsSync(built) ? readdirSync(built).sort() : []) {
     const index = join(built, id, "index.js");

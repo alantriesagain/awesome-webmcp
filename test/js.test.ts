@@ -194,7 +194,7 @@ widecode.plugin({ id: "second", activate(api) { api.commands.add({ name: "/s", r
   eq("a file saved with a built-in's id replaces it", w.host.screen.message.peek() + " " + (w.js.plugins.find((p) => p.id === "models")?.file.endsWith("models.js") === true ? "from the file" : "?"), "the JS models from the file");
   rmSync(join(dir, "models.js"));
   w.js.syncFolder(dir);
-  ok("the file removed, the built-in comes back", w.host.kernel.has("models") && (w.js.plugins.find((p) => p.id === "models")?.file ?? "").endsWith("/dist/plugins/models/index.js") && w.host.kernel.commands.find("/model") !== null);
+  ok("the file removed, the built-in comes back", w.host.kernel.has("models") && (w.js.plugins.find((p) => p.id === "models")?.file ?? "").endsWith("/dist/plugins-test/models/index.js") && w.host.kernel.commands.find("/model") !== null);
   w.host.kernel.stop();
 
   const home = mkdtempSync(join(tmpdir(), "widecode-js-home-"));

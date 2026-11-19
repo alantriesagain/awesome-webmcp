@@ -58,7 +58,7 @@ export const openWidecode = async (options: OpenOptions): Promise<Widecode> => {
   next.start = options.start ?? true;
   next.load = options.load ?? false;
   // The built-in plugins as normal files, which the prepare step writes for a run.
-  next.builtinDir = join(process.cwd(), "dist", "plugins");
+  next.builtinDir = join(process.cwd(), "dist", "plugins-test");
   run.next = next;
   // The folder is the app's --dir too, so its main store is that folder's .widecode, as JSONL files as in the app.
   opened = await openApp(manifest, { args: { dir: options.folder }, kinds: [new JsonlKind()] });

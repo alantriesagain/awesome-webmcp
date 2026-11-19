@@ -3,13 +3,17 @@
 // or ~/.widecode/plugins, each folder with .widecode-installed, the hash of what was written. A
 // folder installed before and unchanged since is replaced; one the user edited since, or one of the
 // user's own with a built-in's id, is left as it is and named; an installed one no longer built in
-// and unchanged goes.
+// and unchanged goes. Run by `light install` (LIGHT_INSTALLED names the binary) it first checks the
+// tree is that binary's own build: a test run's stamp, or any other build's, copies nothing and fails,
+// so a test running beside a build cannot install its plugins.
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, relative } from "node:path";
 
 const MARK = ".widecode-installed";
+const STAMP = ".widecode-build";
 const source = "dist/plugins";
 const home = (process.env.WIDECODE_HOME ?? "").length > 0 ? process.env.WIDECODE_HOME : join(homedir(), ".widecode");
 const target = join(home, "plugins");
@@ -38,8 +42,35 @@ if (!existsSync(source)) {
   console.error("install-plugins: no " + source + "; the prepare step writes it (node --no-warnings scripts/builtin-plugins.mjs)");
   process.exit(1);
 }
-mkdirSync(target, { recursive: true });
 const ids = readdirSync(source).filter((id) => statSync(join(source, id)).isDirectory()).sort();
+const installed = (process.env.LIGHT_INSTALLED ?? "").trim();
+if (installed.length > 0) {
+  let build = "";
+  try {
+    const out = execFileSync(installed, ["--version"], { encoding: "utf8" }).trim();
+    const found = /^widecode (\S+)/.exec(out);
+    build = found !== null ? found[1] : "";
+  } catch {
+    build = "";
+  }
+  if (build === "test") {
+    console.error("install-plugins: the installed binary reports test, a test run's build; run `light install` again with no test run going");
+    process.exit(1);
+  }
+  const stampOf = (id) => {
+    try {
+      return readFileSync(join(source, id, STAMP), "utf8").trim();
+    } catch {
+      return "";
+    }
+  };
+  const wrong = ids.filter((id) => stampOf(id) !== build);
+  if (wrong.length > 0) {
+    console.error("install-plugins: " + source + " is not the installed binary's build (" + (build.length > 0 ? build : "no version") + "): " + wrong.join(", ") + "; run `light install` again with no test run going");
+    process.exit(1);
+  }
+}
+mkdirSync(target, { recursive: true });
 const written = [];
 const left = [];
 for (const id of ids) {
