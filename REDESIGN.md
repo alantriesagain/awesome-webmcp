@@ -104,9 +104,10 @@ Each round leaves widecode building, its 127 tests passing (except the `pi` one,
 
       The start order follows the imports: run, folder, kernel, keymap, screen, session, host, log, settings, widecode. The `widecode` controller only composes the shell, the widgets and the plugin runtime over `host`, starts the plugins, and finishes the start once mounted.
 
+      Hooks became signals (`fe60cf3` to `5c33841`). Each piece of state is a signal holding its value: the keymap, the status message, the tools, the session rows, the harness, what the code column shows, the folder's files, status and base (light #136), and the conversation's revision. Plugins still hear them by name: `hookOn` fires after each change. An occurrence (a request opened, a message about to be sent, the watcher's batch) is light's `event()` (light #134), which also keeps a listener's owner. `Hook` left light (#137).
+
       Left:
       - views importing the controllers instead of taking a `Host`;
-      - hooks becoming signals;
       - commands moving to the code they act on;
       - `Widecode` (the plugin runtime, the widgets, the harness) becoming a `plugins` controller.
 
@@ -121,7 +122,7 @@ Each round leaves widecode building, its 127 tests passing (except the `pi` one,
       The items below are (a)'s:
       - The `widecode` controller splits into `log`, `settings`, `folder`, `session`, `screen`, `keymap` and `plugins`, each reset when it starts again, so a restart is a clean start.
       - Views import the controllers, and `Host` thins down to the facade the plugin api answers through.
-      - Hooks become signals.
+      - Hooks become signals (done).
       - `commands.ts` is split, so each command lives with the controller it acts on.
 4. **Persistence** (done in part, `648699d`, after light #74, #76 and #78):
    - The session and skill records live in the app's `main` store: the folder's `.widecode/` as JSONL, memory with `--ephemeral`, reopened by the run after an `/open`. `SessionRecords` no longer opens a store.
@@ -139,7 +140,7 @@ Each round leaves widecode building, its 127 tests passing (except the `pi` one,
    - `SessionController.open`, `Widecode.folderOpened`, the widgets' and plugins' `folderOpened` listeners and the hook itself are gone.
    - A test gets the app after an `/open` from `currentWidecode()`, and the `open` selftest checks it in the binary.
    - On the way: the Tools tab redraws when the conversation changes, since it used to keep the old calls after a reset.
-6. **The extension seam:**
+6. **The extension seam** (superseded by round 8: chat, code and tools stayed plugins, as normal installed files like every built-in):
    - chat, code and tools become core;
    - the built-ins are still plugins in `plugins/<id>/index.ts`, with their list generated;
    - one list of hook and namespace names checked against the prelude and the docs.
