@@ -5,37 +5,40 @@
 // question or plan, the strip while it shows, the history) and follows the conversation; what a
 // line from the composer does is the plugin's (`onLine`).
 import { HostChat } from "../host/chat-host.ts";
+import screenController from "../controllers/screen.ts";
+import kernelController from "../controllers/kernel.ts";
+import sessionController from "../controllers/session.ts";
+import folderController from "../controllers/folder.ts";
+import hostController from "../controllers/host.ts";
 import { Column } from "../screen/contributions.ts";
 import { ChatTarget } from "../chat/roles.ts";
-import { Host } from "../host/host.ts";
 import { Binder } from "@lightstart/kernel/actions.ts";
 import { type KeyEvent } from "@lightstart/light/native/tui";
 import { ChatPane } from "../chat/chat-pane.ts";
 
 export class ChatWidget extends ChatTarget {
-  readonly host: Host;
   readonly pane: ChatPane;
   /** What a line from the composer does when no question or plan takes it (null: nothing). */
   onLine: ((text: string) => void) | null = null;
   /** The composer's text when the panel opened: text from before that is a message, never an answer. */
   private panelOpenedWith = "";
 
-  constructor(host: Host) {
+  constructor() {
     super();
-    this.host = host;
-    this.pane = new ChatPane(new HostChat(host.session, host.screen, host.kernel, host.roles, host.folder));
+    this.pane = new ChatPane(new HostChat(sessionController.current, screenController.current, kernelController.current, hostController.current.roles, folderController.current));
   }
 
   /** Show it as plugin `owner`'s column named `title`, at `order`, `widthAt` cells wide, and play the chat role; what the owner added goes when it does. */
   mount(owner: string, title: string, order: number, widthAt: (cols: number) => number): void {
-    const h = this.host;
+    const screen = screenController.current;
+    const host = hostController.current;
     const pane = this.pane;
-    h.screen.addColumn(owner, new Column("chat", title, order, pane, widthAt, 2, 1, pane.input, pane.view));
+    screen.addColumn(owner, new Column("chat", title, order, pane, widthAt, 2, 1, pane.input, pane.view));
     this.owner = owner;
     this.composer = pane.composer;
-    h.roles.chat = this;
-    h.hook("conversationChanged")?.on(() => this.refreshConversation(), owner);
-    const bind = new Binder(h.kernel.actions, owner, "chat");
+    host.roles.chat = this;
+    host.hook("conversationChanged")?.on(() => this.refreshConversation(), owner);
+    const bind = new Binder(kernelController.current.actions, owner, "chat");
     // The agent's question or plan takes the keys it uses while it is open (first, so the strip's and the history's come before).
     const panel = (key: KeyEvent): boolean => pane.panel.active && pane.panel.key(key, pane.input.isEmpty());
     bind.add("chat.panel.up", ["up"], "", panel);
@@ -55,7 +58,7 @@ export class ChatWidget extends ChatTarget {
     for (const spec of ["up", "down"]) bind.add("chat.strip." + spec, [spec], "", (_key: KeyEvent) => pane.moveSuggestion(spec === "up" ? -1 : 1));
     bind.add("chat.strip.hide", ["escape"], "", (_key: KeyEvent) => pane.hideSuggestions());
     // The composer's editing, in the "input" scope (after every other).
-    pane.composer.addActions(new HostChat(h.session, h.screen, h.kernel, h.roles, h.folder), owner);
+    pane.composer.addActions(new HostChat(sessionController.current, screen, kernelController.current, host.roles, folderController.current), owner);
   }
 
   override showChat(): void {
@@ -77,7 +80,7 @@ export class ChatWidget extends ChatTarget {
   override typed(text: string): void {
     const pane = this.pane;
     const before = pane.panel.active && text === this.panelOpenedWith;
-    if (!pane.panel.active || before) this.host.remember(text);
+    if (!pane.panel.active || before) sessionController.current.remember(text, folderController.current.workspace.folder);
     pane.leaveHistory();
     if (pane.panel.active && !before) {
       pane.panel.submitText(text);
@@ -88,28 +91,30 @@ export class ChatWidget extends ChatTarget {
 
   /** Show request `id` in the panel (a desktop notification's click): the chat column, its question open. */
   override showRequest(id: string): void {
-    const item = this.host.conversation.model.openRequests().find((r) => r.requestId === id) ?? null;
+    const conversation = sessionController.current.conversation;
+    const item = conversation.model.openRequests().find((r) => r.requestId === id) ?? null;
     if (item === null) return;
     const panel = this.pane.panel;
     this.panelOpenedWith = this.pane.input.value();
-    panel.agentName = this.host.conversation.agent.name();
+    panel.agentName = conversation.agent.name();
     panel.open(item);
-    this.host.screen.focus("chat");
+    screenController.current.focus("chat");
   }
 
   private refreshConversation(): void {
     const pane = this.pane;
+    const conversation = sessionController.current.conversation;
     pane.refresh();
     pane.takeWithdrawn();
-    const open = this.host.conversation.model.openRequests();
+    const open = conversation.model.openRequests();
     const panel = pane.panel;
     const shown = panel.item;
     if (shown !== null && shown.state !== "open") panel.close();
     if (open.length > 0 && panel.item === null) {
       this.panelOpenedWith = pane.input.value();
-      panel.agentName = this.host.conversation.agent.name();
+      panel.agentName = conversation.agent.name();
       panel.open(open[0]);
-      this.host.screen.focus("chat");
+      screenController.current.focus("chat");
     } else if (panel.item !== null) {
       // The shown request's title says how many others wait.
       panel.$requestUpdate();

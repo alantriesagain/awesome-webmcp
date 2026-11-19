@@ -30,9 +30,9 @@ export class Plugins {
 
   constructor(host: Host) {
     this.host = host;
-    this.chat = new ChatWidget(host);
-    this.code = new CodeWidget(host);
-    this.tools = new ToolsWidget(host);
+    this.chat = new ChatWidget();
+    this.code = new CodeWidget();
+    this.tools = new ToolsWidget();
     this.js = new JsRuntime(host);
     this.js.code = this.code;
     this.js.chat = this.chat;

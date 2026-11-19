@@ -1,32 +1,35 @@
 // The Tools tab's role player: the plugin-facing widget mounting the tab (src/chat's ToolsPanel)
 // on the host and playing the ToolsTarget role for the other plugins.
 import { HostChat } from "../host/chat-host.ts";
+import screenController from "../controllers/screen.ts";
+import kernelController from "../controllers/kernel.ts";
+import sessionController from "../controllers/session.ts";
+import folderController from "../controllers/folder.ts";
+import hostController from "../controllers/host.ts";
 import { ToolsTarget } from "../chat/roles.ts";
-import { Host } from "../host/host.ts";
 import { Binder } from "@lightstart/kernel/actions.ts";
 import { type KeyEvent } from "@lightstart/light/native/tui";
 import { CALL, ToolsPanel } from "../chat/tools-pane.ts";
 
 export class ToolsWidget extends ToolsTarget {
-  readonly host: Host;
   panel: ToolsPanel | null = null;
 
-  constructor(host: Host) {
+  constructor() {
     super();
-    this.host = host;
   }
 
   /** Add the Tools tab as plugin `owner`'s, titled `title` at `order` in the tools column, and play the tools role. */
   mount(owner: string, title: string, order: number): void {
-    const h = this.host;
-    const panel = new ToolsPanel(new HostChat(h.session, h.screen, h.kernel, h.roles, h.folder), title, order);
+    const screen = screenController.current;
+    const host = hostController.current;
+    const panel = new ToolsPanel(new HostChat(sessionController.current, screen, kernelController.current, host.roles, folderController.current), title, order);
     this.panel = panel;
     this.owner = owner;
-    h.screen.addPanel(owner, panel);
-    h.roles.tools = this;
+    screen.addPanel(owner, panel);
+    host.roles.tools = this;
     // A new conversation, a reset or a resume: the calls drawn are the conversation's now.
-    h.hook("conversationChanged")?.on(() => panel.view.refresh(), owner);
-    const bind = new Binder(h.kernel.actions, owner, panel.id);
+    host.hook("conversationChanged")?.on(() => panel.view.refresh(), owner);
+    const bind = new Binder(kernelController.current.actions, owner, panel.id);
     bind.add("calls.up", ["up"], "shows the call", (_key: KeyEvent) => this.step(-1));
     bind.add("calls.down", ["down"], "shows the call", (_key: KeyEvent) => this.step(1));
     bind.add("calls.open", ["enter"], "shows the call", (_key: KeyEvent) => {
@@ -51,8 +54,7 @@ export class ToolsWidget extends ToolsTarget {
   override reveal(id: string): void {
     const panel = this.panel;
     if (panel === null) return;
-    const h = this.host;
-    h.screen.setShown(panel.id);
+    screenController.current.setShown(panel.id);
     const s = panel.source;
     s.prepare(panel.view.cols);
     const at = s.rowOf(id);

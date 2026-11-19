@@ -9,7 +9,6 @@ import { toolSummary, RenderContext } from "../conversation/render.ts";
 import { AGENT, Item } from "../conversation/model.ts";
 import { Column } from "../screen/contributions.ts";
 import { CodeTarget } from "../code/target.ts";
-import { Host } from "../host/host.ts";
 import { Latest } from "@lightstart/lib/timing.ts";
 import { Commit } from "@lightstart/workspace/git-log.ts";
 import { LineSource } from "@lightstart/light/native/tui/lines.ts";
@@ -19,19 +18,22 @@ import { CodePane } from "../code/code-view.ts";
 import { CodeFile, loadCode, loadCommitFile } from "../code/diff.ts";
 import { CodeTab, CodeTabHost } from "../code/tabs.ts";
 import { afterChange } from "../host/after-change.ts";
+import screenController from "../controllers/screen.ts";
+import kernelController from "../controllers/kernel.ts";
+import sessionController from "../controllers/session.ts";
+import folderController from "../controllers/folder.ts";
+import hostController from "../controllers/host.ts";
 import { computed } from "@lightstart/light/signals";
 import { Binder } from "@lightstart/kernel/actions.ts";
 import { type KeyEvent } from "@lightstart/light/native/tui";
 
 export class CodeWidget extends CodeTarget {
-  readonly host: Host;
   readonly pane = new CodePane();
   readonly tabs = new CodeTabHost(this.pane);
   private readonly loads = new Latest();
 
-  constructor(host: Host) {
+  constructor() {
     super();
-    this.host = host;
     const active = computed(() => this.tabs.active());
     afterChange(active, () => this.activeChanged(active.peek()));
     this.tabs.onClose = (tab: CodeTab) => this.closed(tab);
@@ -39,31 +41,33 @@ export class CodeWidget extends CodeTarget {
 
   /** Show it as plugin `owner`'s column named `title`, at `order`, and play the code role; what the owner added goes when it does. */
   mount(owner: string, title: string, order: number): void {
-    const h = this.host;
+    const screen = screenController.current;
+    const host = hostController.current;
     const pane = this.pane;
     const column = new Column("code", title, order, this.tabs.view, (_cols: number) => 0, 0, 1, null, pane.view);
     column.tabHost = this.tabs;
-    h.screen.addColumn(owner, column);
+    screen.addColumn(owner, column);
     this.owner = owner;
-    h.roles.code = this;
-    const bind = new Binder(h.kernel.actions, owner, "code");
+    host.roles.code = this;
+    const bind = new Binder(kernelController.current.actions, owner, "code");
     // Tab shows the next tab once a call or subagent is open beside Code; no hint, the tab bar shows them.
     bind.add("code.tab.next", ["tab"], "", (_key: KeyEvent) => {
       if (this.tabs.items.peek().length === 0) return false;
       this.tabs.show((this.tabs.activeIndex() + 1) % this.tabs.labels().length);
       return true;
     });
-    h.hook("statusLoaded")?.on(() => {
+    host.hook("statusLoaded")?.on(() => {
       const open = pane.path.peek();
-      if (open.length > 0 && pane.commit.peek().length === 0) pane.mark.value = h.folder.markOf(open);
+      if (open.length > 0 && pane.commit.peek().length === 0) pane.mark.value = folderController.current.markOf(open);
     }, owner);
   }
 
   override openAgent(id: string): void {
-    const h = this.host;
-    const item = findAgent(h.conversation.model, id);
+    const host = hostController.current;
+    const conversation = sessionController.current.conversation;
+    const item = findAgent(conversation.model, id);
     if (item === null) {
-      h.screen.tell("no such subagent in this session");
+      screenController.current.tell("no such subagent in this session");
       return;
     }
     const found = this.tabs.indexOf(id);
@@ -72,22 +76,23 @@ export class CodeWidget extends CodeTarget {
       return;
     }
     // From a resumed session its steps are in its own transcript, read once.
-    if (item.children.length === 0 && item.task === null) h.conversation.loadSubagent(item);
+    if (item.children.length === 0 && item.task === null) conversation.loadSubagent(item);
     const type = agentType(item);
     const description = agentDescription(item);
-    const source = new AgentSource(h, id);
+    const source = new AgentSource(host, id);
     const pane = new CodePane();
     pane.showAgent(source, "Agent · " + type + (description.length > 0 ? ": " + description : ""), agentStatus(item) === "running");
     pane.onPress = (index: number) => this.toggle(pane, index);
-    h.note("agent " + id);
+    host.note("agent " + id);
     this.tabs.open(new CodeTab(id, description.length > 0 ? type + ": " + description : type, true, pane, source, "agent"));
   }
 
   override openCall(id: string): void {
-    const h = this.host;
-    const item = findCall(h.conversation.model, id);
+    const host = hostController.current;
+    const conversation = sessionController.current.conversation;
+    const item = findCall(conversation.model, id);
     if (item === null) {
-      h.screen.tell("no such call in this session");
+      screenController.current.tell("no such call in this session");
       return;
     }
     if (item.category === AGENT) {
@@ -100,13 +105,13 @@ export class CodeWidget extends CodeTarget {
       return;
     }
     const ctx = new RenderContext();
-    ctx.folder = h.workspace.folder;
+    ctx.folder = folderController.current.workspace.folder;
     const summary = toolSummary(item, ctx).replace(/\s+/g, " ");
-    const source = new CallSource(h, id);
+    const source = new CallSource(host, id);
     const pane = new CodePane();
     pane.showAgent(source, item.name + (summary.length > 0 ? " · " + summary : ""), false);
     pane.onPress = null;
-    h.note("call " + id);
+    host.note("call " + id);
     this.tabs.open(new CodeTab(id, item.name, true, pane, source, "call"));
   }
 
@@ -136,14 +141,14 @@ export class CodeWidget extends CodeTarget {
 
   /** The active tab changed: catch its view up and tell the host what it shows. */
   private activeChanged(tab: CodeTab): void {
-    const h = this.host;
+    const shown = screenController.current.shown;
     if (tab !== this.tabs.code) {
       const view = tab.view;
       if (view instanceof CodePane) view.view.refresh();
-      h.screen.shown.value = tab.source;
+      shown.value = tab.source;
       return;
     }
-    h.screen.shown.value = this.pane.agent.peek().length > 0 ? this.pane.view.source : this.pane.source.file;
+    shown.value = this.pane.agent.peek().length > 0 ? this.pane.view.source : this.pane.source.file;
   }
 
   /** A tab closed: drop its source and its press callback. */
@@ -158,8 +163,8 @@ export class CodeWidget extends CodeTarget {
     const line = pane.view.lineAt(index);
     const tag = line !== null ? line.tag : null;
     if (!(tag instanceof Item)) return;
-    const why = this.host.conversation.toggle(tag);
-    if (why.length > 0) this.host.screen.tell(why);
+    const why = sessionController.current.conversation.toggle(tag);
+    if (why.length > 0) screenController.current.tell(why);
   }
 
   override open(path: string): void {
@@ -188,29 +193,31 @@ export class CodeWidget extends CodeTarget {
 
   /** Show `path` with its changes against the base; a later call wins over one still loading. */
   async load(path: string): Promise<void> {
-    const h = this.host;
+    const folder = folderController.current;
+    const screen = screenController.current;
     const ticket = this.loads.next();
     if (path.length === 0) {
       this.pane.clear();
-      h.screen.shown.value = null;
+      screen.shown.value = null;
       return;
     }
-    const mark = h.folder.markOf(path);
-    const file = await loadCode(h.workspace.repo, h.workspace.folder, path, mark === "U", h.folder.base.peek().base);
+    const mark = folder.markOf(path);
+    const file = await loadCode(folder.workspace.repo, folder.workspace.folder, path, mark === "U", folder.base.peek().base);
     if (!this.loads.is(ticket)) return;
-    this.pane.show(file, h.folder.markOf(path));
-    h.note("code " + path + " hunks=" + String(file.hunks.length));
-    h.screen.shown.value = file;
+    this.pane.show(file, folder.markOf(path));
+    hostController.current.note("code " + path + " hunks=" + String(file.hunks.length));
+    screen.shown.value = file;
   }
 
   /** Show `path` as `commit` changed it. */
   async loadCommit(commit: Commit, path: string, mark: string): Promise<void> {
-    const h = this.host;
+    const folder = folderController.current;
+    const screen = screenController.current;
     const ticket = this.loads.next();
-    const file = await loadCommitFile(h.workspace.repo, h.workspace.folder, commit, path);
+    const file = await loadCommitFile(folder.workspace.repo, folder.workspace.folder, commit, path);
     if (!this.loads.is(ticket)) return;
     this.pane.showCommit(file, mark, commit.short + " " + commit.subject);
-    h.note("commit " + commit.short + " " + path + " hunks=" + String(file.hunks.length));
-    h.screen.shown.value = file;
+    hostController.current.note("commit " + commit.short + " " + path + " hunks=" + String(file.hunks.length));
+    screen.shown.value = file;
   }
 }
