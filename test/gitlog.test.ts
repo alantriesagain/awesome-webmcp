@@ -104,7 +104,7 @@ const main = async (): Promise<void> => {
   const root = new TRoot();
   app.shell.resize(200);
   mount(app.shell, root);
-  await app.host.load();
+  await app.host.session.load(app.host.folder, app.host.hooks);
   const marks = (): string => {
     const out: string[] = [];
     for (const k of app.host.folder.marks().keys()) out.push(app.host.folder.markOf(k) + " " + k);

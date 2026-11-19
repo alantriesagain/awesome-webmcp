@@ -23,6 +23,7 @@ import { BUILD } from "../build.ts";
 import { flushBeforeExit, QuitFlusher } from "../quit.ts";
 import app from "../app.ts";
 import { Carry, Run } from "../run.ts";
+import { quit } from "../host/actions.ts";
 import { afterChange } from "../host/after-change.ts";
 import hostController from "./host.ts";
 import plugins from "./plugins.ts";
@@ -150,7 +151,7 @@ export class WidecodeController extends Controller {
       w.start(current.plugins, current.state, current.extra);
       logger.registerCommands(w.host.kernel);
     }
-    if (current.load) await w.host.load();
+    if (current.load) await w.host.session.load(w.host.folder, w.host.hooks);
     if (this.opened.length > 0) w.host.screen.tell(this.opened);
   }
 
@@ -177,7 +178,7 @@ export class WidecodeController extends Controller {
     this.closed = false;
     host.onOpen = (next: string) => this.reopen(next);
     this.takeOver(w);
-    await host.useStore(store);
+    await host.session.useStore(store);
     host.session.userPermissions = config !== null ? config.permissions : null;
     host.session.titler.executable = host.conversation.executable;
     // The peers daemon is this binary run again; a selftest runs none. Desktop alerts are the real
@@ -251,7 +252,7 @@ export class WidecodeController extends Controller {
     o.onModel = (name: string) => host.kernel.commands.run("/model " + name);
     o.onTrust = () => plugins.current.trustHere();
     o.onLookOnly = () => host.screen.tell("looking only: /trust lets " + host.conversation.agent.name() + " work here");
-    o.onExit = () => host.quit();
+    o.onExit = () => quit();
     runOnboarding(o);
   }
 
@@ -366,7 +367,7 @@ export class WidecodeController extends Controller {
     log("started " + String(term.cols) + "x" + String(term.rows) + " in " + host.workspace.folder + " with " + (agent.owner.length === 0 ? w.host.conversation.executable : agent.name() + " (plugin " + agent.owner + ")"));
 
     const run = async (): Promise<void> => {
-      await host.load();
+      await host.session.load(host.folder, host.hooks);
       log("tree files=" + String(host.folder.paths().length) + " changed=" + String(host.folder.marks().size));
       const resumeId = app.args.string("resume") ?? null;
       if (resumeId !== null) {

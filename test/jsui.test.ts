@@ -83,7 +83,7 @@ const main = async (): Promise<void> => {
   w.shell.resize(W);
   const headless = new Headless(w.shell, W, H);
   const root = headless.root;
-  await w.host.load();
+  await w.host.session.load(w.host.folder, w.host.hooks);
   const screen = (): string[] => headless.screen();
   const has = (lines: string[], text: string): boolean => lines.some((l) => l.includes(text));
   const press = (name: string, text: string): boolean => w.shell.handleKey(new KeyEvent(name, text, false, false, false));

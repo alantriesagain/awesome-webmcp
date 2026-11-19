@@ -79,7 +79,7 @@ const main = async (): Promise<void> => {
     before: async (w: Widecode) => {
       w.host.conversation.executable = fake;
       w.host.conversation.extraArgs.push("--fixture", join(fixtures, "ask.ndjson"), "--record-args", args);
-      await w.host.useStore(store);
+      await w.host.session.useStore(store);
       w.js.dirs = [join(dir, "plugins")];
       w.js.extra = [new PluginSource("probe.js", probe)];
       w.host.session.userPermissions = { allow: ["Bash(npm test *)"], deny: ["Read(./.env)"] };
@@ -89,7 +89,7 @@ const main = async (): Promise<void> => {
   w.host.onLog = (text: string) => logs.push(text);
   eq("the project's columns over the user's", w.configureColumns({ chat: "30%" }), "");
   w.watchHarness();
-  await w.host.load();
+  await w.host.session.load(w.host.folder, w.host.hooks);
   w.shell.resize(200);
   const tell = (text: string): string => {
     w.host.kernel.commands.run(text);
@@ -212,7 +212,7 @@ const main = async (): Promise<void> => {
     before: async (w2: Widecode) => {
       w2.host.conversation.executable = fake;
       w2.host.conversation.extraArgs.push("--fixture", join(fixtures, "turn.ndjson"), "--record-args", args2);
-      await w2.host.useStore(other);
+      await w2.host.session.useStore(other);
     },
   });
   const c2 = w2.host.conversation;
@@ -237,7 +237,7 @@ const main = async (): Promise<void> => {
     folder,
     load: true,
     before: async (w4: Widecode) => {
-      await w4.host.useStore(null);
+      await w4.host.session.useStore(null);
     },
   });
   ok("no store: no user prompt, only the trusted folder's", w4.host.harness.userPromptPath === "" && !w4.host.harness.systemPrompt([]).includes("Be kind.") && w4.host.harness.systemPrompt([]).endsWith("Be terse. Prefer lists."));
@@ -251,7 +251,7 @@ const main = async (): Promise<void> => {
     before: async (w3: Widecode) => {
       w3.host.conversation.executable = fake;
       w3.host.conversation.extraArgs.push("--fixture", join(fixtures, "turn.ndjson"));
-      await w3.host.useStore(store);
+      await w3.host.session.useStore(store);
       w3.js.dirs = [join(folder3, ".widecode", "plugins")];
     },
   });

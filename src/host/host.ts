@@ -4,25 +4,21 @@
 // the compare base, the tree) and the session (controllers/session.ts: the conversation with the agent,
 // the agents, the trust, the store, the harness); the hooks announcing a change, reached here by
 // name; the role slots one plugin fills for the others (the code column, the chat, the tools); the
-// keymaps; the log; and what crosses the three: loading, the changes with the agent's edits marked,
-// opening another folder, a plugin's removal.
+// keymaps; the log; and what crosses the three: the changes with the agent's edits marked, a
+// plugin's removal.
 import { ConversationHolder } from "../conversation/model-source.ts";
 import { ChatModel, Item } from "../conversation/model.ts";
-import { existsSync, statSync } from "node:fs";
-import { expandHome } from "@lightstart/lib/paths.ts";
-import { resolve } from "node:path";
 import { Conversation } from "../conversation/conversation.ts";
 import { removeLanguages } from "@lightstart/highlight/registry.ts";
 import { KeymapController } from "./keymaps.ts";
 import { ApprovalController } from "./approval.ts";
 import { afterChange } from "./after-change.ts";
-import { type Emitter, type Signal } from "@lightstart/light/signals";
+import { type Emitter } from "@lightstart/light/signals";
 import { Roles } from "./roles.ts";
 import { buildHooks, hookOf, replayHook, type NamedHook } from "./hooks.ts";
 import { Kernel } from "@lightstart/kernel/kernel.ts";
 import { FileChange } from "@lightstart/workspace/changes.ts";
 import { Harness } from "../services/harness.ts";
-import { Store } from "../services/store.ts";
 import type { Workspace } from "@lightstart/workspace/workspace.ts";
 import { FolderController } from "@lightstart/workspace/folder.ts";
 import { ScreenController } from "../screen/screen.ts";
@@ -42,10 +38,6 @@ export class Host extends ConversationHolder {
   /** Fire hook `name` again, so plugins started since catch up with the state the others saw. */
   replay(name: string): void {
     replayHook(this.hooks, name);
-  }
-  /** What the code column shows: a file, a subagent's steps or a call (null for nothing). */
-  get shown(): Signal<object | null> {
-    return this.screen.shown;
   }
   /** The keymaps, and the roles plugins play. */
   readonly keys: KeymapController;
@@ -80,9 +72,6 @@ export class Host extends ConversationHolder {
   /** The requests already announced, and the model they belong to (a new conversation or a reset clears them). */
   private readonly seenRequests = new Set<string>();
   private requestModel: ChatModel | null = null;
-  private pendingOpen = "";
-  private pendingOpenAt = 0;
-  private opening = false;
 
   /** Over the start's `folder` and `session`, its `kernel` and the `screen` and `keys` built on it. */
   constructor(folder: FolderController, session: SessionController, kernel: Kernel, screen: ScreenController, keys: KeymapController, approval: ApprovalController) {
@@ -170,11 +159,6 @@ export class Host extends ConversationHolder {
     return this.folder.changes(claude);
   }
 
-  /** Give the session its store (the entry does, before the first conversation starts). */
-  useStore(store: Store | null): Promise<void> {
-    return this.session.useStore(store, this.workspace.folder);
-  }
-
   /** The hook plugins listen to under `name`; null for an unknown name. */
   hook(name: string): Emitter<unknown> | null {
     return hookOf(this.hooks, name);
@@ -197,60 +181,5 @@ export class Host extends ConversationHolder {
     if (this.notes.length > NOTES_KEPT) this.notes.splice(0, this.notes.length - NOTES_KEPT);
     const fn = this.onLog;
     if (fn !== null) fn(text);
-  }
-
-  /** Keep a message the user wrote, for the composer's ↑. */
-  remember(text: string): void {
-    this.session.remember(text, this.workspace.folder);
-  }
-
-  quit(): void {
-    this.conversation.kill();
-    const fn = this.onQuit;
-    if (fn !== null) fn();
-  }
-
-  /** Load the file list and git status, then announce the conversation (the screen's first fill). */
-  async load(): Promise<void> {
-    // A .widecode/ from before it ignored itself would show among the changes.
-    const store = this.session.store;
-    if (store !== null) store.ignoreIn(this.workspace.folder, false);
-    await this.folder.load();
-    this.replay("conversationChanged");
-  }
-
-  /**
-   * Switch to another folder: the app starts again over it, with the same agent, CLI, model and
-   * effort (the widecode controller's `reopen`). While the agent works, the first `/open` only warns.
-   */
-  async openFolder(path: string): Promise<void> {
-    const target = resolve(this.workspace.folder, expandHome(path));
-    if (!existsSync(target) || !statSync(target).isDirectory()) {
-      this.screen.tell("not a folder: " + target);
-      return;
-    }
-    if (this.opening) {
-      this.screen.tell("already opening a folder");
-      return;
-    }
-    const now = Date.now();
-    if (this.conversation.running && (this.pendingOpen !== target || now - this.pendingOpenAt > 10000)) {
-      this.pendingOpen = target;
-      this.pendingOpenAt = now;
-      this.screen.tell(this.conversation.agent.name() + " is still working here: /open it again within 10 s to stop it and switch");
-      return;
-    }
-    this.pendingOpen = "";
-    const open = this.onOpen;
-    if (open === null) {
-      this.screen.tell("no folder can be opened here");
-      return;
-    }
-    this.opening = true;
-    try {
-      await open(target);
-    } finally {
-      this.opening = false;
-    }
   }
 }

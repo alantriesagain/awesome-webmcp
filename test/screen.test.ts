@@ -14,6 +14,7 @@ import { Store } from "../src/services/store.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { Headless } from "@lightstart/test/headless.ts";
 import { currentWidecode, openWidecode } from "./support/app.ts";
+import { openFolder } from "../src/host/actions.ts";
 
 const W = 200;
 const H = 25;
@@ -96,7 +97,7 @@ const main = async (): Promise<void> => {
     plugins: config,
     load: true,
     before: async (w: Widecode) => {
-      await w.host.useStore(store);
+      await w.host.session.useStore(store);
       w.host.session.titler.executable = join(process.cwd(), "test", "fake-title.sh");
       w.shell.resize(W);
       // An /open starts the app again: the new shell is the one drawn.
@@ -320,16 +321,16 @@ const main = async (): Promise<void> => {
 
   const other = mkdtempSync(join(tmpdir(), "code-screen-other-"));
   writeFileSync(join(other, "plain.txt"), "plain\n");
-  await app.host.openFolder(other);
+  await openFolder(other);
   lines = screen();
   ok("/open while Claude works only warns", statusOf(lines).includes("Claude is still working here") && app.host.workspace.folder === repo);
-  await app.host.openFolder(other);
+  await openFolder(other);
   app = currentWidecode();
   lines = screen();
   ok("/open again switches the folder: its files, outside git", has(lines, " All 1│ Changed 0 ") && has(lines, "plain.txt") && !has(lines, "app.js") && app.host.workspace.folder === other);
   ok("and the chat starts over there", has(lines, "A new session in this folder"));
   eq("and the chosen agent talks to the new conversation", app.host.conversation.agent.owner, "claude");
-  await app.host.openFolder(repo);
+  await openFolder(repo);
   app = currentWidecode();
   rmSync(other, { recursive: true, force: true });
 

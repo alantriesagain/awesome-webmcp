@@ -143,7 +143,7 @@ const main = async (): Promise<void> => {
   const extra = new Extra(w.host, ["git"]);
   w.start(JSON.parse('{"status": {"lines": [["hello", "note"]]}}'), new NoStateFile(), [extra]);
   mountApp(w);
-  await w.host.load();
+  await w.host.session.load(w.host.folder, w.host.hooks);
   lines = show(w);
   ok("an extra plugin's tab joins the column", w.host.screen.panelsIn("side").map((p) => p.id).includes("notes"));
   ok("its segment in the status table the config lays out", lines.some((l) => l.includes(" hello! │ ")));

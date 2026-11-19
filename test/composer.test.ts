@@ -31,11 +31,11 @@ const main = async (): Promise<void> => {
   writeFileSync(join(folder, "alpha.txt"), "a\n");
   const home = mkdtempSync(join(tmpdir(), "widecode-composer-home-"));
   const w = await openWidecode({ folder });
-  await w.host.useStore(new Store(home));
+  await w.host.session.useStore(new Store(home));
   const root = new TRoot();
   w.shell.resize(160);
   mount(w.shell, root);
-  await w.host.load();
+  await w.host.session.load(w.host.folder, w.host.hooks);
   frames.flush();
   layout(root, 160, 30, DEFAULT_STYLE);
   const copied: string[] = [];

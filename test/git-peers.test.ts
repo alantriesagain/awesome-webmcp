@@ -50,7 +50,7 @@ const main = async (): Promise<void> => {
   const tree = new TRoot();
   app.shell.resize(200);
   mount(app.shell, tree);
-  await app.host.load();
+  await app.host.session.load(app.host.folder, app.host.hooks);
   const until = async (check: () => boolean): Promise<void> => {
     for (let i = 0; i < 300 && !check(); i++) await wait(20);
   };

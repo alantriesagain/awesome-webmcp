@@ -6,6 +6,7 @@ import { log } from "@lightstart/lib/log.ts";
 import type { JsRuntime } from "./runtime.ts";
 import { API_ANSWERS } from "./namespaces.ts";
 import { answer, json, num, refuse, str, strs } from "../api/values.ts";
+import { openFolder, quit } from "../host/actions.ts";
 
 /** Calls whose first argument names the plugin that owns what they add. */
 const OWNER_FIRST = [
@@ -154,10 +155,10 @@ export class HostRouter {
         h.screen.showPanel(str(a[0]));
         return answer(null);
       case "quit":
-        h.quit();
+        quit();
         return answer(null);
       case "openFolder":
-        void h.openFolder(str(a[0])).catch((err: unknown) => {
+        void openFolder(str(a[0])).catch((err: unknown) => {
           h.screen.tell("cannot open " + str(a[0]) + ": " + errorMessage(err, "error"));
         });
         return answer(null);

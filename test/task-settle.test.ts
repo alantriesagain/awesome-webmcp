@@ -50,7 +50,7 @@ const open = async (folder: string, log: string, agentArgs: string[], home = "")
       if (home.length > 0) {
         const store = new Store(home);
         store.trust(folder);
-        await w.host.useStore(store);
+        await w.host.session.useStore(store);
       }
     },
   });

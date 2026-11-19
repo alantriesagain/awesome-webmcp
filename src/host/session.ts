@@ -19,6 +19,8 @@ import { SessionRecords } from "../services/sessions.ts";
 import { Store } from "../services/store.ts";
 import { Titler } from "../agent/titles.ts";
 import type { McpTool } from "../agent/mcp.ts";
+import type { FolderController } from "@lightstart/workspace/folder.ts";
+import { replayHook, type NamedHook } from "./hooks.ts";
 
 /** What the harness gives the agent: the permission rules, the user's prompt, the project's prompt and the trust. */
 export class AgentHarness {
@@ -106,7 +108,7 @@ export class SessionController extends Controller {
   }
 
   /** Give the session its store (the entry does, before the first conversation starts); `folder` is the one open. */
-  async useStore(store: Store | null, folder: string): Promise<void> {
+  async useStore(store: Store | null, folder: string = this.conversation.folder): Promise<void> {
     this.store = store;
     this.harness.userPromptPath = this.userPromptPath();
     this.setTrusted(store === null || store.trusted(folder));
@@ -215,6 +217,15 @@ export class SessionController extends Controller {
     const store = this.store;
     if (store !== null) store.ignoreIn(folder, true);
     this.history.add(text, this.conversation.sessionId, Date.now());
+  }
+
+  /** Load the file list and git status, then announce the conversation (the screen's first fill). */
+  async load(folder: FolderController, hooks: NamedHook[]): Promise<void> {
+    // A .widecode/ from before it ignored itself would show among the changes.
+    const store = this.store;
+    if (store !== null) store.ignoreIn(folder.workspace.folder, false);
+    await folder.load();
+    replayHook(hooks, "conversationChanged");
   }
 
   private note(text: string): void {

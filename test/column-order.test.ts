@@ -18,7 +18,7 @@ const main = async (): Promise<void> => {
   const H = 24;
   w.shell.resize(W);
   mount(w.shell, root);
-  await w.host.load();
+  await w.host.session.load(w.host.folder, w.host.hooks);
   const settle = (): void => {
     for (let i = 0; i < 3; i++) {
       frames.flush();

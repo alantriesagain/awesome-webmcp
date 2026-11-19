@@ -165,7 +165,7 @@ const main = async (): Promise<void> => {
   const repo = mkdtempSync(join(tmpdir(), "widecode-repo-"));
   // Claude Code's plugin reads the records and keeps the session's record; the CLI ran on its own default model.
   const app = await openWidecode({ folder: repo });
-  await app.host.useStore(store);
+  await app.host.session.useStore(store);
   const conv = app.host.conversation;
   conv.modelName = "";
   const t2 = app.host.session.titler;

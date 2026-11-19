@@ -33,6 +33,7 @@ import { afterChange } from "./host/after-change.ts";
 import { AGENT, Item, NOTICE, RUN, TEXT, TOOL, Turn } from "./conversation/model.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { CodeFile } from "./code/diff.ts";
+import { openFolder, quit } from "./host/actions.ts";
 
 /** The turn's last text item, "" when none. */
 const lastText = (turn: Turn): string => {
@@ -124,10 +125,10 @@ export class Selftest {
     writeFileSync(join(folder, "only.txt"), "one\n");
     const agent = this.w.host.session.agentId.peek();
     this.step = 1;
-    await this.w.host.openFolder(folder);
+    await openFolder(folder);
     const now = this.current();
     this.step = 2;
-    await now.host.load();
+    await now.host.session.load(now.host.folder, now.host.hooks);
     const files = now.host.folder.paths();
     // The new mount paints on its next frames.
     const screen = this.screen;
@@ -324,7 +325,7 @@ export class Selftest {
     this.finished = true;
     this.stopShown?.();
     log("selftest ok");
-    this.current().host.quit();
+    quit();
   }
 
   private fail(why: string): void {

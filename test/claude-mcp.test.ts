@@ -65,7 +65,7 @@ const main = async (): Promise<void> => {
   });
   const c = w.host.conversation;
   w.host.onLog = (text: string) => logs.push(text);
-  await w.host.load();
+  await w.host.session.load(w.host.folder, w.host.hooks);
   const mcp = w.js.mcp;
   ok("the Claude plugin asked for the server at its start", await until(() => mcp.url.length > 0, 3000));
   const token = mcp.tokenFor("claude");

@@ -37,7 +37,7 @@ const main = async (): Promise<void> => {
     folder,
     load: true,
     before: async (w: Widecode) => {
-      await w.host.useStore(store);
+      await w.host.session.useStore(store);
     },
   });
   const c = w.host.conversation;

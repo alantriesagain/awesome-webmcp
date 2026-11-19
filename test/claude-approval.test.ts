@@ -27,7 +27,7 @@ const main = async (): Promise<void> => {
   });
   const c = w.host.conversation;
   w.host.onLog = (text: string) => logs.push(text);
-  await w.host.load();
+  await w.host.session.load(w.host.folder, w.host.hooks);
 
   const argsOf = (): string[] => {
     try {

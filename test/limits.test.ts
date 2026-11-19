@@ -112,7 +112,7 @@ const main = async (): Promise<void> => {
   claude.fiveHour.usedPercent = 99;
   claude.fiveHour.resetsAt = now + 3600;
   store.saveLimits(claude, "claude");
-  await app.host.useStore(store);
+  await app.host.session.useStore(store);
   eq("Claude's limit shows for Claude", String(c.info.fiveHourPct), "99");
   eq("another agent has its own (none yet)", app.host.session.useAgent("opencode") + " " + String(c.info.fiveHourPct), " -1");
   eq("and Claude's come back with Claude", app.host.session.useAgent("claude") + " " + String(c.info.fiveHourPct), " 99");

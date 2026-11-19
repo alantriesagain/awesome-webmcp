@@ -84,7 +84,7 @@ const main = async (): Promise<void> => {
 
   w.start(config(null), store.stateFile(), []);
   c.prepare();
-  await w.host.load();
+  await w.host.session.load(w.host.folder, w.host.hooks);
   ok("the session starts with widecode: its model and efforts known before any message", (await until(() => c.info.modelId === "fake/small")) && c.started && c.agent.choices().efforts.map((e) => e.value).join(",") === "low,high,default" && sessionsMade() === 1 && !sent().includes('"method":"session/prompt"'));
   w.host.roles.chat.submit("/effort max");
   eq("/effort before any message knows the levels", said(), "effort is one of low, high, default (now default)");

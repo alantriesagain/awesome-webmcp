@@ -80,7 +80,7 @@ const main = async (): Promise<void> => {
   const c = w.host.conversation;
   w.host.session.setTrusted(true);
   c.prepare();
-  await w.host.load();
+  await w.host.session.load(w.host.folder, w.host.hooks);
   const idle = (): boolean => !c.model.running && c.model.pending.length === 0;
   const last = (): Turn => c.model.turns[c.model.turns.length - 1];
   const sent = (): string => readFileSync(log, "utf8");

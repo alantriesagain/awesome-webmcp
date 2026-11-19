@@ -84,7 +84,7 @@ const main = async (): Promise<void> => {
   const conversation = app.host.conversation;
   app.shell.resize(W);
   const headless = new Headless(app.shell, W, H);
-  await app.host.load();
+  await app.host.session.load(app.host.folder, app.host.hooks);
   const screen = (): string[] => headless.screen();
   const band = screen().slice(H - 3);
   const split = band[0].indexOf("│ 6 files");

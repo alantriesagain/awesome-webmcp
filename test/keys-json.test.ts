@@ -46,7 +46,7 @@ const start = async (folder: string, home: string, config: unknown): Promise<Wid
     },
   });
   w.start(plugins, store.stateFile(), []);
-  await w.host.load();
+  await w.host.session.load(w.host.folder, w.host.hooks);
   return w;
 };
 

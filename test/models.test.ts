@@ -56,7 +56,7 @@ const main = async (): Promise<void> => {
     },
   });
   const conversation = app.host.conversation;
-  await app.host.useStore(store);
+  await app.host.session.useStore(store);
 
   app.shell.handleKey(key("f5"));
   eq("F5 before a start: the next model, named by its alias", conversation.modelName + " " + conversation.info.modelLabel + " " + String(conversation.info.windowSize), "fable[1m] Fable 1M 1000000");
@@ -122,7 +122,7 @@ const main = async (): Promise<void> => {
   const laterConfig: unknown = { claude: { projects: join(folder, ".projects") } };
   const laterApp = await openWidecode({ folder, plugins: laterConfig });
   const later = laterApp.host.conversation;
-  await laterApp.host.useStore(new Store(home));
+  await laterApp.host.session.useStore(new Store(home));
   later.modelName = "fable[1m]";
   later.resume(id, "");
   eq("a resume starts with the session's model", later.modelName + " " + later.info.modelLabel + " " + String(later.info.windowSize), "opus[1m] Opus 1M 1000000");

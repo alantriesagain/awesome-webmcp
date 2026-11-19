@@ -288,7 +288,7 @@ const main = async (): Promise<void> => {
     before: async (w: Widecode) => {
       const store3 = new Store(home3);
       store3.trust(folder3);
-      await w.host.useStore(store3);
+      await w.host.session.useStore(store3);
     },
   });
   const c3 = w3.host.conversation;

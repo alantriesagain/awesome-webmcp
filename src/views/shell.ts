@@ -17,6 +17,7 @@ import keymapController from "../controllers/keymap.ts";
 import screenController from "../controllers/screen.ts";
 import sessionController from "../controllers/session.ts";
 import pluginsController from "../controllers/plugins.ts";
+import { quit } from "../host/actions.ts";
 import type { Conversation } from "../conversation/conversation.ts";
 import { BandPart, Column } from "../screen/contributions.ts";
 import { columnOrderOf } from "../screen/screen.ts";
@@ -461,7 +462,7 @@ export class Shell extends View {
         this.screen.tell("interrupted; Ctrl+C again to quit");
         return true;
       }
-      hostController.current.quit();
+      quit();
       return true;
     });
     app.add("app.dump", ["f12"], "", (_key: KeyEvent) => {

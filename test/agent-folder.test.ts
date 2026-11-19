@@ -7,6 +7,7 @@ import { join } from "node:path";
 import type { Widecode } from "../src/compose.ts";
 import { done, eq } from "@lightstart/test/assert.ts";
 import { currentWidecode, openWidecode } from "./support/app.ts";
+import { openFolder } from "../src/host/actions.ts";
 
 const plugin = (name: string): string => `widecode.plugin({
   id: "agent-x",
@@ -39,7 +40,7 @@ const main = async (): Promise<void> => {
   const c = w.host.conversation;
   eq("the first folder's agent", c.agent.id() + " " + c.agent.name(), "x Agent A");
 
-  await w.host.openFolder(folderB);
+  await openFolder(folderB);
   w = currentWidecode();
   eq("the new folder's agent of the same id takes the chat", w.host.conversation.agent.id() + " " + w.host.conversation.agent.name(), "x Agent B");
 

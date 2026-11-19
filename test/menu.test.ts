@@ -37,7 +37,7 @@ const main = async (): Promise<void> => {
   w.shell.resize(W);
   const headless = new Headless(w.shell, W, H);
   const root = headless.root;
-  await w.host.load();
+  await w.host.session.load(w.host.folder, w.host.hooks);
   const screen = (): string[] => headless.screen();
   const key = (name: string, text: string): KeyEvent => new KeyEvent(name, text, false, false, false);
   const press = (x: number, y: number): void => {

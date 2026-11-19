@@ -32,7 +32,7 @@ const main = async (): Promise<void> => {
   const tree = new TRoot();
   app.shell.resize(200);
   mount(app.shell, tree);
-  await app.host.load();
+  await app.host.session.load(app.host.folder, app.host.hooks);
   eq("a hosted app names no launcher", app.host.peersLauncher, "");
   const panel = app.host.screen.findPanel("peers");
   const tab = panel instanceof JsPanel ? panel : null;

@@ -45,7 +45,7 @@ const main = async (): Promise<void> => {
   const root = new TRoot();
   w.shell.resize(160);
   mount(w.shell, root);
-  await w.host.load();
+  await w.host.session.load(w.host.folder, w.host.hooks);
   frames.flush();
   layout(root, 160, 30, DEFAULT_STYLE);
   const input = w.chat.pane.input;

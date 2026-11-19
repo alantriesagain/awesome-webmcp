@@ -51,7 +51,7 @@ const main = async (): Promise<void> => {
     before: async (w: Widecode) => {
       const store = new Store(home);
       store.trust(folder);
-      await w.host.useStore(store);
+      await w.host.session.useStore(store);
       w.host.session.agentId.value = "fake";
     },
   });

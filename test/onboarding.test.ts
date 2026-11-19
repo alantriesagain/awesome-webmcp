@@ -42,10 +42,10 @@ const main = async (): Promise<void> => {
   const first = store.loadConfig(w.defaults());
   ok("the store's first run: the config it had to write", store.firstRun && first.notice.length === 0);
   eq("not the second", String(new Store(home).loadConfig(w.defaults()).plugins !== null) + " " + String(new Store(home).firstRun), "true false");
-  await w.host.useStore(store);
+  await w.host.session.useStore(store);
   const logs: string[] = [];
   w.host.onLog = (text: string) => logs.push(text);
-  await w.host.load();
+  await w.host.session.load(w.host.folder, w.host.hooks);
   const panel = w.chat.pane.panel;
   const open = (): string => w.host.conversation.model.openRequests().map((r) => r.name).join(",");
   const question = (): { question: string; header: string; options: { label: string; description: string }[] } => w.host.conversation.model.openRequests()[0].questions[0];
@@ -133,7 +133,7 @@ const main = async (): Promise<void> => {
 
   // Trusted: the agent works, the harness runs; the store remembers.
   store.trust(folder);
-  await w.host.useStore(store);
+  await w.host.session.useStore(store);
   ok("trusted as the store remembers", w.host.session.trusted.peek() && w.host.harness.trusted && store.trusted(folder));
   const said = tell("hello");
   ok("a message goes to the agent now, no longer refused for trust", !said.includes("not trusted"));

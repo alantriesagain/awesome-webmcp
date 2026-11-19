@@ -56,10 +56,10 @@ const main = async (): Promise<void> => {
   const c = w.host.conversation;
   // A store: the folder's records keep the skill runs.
   const home = mkdtempSync(join(tmpdir(), "widecode-skills-home-"));
-  await w.host.useStore(new Store(home));
+  await w.host.session.useStore(new Store(home));
   // Trusted, as the app marks a folder it works in: the project's skills count.
   w.host.session.setTrusted(true);
-  await w.host.load();
+  await w.host.session.load(w.host.folder, w.host.hooks);
   const onDisk = " 1 skill| project|   alpha  The first skill.|   More once Claude starts.";
   await until(() => tab(w) === onDisk);
   eq("before Claude says: the project's skill, read from disk, with more to come", tab(w), onDisk);
