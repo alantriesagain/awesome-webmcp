@@ -1,15 +1,12 @@
-// One start of widecode put together over the start's Host (controllers/host.ts): the shell, the
-// native widgets the plugins mount (the chat and code columns, the Tools tab) and the JS plugins,
-// built-in (plugins, in the binary), the user's and the project's, with the project's harness. `start` hands the kernel config.json's "plugins" and the state file, adds any
-// extra compiled plugins after the JS ones (the tests' and the entry's), and starts them after what
-// each requires, leaving out the ones switched off. What it returns holds the widgets for the
-// entry, the selftest and the tests; plugins never reach each other this way, only through the host.
+// A read-only view of one start of widecode: the start's Host, its Shell and the widgets and JS
+// plugins the plugins controller (controllers/plugins.ts) built. It holds nothing of its own and
+// does nothing: every member is a getter or a one-line delegation to where the work now is. It is
+// what src/run.ts, src/selftest.ts and the tests read; the app itself reaches the controllers.
 import { Host } from "./host/host.ts";
 import pluginsController from "./controllers/plugins.ts";
 import { JsRuntime } from "./runtime/runtime.ts";
 import { Plugin } from "@lightstart/kernel/plugin.ts";
 import type { StateFile } from "@lightstart/kernel/settings.ts";
-import { mergeColumns } from "./services/harness.ts";
 import { PluginDefault } from "./services/store.ts";
 import { ChatWidget } from "./views/chat-widget.ts";
 import { CodeWidget } from "./views/code-widget.ts";
@@ -20,6 +17,12 @@ import { Shell } from "./views/shell.ts";
 export class Widecode {
   readonly host: Host;
   readonly shell: Shell;
+
+  constructor(host: Host, shell: Shell) {
+    this.host = host;
+    this.shell = shell;
+  }
+
   /** The chat column's widget, mounted by the chat plugin. */
   get chat(): ChatWidget {
     return pluginsController.current.chat;
@@ -37,21 +40,12 @@ export class Widecode {
     return pluginsController.current.js;
   }
 
-  constructor(host: Host, shell: Shell) {
-    this.host = host;
-    this.shell = shell;
-    this.js.code = this.code;
-    this.js.chat = this.chat;
-    this.js.tools = this.tools;
-    pluginsController.current.configureSizes = (columns: unknown) => this.shell.sizes.configure(columns);
-  }
-
   /** Each plugin's section as a new config.json gets it, the JS plugins' included. */
   defaults(): PluginDefault[] {
     return pluginsController.current.defaults();
   }
 
-  /** Start: `plugins` is config.json's "plugins" (null for none), `state` what plugins keep, `extra` compiled plugins added after the JS ones. The keymap /keymap kept comes before the one the host was given (config.json's), before any plugin reads it. */
+  /** Start: `plugins` is config.json's "plugins" (null for none), `state` what plugins keep, `extra` compiled plugins added after the JS ones. */
   start(plugins: unknown, state: StateFile, extra: Plugin[]): void {
     pluginsController.current.start(plugins, state, extra);
     this.shell.finish();
@@ -59,37 +53,12 @@ export class Widecode {
 
   /** The columns' widths: the user's config with the project's over it; answers what could not be used. */
   configureColumns(columns: unknown): string {
-    this.host.session.userColumns = columns;
-    const note = this.shell.sizes.configure(mergeColumns(columns, this.host.harness.config().columns));
-    this.host.screen.layout.value = this.host.screen.layout.peek() + 1;
-    return note;
+    return this.shell.configureColumns(columns);
   }
 
   /** The painted `screen` as text: the named columns (every column for []) each cropped to its cells, the band under them included, the rows' trailing blanks dropped. */
   screenText(screen: Screen, columns: string[]): string {
-    const ids = this.host.screen.columns.map((c) => c.id);
-    const widths = this.shell.widths();
-    let used = 0;
-    for (const w of widths) used += w;
-    const starts: number[] = [];
-    const ends: number[] = [];
-    let x = 0;
-    for (let i = 0; i < ids.length; i++) {
-      const w = widths[i] === 0 ? Math.max(0, screen.w - used) : widths[i];
-      if (columns.length === 0 || columns.includes(ids[i])) {
-        starts.push(x);
-        ends.push(x + w);
-      }
-      x += w;
-    }
-    const rows: string[] = [];
-    for (let y = 0; y < screen.h; y++) {
-      let row = "";
-      for (let i = 0; i < starts.length; i++) row += screen.rowText(y, starts[i], ends[i]);
-      rows.push(row.replace(/\s+$/, ""));
-    }
-    while (rows.length > 0 && rows[rows.length - 1].length === 0) rows.pop();
-    return rows.join("\n");
+    return this.shell.screenText(screen, columns);
   }
 
   /** The project's config read again over the user's: a plugin whose section or on/off changed starts again, the columns follow; answers a notice ("" for none). */
@@ -118,5 +87,5 @@ export class Widecode {
   }
 }
 
-/** widecode over the start's `host`, not started. */
-export const composeWidecode = (host: Host): Widecode => new Widecode(host, new Shell());
+/** widecode over the start's `host` and `shell`, not started. */
+export const composeWidecode = (host: Host, shell: Shell): Widecode => new Widecode(host, shell);

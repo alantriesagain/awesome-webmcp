@@ -17,12 +17,14 @@ import kernelController from "../controllers/kernel.ts";
 import keymapController from "../controllers/keymap.ts";
 import screenController from "../controllers/screen.ts";
 import sessionController from "../controllers/session.ts";
+import pluginsController from "../controllers/plugins.ts";
 import type { Conversation } from "../conversation/conversation.ts";
 import { BandPart, Column } from "../screen/contributions.ts";
 import { columnOrderOf } from "../screen/screen.ts";
+import { mergeColumns } from "../services/harness.ts";
 import { Action, Binder } from "@lightstart/kernel/actions.ts";
 import { joinLabels } from "@lightstart/kernel/keys.ts";
-import { type CustomEvent, KeyEvent, type MouseEvent, TBox, TElement, TNode, View, html, signal, key, tabAt, tabSpanAt } from "@lightstart/light/native/tui";
+import { type CustomEvent, KeyEvent, type MouseEvent, type Screen, TBox, TElement, TNode, View, html, signal, key, tabAt, tabSpanAt } from "@lightstart/light/native/tui";
 import { LineCopy } from "@lightstart/tui/line-view.ts";
 import { Menu, MenuBar, MenuItem } from "@lightstart/tui/menu-bar.ts";
 import { ColumnWidths } from "./column-widths.ts";
@@ -109,6 +111,47 @@ export class Shell extends View {
       this.tabs.set(spec.id, new TabColumn(spec.id));
     }
     this.addKeys();
+    pluginsController.current.configureSizes = (columns: unknown) => this.configureSizes(columns);
+  }
+
+  /** The columns' widths as `sizes` a plugin sets them; answers what could not be used. */
+  configureSizes(columns: unknown): string {
+    return this.sizes.configure(columns);
+  }
+
+  /** The columns' widths: the user's config with the project's over it; answers what could not be used. */
+  configureColumns(columns: unknown): string {
+    this.host.session.userColumns = columns;
+    const note = this.sizes.configure(mergeColumns(columns, this.host.harness.config().columns));
+    this.screen.layout.value = this.screen.layout.peek() + 1;
+    return note;
+  }
+
+  /** The painted `screen` as text: the named columns (every column for []) each cropped to its cells, the band under them included, the rows' trailing blanks dropped. */
+  screenText(screen: Screen, columns: string[]): string {
+    const ids = this.screen.columns.map((c) => c.id);
+    const widths = this.widths();
+    let used = 0;
+    for (const w of widths) used += w;
+    const starts: number[] = [];
+    const ends: number[] = [];
+    let x = 0;
+    for (let i = 0; i < ids.length; i++) {
+      const w = widths[i] === 0 ? Math.max(0, screen.w - used) : widths[i];
+      if (columns.length === 0 || columns.includes(ids[i])) {
+        starts.push(x);
+        ends.push(x + w);
+      }
+      x += w;
+    }
+    const rows: string[] = [];
+    for (let y = 0; y < screen.h; y++) {
+      let row = "";
+      for (let i = 0; i < starts.length; i++) row += screen.rowText(y, starts[i], ends[i]);
+      rows.push(row.replace(/\s+$/, ""));
+    }
+    while (rows.length > 0 && rows[rows.length - 1].length === 0) rows.pop();
+    return rows.join("\n");
   }
 
   /** The start's Host, for what crosses its parts: the roles, quitting, a dump, a plugin's removal. */

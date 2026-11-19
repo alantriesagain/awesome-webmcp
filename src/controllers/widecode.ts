@@ -10,6 +10,7 @@ import { errorMessage, isRecord } from "@lightstart/lib/json.ts";
 import { basename, join } from "node:path";
 import { log, trail } from "@lightstart/lib/log.ts";
 import { composeWidecode, Widecode } from "../compose.ts";
+import { Shell } from "../views/shell.ts";
 import { NoStateFile } from "@lightstart/kernel/settings.ts";
 import { checkSource } from "../api/plugins.ts";
 import { AgentChoice, HarnessFile, Onboarding, folderCarries, runOnboarding } from "../views/onboarding.ts";
@@ -136,7 +137,7 @@ export class WidecodeController extends Controller {
     this.columnsNote = "";
     this.agentNote = "";
     this.keysNote = "";
-    const w = composeWidecode(hostController.current);
+    const w = composeWidecode(hostController.current, new Shell());
     w.js.builtinDir = current.builtinDir;
     this.w = w;
     this.closed = false;
@@ -155,7 +156,7 @@ export class WidecodeController extends Controller {
     this.keysNote = "";
     const selftest = app.args.string("selftest") ?? "";
     const where = current.folder;
-    const w = composeWidecode(hostController.current);
+    const w = composeWidecode(hostController.current, new Shell());
     w.js.builtinDir = current.builtinDir;
     const host = w.host;
     const store = settings.current.store;
