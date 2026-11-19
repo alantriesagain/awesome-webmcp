@@ -6,20 +6,37 @@ import { AgentHarness } from "./host/session.ts";
 import { JsRuntime } from "./runtime/runtime.ts";
 import { Plugin } from "@lightstart/kernel/plugin.ts";
 import type { StateFile } from "@lightstart/kernel/settings.ts";
-import { mergePlugins } from "./services/harness.ts";
+import { mergeColumns, mergePlugins } from "./services/harness.ts";
 import { Command } from "@lightstart/kernel/commands.ts";
 import { PluginDefault } from "./services/store.ts";
+import { ChatWidget } from "./views/chat-widget.ts";
+import { CodeWidget } from "./views/code-widget.ts";
+import { ToolsWidget } from "./views/tools-widget.ts";
 
 export class Plugins {
   readonly host: Host;
+  /** The chat column's widget, mounted by the chat plugin. */
+  readonly chat: ChatWidget;
+  /** The code column's widget, mounted by the code plugin. */
+  readonly code: CodeWidget;
+  /** The tools column's Tools tab, mounted by the tools plugin. */
+  readonly tools: ToolsWidget;
   /** The JS plugins: built-in, the user's, the project's. */
   readonly js: JsRuntime;
+  /** Set by the shell's owner to take the columns' widths; answers what it could not use. */
+  configureSizes: ((columns: unknown) => string) | null = null;
   private prepared = false;
   private closed = false;
 
   constructor(host: Host) {
     this.host = host;
+    this.chat = new ChatWidget(host);
+    this.code = new CodeWidget(host);
+    this.tools = new ToolsWidget(host);
     this.js = new JsRuntime(host);
+    this.js.code = this.code;
+    this.js.chat = this.chat;
+    this.js.tools = this.tools;
   }
 
   /** The JS plugins in the kernel, not started. */
@@ -65,6 +82,66 @@ export class Plugins {
   noteHarness(): void {
     const h = this.host.harness;
     this.host.session.useHarness(new AgentHarness(this.host.session.permissions().rulesJson(), h.userPrompt(), h.prompt(), this.host.session.trusted.peek()));
+  }
+
+  /** The columns' widths: the user's config with the project's over it; answers what could not be used. */
+  private useColumns(): string {
+    const note = this.configureSizes !== null ? this.configureSizes(mergeColumns(this.host.session.userColumns, this.host.harness.config().columns)) : "";
+    this.host.screen.layout.value = this.host.screen.layout.peek() + 1;
+    return note;
+  }
+
+  /** The project's config read again over the user's: a plugin whose section or on/off changed starts again, the columns follow; answers a notice ("" for none). */
+  applyHarness(): string {
+    const k = this.host.kernel;
+    const cfg = this.host.harness.config();
+    const ids: string[] = [];
+    for (const d of this.js.defs) if (!ids.includes(d.id)) ids.push(d.id);
+    const offBefore = k.settings.switchedOff();
+    const sectionsBefore: string[] = ids.map((id) => JSON.stringify(k.settings.section(id)));
+    k.settings.load(mergePlugins(this.host.session.userPlugins, cfg.plugins));
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      if (offBefore.has(id) !== k.settings.isOff(id) || sectionsBefore[i] !== JSON.stringify(k.settings.section(id))) this.js.reloadPlugin(id);
+    }
+    const note = this.useColumns();
+    const permissions = this.host.session.permissions();
+    this.noteHarness();
+    return [cfg.notice, permissions.notice, note].filter((t) => t.length > 0).join("; ");
+  }
+
+  /** Put the folder's harness in use without keeping the trust (`--trust`): its plugins, config and prompt. Answers what to tell ("" for nothing). */
+  useHarnessNow(): string {
+    this.host.session.setTrusted(true);
+    this.useProjectPlugins(true);
+    this.watchHarness();
+    return this.applyHarness();
+  }
+
+  /** Trust the folder from now on: the agent works here (one that starts at launch starts now), and its harness is put in use: its plugins, its prompt, its config. Answers what to tell ("" without a store). */
+  trust(): string {
+    const h = this.host;
+    const store = h.session.store;
+    if (store === null) return "";
+    store.trust(h.workspace.folder);
+    const wasTrusted = h.session.trusted.peek();
+    const note = this.useHarnessNow();
+    if (!wasTrusted) h.conversation.prepare();
+    return "trusted: " + h.conversation.agent.name() + " works here and the folder's harness is in use" + (note.length > 0 ? " (" + note + ")" : "");
+  }
+
+  /** Follow the project's harness folder: its plugins reload as they change, its config is applied, its prompt reaches the agent at the next start. */
+  watchHarness(): void {
+    const h = this.host;
+    h.harness.onChange = (what: string) => {
+      if (!h.harness.trusted) return;
+      if (what === "plugins") this.useProjectPlugins(true);
+      else if (what === "config") {
+        const note = this.applyHarness();
+        h.screen.tell(note.length > 0 ? note : "the harness config applied");
+      } else this.noteHarness();
+    };
+    h.harness.watch();
   }
 
   /** Stop what this start opened: the plugins' processes, their folders' watches, the MCP server. Once. */
