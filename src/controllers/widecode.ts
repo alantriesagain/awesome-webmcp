@@ -139,6 +139,7 @@ export class WidecodeController extends Controller {
     this.keysNote = "";
     const w = composeWidecode(hostController.current, new Shell());
     w.js.builtinDir = current.builtinDir;
+    w.host.keys.tell = (text: string) => w.host.screen.tell(text);
     this.w = w;
     this.closed = false;
     w.host.onOpen = (target: string) => this.reopen(target);
@@ -162,6 +163,7 @@ export class WidecodeController extends Controller {
     const w = composeWidecode(hostController.current, new Shell());
     w.js.builtinDir = current.builtinDir;
     const host = w.host;
+    host.keys.tell = (text: string) => host.screen.tell(text);
     const store = settings.current.store;
     const config = settings.current.config;
     if (config !== null) w.js.memoryMb = config.pluginMemoryMb;

@@ -32,8 +32,8 @@ import { TabColumn } from "./tab-column.ts";
 import "../screen/column-view.ts";
 import { palette } from "@lightstart/tui/palette.ts";
 import { trail } from "@lightstart/lib/log.ts";
-import { Command, Suggestion } from "@lightstart/kernel/commands.ts";
-import { welcome } from "./onboarding.ts";
+import { Command } from "@lightstart/kernel/commands.ts";
+import { registerWelcome } from "./onboarding.ts";
 
 /** A key as the trail names it: its modifiers and name, a character only with Ctrl or Alt (what is typed stays out of the log). */
 const keyName = (e: KeyEvent): string => (e.ctrl ? "ctrl+" : "") + (e.alt ? "alt+" : "") + (e.shift ? "shift+" : "") + (e.key === "char" ? (e.ctrl || e.alt ? "char:" + e.text : "char") : e.key);
@@ -190,10 +190,8 @@ export class Shell extends View {
   private addCommands(): void {
     const commands = this.kernel.commands;
     commands.add(new Command("/help", "", "this list", "shell", (_arg: string) => this.help()));
-    commands.add(new Command("/welcome", "", "the welcome: the columns, the keys and commands to start with", "shell", (_arg: string) => welcome(this.host)));
-    const keymap = new Command("/keymap", "[name]", "the keymap in use: default, or one a plugin brings (emacs, vi); kept for the next run", "shell", (arg: string) => this.keymapCommand(arg.trim()));
-    keymap.onComplete = (arg: string): Suggestion[] => this.keys.names().filter((n) => n.startsWith(arg.trim())).map((n) => new Suggestion(n, n, n === this.keys.keymap.value ? "now" : ""));
-    commands.add(keymap);
+    registerWelcome(this.host, this.kernel);
+    this.keys.registerCommands();
     commands.add(new Command("/columns", "[reset]", "the columns' widths; reset forgets the widths borders were dragged to", "shell", (arg: string) => this.columnsCommand(arg)));
   }
 
@@ -580,21 +578,6 @@ export class Shell extends View {
       "Commands: " + commands.join(", ") + ". Keys: " + columns + ", " + hints.join(", ") + ". In the composer: " + composer.join(", ") + ". Keymap: " + this.keys.keymap.value + " (/keymap lists them; ~/.widecode/keys.json rebinds). A press on a \"· N tools\" line shows those calls in the Tools tab, on a call there shows it whole.";
     this.conversation.model.notice(text, "info", "", "");
     this.conversation.changed();
-  }
-
-  /** /keymap: the one in use and the ones there are; `/keymap <name>` switches, kept for the next run. */
-  keymapCommand(name: string): void {
-    const names = this.keys.names();
-    if (name.length === 0) {
-      this.screen.tell("keymap " + this.keys.keymap.value + " (" + names.join(", ") + "); /keymap <name> switches");
-      return;
-    }
-    if (!names.includes(name)) {
-      this.screen.tell("no keymap named " + name + " (" + names.join(", ") + ")");
-      return;
-    }
-    this.keys.set(name);
-    this.screen.tell("keymap " + name);
   }
 
   override render(): unknown {

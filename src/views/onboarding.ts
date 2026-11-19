@@ -8,6 +8,8 @@
 // answered. Nothing here reaches light.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import type { Kernel } from "@lightstart/kernel/kernel.ts";
+import { Command } from "@lightstart/kernel/commands.ts";
 import { Ask } from "../conversation/requests.ts";
 import { Host } from "../host/host.ts";
 
@@ -106,6 +108,11 @@ export const welcomeText = (host: Host): string => {
 export const welcome = (host: Host): void => {
   host.conversation.model.notice(welcomeText(host), "info", "", "");
   host.conversation.changed();
+};
+
+/** The /welcome command, added by the shell in its command order. */
+export const registerWelcome = (host: Host, kernel: Kernel): void => {
+  kernel.commands.add(new Command("/welcome", "", "the welcome: the columns, the keys and commands to start with", "shell", (_arg: string) => welcome(host)));
 };
 
 /** What `folder` carries that the agent reads or widecode runs; `checkPlugin(file)` says what a harness plugin file registers or why it does not load. */

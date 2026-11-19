@@ -7,6 +7,7 @@ import { Controller } from "@lightstart/light/controller/class.ts";
 import { signal } from "@lightstart/light/signals";
 import { Kernel } from "@lightstart/kernel/kernel.ts";
 import { keyEntriesOf } from "@lightstart/kernel/keys.ts";
+import { Command, Suggestion } from "@lightstart/kernel/commands.ts";
 
 /** A keymap a plugin brought, by the name /keymap takes. */
 export class KeymapDef {
@@ -30,6 +31,8 @@ export class KeymapController extends Controller {
   keymaps: KeymapDef[] = [];
   /** Answers the user's keys.json text ("" for none); null without a store. */
   onRead: (() => string) | null = null;
+  /** Says what /keymap did in the status bar; the app sets it (the screen starts after the keymap). */
+  tell: ((text: string) => void) | null = null;
 
   constructor(kernel: Kernel) {
     super("keymaps");
@@ -41,6 +44,29 @@ export class KeymapController extends Controller {
     const out = ["default"];
     for (const k of this.keymaps) if (!out.includes(k.id)) out.push(k.id);
     return out;
+  }
+
+  /** The /keymap command, per start (the kernel is new each start); the shell adds it in its command order. */
+  registerCommands(): void {
+    const command = new Command("/keymap", "[name]", "the keymap in use: default, or one a plugin brings (emacs, vi); kept for the next run", "shell", (arg: string) => this.use(arg.trim()));
+    command.onComplete = (arg: string): Suggestion[] => this.names().filter((n) => n.startsWith(arg.trim())).map((n) => new Suggestion(n, n, n === this.keymap.value ? "now" : ""));
+    this.kernel.commands.add(command);
+  }
+
+  /** /keymap: the one in use and the ones there are; `/keymap <name>` switches, kept for the next run. */
+  use(name: string): void {
+    const names = this.names();
+    const say = this.tell;
+    if (name.length === 0) {
+      if (say !== null) say("keymap " + this.keymap.value + " (" + names.join(", ") + "); /keymap <name> switches");
+      return;
+    }
+    if (!names.includes(name)) {
+      if (say !== null) say("no keymap named " + name + " (" + names.join(", ") + ")");
+      return;
+    }
+    this.set(name);
+    if (say !== null) say("keymap " + name);
   }
 
   /** Use keymap `name` from now on, kept for the next run. */
