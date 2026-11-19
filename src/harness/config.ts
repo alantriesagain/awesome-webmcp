@@ -5,7 +5,7 @@
 //
 //   "harness": { "model": "anthropic/claude-sonnet-5", "effort": "high", "compactAt": 200000, "http": "node",
 //     (a provider with "api": "openai" speaks chat completions; a model's "api", "baseUrl", "thinking": "toggle" | "effort", "reasoningField")
-//     "search": { "order": ["searxng", "google", "brave", "tavily"], "searxng": "http://127.0.0.1:8080" },
+//     "search": { "order": ["searxng", "brave", "tavily", "exa", "google"], "searxng": "http://127.0.0.1:8080" },
 //     "browser": { "command": "" },
 //     "providers": { "mine": { "name": "Mine", "baseUrl": "https://host/anthropic", "keyEnv": "MINE_API_KEY",
 //       "models": [{ "id": "big", "name": "Big", "context": 200000, "output": 32000, "price": [1, 4] }] } } }

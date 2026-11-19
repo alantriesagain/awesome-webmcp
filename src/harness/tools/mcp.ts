@@ -185,7 +185,7 @@ export class McpLink {
   }
 
   /** Call `tool` with `argsJson`: the text it answered, and whether that is an error. */
-  async callTool(tool: string, argsJson: string, abort: Abort): Promise<McpCallEnd> {
+  async callTool(tool: string, argsJson: string, abort: Abort, totalMs = CALL_MS): Promise<McpCallEnd> {
     const out = new McpCallEnd();
     const failed = await this.handshake(abort);
     if (failed.length > 0) {
@@ -193,7 +193,7 @@ export class McpLink {
       out.isError = true;
       return out;
     }
-    const got = await this.rpc("tools/call", '{"name":' + JSON.stringify(tool) + ',"arguments":' + (argsJson.length > 0 ? argsJson : "{}") + ',"_meta":{"progressToken":' + String(this.seq + 1) + "}}", abort, CALL_MS);
+    const got = await this.rpc("tools/call", '{"name":' + JSON.stringify(tool) + ',"arguments":' + (argsJson.length > 0 ? argsJson : "{}") + ',"_meta":{"progressToken":' + String(this.seq + 1) + "}}", abort, totalMs);
     if (got.error.length > 0) {
       out.text = got.error;
       out.isError = true;

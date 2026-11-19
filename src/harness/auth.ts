@@ -1,7 +1,7 @@
-// The keys the harness speaks to providers with: the provider's environment variable first, then
-// `~/.widecode/auth.json` (`{"<provider>": {"key": "..."}}`, readable by the user alone), which
-// `widecode --harness-auth <provider>` writes from a line on stdin. No OAuth: a subscription's
-// login is not a key the API takes.
+// The keys the harness speaks to providers and search APIs with (Brave, Tavily, Exa): the
+// environment variable first, then `~/.widecode/auth.json` (`{"<provider>": {"key": "..."}}`,
+// readable by the user alone), which `widecode --harness-auth <provider>` writes from a line on
+// stdin. No OAuth: a subscription's login is not a key the API takes.
 import { chmodSync } from "node:fs";
 import { readTextOr, writeAtomic } from "@lightstart/lib/fs.ts";
 import { objectText, parseJson, recordOf, str } from "@lightstart/lib/json.ts";

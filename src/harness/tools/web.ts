@@ -1,20 +1,22 @@
 // WebFetch and WebSearch. A page is fetched through the headless browser (its scripts run, the
 // DOM printed) and turned into markdown, else through curl when there is no browser; a search
 // tries its backends in order until one gives results: SearXNG when the config names an instance,
-// Google through the browser (its results parsed from the page; a consent or bot page gives none),
-// Brave's and Tavily's APIs when there is a key, DuckDuckGo's HTML page only when the config's
-// order lists it.
+// Brave's and Tavily's APIs when there is a key, Exa's hosted MCP server (no key needed), Google
+// through the browser (its results parsed from the page; a consent or bot page gives none),
+// DuckDuckGo's HTML page only when the config's order lists it.
 import { listOf, recordOf, str } from "@lightstart/lib/json.ts";
 import { Abort, Stopper } from "../loop/abort.ts";
 import { HttpRequest, HttpStream } from "../http/stream.ts";
 import { USER_AGENT, dumpDom, runProgram } from "./browser.ts";
 import { decodeEntities, htmlToMarkdown } from "./html.ts";
+import { McpLink } from "./mcp.ts";
 import { ToolContext, ToolOutcome } from "./tool.ts";
 
 /** What a fetch gives the model, at most. */
 const PAGE_MAX = 50000;
 const SEARCH_MS = 20000;
-export const DEFAULT_ORDER = ["searxng", "google", "brave", "tavily"];
+const EXA_URL = "https://mcp.exa.ai/mcp";
+export const DEFAULT_ORDER = ["searxng", "brave", "tavily", "exa", "google"];
 
 /** What the web tools have: the browser, where its profiles go, how HTTP is done, the search backends in order and their settings. */
 export class WebSettings {
@@ -25,12 +27,14 @@ export class WebSettings {
   searxng = "";
   braveKey = "";
   tavilyKey = "";
+  exaKey = "";
+  exaUrl = EXA_URL;
 }
 
 /** The backends to try: `wanted` (the config's order, else the default) of those that can run. */
 export const searchOrder = (wanted: string[], s: WebSettings): string[] => {
   const order = wanted.length > 0 ? wanted : DEFAULT_ORDER;
-  return order.filter((b) => (b === "searxng" && s.searxng.length > 0) || (b === "google" && s.browser.length > 0) || (b === "brave" && s.braveKey.length > 0) || (b === "tavily" && s.tavilyKey.length > 0) || (b === "duckduckgo" && wanted.includes("duckduckgo")));
+  return order.filter((b) => (b === "searxng" && s.searxng.length > 0) || (b === "google" && s.browser.length > 0) || (b === "brave" && s.braveKey.length > 0) || (b === "tavily" && s.tavilyKey.length > 0) || b === "exa" || (b === "duckduckgo" && wanted.includes("duckduckgo")));
 };
 
 /** `s` percent-encoded for a query string, as UTF-8. */
@@ -206,6 +210,40 @@ export const parseSearxng = (text: string): SearchResult => parseJsonHits(text, 
 export const parseBrave = (text: string): SearchResult => parseJsonHits(text, ["web", "results"], "description");
 export const parseTavily = (text: string): SearchResult => parseJsonHits(text, ["results"], "content");
 
+/** Exa's text: hits separated by a line of `---`, each with a `Title:` and `URL:` line and its text under `Highlights:`. */
+export const parseExa = (text: string): SearchResult => {
+  const r = new SearchResult();
+  for (const block of text.split(/\r?\n[ \t]*---[ \t]*\r?\n/)) {
+    const lines = block.split(/\r?\n/);
+    let title = "";
+    let url = "";
+    let after = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].startsWith("Title:")) title = lines[i].slice(6).trim();
+      else if (lines[i].startsWith("URL:")) url = lines[i].slice(4).trim();
+      else if (lines[i].trim() === "Highlights:") {
+        after = i + 1;
+        break;
+      }
+    }
+    if (url.length === 0) continue;
+    // The page's text under Highlights, its title, headings and table rows left out (they repeat the title or say little), up to the cut.
+    const parts: string[] = [];
+    let size = 0;
+    for (let i = after; i >= 0 && i < lines.length && size <= 300; i++) {
+      const line = lines[i].trim();
+      if (line.length === 0 || line === title || line.startsWith("#") || line.startsWith("|")) continue;
+      parts.push(line);
+      size += line.length + 1;
+    }
+    let snippet = parts.join(" ").replace(/\s+/g, " ").trim();
+    if (snippet.length > 300) snippet = snippet.slice(0, 300) + "…";
+    r.hits.push(new SearchHit(title, url, snippet));
+  }
+  if (r.hits.length === 0) r.error = "no results from Exa";
+  return r;
+};
+
 const answered = (got: Fetched, name: string): string => (got.error.length > 0 ? got.error : got.status !== 200 ? name + " answered " + String(got.status) : "");
 
 /** One backend's results for `query`. */
@@ -232,6 +270,16 @@ const searchWith = async (backend: string, query: string, limit: number, s: WebS
     const why = answered(got, "Tavily");
     return why.length > 0 ? failedWith(why) : parseTavily(got.body);
   }
+  if (backend === "exa") {
+    let url = s.exaUrl.length > 0 ? s.exaUrl : EXA_URL;
+    if (s.exaKey.length > 0) url += (url.includes("?") ? "&" : "?") + "exaApiKey=" + encodeQuery(s.exaKey);
+    const link = new McpLink("exa", url, []);
+    link.httpKind = s.httpKind;
+    const args = '{"query":' + JSON.stringify(query) + ',"objective":' + JSON.stringify(query) + ',"numResults":' + String(Math.min(20, limit)) + "}";
+    const end = await link.callTool("web_search_exa", args, abort, SEARCH_MS);
+    if (end.isError) return failedWith(end.text.length > 0 ? end.text : "Exa refused the search");
+    return parseExa(end.text);
+  }
   if (backend === "duckduckgo") {
     const got = await httpText("GET", "https://html.duckduckgo.com/html/?q=" + q, [["user-agent", USER_AGENT]], "", s.httpKind, abort);
     const why = answered(got, "DuckDuckGo");
@@ -249,7 +297,7 @@ export const webSearchTool = async (input: Record<string, unknown>, ctx: ToolCon
   const n = typeof input["limit"] === "number" ? (input["limit"] as number) : 8;
   const limit = Math.max(1, Math.min(20, Math.floor(n)));
   const s = ctx.web;
-  if (s.order.length === 0) return ToolOutcome.failed("no search backend here: there is no browser for Google, and the config names no SearXNG instance (harness.search.searxng) and no key for Brave or Tavily (widecode --harness-auth brave)");
+  if (s.order.length === 0) return ToolOutcome.failed("no search backend here: the config's harness.search.order leaves out Exa and names no SearXNG instance, browser, or Brave or Tavily key");
   const why: string[] = [];
   for (const backend of s.order) {
     if (abort.aborted) return ToolOutcome.failed("interrupted");
@@ -261,7 +309,7 @@ export const webSearchTool = async (input: Record<string, unknown>, ctx: ToolCon
     }
     why.push(backend + ": " + got.error);
   }
-  return ToolOutcome.failed("no results for " + JSON.stringify(query) + ": " + why.join("; ") + (s.order.every((b) => b === "google" || b === "duckduckgo") ? ". A SearXNG instance (harness.search.searxng in config.json) or a Brave or Tavily key (widecode --harness-auth brave) searches without being refused." : ""));
+  return ToolOutcome.failed("no results for " + JSON.stringify(query) + ": " + why.join("; ") + (s.order.includes("exa") ? "" : ". Exa needs no key; leave it in harness.search.order (the default) to search with it."));
 };
 
 /** The page's text when the browser showed a document that is not HTML (text, JSON) in its viewer: a body of one `<pre>`. */

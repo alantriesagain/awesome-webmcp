@@ -52,7 +52,7 @@ const folderTrusted = (paths: HarnessPaths, folder: string): boolean => {
 };
 
 /** The search APIs a key is kept for, beside the model providers. */
-const SEARCH_KEYS = ["brave", "tavily"];
+const SEARCH_KEYS = ["brave", "tavily", "exa"];
 
 /** What the web tools have on this machine: the browser found, the search backends with their settings and keys. */
 export const webSettings = (config: HarnessConfig, auth: Auth, paths: HarnessPaths): WebSettings => {
@@ -63,6 +63,7 @@ export const webSettings = (config: HarnessConfig, auth: Auth, paths: HarnessPat
   w.searxng = config.searxng;
   w.braveKey = auth.keyFor(new Provider("brave", "Brave Search", "", "BRAVE_API_KEY", false));
   w.tavilyKey = auth.keyFor(new Provider("tavily", "Tavily", "", "TAVILY_API_KEY", false));
+  w.exaKey = auth.keyFor(new Provider("exa", "Exa", "", "EXA_API_KEY", false));
   w.order = searchOrder(config.searchOrder, w);
   return w;
 };
