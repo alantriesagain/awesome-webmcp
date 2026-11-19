@@ -7,9 +7,9 @@
 // and the diagnosis the stream gives (the first request's input, the requests, a compaction, the
 // peak context), with the cost computed from a price table.
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, isAbsolute, join, relative } from "node:path";
 import { listOf, num, objectText, recordOf, str } from "@lightstart/lib/json.ts";
 import { HarnessConfig } from "../config.ts";
 import { ModelRegistry } from "../model/registry.ts";
@@ -102,12 +102,13 @@ export const pricesFromConfig = (path: string): PriceTable => {
 /** Exa's hosted MCP server: the web search every agent of a run searches with. */
 export const EXA_MCP = "https://mcp.exa.ai/mcp";
 
-/** A task: its name, its prompt, the folder holding `repo/` and `check.mjs`, its time. */
+/** A task: its name, its prompt, the folder holding `repo/` and `check.mjs`, its time, whether it needs the web. */
 export class BenchTask {
   readonly name: string;
   readonly dir: string;
   prompt = "";
   timeoutMs = 300000;
+  web = false;
 
   constructor(name: string, dir: string) {
     this.name = name;
@@ -133,9 +134,177 @@ export const loadTasks = (root: string, only: string[]): BenchTask[] => {
     const t = new BenchTask(name, join(root, name));
     t.prompt = str(spec["prompt"]);
     t.timeoutMs = num(spec["timeoutMs"], t.timeoutMs);
+    t.web = spec["web"] === true;
     out.push(t);
   }
   return out;
+};
+
+const cut = (text: string, size: number): string => (text.length > size ? text.slice(0, size) : text);
+
+/** An agent's tool name as the transcript's category. */
+export const toolCategory = (tool: string): string => {
+  const n = tool.toLowerCase();
+  if (n === "read") return "read";
+  if (n === "write") return "write";
+  if (n === "edit") return "edit";
+  if (n === "bash") return "bash";
+  if (n === "grep") return "grep";
+  if (n === "glob") return "glob";
+  if (n === "ls" || n === "list") return "ls";
+  if (n === "task") return "task";
+  if (n.includes("web_search") || n === "websearch" || n === "search") return "search";
+  if (n.includes("web_fetch") || n === "webfetch" || n === "fetch") return "fetch";
+  return "other";
+};
+
+/** One tool call in a run's transcript. */
+export class TranscriptCall {
+  n = 0;
+  tool = "";
+  as = "other";
+  path = "";
+  command = "";
+  input = "";
+  failed = false;
+  resultChars = 0;
+  result = "";
+  atMs = 0;
+
+  line(): string {
+    return objectText(
+      ["kind", "n", "tool", "as", "path", "command", "input", "failed", "resultChars", "result", "atMs"],
+      ['"call"', String(this.n), JSON.stringify(this.tool), JSON.stringify(this.as), JSON.stringify(this.path), JSON.stringify(this.command), JSON.stringify(this.input), this.failed ? "true" : "false", String(this.resultChars), JSON.stringify(this.result), String(this.atMs)],
+    );
+  }
+}
+
+/** One assistant text in a run's transcript. */
+export class TranscriptText {
+  atMs = 0;
+  text = "";
+
+  line(): string {
+    return objectText(["kind", "atMs", "text"], ['"text"', String(this.atMs), JSON.stringify(this.text)]);
+  }
+}
+
+/** A run's events, written as JSONL once it finishes. */
+export class Transcript {
+  private readonly task: string;
+  private readonly agent: string;
+  private readonly model: string;
+  private readonly web: boolean;
+  calls: TranscriptCall[] = [];
+  texts: TranscriptText[] = [];
+
+  constructor(task: BenchTask, spec: RunSpec) {
+    this.task = task.name;
+    this.agent = spec.agent;
+    this.model = spec.model;
+    this.web = task.web;
+  }
+
+  write(path: string, passed: boolean, setupFailed: boolean): void {
+    if (path.length === 0) return;
+    mkdirSync(dirname(path), { recursive: true });
+    const lines = [
+      objectText(
+        ["kind", "task", "agent", "model", "web", "passed", "setupFailed"],
+        ['"run"', JSON.stringify(this.task), JSON.stringify(this.agent), JSON.stringify(this.model), this.web ? "true" : "false", passed ? "true" : "false", setupFailed ? "true" : "false"],
+      ),
+    ];
+    for (const c of this.calls) lines.push(c.line());
+    for (const t of this.texts) lines.push(t.line());
+    writeFileSync(path, lines.join("\n") + "\n");
+  }
+}
+
+const jsonText = (value: unknown): string => {
+  if (typeof value === "string") return value;
+  if (value === undefined || value === null) return "{}";
+  return JSON.stringify(value);
+};
+
+const inputRecord = (text: string): Record<string, unknown> | null => {
+  try {
+    return recordOf(JSON.parse(text));
+  } catch {
+    return null;
+  }
+};
+
+const pathUnder = (path: string, work: string): string => {
+  if (!isAbsolute(path)) return path;
+  const rel = relative(work, path);
+  return rel.length > 0 && !rel.startsWith("..") && !isAbsolute(rel) ? rel : path;
+};
+
+const pathOfInput = (input: Record<string, unknown> | null, fallback: string, work: string): string => {
+  if (input !== null) {
+    for (const key of ["file_path", "filePath", "path"]) {
+      const value = input[key];
+      if (typeof value === "string" && value.length > 0) return pathUnder(value, work);
+    }
+  }
+  return fallback.length > 0 ? pathUnder(fallback, work) : "";
+};
+
+const contentText = (value: unknown): string => {
+  if (typeof value === "string") return value;
+  const r = recordOf(value);
+  if (r === null) return "";
+  const texts: string[] = [];
+  for (const part of listOf(r["content"])) {
+    const p = recordOf(part);
+    if (p !== null && typeof p["text"] === "string") texts.push(p["text"]);
+  }
+  if (texts.length > 0) return texts.join("");
+  return typeof r["text"] === "string" ? r["text"] : "";
+};
+
+/** The calls in an `opencode export`'s JSON, its tool parts' inputs and outputs (null when it does not parse). */
+export const callsFromExport = (text: string, work: string, started: number): TranscriptCall[] | null => {
+  let root: Record<string, unknown> | null = null;
+  try {
+    root = recordOf(JSON.parse(text));
+  } catch {
+    return null;
+  }
+  if (root === null) return null;
+  const calls: TranscriptCall[] = [];
+  for (const value of listOf(root["messages"])) {
+    const message = recordOf(value);
+    if (message === null) continue;
+    const info = recordOf(message["info"]);
+    const messageTime = info !== null ? recordOf(info["time"]) : null;
+    const messageAt = messageTime !== null ? num(messageTime["created"], 0) : 0;
+    for (const partValue of listOf(message["parts"])) {
+      const part = recordOf(partValue);
+      if (part === null || str(part["type"]) !== "tool") continue;
+      const state = recordOf(part["state"]);
+      const input = state !== null ? recordOf(state["input"]) : null;
+      const inputText = input !== null ? JSON.stringify(input) : "{}";
+      const output = state !== null ? state["output"] : "";
+      const result = typeof output === "string" ? output : contentText(output);
+      const status = state !== null ? str(state["status"]) : "";
+      const stateTime = state !== null ? recordOf(state["time"]) : null;
+      const startAt = stateTime !== null ? num(stateTime["start"], messageAt) : messageAt;
+      const call = new TranscriptCall();
+      call.n = calls.length + 1;
+      call.tool = str(part["tool"]);
+      call.as = toolCategory(call.tool);
+      call.path = pathOfInput(input, "", work);
+      call.command = input !== null && typeof input["command"] === "string" ? input["command"] : "";
+      call.input = cut(inputText, 2000);
+      call.failed = status === "error";
+      call.resultChars = result.length;
+      call.result = cut(result, 300);
+      call.atMs = startAt > 0 ? Math.max(0, startAt - started) : 0;
+      calls.push(call);
+    }
+  }
+  return calls;
 };
 
 /** How a run starts the agent and what it asks of it. */
@@ -160,6 +329,8 @@ export class RunSpec {
   prices: PriceTable | null = null;
   /** Run the harness over the user's store rather than a fresh one (for a comparison with the benchmark's clean runs). */
   userStore = false;
+  /** Where the run's transcript is written ("" for none). */
+  transcript = "";
 }
 
 /** What one run measured. */
@@ -204,11 +375,13 @@ export class RunResult {
   folder = "";
   /** The temp store a clean harness run used ("" when the run used the user's). */
   store = "";
+  /** The run's transcript ("" when none was written). */
+  transcript = "";
 
   line(): string {
     return objectText(
-      ["task", "agent", "model", "effort", "passed", "setupFailed", "checkOutput", "stopReason", "error", "ms", "firstTokenMs", "calls", "failedCalls", "tools", "inputTokens", "cacheReadTokens", "outputTokens", "contextUsed", "firstInputTokens", "requests", "compacted", "peakContext", "costUsd", "computedCostUsd", "reply", "folder"],
-      [JSON.stringify(this.task), JSON.stringify(this.agent), JSON.stringify(this.model), JSON.stringify(this.effort), this.passed ? "true" : "false", this.setupFailed ? "true" : "false", JSON.stringify(this.checkOutput), JSON.stringify(this.stopReason), JSON.stringify(this.error), String(this.ms), String(this.firstTokenMs), String(this.calls), String(this.failedCalls), "[" + this.tools.map((t) => JSON.stringify(t)).join(",") + "]", String(this.inputTokens), String(this.cacheReadTokens), String(this.outputTokens), String(this.contextUsed), String(this.firstInputTokens), String(this.requests), String(this.compacted), String(this.peakContext), String(this.costUsd), String(this.computedCostUsd), JSON.stringify(this.reply), JSON.stringify(this.folder)],
+      ["task", "agent", "model", "effort", "passed", "setupFailed", "checkOutput", "stopReason", "error", "ms", "firstTokenMs", "calls", "failedCalls", "tools", "inputTokens", "cacheReadTokens", "outputTokens", "contextUsed", "firstInputTokens", "requests", "compacted", "peakContext", "costUsd", "computedCostUsd", "reply", "folder", "transcript"],
+      [JSON.stringify(this.task), JSON.stringify(this.agent), JSON.stringify(this.model), JSON.stringify(this.effort), this.passed ? "true" : "false", this.setupFailed ? "true" : "false", JSON.stringify(this.checkOutput), JSON.stringify(this.stopReason), JSON.stringify(this.error), String(this.ms), String(this.firstTokenMs), String(this.calls), String(this.failedCalls), "[" + this.tools.map((t) => JSON.stringify(t)).join(",") + "]", String(this.inputTokens), String(this.cacheReadTokens), String(this.outputTokens), String(this.contextUsed), String(this.firstInputTokens), String(this.requests), String(this.compacted), String(this.peakContext), String(this.costUsd), String(this.computedCostUsd), JSON.stringify(this.reply), JSON.stringify(this.folder), JSON.stringify(this.transcript)],
     );
   }
 
@@ -248,6 +421,7 @@ export class RunResult {
     o.computedCostUsd = num(r["computedCostUsd"], -1);
     o.reply = str(r["reply"]);
     o.folder = str(r["folder"]);
+    o.transcript = str(r["transcript"]);
     return o;
   }
 }
@@ -412,7 +586,17 @@ const cleanHarness = (spec: RunSpec): { command: string[]; forget: string[]; env
   };
 };
 
-/** Finish a run: its exact usage, then its check and the session's end. */
+const envWith = (extra: Record<string, string>): Record<string, string> => {
+  const vars: Record<string, string> = {};
+  for (const k of Object.keys(process.env)) {
+    const v = process.env[k];
+    if (typeof v === "string") vars[k] = v;
+  }
+  for (const k of Object.keys(extra)) vars[k] = extra[k];
+  return vars;
+};
+
+/** Finish a run: its exact usage, then its check and the session's end, and its transcript. */
 const finishRun = async (
   task: BenchTask,
   spec: RunSpec,
@@ -422,14 +606,21 @@ const finishRun = async (
   sessionId: string,
   stop: () => void,
   forget: string[],
+  transcript: Transcript,
+  env: Record<string, string>,
 ): Promise<RunResult> => {
   result.ms = Date.now() - started;
+  const sub = Object.keys(env).length > 0 ? { cwd: work, timeout: 30000, env: envWith(env) } : { cwd: work, timeout: 30000 };
   if (sessionId.length > 0 && spec.usage.length > 0) {
     const words = spec.usage.map((w) => w.split("{session}").join(sessionId));
-    const exported = spawnSync(words[0], words.slice(1), { cwd: work, encoding: "utf8", timeout: 30000 });
+    const exported = spawnSync(words[0], words.slice(1), { ...sub, encoding: "utf8" });
     if (exported.status === 0 && typeof exported.stdout === "string" && exported.stdout.trim().length > 0) {
       const usage = opencodeUsage(exported.stdout);
       if (usage !== null) applyUsage(result, usage);
+      if (spec.agent === "opencode") {
+        const calls = callsFromExport(exported.stdout, work, started);
+        if (calls !== null) transcript.calls = calls;
+      }
     }
   }
   if (spec.prices !== null && (result.inputTokens > 0 || result.outputTokens > 0))
@@ -439,10 +630,11 @@ const finishRun = async (
   result.checkOutput = ((check.stdout ?? "") + (check.stderr ?? "")).trim().slice(0, 600);
   if (sessionId.length > 0 && forget.length > 0) {
     const words = forget.map((w) => w.split("{session}").join(sessionId));
-    spawnSync(words[0], words.slice(1), { cwd: work, stdio: "ignore", timeout: 15000 });
+    spawnSync(words[0], words.slice(1), { ...sub, stdio: "ignore", timeout: 15000 });
   }
   stop();
   await delay(200);
+  transcript.write(spec.transcript, result.passed, result.setupFailed);
   if (!spec.keep) rmSync(work, { recursive: true, force: true });
   return result;
 };
@@ -454,6 +646,7 @@ const runPiTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult> => 
   result.agent = spec.agent;
   result.model = spec.model;
   result.effort = spec.effort;
+  result.transcript = spec.transcript;
   result.compacted = 0;
   result.requests = 0;
   result.costUsd = 0;
@@ -482,6 +675,19 @@ const runPiTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult> => 
   if (spec.effort.length > 0) command.push("--thinking", spec.effort);
   const client = new PiClient();
   const started = Date.now();
+  const transcript = new Transcript(task, spec);
+  const callById = new Map<string, TranscriptCall>();
+  let pendingText = "";
+  let pendingAt = 0;
+  const flushText = (): void => {
+    if (pendingText.trim().length > 0) {
+      const t = new TranscriptText();
+      t.atMs = pendingAt - started;
+      t.text = cut(pendingText, 1000);
+      transcript.texts.push(t);
+    }
+    pendingText = "";
+  };
   const seen = new Map<string, number>();
   const order: string[] = [];
   const replyParts: string[] = [];
@@ -498,16 +704,41 @@ const runPiTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult> => 
       const event = recordOf(r["assistantMessageEvent"]);
       const type = event !== null ? str(event["type"]) : "";
       if ((type === "text_delta" || type === "thinking_delta") && result.firstTokenMs < 0) result.firstTokenMs = Date.now() - started;
-      if (type === "text_delta" && event !== null) replyParts.push(str(event["delta"]));
+      if (type === "text_delta" && event !== null) {
+        if (pendingText.length === 0) pendingAt = Date.now();
+        replyParts.push(str(event["delta"]));
+        pendingText += str(event["delta"]);
+      }
     } else if (kind === "tool_execution_start") {
+      flushText();
       result.calls++;
       const name = str(r["toolName"]).length > 0 ? str(r["toolName"]) : "?";
       if (!seen.has(name)) order.push(name);
       seen.set(name, (seen.get(name) ?? 0) + 1);
-    } else if (kind === "tool_execution_end" && r["isError"] === true) result.failedCalls++;
-    else if (kind === "message_end") {
+      const args = recordOf(r["args"]);
+      const call = new TranscriptCall();
+      call.n = result.calls;
+      call.tool = name;
+      call.as = toolCategory(name);
+      call.path = pathOfInput(args, "", work);
+      call.command = args !== null && typeof args["command"] === "string" ? args["command"] : "";
+      call.input = cut(jsonText(r["args"]), 2000);
+      call.atMs = Date.now() - started;
+      callById.set(str(r["toolCallId"]), call);
+      transcript.calls.push(call);
+    } else if (kind === "tool_execution_end") {
+      if (r["isError"] === true) result.failedCalls++;
+      const call = callById.get(str(r["toolCallId"]));
+      if (call !== undefined) {
+        const text = contentText(r["result"]);
+        call.failed = r["isError"] === true;
+        call.resultChars = text.length;
+        call.result = cut(text, 300);
+      }
+    } else if (kind === "message_end") {
       const message = recordOf(r["message"]);
       if (message === null || str(message["role"]) !== "assistant") return;
+      flushText();
       result.requests++;
       const usage = recordOf(message["usage"]);
       const input = usage !== null ? num(usage["input"], 0) : 0;
@@ -528,10 +759,11 @@ const runPiTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult> => 
     else if (kind === "agent_settled" && r["aborted"] === true) aborted = true;
   };
   const finish = async (): Promise<RunResult> => {
+    flushText();
     result.tools = order.map((t) => t + "=" + String(seen.get(t) ?? 0));
     result.reply = replyParts.join("").trim().slice(-600);
     rmSync(agentDir, { recursive: true, force: true });
-    return finishRun(task, spec, result, work, started, "", () => client.stop(), spec.forget);
+    return finishRun(task, spec, result, work, started, "", () => client.stop(), spec.forget, transcript, env);
   };
   client.start(command, work, env);
   const settled = client.waitSettled();
@@ -566,6 +798,7 @@ export const runTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult
   result.agent = spec.agent;
   result.model = spec.model;
   result.effort = spec.effort;
+  result.transcript = spec.transcript;
   const work = mkdtempSync(join(tmpdir(), "harness-bench-" + task.name + "-"));
   result.folder = work;
   cpSync(join(task.dir, "repo"), work, { recursive: true });
@@ -574,11 +807,15 @@ export const runTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult
   git(work, ["-c", "user.email=bench@widecode", "-c", "user.name=bench", "commit", "-qm", "the task"]);
   // A harness run gets a store of its own, so the user's skills, prompts, plugins, MCP servers and
   // config never reach the agent; its auth.json is a link to the user's, so the key is never copied.
+  // An opencode run gets an empty config folder, so its instructions, MCP servers, agents and
+  // providers do not reach it either, while its data folder keeps the key and the session.
   let command = spec.command;
   let forget = spec.forget;
-  let env = spec.env;
+  let env: Record<string, string> = {};
+  for (const k of Object.keys(spec.env)) env[k] = spec.env[k];
   let store = "";
   let emptyHome = "";
+  let configDir = "";
   if (spec.agent === "harness" && !spec.userStore) {
     const clean = cleanHarness(spec);
     command = clean.command;
@@ -587,9 +824,35 @@ export const runTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult
     store = clean.store;
     emptyHome = clean.home;
     result.store = store;
+  } else if (spec.agent === "opencode" && !spec.userStore) {
+    configDir = mkdtempSync(join(tmpdir(), "harness-bench-opencode-config-"));
+    env["XDG_CONFIG_HOME"] = configDir;
   }
   const client = new AcpClient();
   const started = Date.now();
+  const transcript = new Transcript(task, spec);
+  const callById = new Map<string, TranscriptCall>();
+  let pendingText = "";
+  let pendingMessage = "";
+  let pendingAt = 0;
+  const flushText = (): void => {
+    if (pendingText.trim().length > 0) {
+      const t = new TranscriptText();
+      t.atMs = pendingAt - started;
+      t.text = cut(pendingText, 1000);
+      transcript.texts.push(t);
+    }
+    pendingText = "";
+    pendingMessage = "";
+  };
+  const textChunk = (id: string, text: string): void => {
+    if (id !== pendingMessage) {
+      flushText();
+      pendingMessage = id;
+      pendingAt = Date.now();
+    }
+    pendingText += text;
+  };
   const seen = new Map<string, number>();
   const order: string[] = [];
   const replyParts: string[] = [];
@@ -605,15 +868,56 @@ export const runTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult
     if ((kind === "agent_message_chunk" || kind === "agent_thought_chunk") && result.firstTokenMs < 0) result.firstTokenMs = Date.now() - started;
     if (kind === "agent_message_chunk") {
       const c = recordOf(u["content"]);
-      if (c !== null) replyParts.push(str(c["text"]));
+      if (c !== null) {
+        replyParts.push(str(c["text"]));
+        textChunk(str(u["messageId"]), str(c["text"]));
+      }
     } else if (kind === "tool_call") {
+      flushText();
       result.calls++;
       const title = str(u["title"]).length > 0 ? str(u["title"]) : "?";
       if (!seen.has(title)) order.push(title);
       seen.set(title, (seen.get(title) ?? 0) + 1);
       if (str(u["status"]) === "failed") result.failedCalls++;
-    } else if (kind === "tool_call_update" && str(u["status"]) === "failed") result.failedCalls++;
-    else if (kind === "usage_update") {
+      const inputJson = jsonText(u["rawInput"]);
+      const input = inputRecord(inputJson);
+      let location = "";
+      for (const v of listOf(u["locations"])) {
+        const l = recordOf(v);
+        if (l !== null && str(l["path"]).length > 0) {
+          location = str(l["path"]);
+          break;
+        }
+      }
+      const call = new TranscriptCall();
+      call.n = result.calls;
+      call.tool = title;
+      call.as = toolCategory(title);
+      call.path = pathOfInput(input, location, work);
+      call.command = input !== null && typeof input["command"] === "string" ? input["command"] : "";
+      call.input = cut(inputJson, 2000);
+      call.failed = str(u["status"]) === "failed";
+      call.atMs = Date.now() - started;
+      callById.set(str(u["toolCallId"]), call);
+      transcript.calls.push(call);
+    } else if (kind === "tool_call_update") {
+      if (str(u["status"]) === "failed") result.failedCalls++;
+      const call = callById.get(str(u["toolCallId"]));
+      if (call !== undefined) {
+        let text = "";
+        for (const v of listOf(u["content"])) {
+          const block = recordOf(v);
+          if (block === null) continue;
+          const inner = recordOf(block["content"]);
+          if (inner !== null && typeof inner["text"] === "string") text += inner["text"];
+          else if (typeof block["text"] === "string") text += block["text"];
+        }
+        if (text.length === 0) text = contentText(u["rawOutput"]);
+        call.failed = str(u["status"]) === "failed";
+        call.resultChars = text.length;
+        call.result = cut(text, 300);
+      }
+    } else if (kind === "usage_update") {
       const used = num(u["used"], -1);
       // An update whose context did not change is no request of the session's (a subagent's cost).
       if (used >= 0 && prompted && used !== result.lastContext) {
@@ -635,12 +939,14 @@ export const runTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult
   };
   client.start(command, work, env);
   const finish = async (): Promise<RunResult> => {
+    flushText();
     result.tools = order.map((t) => t + "=" + String(seen.get(t) ?? 0));
     result.reply = replyParts.join("").trim().slice(-600);
-    const done = await finishRun(task, spec, result, work, started, sessionId, () => client.stop(), forget);
+    const done = await finishRun(task, spec, result, work, started, sessionId, () => client.stop(), forget, transcript, env);
     if (!spec.keep) {
       if (store.length > 0) rmSync(store, { recursive: true, force: true });
       if (emptyHome.length > 0) rmSync(emptyHome, { recursive: true, force: true });
+      if (configDir.length > 0) rmSync(configDir, { recursive: true, force: true });
     }
     return done;
   };

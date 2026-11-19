@@ -30,6 +30,12 @@ task into a temp git repository, starts the agent there, chooses the model and e
 session's options over ACP, through pi's arguments), sends the prompt, follows the turn (cancelled
 past the task's time), runs the check, and deletes the session.
 
+`--agent` takes a list (`--agent harness,opencode,pi`), each agent started as its own command. The
+runs go repeat by repeat, task by task, model by model, agent by agent, so a provider's slow hour
+falls on every agent alike. One records file holds the whole invocation and its default name joins
+the agents with `+`; `--budget` counts all of their runs. `--web` runs only the tasks whose
+task.json says `"web": true`, and `--no-web` only the others.
+
 Each harness run gets a fresh temp store passed as `--harness-home`, so the user's skills, prompt
 templates, extensions, plugins, MCP servers and config.json never reach the agent. The temp store's
 `auth.json` is a symbolic link to `~/.widecode/auth.json`, so the key is linked rather than copied
@@ -38,7 +44,12 @@ or read. When the user has skills or prompt templates under HOME (`~/.agents/ski
 PATH and the rest of the environment kept. The temp folders are deleted after the run.
 `--user-store` runs the harness over the user's store instead, for a comparison. pi starts with a
 folder of its own (`PI_CODING_AGENT_DIR`, so the user's settings and extensions do not load) and
-its key read from `~/.widecode/auth.json`.
+its key read from `~/.widecode/auth.json`. opencode reads its configuration from
+`$XDG_CONFIG_HOME/opencode` (default `~/.config/opencode`), so each run gets an empty temp config
+folder there: the user's instructions, MCP servers, agents and providers never reach it. Its data
+folder is left as it is, since `opencode export` and `opencode session delete` must find the
+session, and both run with the same environment as the agent. `--user-store` keeps the user's
+config for opencode too.
 
 It records the time to the first token and in all, the calls by tool and those that failed, the
 tokens, the context and the cost the agent reported; the records go to `bench/results/` (ignored by
@@ -63,8 +74,19 @@ the top) or by default from the harness's model registry: its built-in models an
 adds, each keyed `provider/id`. Both the computed cost and the agent-reported one are kept, and the
 table shows the computed one when a price is known.
 
+Every run also writes a transcript beside the records. For `--out <dir>/<name>.jsonl`, the folder
+`<dir>/<name>/` holds `<task>-<agent>-<k>.jsonl`, k counting that task and agent's runs in the
+invocation, and the record's `transcript` names the file. Its first line is the run: task, agent,
+model, whether the task needs the web, whether it passed, whether it was a setup failure. Then a
+line per tool call: its number, the agent's own tool name, its category among read, write, edit,
+bash, grep, glob, ls, search, fetch, task and other, the path it names (relative to the run's
+folder when inside it), a bash call's command, its input cut to 2000 characters, whether it failed,
+the length and the first 300 characters of its result, and its time from the run's start. A line
+per assistant text follows, cut to 1000 characters. The harness and opencode give these over ACP
+and pi in its tool records; opencode's calls come from the `opencode export` when it parses.
+
 ```
-node src/harness/bench/run.ts --model deepseek/deepseek-flash,opencode/kimi-k2.6 --repeat 2 --budget 1
+node src/harness/bench/run.ts --agent harness,opencode,pi --model deepseek/deepseek-flash,opencode/kimi-k2.6 --repeat 2 --budget 1
 node src/harness/bench/run.ts --agent opencode --model opencode/big-pickle --tasks fix-bug,edit-json
 node src/harness/bench/run.ts --agent pi --model opencode/deepseek-v4.1-flash --tasks fix-bug,edit-json
 node src/harness/bench/run.ts --user-store --model deepseek/deepseek-flash --tasks fix-bug

@@ -6,14 +6,15 @@
 // the first token, the stop reason) and its session forgotten after; the records read back; the
 // table.
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { reportText } from "../src/harness/bench/report.ts";
-import { ModelPrice, PriceTable, RunResult, RunSpec, loadTasks, opencodeUsage, pricesFromConfig, runTask } from "../src/harness/bench/runner.ts";
+import { ModelPrice, PriceTable, RunResult, RunSpec, callsFromExport, loadTasks, opencodeUsage, pricesFromConfig, runTask, toolCategory } from "../src/harness/bench/runner.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const main = async (): Promise<void> => {
+  const linesOf = (path: string): Record<string, unknown>[] => readFileSync(path, "utf8").trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
   const tasks = loadTasks(join(process.cwd(), "src", "harness", "bench", "tasks"), []);
   eq("the tasks", tasks.map((t) => t.name).join(","), "add-flag,answer-from-code,csv-quotes,edit-json,fix-bug,implement-slug,keep-tests-green,limit-concurrency,long-file-edit,misleading-failure,noisy-output,rename-symbol,run-to-see,search-first-lts,search-lts-codenames,search-release-date,search-same-day,signature-change,trace-config,whitespace-exact");
   const verdicts: string[] = [];
@@ -28,7 +29,8 @@ const main = async (): Promise<void> => {
   }
   eq("each check fails as given and passes solved", verdicts.join(" "), tasks.map((t) => t.name + ":fails/passes").join(" "));
 
-  const exported = opencodeUsage(readFileSync(join(process.cwd(), "test", "harness", "fixtures", "opencode-export.json"), "utf8"));
+  const exportText = readFileSync(join(process.cwd(), "test", "harness", "fixtures", "opencode-export.json"), "utf8");
+  const exported = opencodeUsage(exportText);
   eq(
     "opencode's export: its assistant messages, the cache counted in the input",
     exported === null ? "none" : [exported.requests, exported.inputTokens, exported.cacheReadTokens, exported.outputTokens, exported.firstInputTokens, exported.peakContext].join(","),
@@ -36,6 +38,17 @@ const main = async (): Promise<void> => {
   );
   ok("the export's own cost", exported !== null && exported.costUsd.toFixed(6) === "0.003949");
   eq("an export with no assistant message gives nothing", String(opencodeUsage('{"messages":[]}')), "null");
+  const exportCalls = callsFromExport(exportText, "/work/repo", 0);
+  eq(
+    "opencode's export turned into calls: each tool, its category, path, command, result and failure",
+    exportCalls === null ? "none" : exportCalls.map((c) => [c.n, c.tool, c.as, c.path, c.command, String(c.resultChars), String(c.failed)].join(":")).join(" "),
+    "1:bash:bash::ls -1:12:false 2:bash:bash::cat package.json:21:false 3:read:read:package.json::39:false 4:edit:edit:answer.txt::30:false 5:bash:bash::node check.mjs:22:true",
+  );
+  eq(
+    "tool names to the transcript's categories",
+    ["Read", "Write", "Edit", "Bash", "Grep", "Glob", "LS", "WebSearch", "WebFetch", "Task", "read", "list", "websearch", "webfetch", "mcp__exa__web_search_exa", "mcp__exa__web_fetch_exa", "Skill"].map(toolCategory).join(","),
+    "read,write,edit,bash,grep,glob,ls,search,fetch,task,read,ls,search,fetch,search,fetch,other",
+  );
 
   const home = mkdtempSync(join(tmpdir(), "bench-home-"));
   const registryPrices = pricesFromConfig(join(home, "missing-config.json"));
@@ -64,6 +77,7 @@ const main = async (): Promise<void> => {
   prices.add("fake/fake", new ModelPrice(1, 2, 0.1));
   spec.prices = prices;
   spec.userStore = true;
+  spec.transcript = join(home, "good-transcript.jsonl");
   eq("a price: the cache's reads at their own", prices.cost("fake/fake", 1000000, 400000, 500000).toFixed(2) + " " + String(prices.cost("other/model", 1, 0, 1)), "1.64 -1");
   const task = tasks.filter((t) => t.name === "answer-from-code")[0];
   const good = await runTask(task, spec);
@@ -71,11 +85,17 @@ const main = async (): Promise<void> => {
   ok("measured: the first token, the time, the tokens, the reply", good.firstTokenMs >= 0 && good.ms >= good.firstTokenMs && good.outputTokens > 0 && good.reply === "Writing it.Done.");
   ok("diagnosed: the first request, the requests, no compaction, the peak context, the computed cost", good.firstInputTokens > 0 && good.requests === 2 && good.compacted === 0 && good.peakContext >= good.firstInputTokens && good.computedCostUsd > 0);
   ok("its folder removed, its session forgotten", !existsSync(good.folder) && readdirSync(join(home, "harness", "sessions")).every((d) => readdirSync(join(home, "harness", "sessions", d)).length === 0));
+  const goodLines = linesOf(spec.transcript);
+  eq("the harness run's transcript header", goodLines[0]["kind"] + " " + String(goodLines[0]["task"]) + " " + String(goodLines[0]["agent"]) + " " + String(goodLines[0]["model"]) + " " + String(goodLines[0]["web"]) + " " + String(goodLines[0]["passed"]) + " " + String(goodLines[0]["setupFailed"]), "run answer-from-code harness fake/fake false true false");
+  const goodCalls = goodLines.filter((l) => l["kind"] === "call");
+  eq("the harness run's call: its tool, category, path, result and failure", goodCalls.map((c) => [c["n"], c["tool"], c["as"], c["path"], c["command"], String(c["failed"]), String(Number(c["resultChars"]) > 0)].join(":")).join(" "), "1:Write:write:answer.txt::false:true");
+  ok("the harness run's call carries its input and time, and its text", String(goodCalls[0]["input"]).includes("answer.txt") && Number(goodCalls[0]["atMs"]) >= 0 && goodLines.some((l) => l["kind"] === "text" && String(l["text"]).includes("Writing it.")));
   const pi = new RunSpec();
   pi.agent = "pi";
   pi.command = ["node", join(process.cwd(), "test", "harness", "fake-pi.mjs")];
   pi.model = "opencode/deepseek-v4.1-flash";
   pi.prices = registryPrices;
+  pi.transcript = join(home, "pi-transcript.jsonl");
   const piRun = await runTask(task, pi);
   eq("pi over its RPC: the tool call, the stop, the check", String(piRun.passed) + " " + piRun.stopReason + " " + piRun.error + "|" + piRun.tools.join(",") + " " + String(piRun.calls) + " " + String(piRun.failedCalls) + " " + piRun.checkOutput, "true stop |write=1 1 0 ok");
   ok(
@@ -83,6 +103,11 @@ const main = async (): Promise<void> => {
     piRun.firstTokenMs >= 0 && piRun.requests === 2 && piRun.inputTokens === 200 && piRun.cacheReadTokens === 70 && piRun.outputTokens === 15 && piRun.firstInputTokens === 50 && piRun.peakContext === 150 && piRun.compacted === 0 && Math.abs(piRun.costUsd - 0.0015) < 1e-9 && piRun.computedCostUsd > 0,
   );
   eq("pi's reply", piRun.reply, "done");
+  const piLines = linesOf(pi.transcript);
+  eq("the pi run's transcript header", piLines[0]["kind"] + " " + String(piLines[0]["task"]) + " " + String(piLines[0]["agent"]) + " " + String(piLines[0]["passed"]) + " " + String(piLines[0]["setupFailed"]), "run answer-from-code pi true false");
+  const piCalls = piLines.filter((l) => l["kind"] === "call");
+  eq("the pi run's call: its tool, category, path, result and failure", piCalls.map((c) => [c["n"], c["tool"], c["as"], c["path"], String(c["failed"]), String(Number(c["resultChars"]) > 0)].join(":")).join(" "), "1:write:write:answer.txt:false:true");
+  ok("the pi run's transcript has its text", piLines.some((l) => l["kind"] === "text" && String(l["text"]).includes("done")));
   spec.command = ["node", daemon, "--harness", "--harness-fake", wrong, "--harness-home", home];
   const bad = await runTask(task, spec);
   eq("one that answers wrong fails, with the check's words", String(bad.passed) + " " + bad.checkOutput, 'false answer.txt says "8080"');
@@ -168,6 +193,35 @@ const main = async (): Promise<void> => {
       withSetup.includes("- t3, opencode fake/fake: setup failure: initialize: timed out") &&
       !withSetup.includes("- t3, opencode fake/fake: initialize: timed out"),
   );
+  // Two agents interleaved over two repeats: one records file, one run after another, repeat by
+  // repeat, task by task, agent by agent, and each run's transcript beside it.
+  const bin = join(home, "bin");
+  mkdirSync(bin, { recursive: true });
+  const piCommand = join(bin, "pi");
+  writeFileSync(piCommand, '#!/bin/sh\nexec "' + process.execPath + '" "' + join(process.cwd(), "test", "harness", "fake-pi.mjs") + '" "$@"\n');
+  chmodSync(piCommand, 0o755);
+  const runs = join(home, "interleaved");
+  const records = join(runs, "all.jsonl");
+  writeFileSync(join(home, "prices.json"), "{}");
+  const interleaved = spawnSync(
+    "node",
+    [join(process.cwd(), "src", "harness", "bench", "run.ts"), "--agent", "harness,pi", "--fake", fixture, "--tasks", "answer-from-code,edit-json", "--repeat", "2", "--prices", join(home, "prices.json"), "--out", records],
+    { cwd: process.cwd(), encoding: "utf8", timeout: 180000, env: { ...process.env, PATH: bin + ":" + (process.env["PATH"] ?? "") } },
+  );
+  eq("the interleaved run finished", String(interleaved.status), "0");
+  const order = linesOf(records).map((r) => String(r["task"]) + "=" + String(r["agent"])).join(" ");
+  eq(
+    "the interleaved order: repeat, task, agent",
+    order,
+    "answer-from-code=harness answer-from-code=pi edit-json=harness edit-json=pi answer-from-code=harness answer-from-code=pi edit-json=harness edit-json=pi",
+  );
+  eq("one records file", readdirSync(runs).filter((n) => n.endsWith(".jsonl")).join(","), "all.jsonl");
+  eq(
+    "the transcripts beside the records, counting each task and agent",
+    readdirSync(join(runs, "all")).sort().join(","),
+    "answer-from-code-harness-1.jsonl,answer-from-code-harness-2.jsonl,answer-from-code-pi-1.jsonl,answer-from-code-pi-2.jsonl,edit-json-harness-1.jsonl,edit-json-harness-2.jsonl,edit-json-pi-1.jsonl,edit-json-pi-2.jsonl",
+  );
+  ok("the record names its transcript", linesOf(records).every((r) => String(r["transcript"]).length > 0 && existsSync(String(r["transcript"]))));
   rmSync(home, { recursive: true, force: true });
   done();
 };
