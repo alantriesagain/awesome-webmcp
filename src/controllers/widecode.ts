@@ -23,6 +23,7 @@ import { Command } from "@lightstart/kernel/commands.ts";
 import { flushBeforeExit, QuitFlusher } from "../quit.ts";
 import app from "../app.ts";
 import { Carry, Run } from "../run.ts";
+import { afterChange } from "../host/after-change.ts";
 import hostController from "./host.ts";
 import logger from "./log.ts";
 import run from "./run.ts";
@@ -321,7 +322,7 @@ export class WidecodeController extends Controller {
       return "session " + (sid.length > 0 ? sid : "none") + " · " + c.agent.name() + " · " + (turnSince > 0 ? "turn running for " + String(Math.round((Date.now() - turnSince) / 1000)) + " s" : "idle") + " · " + String(trail.frames) + " frames · plugins " + megabytes(this.w.js.memoryBytes()) + "/" + String(this.w.js.memoryMb) + " MB";
     };
     let loggedSession = "";
-    host.session.conversationChanged.add("log", () => {
+    afterChange(host.session.conversationState, () => {
       const c = host.conversation;
       const sid = c.model.sessionId;
       if (sid.length > 0 && sid !== loggedSession) {
@@ -379,7 +380,7 @@ export class WidecodeController extends Controller {
       title = t;
       term.title(t);
     };
-    host.session.conversationChanged.add("title", syncTitle);
+    afterChange(host.session.conversationState, syncTitle);
     syncTitle();
     const agent = host.conversation.agent;
     log("started " + String(term.cols) + "x" + String(term.rows) + " in " + host.workspace.folder + " with " + (agent.owner.length === 0 ? w.host.conversation.executable : agent.name() + " (plugin " + agent.owner + ")"));

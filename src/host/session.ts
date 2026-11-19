@@ -6,7 +6,8 @@
 // merged over. The agent chosen and the trust are signals; the hooks announce the conversation's
 // changes to plugins. One of light's controllers, as the app's state is.
 import { join } from "node:path";
-import { signal } from "@lightstart/light/native/tui";
+import { computed, signal } from "@lightstart/light/native/tui";
+import type { Signal } from "@lightstart/light/native/tui";
 import { Controller } from "@lightstart/light/controller/class.ts";
 import { Agent } from "../conversation/agent.ts";
 import { activityOf, stepOf } from "../conversation/activity.ts";
@@ -40,7 +41,13 @@ export class AgentHarness {
 }
 
 export class SessionController extends Controller {
-  conversation: Conversation;
+  /** The conversation open: another folder opens with one of its own. */
+  readonly current: Signal<Conversation>;
+  /** What follows the whole conversation: the one current with its revision (a new array when either moves). */
+  readonly conversationState = computed(() => {
+    const c = this.current.value;
+    return [c, c.revision.value];
+  });
   /** The project's harness, `.widecode/` in the folder. */
   harness: Harness;
   /** Whether the user trusts the folder: the agent works here and the folder's harness runs. True without a store; else as the store remembers, until /trust. */
@@ -64,7 +71,6 @@ export class SessionController extends Controller {
   userPlugins: unknown = null;
   userColumns: unknown = null;
   userPermissions: unknown = null;
-  readonly conversationChanged = new Hook();
   /** A request became open in the request panel: its id, category, name and a one-line summary. */
   readonly requestOpened = new Hook();
   /** A message is about to be sent to the agent (`conversation` not started yet for a new session). */
@@ -78,10 +84,15 @@ export class SessionController extends Controller {
 
   constructor(conversation: Conversation, folder: string) {
     super("session");
-    this.conversation = conversation;
+    this.current = signal(conversation);
     this.harness = new Harness(folder);
     this.harness.userPromptPath = this.userPromptPath();
     this.wire(conversation);
+  }
+
+  /** The conversation open. */
+  get conversation(): Conversation {
+    return this.current.value;
   }
 
   /** The user-wide prompt, `prompt.md` in the store's root ("" without a store). */
@@ -91,7 +102,6 @@ export class SessionController extends Controller {
 
   private wire(c: Conversation): void {
     c.store = this.records;
-    c.onChange = () => this.conversationChanged.fire();
     c.onNote = (text: string) => this.note(text);
   }
 

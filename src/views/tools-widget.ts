@@ -25,7 +25,7 @@ export class ToolsWidget extends ToolsTarget {
     h.screen.addPanel(owner, panel);
     h.roles.tools = this;
     // A new conversation, a reset or a resume: the calls drawn are the conversation's now.
-    h.session.conversationChanged.add(owner, () => panel.view.refresh());
+    h.hook("conversationChanged")?.add(owner, () => panel.view.refresh());
     const bind = new Binder(h.kernel.actions, owner, panel.id);
     bind.add("calls.up", ["up"], "shows the call", (_key: KeyEvent) => this.step(-1));
     bind.add("calls.down", ["down"], "shows the call", (_key: KeyEvent) => this.step(1));

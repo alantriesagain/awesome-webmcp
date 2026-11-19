@@ -198,7 +198,7 @@ export const answerAgent = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
       return answer(h.conversation.title);
     case "agent.setTitle":
       h.conversation.title = str(a[0]);
-      h.session.conversationChanged.fire();
+      h.conversation.changed();
       return answer(null);
     case "agent.firstExchange": {
       const e = h.conversation.firstExchange();

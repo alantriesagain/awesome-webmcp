@@ -95,7 +95,7 @@ export class Selftest {
       void this.open();
       return;
     }
-    this.w.host.session.conversationChanged.add("selftest", () => this.conversation());
+    this.w.host.hook("conversationChanged")?.add("selftest", () => this.conversation());
     if (this.name === "fake") this.w.host.roles.chat.submit("Reply with exactly the word PONG and nothing else.");
     else if (this.name === "fake-acp") this.w.host.roles.chat.submit("ask");
     else if (this.name === "harness") this.w.host.roles.chat.submit("run it");
@@ -159,7 +159,7 @@ export class Selftest {
     if (last === null) return;
     if (this.name === "live-acp") {
       if (last.result === null || m.running) return;
-      this.w.host.session.conversationChanged.remove("selftest");
+      this.w.host.hook("conversationChanged")?.remove("selftest");
       const ran = last.body.children.some((i: Item) => i.kind === TOOL && i.category === RUN && i.result !== null);
       setTimeout(() => {
         const screen = this.screen;
@@ -179,7 +179,7 @@ export class Selftest {
         if (text.includes("PONG")) this.pass();
         else this.fail("PONG not on screen");
       }, 100);
-      this.w.host.session.conversationChanged.remove("selftest");
+      this.w.host.hook("conversationChanged")?.remove("selftest");
       return;
     }
     if (this.name === "harness") {

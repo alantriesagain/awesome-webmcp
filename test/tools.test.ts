@@ -59,7 +59,7 @@ const main = async (): Promise<void> => {
       continue;
     }
     c.receive(f.raw);
-    w.host.session.conversationChanged.fire();
+    w.host.conversation.changed();
     if (running.length === 0 && rows().some((l) => l.includes("Sleep for 6 seconds"))) running = rows();
   }
   const runningRow = running.find((l) => l.includes("Sleep for 6 seconds")) ?? "";

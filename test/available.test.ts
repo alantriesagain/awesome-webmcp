@@ -116,7 +116,7 @@ const main = async (): Promise<void> => {
     const f = JSON.parse(line) as { dir?: unknown; raw?: unknown };
     if (f.dir === "out" && typeof f.raw === "string") c3.receive(f.raw);
   }
-  w3.host.session.conversationChanged.fire();
+  w3.host.conversation.changed();
   ok("the main agent's list", await until(() => tab(w3).includes("Claude|")));
   const before = tab(w3);
   const sub = agentsOf(c3.model)[0];

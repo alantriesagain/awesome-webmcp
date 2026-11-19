@@ -5,6 +5,7 @@
 // A conversation is new (the agent starts on the first message) or resumes a session, which the
 // agent shows and resumes on the next message. widecode's own tools put requests to the user here
 // too (asks): their replies go to the tool, not the agent.
+import { signal } from "@lightstart/light/signals";
 import { Agent, ImageBlock } from "./agent.ts";
 import { openRequest } from "./events.ts";
 import { AGENT, ChatModel, Item, NOTICE, PROMPT, TEXT, THINKING, TOOL } from "./model.ts";
@@ -35,8 +36,8 @@ export class Conversation {
   title = "";
   /** The commit HEAD was on when this new session's first message went (kept as its record's baseCommit). */
   headAtStart = "";
-  /** Called when the model changed (the view redraws on the next frame). */
-  onChange: (() => void) | null = null;
+  /** The conversation's revision: it moves with each change the conversation makes, its model, status, session or agent, for what follows the whole conversation. */
+  readonly revision = signal(0);
   /** Called with lines worth logging and showing: process events, errors. */
   onNote: ((text: string) => void) | null = null;
   /** Called with every line written to the agent (tests read the exact text here). */
@@ -76,10 +77,9 @@ export class Conversation {
     return "";
   }
 
-  /** Tell the view the model changed. */
+  /** Tell whoever follows the conversation that it changed. */
   changed(): void {
-    const fn = this.onChange;
-    if (fn !== null) fn();
+    this.revision.value = this.revision.peek() + 1;
   }
 
   note(text: string): void {

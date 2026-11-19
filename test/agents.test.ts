@@ -36,7 +36,7 @@ const main = async (): Promise<void> => {
     const f = JSON.parse(line) as Frame;
     if (f.dir === "out" && typeof f.raw === "string") c.receive(f.raw);
   }
-  w.host.session.conversationChanged.fire();
+  w.host.conversation.changed();
   const calls = agentsOf(c.model);
   eq("the turn's subagent, done", calls.map((a) => a.name + " " + agentStatus(a)).join(", "), "Agent done");
 
@@ -72,7 +72,7 @@ const main = async (): Promise<void> => {
   eq("Esc closes the subagent tab and shows Code", w.code.tabs.active().id + " " + String(w.host.roles.code.inAgent()) + " " + w.host.roles.code.path(), "code false a.txt");
 
   c.receive(JSON.stringify({ type: "assistant", message: { id: "msg-tab-call", content: [{ type: "tool_use", id: "toolu_tab_call", name: "Bash", input: { command: "echo hi" } }] } }));
-  w.host.session.conversationChanged.fire();
+  w.host.conversation.changed();
   w.host.roles.code.openAgent(agentId);
   w.host.roles.code.openCall("toolu_tab_call");
   eq("a call and a subagent: two tabs beside Code, the call shown", w.code.tabs.labels().join("|") + " " + w.code.tabs.active().id, "Code|general-purpose: Read n… ×|Bash × toolu_tab_call");

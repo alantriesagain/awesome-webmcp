@@ -16,7 +16,7 @@ import { removeLanguages } from "@lightstart/highlight/registry.ts";
 import { Hook } from "@lightstart/lib/hook.ts";
 import { KeymapController } from "./keymaps.ts";
 import { ApprovalController } from "./approval.ts";
-import { hookOn, hookOnEvent } from "./after-change.ts";
+import { afterChange, hookOn, hookOnEvent } from "./after-change.ts";
 import { computed, signal } from "@lightstart/light/signals";
 import { Roles } from "./roles.ts";
 import { Kernel } from "@lightstart/kernel/kernel.ts";
@@ -104,7 +104,7 @@ export class Host extends ConversationHolder {
     this.session = session;
     // The one list of the hooks plugins listen to (widecode.d.ts and PLUGINS.md name the same ones: test/api.test.ts).
     this.hooks = [
-      new NamedHook("conversationChanged", session.conversationChanged),
+      new NamedHook("conversationChanged", hookOn("conversationChanged", session.conversationState)),
       new NamedHook("sessionsChanged", hookOn("sessionsChanged", computed(() => [session.sessionRows.value, session.skillRows.value]))),
       new NamedHook("filesLoaded", hookOn("filesLoaded", folder.files)),
       new NamedHook("statusLoaded", hookOn("statusLoaded", folder.status)),
@@ -123,7 +123,7 @@ export class Host extends ConversationHolder {
     this.folder.onNote = (text: string) => this.note(text);
     this.session.onNote = (text: string) => this.note(text);
     // First, so every plugin hearing the change reads current status data and changes.
-    this.session.conversationChanged.add("host", () => {
+    afterChange(this.session.conversationState, () => {
       this.session.syncInfo(this.folder.branch());
       this.sawEdit();
       this.noteRequests();
@@ -241,7 +241,7 @@ export class Host extends ConversationHolder {
     const store = this.session.store;
     if (store !== null) store.ignoreIn(this.workspace.folder, false);
     await this.folder.load();
-    this.session.conversationChanged.fire();
+    this.replay("conversationChanged");
   }
 
   /**

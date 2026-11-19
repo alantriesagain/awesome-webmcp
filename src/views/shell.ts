@@ -17,7 +17,6 @@ import kernelController from "../controllers/kernel.ts";
 import keymapController from "../controllers/keymap.ts";
 import screenController from "../controllers/screen.ts";
 import sessionController from "../controllers/session.ts";
-import type { SessionController } from "../host/session.ts";
 import type { Conversation } from "../conversation/conversation.ts";
 import { BandPart, Column } from "../screen/contributions.ts";
 import { columnOrderOf } from "../screen/screen.ts";
@@ -130,11 +129,7 @@ export class Shell extends View {
     return keymapController.current;
   }
 
-  /** The start's session, and its conversation with the agent. */
-  private get session(): SessionController {
-    return sessionController.current;
-  }
-
+  /** The conversation with the agent. */
   private get conversation(): Conversation {
     return sessionController.current.conversation;
   }
@@ -547,7 +542,7 @@ export class Shell extends View {
     const text =
       "Commands: " + commands.join(", ") + ". Keys: " + columns + ", " + hints.join(", ") + ". In the composer: " + composer.join(", ") + ". Keymap: " + this.keys.keymap.value + " (/keymap lists them; ~/.widecode/keys.json rebinds). A press on a \"· N tools\" line shows those calls in the Tools tab, on a call there shows it whole.";
     this.conversation.model.notice(text, "info", "", "");
-    this.session.conversationChanged.fire();
+    this.conversation.changed();
   }
 
   /** /keymap: the one in use and the ones there are; `/keymap <name>` switches, kept for the next run. */

@@ -105,7 +105,7 @@ export const welcomeText = (host: Host): string => {
 /** Put the welcome in the chat. */
 export const welcome = (host: Host): void => {
   host.conversation.model.notice(welcomeText(host), "info", "", "");
-  host.session.conversationChanged.fire();
+  host.conversation.changed();
 };
 
 /** What `folder` carries that the agent reads or widecode runs; `checkPlugin(file)` says what a harness plugin file registers or why it does not load. */

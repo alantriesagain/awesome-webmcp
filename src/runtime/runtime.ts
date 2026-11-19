@@ -376,7 +376,7 @@ export class JsRuntime extends Bridge {
     for (let i = before; i < k.problems.length; i++) this.fail(k.problems[i]);
     this.host.replay("filesLoaded");
     this.host.replay("statusLoaded");
-    this.host.session.conversationChanged.fire();
+    this.host.replay("conversationChanged");
     this.flushTools();
   }
 
@@ -443,7 +443,7 @@ export class JsRuntime extends Bridge {
     this.host.screen.focus(active);
     this.host.replay("filesLoaded");
     this.host.replay("statusLoaded");
-    this.host.session.conversationChanged.fire();
+    this.host.replay("conversationChanged");
     this.flushTools();
     this.host.screen.tell(source === null ? "removed " + shownName(file) + (retired.length > 0 ? ": " + retired.join(", ") : "") : "reloaded " + shownName(file) + (ids.length > 0 ? ": " + ids.join(", ") : ""));
   }
@@ -527,7 +527,7 @@ export class JsRuntime extends Bridge {
     // The new plugins catch up with the state the others already saw.
     this.host.replay("filesLoaded");
     this.host.replay("statusLoaded");
-    this.host.session.conversationChanged.fire();
+    this.host.replay("conversationChanged");
     this.toolsDirty = true;
     this.flushTools();
     this.host.screen.tell("plugins reloaded: " + String(this.table.plugins.length) + (this.errors.length > 0 ? ", " + String(this.errors.length) + " with problems (see the log)" : ""));
