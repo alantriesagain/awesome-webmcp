@@ -210,6 +210,9 @@ export const parseSearxng = (text: string): SearchResult => parseJsonHits(text, 
 export const parseBrave = (text: string): SearchResult => parseJsonHits(text, ["web", "results"], "description");
 export const parseTavily = (text: string): SearchResult => parseJsonHits(text, ["results"], "content");
 
+/** What a hit of Exa's keeps of its page's passages, at most. */
+const EXA_TEXT = 2000;
+
 /** Exa's text: hits separated by a line of `---`, each with a `Title:` and `URL:` line and its text under `Highlights:`. */
 export const parseExa = (text: string): SearchResult => {
   const r = new SearchResult();
@@ -227,17 +230,18 @@ export const parseExa = (text: string): SearchResult => {
       }
     }
     if (url.length === 0) continue;
-    // The page's text under Highlights, its title, headings and table rows left out (they repeat the title or say little), up to the cut.
+    // Under Highlights are the page's passages Exa chose for the query, the answer often among them
+    // (a date, a table row): kept as lines, the title's repeat and blank lines left out, to EXA_TEXT.
     const parts: string[] = [];
     let size = 0;
-    for (let i = after; i >= 0 && i < lines.length && size <= 300; i++) {
+    for (let i = after; i >= 0 && i < lines.length && size <= EXA_TEXT; i++) {
       const line = lines[i].trim();
-      if (line.length === 0 || line === title || line.startsWith("#") || line.startsWith("|")) continue;
+      if (line.length === 0 || line === title) continue;
       parts.push(line);
       size += line.length + 1;
     }
-    let snippet = parts.join(" ").replace(/\s+/g, " ").trim();
-    if (snippet.length > 300) snippet = snippet.slice(0, 300) + "…";
+    let snippet = parts.join("\n");
+    if (snippet.length > EXA_TEXT) snippet = snippet.slice(0, EXA_TEXT) + "…";
     r.hits.push(new SearchHit(title, url, snippet));
   }
   if (r.hits.length === 0) r.error = "no results from Exa";
@@ -289,7 +293,7 @@ const searchWith = async (backend: string, query: string, limit: number, s: WebS
 };
 
 /** Hits as the model reads them: numbered, each with its address and snippet. */
-export const hitsText = (hits: SearchHit[]): string => hits.map((h, i) => String(i + 1) + ". " + h.title + "\n   " + h.url + (h.snippet.length > 0 ? "\n   " + h.snippet : "")).join("\n");
+export const hitsText = (hits: SearchHit[]): string => hits.map((h, i) => String(i + 1) + ". " + h.title + "\n   " + h.url + (h.snippet.length > 0 ? "\n   " + h.snippet.split("\n").join("\n   ") : "")).join("\n");
 
 export const webSearchTool = async (input: Record<string, unknown>, ctx: ToolContext, abort: Abort): Promise<ToolOutcome> => {
   const query = str(input["query"]).trim();

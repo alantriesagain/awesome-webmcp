@@ -46,8 +46,9 @@ const main = async (): Promise<void> => {
   const exaText = exaData.result.content[0].text;
   const exa = parseExa(exaText);
   eq("Exa's answer: its hits", exa.hits.map((h) => h.title + " <" + h.url + ">").join(" | "), "Node.js — Node.js 22.0.0 (Current) <https://nodejs.org/en/blog/release/v22.0.0> | Node.js — Node.js Releases <https://nodejs.org/en/about/previous-releases> | nodejs/Release <https://github.com/nodejs/Release>");
-  eq("Exa's snippet: the page's text, its title and headings left out", exa.hits[0].snippet + " | " + exa.hits[2].snippet, "We're excited to announce the release of Node.js 22! | ");
-  ok("Exa's long snippet cut", exa.hits[1].snippet.length === 301 && exa.hits[1].snippet.endsWith("…"));
+  eq("Exa's text: the page's passages as lines, the title's repeat left out", exa.hits[0].snippet + " | " + exa.hits[2].snippet, "# Node.js 22.0.0 (Current)\nWe're excited to announce the release of Node.js 22! | # Node.js Release Working Group");
+  ok("a long passage kept whole up to its cut", exa.hits[1].snippet.length > 300 && !exa.hits[1].snippet.endsWith("…"));
+  ok("cut past 2000 characters", parseExa("Title: T\nURL: https://t.x/\nHighlights:\n" + "x".repeat(3000)).hits[0].snippet.length === 2001);
 
   // A server of the test's: a SearXNG answer, a page, a text file, an error.
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
