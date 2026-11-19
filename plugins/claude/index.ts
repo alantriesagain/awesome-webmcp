@@ -29,7 +29,7 @@ import { rec, str, num, list, parse, safeId, activeChain, summarize } from "./re
 import { replyJson } from "./tools.ts";
 import { Status, limitMessage, resetFrom } from "./status.ts";
 import { Reader } from "./reader.ts";
-import { INTERACTIVE, ALLOW_ALL, PERMISSION_OPTIONS, argumentOf, outsidePath, folderSessionLabel, folderKeptLabel, allowResponse } from "./permissions.ts";
+import { INTERACTIVE, ALLOW_ALL, PERMISSION_OPTIONS, argumentOf, outsidePath, folderSessionLabel, folderKeptLabel, allowResponse, denyResponse, permissionModeOf, kindOf, pathsIn, approve } from "./permissions.ts";
 
 /** A random version 4 UUID (QuickJS has no crypto; Math.random is enough for a message's id). */
 const uuidV4 = (): string => {
@@ -348,7 +348,16 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
         const id = str(r.request_id);
         const argument = argumentOf(tool, q.input);
         const key = tool + "\n" + argument;
-        if (allowAll) {
+        // The session's approval mode answers first: Full access and auto's reads and edits in the folder go through, plan changes nothing.
+        const mode = api.agent.approval();
+        const decision = approve(mode, kindOf(tool), pathsIn(q.input), folder);
+        if (decision === "allow") {
+          write(allowResponse(id, q.input));
+          api.note("claude: " + tool + " allowed by mode " + mode);
+        } else if (decision === "reject") {
+          write(denyResponse(id, "plan mode: nothing changes"));
+          api.note("claude: " + tool + " rejected by mode " + mode);
+        } else if (allowAll) {
           write(allowResponse(id, q.input));
           api.note("claude: allowed " + tool + " (all allowed for this session)");
         } else if (allowedThisSession.has(key)) {
@@ -581,7 +590,9 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     const resume = o.resume.length > 0 ? o.resume : resumed.length > 0 ? resumed : o.args.includes("--no-session-persistence") ? "" : api.agent.sessionId();
     if (resume.length > 0) command.push("--resume", resume);
     for (const f of allowedFolders) command.push("--add-dir", f);
-    command.push("--permission-mode", "bypassPermissions");
+    // The session's approval mode decides Claude Code's own: ask first, auto through edits in the folder, plan, or full.
+    const approval = api.agent.approval();
+    command.push("--permission-mode", permissionModeOf(approval));
     if (o.effort.length > 0) command.push("--effort", o.effort);
     const s = server;
     if (s !== null) command.push("--mcp-config", s.file.length > 0 ? s.file : JSON.stringify({ mcpServers: { widecode: { type: "http", url: s.url, headers: Object.fromEntries(s.headers.map((h) => [h.name, h.value])) } } }));
@@ -632,6 +643,14 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     return path.length > 0 ? api.fs.window(path, before, HISTORY_BYTES, SKIP_RECORDS) : { lines: [], start: 0, end: 0 };
   };
 
+  // A changed approval mode reaches a running CLI at once; plan's own switch already went through setMode.
+  api.on("approvalChanged", () => {
+    const mode = permissionModeOf(api.agent.approval());
+    if (proc === null || mode === api.agent.mode()) return;
+    control('{"subtype":"set_permission_mode","mode":' + JSON.stringify(mode) + "}");
+    emit({ type: "mode", mode });
+    flush();
+  });
   refreshServer();
   api.on("toolsChanged", () => {
     refreshServer();

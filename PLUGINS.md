@@ -420,7 +420,8 @@ Shift+Tab in the chat) decides what asks for permission. `ask` puts every permis
 the request panel. `auto` lets a read, edit, search or think whose paths are all inside the
 session's folder through, and asks about everything else. `plan` rejects permission requests and
 switches the agent to its plan mode when it has one. `full` allows every request at once. The mode
-covers ACP agents and widecode's Task subagents; Claude Code follows it in a later change.
+covers ACP agents, widecode's Task subagents and Claude Code, whose own modes it maps to (`ask`
+`default`, `auto` `acceptEdits`, `plan` `plan`, `full` `bypassPermissions`).
 
 A session is listed from the agent's `session/list` while it runs and offers it, else from the
 entry's `sessions` command, which prints them as JSON. ACP does not say which tools an agent has:
@@ -597,6 +598,12 @@ takes them; the user picks or answers in their own words) and `PresentPlan` (a p
 approved while the agent is in plan mode, the agent is switched to its first other mode and a
 message asks it to carry the plan out once its turn ends, since an ACP agent's mode holds from its
 next prompt). Its section names them: `{ "names": { "question": "AskUser", "plan": "PresentPlan" } }`.
+
+Claude Code's prompts reach widecode over stdio as `can_use_tool` requests, in every mode. The mode
+answers first, as for an ACP agent: `full` allows, `plan` denies with "plan mode: nothing changes", and
+`auto` allows a read, edit or search whose paths are inside the session's folder; anything else goes to
+the request panel with its usual options (once, for the session, a folder, all, deny). Each answer the
+mode gives is logged with `api.note`.
 
 `plugins/box/index.ts` brings `HostAction`: an agent asks the host to run one of the commands a project
 configures, the request panel shows the command and the agent's reason under the call, and the user

@@ -68,3 +68,69 @@ export const folderKeptLabel = (shown: string): string => "Allow " + shown + " f
 /** The control response that lets a call run with its own input, adding `folder` to the session's folders (kept in the project's local settings when `kept`) when one is given. */
 export const allowResponse = (requestId: string, input: unknown, folder = "", kept = false): string =>
   '{"type":"control_response","response":{"subtype":"success","request_id":' + JSON.stringify(requestId) + ',"response":{"behavior":"allow","updatedInput":' + inputJson(input) + (folder.length > 0 ? ',"updatedPermissions":[{"type":"addDirectories","directories":[' + JSON.stringify(folder) + '],"destination":' + (kept ? '"localSettings"' : '"session"') + "}]" : "") + "}}}";
+
+/** The control response that denies request `requestId`, saying `message` to the agent. */
+export const denyResponse = (requestId: string, message: string): string =>
+  '{"type":"control_response","response":{"subtype":"success","request_id":' + JSON.stringify(requestId) + ',"response":{"behavior":"deny","message":' + JSON.stringify(message) + "}}}";
+
+/** Claude Code's permission mode for widecode's approval mode. */
+export const permissionModeOf = (approval: string): string => {
+  if (approval === "auto") return "acceptEdits";
+  if (approval === "plan") return "plan";
+  if (approval === "full") return "bypassPermissions";
+  return "default";
+};
+
+/** The kind of call a Claude Code tool makes, as the approval decision reads it. */
+export const kindOf = (tool: string): string => {
+  if (tool === "Read" || tool === "LS") return "read";
+  if (tool === "Glob" || tool === "Grep") return "search";
+  if (tool === "Edit" || tool === "Write" || tool === "MultiEdit" || tool === "NotebookEdit") return "edit";
+  if (tool === "Bash") return "execute";
+  if (tool === "WebFetch" || tool === "WebSearch") return "fetch";
+  return "other";
+};
+
+/** The paths a Claude Code tool call's input names. */
+export const pathsIn = (input: unknown): string[] => {
+  const r = rec(input);
+  if (r === null) return [];
+  const out: string[] = [];
+  for (const key of ["file_path", "path", "notebook_path"]) if (str(r[key]).length > 0) out.push(str(r[key]));
+  return out;
+};
+
+/** A path with its "." and ".." segments resolved, absolute paths kept absolute. */
+const normalize = (path: string): string => {
+  const absolute = path.startsWith("/");
+  const parts: string[] = [];
+  for (const segment of path.split("/")) {
+    if (segment.length === 0 || segment === ".") continue;
+    if (segment === "..") {
+      if (parts.length > 0 && parts[parts.length - 1] !== "..") parts.pop();
+      else if (!absolute) parts.push("..");
+    } else parts.push(segment);
+  }
+  return (absolute ? "/" : "") + parts.join("/");
+};
+
+/** Whether `path` (absolute, or relative to `folder`) is `folder` or inside it. */
+const inside = (path: string, folder: string): boolean => {
+  if (folder.length === 0 || path.startsWith("~")) return false;
+  const root = normalize(folder);
+  const full = normalize(path.startsWith("/") ? path : root + "/" + path);
+  return full === root || full.startsWith(root === "/" ? "/" : root + "/");
+};
+
+/**
+ * What mode `mode` does with a call of `kind` naming `paths` in `folder`: "allow", "reject" or
+ * "ask". The decision the acp plugin makes (plugins/acp/approval.ts), kept here so plugins share no code.
+ */
+export const approve = (mode: string, kind: string, paths: string[], folder: string): "allow" | "reject" | "ask" => {
+  if (mode === "full") return "allow";
+  if (mode === "plan") return "reject";
+  if (mode !== "auto") return "ask";
+  if (!["read", "edit", "search", "think"].includes(kind)) return "ask";
+  for (const path of paths) if (!inside(path, folder)) return "ask";
+  return "allow";
+};
