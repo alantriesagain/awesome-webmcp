@@ -20,7 +20,6 @@ import { Store } from "../services/store.ts";
 import type { Config } from "../services/store.ts";
 import { Controller } from "@lightstart/light/controller/class.ts";
 import { BUILD } from "../build.ts";
-import { Command } from "@lightstart/kernel/commands.ts";
 import { flushBeforeExit, QuitFlusher } from "../quit.ts";
 import app from "../app.ts";
 import { Carry, Run } from "../run.ts";
@@ -29,6 +28,7 @@ import hostController from "./host.ts";
 import plugins from "./plugins.ts";
 import logger from "./log.ts";
 import run from "./run.ts";
+import session from "./session.ts";
 import settings from "./settings.ts";
 
 /** How often the log says the run is alive. */
@@ -203,8 +203,9 @@ export class WidecodeController extends Controller {
     this.agentNote = host.session.useAgent(host.session.agentId.peek());
     host.screen.clipboard.configure(config !== null ? config.clipboard : "auto");
     this.columnsNote = w.configureColumns(config !== null ? config.columns : null);
-    if (store !== null) this.addStoreCommands(store);
     if (store !== null) {
+      plugins.current.registerCommands();
+      session.registerCommands();
       w.js.watchFolders();
       w.watchHarness();
     }
@@ -216,34 +217,6 @@ export class WidecodeController extends Controller {
       const why = "no chat plugin: the built-in plugins are not installed (light install in widecode's folder writes them into " + join(Store.defaultRoot(), "plugins") + ")";
       host.screen.tell(why);
     }
-  }
-
-  /** The commands that need the user's store: the folder's trust, and the agent to talk to kept in config.json. */
-  private addStoreCommands(store: Store): void {
-    const h = this.w.host;
-    const commands = h.kernel.commands;
-    commands.add(new Command("/trust", "", "trust this folder: the agent works here and its own harness (.widecode: plugins, prompt, config) runs, now and on every launch", "plugins", (_arg: string) => this.trust()));
-    commands.add(
-      new Command("/agent", "<id>", "the agent to talk to (claude, or one a plugin brings), kept in config.json", "plugins", (arg: string) => {
-        const id = arg.trim();
-        if (id.length === 0) {
-          h.screen.tell("agent " + h.session.agentId.peek() + " (" + h.session.agents.map((a) => a.id()).join(", ") + "); /agent <id> switches");
-          return;
-        }
-        const error = h.session.useAgent(id);
-        if (error.length > 0) {
-          h.screen.tell(error);
-          return;
-        }
-        const written = store.setConfigValue("agent", id);
-        h.screen.tell(written.length > 0 ? written : "agent " + id + ", kept in config.json");
-      }),
-    );
-  }
-
-  /** Trust the folder from now on (compose.ts), saying so. */
-  private trust(): void {
-    if (this.store !== null) this.w.host.screen.tell(this.w.trust());
   }
 
   /** A harness plugin file as the trust question lists it: the ids it registers, or why it does not load (checked in a context of its own, nothing run). */
@@ -276,7 +249,7 @@ export class WidecodeController extends Controller {
     if (Array.isArray(list) && host.kernel.commands.find("/model") !== null) for (const m of list as unknown[]) if (typeof m === "string" && m.trim().length > 0) o.models.push(m.trim());
     o.onAgent = (id: string) => host.kernel.commands.run("/agent " + id);
     o.onModel = (name: string) => host.kernel.commands.run("/model " + name);
-    o.onTrust = () => this.trust();
+    o.onTrust = () => plugins.current.trustHere();
     o.onLookOnly = () => host.screen.tell("looking only: /trust lets " + host.conversation.agent.name() + " work here");
     o.onExit = () => host.quit();
     runOnboarding(o);
