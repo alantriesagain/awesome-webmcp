@@ -11,7 +11,11 @@ import { join } from "node:path";
 import type { Kernel } from "@lightstart/kernel/kernel.ts";
 import { Command } from "@lightstart/kernel/commands.ts";
 import { Ask } from "../conversation/requests.ts";
-import { Host } from "../host/host.ts";
+import folderController from "../controllers/folder.ts";
+import kernelController from "../controllers/kernel.ts";
+import keymapController from "../controllers/keymap.ts";
+import screenController from "../controllers/screen.ts";
+import sessionController from "../controllers/session.ts";
 
 /** A plugin file of a harness as the trust question lists it: its path from the folder, the ids it registers, why it does not load ("" when it does). */
 export class HarnessFile {
@@ -84,17 +88,17 @@ const chosen = (reply: string): string => {
 };
 
 /** One question in the panel, `then` hearing the label chosen ("" for none). */
-const askOne = (host: Host, name: string, header: string, question: string, options: { label: string; description: string }[], then: (label: string) => void): void => {
+const askOne = (name: string, header: string, question: string, options: { label: string; description: string }[], then: (label: string) => void): void => {
   const ask = new Ask();
   ask.onReplied = (reply: string) => then(chosen(reply));
-  host.conversation.ask(ask, { category: "question", name, questions: [{ question, header, options }] });
+  sessionController.current.conversation.ask(ask, { category: "question", name, questions: [{ question, header, options }] });
 };
 
 /** The welcome: where things are, the keys that matter first, the commands to start with. */
-export const welcomeText = (host: Host): string => {
-  const k = host.kernel.keys;
+export const welcomeText = (kernel: Kernel): string => {
+  const k = kernel.keys;
   const label = (id: string): string => k.label(id);
-  const agent = host.conversation.agent.name();
+  const agent = sessionController.current.conversation.agent.name();
   return (
     "Welcome to widecode. The chat with " + agent + " is on the left; the tools column shows its calls, the files column this folder and its sessions, the code column the file it edits with the changes. " +
     label("app.focus.chat") + " " + label("app.focus.tools") + " " + label("app.focus.side") + " " + label("app.focus.code") + " go to a column, " + label("app.column.previous") + "/" + label("app.column.next") + " move between them. " +
@@ -105,22 +109,23 @@ export const welcomeText = (host: Host): string => {
 };
 
 /** Put the welcome in the chat. */
-export const welcome = (host: Host): void => {
-  host.conversation.model.notice(welcomeText(host), "info", "", "");
-  host.conversation.changed();
+export const welcome = (kernel: Kernel): void => {
+  const conversation = sessionController.current.conversation;
+  conversation.model.notice(welcomeText(kernel), "info", "", "");
+  conversation.changed();
 };
 
 /** The /welcome command, added by the shell in its command order. */
-export const registerWelcome = (host: Host, kernel: Kernel): void => {
-  kernel.commands.add(new Command("/welcome", "", "the welcome: the columns, the keys and commands to start with", "shell", (_arg: string) => welcome(host)));
+export const registerWelcome = (kernel: Kernel): void => {
+  kernel.commands.add(new Command("/welcome", "", "the welcome: the columns, the keys and commands to start with", "shell", (_arg: string) => welcome(kernel)));
 };
 
 /** What `folder` carries that the agent reads or widecode runs; `checkPlugin(file)` says what a harness plugin file registers or why it does not load. */
-export const folderCarries = (host: Host, checkPlugin: (file: string) => HarnessFile): FolderCarries => {
+export const folderCarries = (checkPlugin: (file: string) => HarnessFile): FolderCarries => {
   const out = new FolderCarries();
-  const folder = host.workspace.folder;
+  const folder = folderController.current.workspace.folder;
   for (const f of AGENT_FILES) if (existsSync(join(folder, f))) out.agentFiles.push(f);
-  const h = host.harness;
+  const h = sessionController.current.harness;
   for (const file of h.pluginFiles()) out.harnessFiles.push(checkPlugin(file));
   out.promptLength = h.rawPrompt().length;
   const s = h.summary();
@@ -129,17 +134,17 @@ export const folderCarries = (host: Host, checkPlugin: (file: string) => Harness
 };
 
 /** The agents, by name; `then` hears the id chosen. */
-export const askAgent = (host: Host, agents: AgentChoice[], then: (id: string) => void): void => {
+export const askAgent = (agents: AgentChoice[], then: (id: string) => void): void => {
   const options = agents.slice(0, 4).map((a) => ({ label: a.name, description: a.id === "claude" ? "Anthropic's agent, through the claude CLI" : a.id + ", over ACP; its CLI must be installed" }));
-  askOne(host, "Agent", "Agent", "Which agent do you want to talk to? /agent changes it later.", options, (label: string) => {
+  askOne("Agent", "Agent", "Which agent do you want to talk to? /agent changes it later.", options, (label: string) => {
     const a = agents.find((x) => x.name === label);
     then(a !== undefined ? a.id : "");
   });
 };
 
 /** The models, by name; `then` hears the one chosen ("" for none). */
-export const askModel = (host: Host, models: string[], then: (name: string) => void): void => {
-  askOne(host, "Model", "Model", "Which model should a new session start on? /model and F5 change it later.", models.slice(0, 4).map((m) => ({ label: m, description: "" })), then);
+export const askModel = (models: string[], then: (name: string) => void): void => {
+  askOne("Model", "Model", "Which model should a new session start on? /model and F5 change it later.", models.slice(0, 4).map((m) => ({ label: m, description: "" })), then);
 };
 
 /** What the folder carries, in words ("" for nothing). */
@@ -158,15 +163,14 @@ const carriesText = (c: FolderCarries): string => {
  * Ask whether to trust the folder: what it carries, what trusting means. `onTrust` trusts it;
  * `onLookOnly` keeps the agent out until /trust (also for Esc); `onExit` quits.
  */
-export const askTrust = (host: Host, carries: FolderCarries, onTrust: () => void, onLookOnly: () => void, onExit: () => void): void => {
-  const agent = host.conversation.agent.name();
+export const askTrust = (carries: FolderCarries, onTrust: () => void, onLookOnly: () => void, onExit: () => void): void => {
+  const agent = sessionController.current.conversation.agent.name();
   const what = carriesText(carries);
   const question =
-    "Do you trust this folder, " + host.workspace.folder + "? Trusted, " + agent + " works here with your permission rules and nothing else asked, reads the folder's instruction files, settings and hooks, and runs its MCP servers; the folder's own widecode harness (.widecode) runs inside widecode, with your files and processes" +
+    "Do you trust this folder, " + folderController.current.workspace.folder + "? Trusted, " + agent + " works here with your permission rules and nothing else asked, reads the folder's instruction files, settings and hooks, and runs its MCP servers; the folder's own widecode harness (.widecode) runs inside widecode, with your files and processes" +
     (what.length > 0 ? ". It carries: " + what : "") +
     ". A repository you cloned may carry files you did not write. Your answer holds on every launch here.";
   askOne(
-    host,
     "Trust",
     "Folder",
     question,
@@ -184,27 +188,28 @@ export const askTrust = (host: Host, carries: FolderCarries, onTrust: () => void
 };
 
 /** Ask which keymap to use among the ones there are; the choice is kept (setKeymap). */
-export const askKeymap = (host: Host, then: () => void): void => {
-  const names = host.keys.names();
+export const askKeymap = (then: () => void): void => {
+  const keys = keymapController.current;
+  const names = keys.names();
   const options = KEYMAPS.filter((m) => names.includes(m.name)).map((m) => ({ label: m.label, description: m.description }));
   if (options.length < 2) {
     then();
     return;
   }
-  askOne(host, "Keymap", "Keymap", "Which keys do you want in the composer? /keymap changes them later.", options, (label: string) => {
+  askOne("Keymap", "Keymap", "Which keys do you want in the composer? /keymap changes them later.", options, (label: string) => {
     const m = KEYMAPS.find((x) => x.label === label);
     if (m !== undefined) {
-      host.keys.set(m.name);
-      host.screen.tell("keymap " + m.name + "; /keymap changes it");
+      keys.set(m.name);
+      screenController.current.tell("keymap " + m.name + "; /keymap changes it");
     }
     then();
   });
 };
 
 /** Run the onboarding `o` calls for: the welcome and the agent, the model, the folder, the keys, each after the one before. */
-export const runOnboarding = (host: Host, o: Onboarding): void => {
+export const runOnboarding = (o: Onboarding): void => {
   const keys = (): void => {
-    if (o.firstRun) askKeymap(host, () => {});
+    if (o.firstRun) askKeymap(() => {});
   };
   const folder = (): void => {
     if (o.trusted) {
@@ -212,7 +217,6 @@ export const runOnboarding = (host: Host, o: Onboarding): void => {
       return;
     }
     askTrust(
-      host,
       o.carries,
       () => {
         const fn = o.onTrust;
@@ -235,20 +239,20 @@ export const runOnboarding = (host: Host, o: Onboarding): void => {
       folder();
       return;
     }
-    askModel(host, o.models, (name: string) => {
+    askModel(o.models, (name: string) => {
       const fn = o.onModel;
       if (name.length > 0 && fn !== null) fn(name);
       folder();
     });
   };
-  if (o.firstRun) welcome(host);
+  if (o.firstRun) welcome(kernelController.current);
   if (!o.firstRun || o.agents.length < 2) {
-    model(host.session.agentId.peek());
+    model(sessionController.current.agentId.peek());
     return;
   }
-  askAgent(host, o.agents, (id: string) => {
+  askAgent(o.agents, (id: string) => {
     const fn = o.onAgent;
     if (id.length > 0 && fn !== null) fn(id);
-    model(id.length > 0 ? id : host.session.agentId.peek());
+    model(id.length > 0 ? id : sessionController.current.agentId.peek());
   });
 };

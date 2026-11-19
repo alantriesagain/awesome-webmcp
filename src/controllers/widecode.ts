@@ -269,7 +269,7 @@ export class WidecodeController extends Controller {
     const o = new Onboarding();
     o.firstRun = firstRun;
     o.trusted = host.session.trusted.peek();
-    o.carries = host.session.trusted.peek() ? o.carries : folderCarries(host, (file: string) => this.checkPlugin(file));
+    o.carries = host.session.trusted.peek() ? o.carries : folderCarries((file: string) => this.checkPlugin(file));
     for (const a of host.session.agents) o.agents.push(new AgentChoice(a.id(), a.name()));
     const models = host.kernel.settings.section("models");
     const list = isRecord(models) ? (models as { list?: unknown }).list : null;
@@ -279,7 +279,7 @@ export class WidecodeController extends Controller {
     o.onTrust = () => this.trust();
     o.onLookOnly = () => host.screen.tell("looking only: /trust lets " + host.conversation.agent.name() + " work here");
     o.onExit = () => host.quit();
-    runOnboarding(host, o);
+    runOnboarding(o);
   }
 
   /** The renderer the app is mounted on now; a restart mounts another. */

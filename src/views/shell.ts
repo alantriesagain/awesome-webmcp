@@ -8,7 +8,6 @@
 // tab column's tabs; /help, written from
 // every command and key binding registered, and /columns. The columns are as wide as column-widths.ts
 // says; a drag on the border between two resizes them, and state.json keeps what it left.
-import type { Host } from "../host/host.ts";
 import type { KeymapController } from "../host/keymaps.ts";
 import type { ScreenController } from "../screen/screen.ts";
 import type { Kernel } from "@lightstart/kernel/kernel.ts";
@@ -121,8 +120,8 @@ export class Shell extends View {
 
   /** The columns' widths: the user's config with the project's over it; answers what could not be used. */
   configureColumns(columns: unknown): string {
-    this.host.session.userColumns = columns;
-    const note = this.sizes.configure(mergeColumns(columns, this.host.harness.config().columns));
+    sessionController.current.userColumns = columns;
+    const note = this.sizes.configure(mergeColumns(columns, sessionController.current.harness.config().columns));
     this.screen.layout.value = this.screen.layout.peek() + 1;
     return note;
   }
@@ -152,11 +151,6 @@ export class Shell extends View {
     }
     while (rows.length > 0 && rows[rows.length - 1].length === 0) rows.pop();
     return rows.join("\n");
-  }
-
-  /** The start's Host, for what crosses its parts: the roles, quitting, a dump, a plugin's removal. */
-  get host(): Host {
-    return hostController.current;
   }
 
   /** The start's screen, kernel and keymaps. */
@@ -190,7 +184,7 @@ export class Shell extends View {
   private addCommands(): void {
     const commands = this.kernel.commands;
     commands.add(new Command("/help", "", "this list", "shell", (_arg: string) => this.help()));
-    registerWelcome(this.host, this.kernel);
+    registerWelcome(this.kernel);
     this.keys.registerCommands();
     commands.add(new Command("/columns", "[reset]", "the columns' widths; reset forgets the widths borders were dragged to", "shell", (arg: string) => this.columnsCommand(arg)));
   }
@@ -204,7 +198,7 @@ export class Shell extends View {
       const owner = "shell:" + spec.id;
       const has = this.screen.column(spec.id) !== null;
       if (this.screen.panelsIn(spec.id).length === 0) {
-        if (has) this.host.removeOwner(owner);
+        if (has) hostController.current.removeOwner(owner);
         continue;
       }
       if (has) continue;
@@ -228,7 +222,7 @@ export class Shell extends View {
       trail.leave(d);
       return true;
     }
-    const composer = this.host.roles.chat.composer;
+    const composer = hostController.current.roles.chat.composer;
     const before = composer !== null ? composer.snapshot() : null;
     const id = this.kernel.keys.dispatch(e, this.screen.scopes());
     if (composer !== null && before !== null) composer.record(before, id);
@@ -467,11 +461,11 @@ export class Shell extends View {
         this.screen.tell("interrupted; Ctrl+C again to quit");
         return true;
       }
-      this.host.quit();
+      hostController.current.quit();
       return true;
     });
     app.add("app.dump", ["f12"], "", (_key: KeyEvent) => {
-      const fn = this.host.onDump;
+      const fn = hostController.current.onDump;
       if (fn !== null) fn();
       return true;
     });

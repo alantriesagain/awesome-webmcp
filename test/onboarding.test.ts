@@ -58,14 +58,14 @@ const main = async (): Promise<void> => {
   eq("the agent stays out: a message is refused and says why", tell("hello"), "this folder is not trusted: /trust lets Claude work here");
   eq("a mode too", w.host.conversation.setMode("plan").length === 0 ? "the core alone allows it" : "refused", "the core alone allows it");
 
-  const text = welcomeText(w.host);
+  const text = welcomeText(w.host.kernel);
   ok("the welcome names the columns' keys, the composer's, the commands, the trust", text.startsWith("Welcome to widecode.") && text.includes("F1") && text.includes("/help") && text.includes("/trust") && text.includes("clears the message, and quits when it is empty"));
-  welcome(w.host);
+  welcome(w.host.kernel);
   ok("in the chat", chatOf(w).includes("Welcome to widecode."));
   w.host.kernel.commands.run("/welcome");
   eq("/welcome shows it again", String(chatOf(w).split("Welcome to widecode.").length), "3");
 
-  const carries = folderCarries(w.host, (file: string) => {
+  const carries = folderCarries((file: string) => {
     const c = checkSource(w.js, readFileSync(file, "utf8"), file);
     return new HarnessFile(file.slice(folder.length + 1), c.ids, c.errors.length > 0 ? c.errors[0] : "");
   });
@@ -84,7 +84,7 @@ const main = async (): Promise<void> => {
   o.onTrust = () => did.push("trust");
   o.onLookOnly = () => did.push("look");
   o.onExit = () => did.push("exit");
-  runOnboarding(w.host, o);
+  runOnboarding(o);
   ok("the welcome, then the agent asked first", chatOf(w).split("Welcome to widecode.").length === 4 && open() === "Agent" && panel.active && question().options.map((x) => x.label).join(",") === "Claude,opencode");
   panel.key(new KeyEvent("char", "1", false, false, false), true);
   ok("then the model, Claude Code's list", open() === "Model" && question().options.map((x) => x.label).join(",") === "opus[1m],fable[1m]");
@@ -113,22 +113,22 @@ const main = async (): Promise<void> => {
     return x;
   };
   did.length = 0;
-  runOnboarding(w.host, later());
+  runOnboarding(later());
   ok("not the first run: the folder's question alone", open() === "Trust");
   panel.key(new KeyEvent("char", "2", false, false, false), true);
   eq("Look only", did.join(",") + " " + open(), "look ");
-  runOnboarding(w.host, later());
+  runOnboarding(later());
   panel.key(new KeyEvent("escape", "", false, false, false), true);
   eq("Esc is Look only too", did.join(","), "look,look");
-  runOnboarding(w.host, later());
+  runOnboarding(later());
   panel.key(new KeyEvent("char", "3", false, false, false), true);
   eq("Exit", did.join(","), "look,look,exit");
-  runOnboarding(w.host, later());
+  runOnboarding(later());
   w.host.roles.chat.typed("sure, go ahead");
   eq("an answer in words is Look only, and the words do not reach the agent", did.join(","), "look,look,exit,look");
   const t = later();
   t.trusted = true;
-  runOnboarding(w.host, t);
+  runOnboarding(t);
   eq("a trusted folder, not the first run: nothing asked", open(), "");
 
   // Trusted: the agent works, the harness runs; the store remembers.
