@@ -171,11 +171,11 @@ const main = async (): Promise<void> => {
   // The chat and models plugins, from what the agent offers.
   const said = (): string => w.host.screen.message.peek();
   w.host.roles.chat.submit("/plan");
-  ok("/plan leaves plan mode for a mode it offers", (await until(() => c.model.permissionMode === "build")) && said() === "plan mode off");
+  ok("/plan enters plan mode", (await until(() => w.host.approval.approval.peek() === "plan")) && said() === "mode: plan");
   w.shell.handleKey(new KeyEvent("tab", "", false, false, true));
-  ok("Shift+Tab: plan mode", (await until(() => c.model.permissionMode === "plan")) && said() === "plan mode: Fake plans and asks before changing anything");
+  ok("Shift+Tab: Full access, the agent back in the mode before plan", (await until(() => c.model.permissionMode === "build")) && w.host.approval.approval.peek() === "full" && said() === "mode: Full access (nothing asks, subagents included)");
   w.shell.handleKey(new KeyEvent("tab", "", false, false, true));
-  ok("and back to the mode before it", await until(() => c.model.permissionMode === "build"));
+  ok("and back to ask", w.host.approval.approval.peek() === "ask" && said() === "mode: ask");
   w.host.roles.chat.submit("/effort max");
   eq("/effort: one of its efforts", said(), "effort is one of low, high, default (now high)");
   w.host.roles.chat.submit("/effort low");

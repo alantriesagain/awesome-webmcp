@@ -2,7 +2,8 @@
 // config.json (the status section's `lines` and `toolsLines`), each line a row of cells, a cell one
 // segment or several joined by " · ", cell i of every row as wide as the widest so like things
 // stack, each row's last cell free to grow (the text: title, activity, hints). Segments come from
-// any plugin by name (this one draws the session's: folder, branch, effort, mode, title, context,
+// any plugin by name (this one draws the session's: folder, branch, effort, the approval mode when it
+// is not ask, title, context,
 // limits, cache, activity and its clock, tools, calls, thinking, cost, time, queued, the message or
 // hints); a cell can also run the user's command, which gets Claude Code's status line JSON on stdin
 // and prints colored lines. A press on a cell runs its segment's press (the mode toggles plan mode,
@@ -326,7 +327,19 @@ widecode.plugin({
       },
       title: () => api.tell("/rename <title> renames the session · /title asks Claude for a new one"),
     };
-    for (const name of Object.keys(SEGMENTS)) api.ui.segment({ name, draw: SEGMENTS[name], press: presses[name] });
+    for (const name of Object.keys(SEGMENTS)) {
+      const draw =
+        name === "mode"
+          ? (ctx: widecode.SegmentContext): Run[] => {
+              const approval = api.agent.approval();
+              if (approval === "full") return [run("Full access", BAD)];
+              if (approval === "plan") return [run("plan mode", WARN)];
+              if (approval === "auto") return [run("auto", DIM)];
+              return SEGMENTS.mode(ctx);
+            }
+          : SEGMENTS[name];
+      api.ui.segment({ name, draw, press: presses[name] });
+    }
 
     /** A table of `specs` on the band under column `under`: its commands, its rows, its strip. */
     const table = (specs: Spec[][], id: string, under: string, order: number): { refresh(): void; rerun(): void } => {
@@ -464,6 +477,9 @@ widecode.plugin({
       }
     });
     api.on("messageChanged", () => {
+      for (const t of tables) t.refresh();
+    });
+    api.on("approvalChanged", () => {
       for (const t of tables) t.refresh();
     });
   },

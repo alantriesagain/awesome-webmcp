@@ -43,6 +43,7 @@ import { sweep } from "./sessions.ts";
 import { tasksOf, BoxRunner, TaskCalls } from "./tasks.ts";
 import type { TaskTarget } from "./tasks.ts";
 import { acpAgent } from "./acp-agent.ts";
+import { approve, pathsOf } from "./approval.ts";
 
 /** Sizes a run logs while it keeps its events, to diagnose memory growth. */
 const EVENT_LOG_CHARS = 1024 * 1024;
@@ -656,7 +657,21 @@ class SubagentRun {
   private permission(m: Msg, params: Msg): void {
     const call = obj(params.toolCall);
     const title = call !== null && str(call.title).length > 0 ? str(call.title) : "The subagent";
+    const kind = call !== null ? str(call.kind) : "";
+    const locations = call !== null ? list(call.locations).map((l) => str(obj(l)?.path)).filter((p) => p.length > 0) : [];
     const options = list(params.options).map(obj).filter((o): o is Msg => o !== null).map((o) => ({ id: str(o.optionId), label: str(o.name).length > 0 ? str(o.name) : str(o.kind), detail: str(o.kind) }));
+    const mode = this.api.agent.approval();
+    const decision = approve(mode, kind, pathsOf(locations, call !== null ? obj(call.rawInput) : null), this.cwd);
+    if (decision !== "ask") {
+      const allowed = decision === "allow";
+      const want = allowed ? (mode === "full" ? ["allow_always", "allow_once"] : ["allow_once", "allow_always"]) : ["reject_once"];
+      const chosen = options.find((o) => o.detail === want[0]) ?? options.find((o) => o.detail === want[1]);
+      if (!allowed) this.refused = title;
+      this.api.note("acp: subagent " + kind + " " + title + ": " + (allowed ? "allowed" : "rejected") + " by mode " + mode);
+      const answer: unknown = chosen !== undefined ? { outcome: { outcome: "selected", optionId: chosen.id } } : { outcome: "cancelled" };
+      if (this.proc !== null) this.proc.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, result: answer }));
+      return;
+    }
     const question = title + " asks for permission";
     this.api.note("subagent " + this.callId + " asks: " + title);
     this.api.conversation

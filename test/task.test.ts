@@ -258,6 +258,19 @@ const main = async (): Promise<void> => {
   ok("the answer says the permission was refused", refusedAnswer.includes("[a permission was refused: rm a.txt]"));
   eq("and its card says so", refusedCall.task !== null ? refusedCall.task.summary : "none", "a permission was refused: rm a.txt");
 
+  // Full access answers a subagent's permission at once, with no request in the panel.
+  c.model.closeTurn(null);
+  c.model.openTurn("main", 0, true);
+  w.host.approval.set("full");
+  const fullCall = c.model.block("", "tcfull", TOOL, "toolu-full", "Task", "");
+  ok("the full-access call is made", fullCall !== null);
+  if (fullCall === null) return;
+  await post('{"jsonrpc":"2.0","id":17,"method":"tools/call","params":{"name":"Task","arguments":{"description":"allowed","prompt":"ask","subagent_type":"deepseek"},"_meta":{"claudecode/toolUseId":"toolu-full"}}}');
+  ok("the permission was allowed without a request", c.model.openRequests().length === 0);
+  ok("the allowed call ran", fullCall.children.some((i) => i.kind === TOOL && i.result !== null && i.result.text === "removed"));
+  w.host.approval.set("ask");
+  c.model.closeTurn(null);
+
   // An ACP main agent names no tool-use id: the Task tool makes the card itself, or runs under the
   // card the main announced. A store keeps the runs' transcripts.
   const folder3 = mkdtempSync(join(tmpdir(), "widecode-task-acp-"));

@@ -62,7 +62,7 @@ const main = async (): Promise<void> => {
   ok("binds a key to a plugin's action", press(w, "f8") && said(w) === "hello from vi");
   ok("null unbinds: F5 cycles no model, n no change", !press(w, "f5") && !press(w, "char", "n"));
   w.host.screen.focus("chat");
-  eq("the hints follow: no F5 model, the code column on F6", w.host.screen.hints(), "Enter sends · @ file · Esc interrupts · Shift+Tab plan · /help");
+  eq("the hints follow: no F5 model, the code column on F6", w.host.screen.hints(), "Enter sends · @ file · Esc interrupts · Shift+Tab mode · /help");
   w.host.screen.focus("code");
   eq("in the code column: p alone for the changes", w.host.screen.hints().split(" · ")[1], "p changes");
   w.host.roles.chat.submit("/help");

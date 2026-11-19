@@ -57,7 +57,7 @@ declare namespace widecode {
   }
 
   /** The hooks a plugin can listen to; most listeners get nothing and read what changed (requestOpened's gets the request). */
-  type Hook = "conversationChanged" | "sessionsChanged" | "filesLoaded" | "statusLoaded" | "folderChanged" | "baseChanged" | "fileShown" | "requestOpened" | "messageSending" | "keymapChanged" | "messageChanged" | "toolsChanged" | "harnessChanged";
+  type Hook = "conversationChanged" | "sessionsChanged" | "filesLoaded" | "statusLoaded" | "folderChanged" | "baseChanged" | "fileShown" | "requestOpened" | "messageSending" | "keymapChanged" | "approvalChanged" | "messageChanged" | "toolsChanged" | "harnessChanged";
 
   /** A piece of a row in one style; colors are "#rrggbb", "0"…"255" or a name ("gray", "cyan"). */
   interface Run {
@@ -926,6 +926,10 @@ declare namespace widecode {
       mode(): string;
       /** Switch modes, starting the agent if needed; "" or why not. */
       setMode(mode: string): string;
+      /** The session's approval mode: "ask", "auto", "plan" or "full". */
+      approval(): string;
+      /** Set the session's approval mode; "" or why not. */
+      setApproval(mode: string): string;
       interrupt(): void;
       /**
        * Send a message (images it names by path attached); `error` is "" when sent. `from` is ""

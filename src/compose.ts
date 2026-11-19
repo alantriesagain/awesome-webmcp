@@ -66,6 +66,8 @@ export class Widecode {
     k.settings.useStateFile(state);
     const kept = k.settings.state("keymap");
     if (typeof kept === "string" && kept.length > 0) this.host.keys.keymap.value = kept;
+    const mode = k.settings.state("approval");
+    if (typeof mode === "string") this.host.approval.set(mode);
     this.prepare();
     for (const p of extra) k.use(p);
     k.start();

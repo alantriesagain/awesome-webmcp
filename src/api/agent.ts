@@ -151,6 +151,11 @@ export const answerAgent = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
     case "agent.setMode":
       if (!h.session.trusted.peek()) return answer(h.session.untrusted());
       return answer(h.conversation.setMode(str(a[0])));
+    case "agent.approval":
+      // What asks for permission: "ask", "auto", "plan" or "full".
+      return answer(h.approval.approval.value);
+    case "agent.setApproval":
+      return answer(h.approval.set(str(a[0])));
     case "agent.sideQuestion":
       // A side question (/btw): its answer shows in the chat, kept out of the conversation; "" or why not.
       return answer(h.conversation.sideQuestion(str(a[0])));
@@ -268,6 +273,8 @@ export const NAMESPACE_AGENT = new PreludePart("agent", `        info: () => cal
         setEffort: (level) => call("agent.setEffort", String(level)),
         mode: () => call("agent.mode"),
         setMode: (mode) => call("agent.setMode", String(mode)),
+        approval: () => call("agent.approval"),
+        setApproval: (mode) => call("agent.setApproval", String(mode)),
         interrupt: () => call("agent.interrupt"),
         send: (text, options) => call("agent.send", String(text), options ?? null),
         reset: () => call("agent.reset"),

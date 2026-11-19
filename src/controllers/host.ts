@@ -7,6 +7,7 @@ import kernel from "./kernel.ts";
 import keymap from "./keymap.ts";
 import screen from "./screen.ts";
 import session from "./session.ts";
+import approval from "./approval.ts";
 
 export class HostHolder extends Controller {
   /** This start's; set once the start made it. */
@@ -17,7 +18,7 @@ export class HostHolder extends Controller {
   }
 
   override connected(): Promise<void> | null {
-    this.current = new Host(folder.current, session.current, kernel.current, screen.current, keymap.current);
+    this.current = new Host(folder.current, session.current, kernel.current, screen.current, keymap.current, approval.current);
     return null;
   }
 }

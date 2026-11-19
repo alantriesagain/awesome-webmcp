@@ -15,6 +15,7 @@ import { Conversation } from "../conversation/conversation.ts";
 import { removeLanguages } from "@lightstart/highlight/registry.ts";
 import { Hook } from "@lightstart/lib/hook.ts";
 import { KeymapController } from "./keymaps.ts";
+import { ApprovalController } from "./approval.ts";
 import { hookOn } from "./after-change.ts";
 import { computed, signal } from "@lightstart/light/signals";
 import { Roles } from "./roles.ts";
@@ -57,6 +58,8 @@ export class Host extends ConversationHolder {
   readonly shown = signal<object | null>(null);
   /** The keymaps, and the roles plugins play. */
   readonly keys: KeymapController;
+  /** The session's approval mode: what asks for permission. */
+  readonly approval: ApprovalController;
   readonly roles = new Roles();
   /** The keymap in use changed (/keymap, or the one kept for this run read). */
   /** The keymap in use: "default" (readline's keys alone), or one a plugin brought (its id); emacs unless config.json or /keymap says otherwise. */
@@ -91,11 +94,12 @@ export class Host extends ConversationHolder {
   private opening = false;
 
   /** Over the start's `folder` and `session`, its `kernel` and the `screen` and `keys` built on it. */
-  constructor(folder: FolderController, session: SessionController, kernel: Kernel, screen: ScreenController, keys: KeymapController) {
+  constructor(folder: FolderController, session: SessionController, kernel: Kernel, screen: ScreenController, keys: KeymapController, approval: ApprovalController) {
     super();
     this.kernel = kernel;
     this.screen = screen;
     this.keys = keys;
+    this.approval = approval;
     this.folder = folder;
     this.session = session;
     // The one list of the hooks plugins listen to (widecode.d.ts and PLUGINS.md name the same ones: test/api.test.ts).
@@ -110,6 +114,7 @@ export class Host extends ConversationHolder {
       new NamedHook("requestOpened", session.requestOpened),
       new NamedHook("messageSending", session.messageSending),
       new NamedHook("keymapChanged", hookOn("keymapChanged", keys.keymap)),
+      new NamedHook("approvalChanged", hookOn("approvalChanged", approval.approval)),
       new NamedHook("messageChanged", hookOn("messageChanged", screen.message)),
       new NamedHook("toolsChanged", hookOn("toolsChanged", session.tools)),
       new NamedHook("harnessChanged", hookOn("harnessChanged", session.harnessState)),

@@ -14,6 +14,7 @@ import { SIDE_PROMPT, LISTING_MS, sessionsOf, rememberFresh, dropFresh, ownPid, 
 import { setting, optionsOf } from "./settings.ts";
 import type { Setting, Option } from "./settings.ts";
 import { TaskCalls } from "./tasks.ts";
+import { approve, pathsOf } from "./approval.ts";
 
 export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCalls): widecode.AgentAdapter => {
   const entries: Record<string, Entry> = {};
@@ -720,12 +721,24 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
       return { optionId: str(o?.optionId), name: str(o?.name), kind: str(o?.kind) };
     });
     const rid = "perm" + String(m.id);
-    asked.set(rid, { rpc: m.id, options });
     const callId = str(tool?.toolCallId);
     const title = str(tool?.title);
+    const kind = str(tool?.kind);
+    const input = obj(tool?.rawInput);
     // The call it asks about shows while it waits, announced or not.
     if (tool !== null && callId.length > 0 && !calls.has(callId)) call(tool, false);
-    const kind = str(tool?.kind);
+    const locations = list(tool?.locations).map((l) => str(obj(l)?.path)).filter((p) => p.length > 0);
+    const mode = api.agent.approval();
+    const decision = approve(mode, kind, pathsOf(locations, input), cwd);
+    if (decision !== "ask") {
+      const allowed = decision === "allow";
+      const want = allowed ? (mode === "full" ? ["allow_always", "allow_once"] : ["allow_once", "allow_always"]) : ["reject_once"];
+      const chosen = options.find((o) => o.kind === want[0]) ?? options.find((o) => o.kind === want[1]);
+      send({ jsonrpc: "2.0", id: m.id, result: { outcome: chosen !== undefined ? { outcome: "selected", optionId: chosen.optionId } : { outcome: "cancelled" } } });
+      api.note("acp: " + entry.name + " " + kind + " " + title + ": " + (allowed ? "allowed" : "rejected") + " by mode " + mode);
+      return;
+    }
+    asked.set(rid, { rpc: m.id, options });
     const what = summaryOf(kind, title, obj(tool?.rawInput));
     emit({
       type: "request",
