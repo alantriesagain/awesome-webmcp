@@ -84,7 +84,7 @@ export class Selftest {
     }
     setTimeout(() => this.fail("timed out at step " + String(this.step)), this.name.startsWith("live") ? 120000 : 30000);
     if (this.name === "shell") {
-      this.stopShown = afterChange(this.w.host.shown, () => this.shown(this.w.host.roles.code.file()));
+      this.stopShown = afterChange(this.w.host.screen.shown, () => this.shown(this.w.host.roles.code.file()));
       let first = "";
       for (const [path, mark] of this.w.host.folder.marks()) if (mark === "M" && (first.length === 0 || path < first)) first = path;
       if (first.length > 0) this.w.host.roles.code.open(first);

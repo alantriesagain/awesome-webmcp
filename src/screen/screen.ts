@@ -39,6 +39,8 @@ export class ScreenController extends Controller {
   /** The active column's id, the message in the status bar ("" for the key hints). */
   readonly active: Signal<string>;
   readonly message = signal("");
+  /** What the code column shows: a file, a subagent's steps or a call (null for nothing). */
+  readonly shown = signal<object | null>(null);
   /** Moves when the tab a tab column shows changes; when columns, tabs or band strips come or go (the shell lays out again). */
   readonly tabs = signal(0);
   readonly layout = signal(0);
@@ -56,7 +58,7 @@ export class ScreenController extends Controller {
   onScreen: ((columns: string[]) => string) | null = null;
   onNote: ((text: string) => void) | null = null;
   /** The tab each tab column shows, by column id, and the columns whose tab was shown on purpose: until then the first tab (by order) is the one shown. */
-  private readonly shown = new Map<string, string>();
+  private readonly shownTab = new Map<string, string>();
   private readonly chosen = new Set<string>();
   private readonly messages = new Latest();
   /** The left-to-right order kept for the next run: where a column that comes back goes. */
@@ -120,7 +122,7 @@ export class ScreenController extends Controller {
     for (let i = this.panels.length - 1; i >= 0; i--) if (this.panels[i].id === p.id) this.panels.splice(i, 1);
     this.panels.push(p);
     this.panels.sort((a, b) => a.order - b.order);
-    if (!this.chosen.has(p.column)) this.shown.set(p.column, this.panelsIn(p.column)[0].id);
+    if (!this.chosen.has(p.column)) this.shownTab.set(p.column, this.panelsIn(p.column)[0].id);
     this.retab();
     this.relayout();
   }
@@ -151,12 +153,12 @@ export class ScreenController extends Controller {
     this.menus.value = this.menus.peek() + 1;
     this.segments.removeOwner(owner);
     for (const id of Array.from(this.chosen)) if (this.column(id) === null && this.panelsIn(id).length === 0) this.chosen.delete(id);
-    for (const column of Array.from(this.shown.keys())) {
-      const p = this.findPanel(this.shown.get(column) ?? "");
+    for (const column of Array.from(this.shownTab.keys())) {
+      const p = this.findPanel(this.shownTab.get(column) ?? "");
       if (p !== null && p.column === column) continue;
       const left = this.panelsIn(column);
-      if (left.length > 0) this.shown.set(column, left[0].id);
-      else this.shown.delete(column);
+      if (left.length > 0) this.shownTab.set(column, left[0].id);
+      else this.shownTab.delete(column);
     }
     this.retab();
     if (this.column(this.active.peek()) === null && this.columns.length > 0) this.focus(this.columns[0].id);
@@ -181,7 +183,7 @@ export class ScreenController extends Controller {
   /** The tab tab column `column` shows (its first until one is shown on purpose); null for none. */
   shownPanel(column: string): Panel | null {
     this.tabs.value;
-    const p = this.findPanel(this.shown.get(column) ?? "");
+    const p = this.findPanel(this.shownTab.get(column) ?? "");
     if (p !== null && p.column === column) return p;
     const all = this.panelsIn(column);
     return all.length > 0 ? all[0] : null;
@@ -195,7 +197,7 @@ export class ScreenController extends Controller {
 
   /** The tabs the tab columns show, to put back with `setShown` (a reload). */
   shownTabs(): string[] {
-    return Array.from(this.shown.values());
+    return Array.from(this.shownTab.values());
   }
 
   /** Make tab `id` the one its column shows, without going there. */
@@ -203,7 +205,7 @@ export class ScreenController extends Controller {
     const p = this.findPanel(id);
     if (p === null) return;
     this.chosen.add(p.column);
-    this.shown.set(p.column, id);
+    this.shownTab.set(p.column, id);
     this.retab();
   }
 

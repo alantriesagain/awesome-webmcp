@@ -19,7 +19,7 @@ export class ToolsWidget extends ToolsTarget {
   /** Add the Tools tab as plugin `owner`'s, titled `title` at `order` in the tools column, and play the tools role. */
   mount(owner: string, title: string, order: number): void {
     const h = this.host;
-    const panel = new ToolsPanel(new HostChat(h), title, order);
+    const panel = new ToolsPanel(new HostChat(h.session, h.screen, h.kernel, h.roles, h.folder), title, order);
     this.panel = panel;
     this.owner = owner;
     h.screen.addPanel(owner, panel);

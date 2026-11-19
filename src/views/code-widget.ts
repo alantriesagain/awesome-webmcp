@@ -140,10 +140,10 @@ export class CodeWidget extends CodeTarget {
     if (tab !== this.tabs.code) {
       const view = tab.view;
       if (view instanceof CodePane) view.view.refresh();
-      h.shown.value = tab.source;
+      h.screen.shown.value = tab.source;
       return;
     }
-    h.shown.value = this.pane.agent.peek().length > 0 ? this.pane.view.source : this.pane.source.file;
+    h.screen.shown.value = this.pane.agent.peek().length > 0 ? this.pane.view.source : this.pane.source.file;
   }
 
   /** A tab closed: drop its source and its press callback. */
@@ -192,7 +192,7 @@ export class CodeWidget extends CodeTarget {
     const ticket = this.loads.next();
     if (path.length === 0) {
       this.pane.clear();
-      h.shown.value = null;
+      h.screen.shown.value = null;
       return;
     }
     const mark = h.folder.markOf(path);
@@ -200,7 +200,7 @@ export class CodeWidget extends CodeTarget {
     if (!this.loads.is(ticket)) return;
     this.pane.show(file, h.folder.markOf(path));
     h.note("code " + path + " hunks=" + String(file.hunks.length));
-    h.shown.value = file;
+    h.screen.shown.value = file;
   }
 
   /** Show `path` as `commit` changed it. */
@@ -211,6 +211,6 @@ export class CodeWidget extends CodeTarget {
     if (!this.loads.is(ticket)) return;
     this.pane.showCommit(file, mark, commit.short + " " + commit.subject);
     h.note("commit " + commit.short + " " + path + " hunks=" + String(file.hunks.length));
-    h.shown.value = file;
+    h.screen.shown.value = file;
   }
 }

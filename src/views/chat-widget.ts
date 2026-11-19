@@ -23,7 +23,7 @@ export class ChatWidget extends ChatTarget {
   constructor(host: Host) {
     super();
     this.host = host;
-    this.pane = new ChatPane(new HostChat(host));
+    this.pane = new ChatPane(new HostChat(host.session, host.screen, host.kernel, host.roles, host.folder));
   }
 
   /** Show it as plugin `owner`'s column named `title`, at `order`, `widthAt` cells wide, and play the chat role; what the owner added goes when it does. */
@@ -55,7 +55,7 @@ export class ChatWidget extends ChatTarget {
     for (const spec of ["up", "down"]) bind.add("chat.strip." + spec, [spec], "", (_key: KeyEvent) => pane.moveSuggestion(spec === "up" ? -1 : 1));
     bind.add("chat.strip.hide", ["escape"], "", (_key: KeyEvent) => pane.hideSuggestions());
     // The composer's editing, in the "input" scope (after every other).
-    pane.composer.addActions(new HostChat(h), owner);
+    pane.composer.addActions(new HostChat(h.session, h.screen, h.kernel, h.roles, h.folder), owner);
   }
 
   override showChat(): void {

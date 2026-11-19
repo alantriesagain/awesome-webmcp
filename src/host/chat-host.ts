@@ -1,5 +1,5 @@
 // widecode's host as the chat's views see it (src/chat's ChatHost): each answer the host's own of
-// the moment.
+// the moment, over the controllers that hold it.
 import { ChatHost } from "../chat/host.ts";
 import { ChatTarget, ToolsTarget } from "../chat/roles.ts";
 import { CodeTarget } from "../code/target.ts";
@@ -7,47 +7,57 @@ import { Conversation } from "../conversation/conversation.ts";
 import { PromptHistory } from "../conversation/history.ts";
 import { Kernel } from "@lightstart/kernel/kernel.ts";
 import { ScreenController } from "../screen/screen.ts";
+import { FolderController } from "@lightstart/workspace/folder.ts";
 import { spawn } from "node:child_process";
-import { Host } from "./host.ts";
+import { Roles } from "./roles.ts";
+import { SessionController } from "./session.ts";
 
 export class HostChat extends ChatHost {
-  readonly host: Host;
+  readonly session: SessionController;
+  readonly screenController: ScreenController;
+  readonly kernelController: Kernel;
+  readonly roles: Roles;
+  readonly folder: FolderController;
 
-  constructor(host: Host) {
+  constructor(session: SessionController, screen: ScreenController, kernel: Kernel, roles: Roles, folder: FolderController) {
     super();
-    this.host = host;
+    this.session = session;
+    this.screenController = screen;
+    this.kernelController = kernel;
+    this.roles = roles;
+    this.folder = folder;
   }
 
   override current(): Conversation {
-    return this.host.conversation;
+    return this.session.conversation;
   }
 
   override screen(): ScreenController {
-    return this.host.screen;
+    return this.screenController;
   }
 
   override kernel(): Kernel {
-    return this.host.kernel;
+    return this.kernelController;
   }
 
   override chat(): ChatTarget {
-    return this.host.roles.chat;
+    return this.roles.chat;
   }
 
   override tools(): ToolsTarget {
-    return this.host.roles.tools;
+    return this.roles.tools;
   }
 
   override code(): CodeTarget {
-    return this.host.roles.code;
+    return this.roles.code;
   }
 
   override paths(): string[] {
-    return this.host.folder.paths();
+    return this.folder.paths();
   }
 
   override history(): PromptHistory {
-    return this.host.session.history;
+    return this.session.history;
   }
 
   override openPath(path: string): void {

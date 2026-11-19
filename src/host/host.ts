@@ -15,9 +15,10 @@ import { Conversation } from "../conversation/conversation.ts";
 import { removeLanguages } from "@lightstart/highlight/registry.ts";
 import { KeymapController } from "./keymaps.ts";
 import { ApprovalController } from "./approval.ts";
-import { afterChange, hookOn, hookOnEvent } from "./after-change.ts";
-import { type Emitter, computed, signal } from "@lightstart/light/signals";
+import { afterChange } from "./after-change.ts";
+import { type Emitter, type Signal } from "@lightstart/light/signals";
 import { Roles } from "./roles.ts";
+import { buildHooks, hookOf, replayHook, type NamedHook } from "./hooks.ts";
 import { Kernel } from "@lightstart/kernel/kernel.ts";
 import { FileChange } from "@lightstart/workspace/changes.ts";
 import { Harness } from "../services/harness.ts";
@@ -26,17 +27,6 @@ import type { Workspace } from "@lightstart/workspace/workspace.ts";
 import { FolderController } from "@lightstart/workspace/folder.ts";
 import { ScreenController } from "../screen/screen.ts";
 import { SessionController } from "./session.ts";
-
-/** A hook plugins listen to (an event their listeners join under their own name), and the name they listen to it under. */
-export class NamedHook {
-  readonly name: string;
-  readonly hook: Emitter<unknown>;
-
-  constructor(name: string, hook: Emitter<unknown>) {
-    this.name = name;
-    this.hook = hook;
-  }
-}
 
 /** How many log lines the host keeps for plugins to read. */
 const NOTES_KEPT = 300;
@@ -51,10 +41,12 @@ export class Host extends ConversationHolder {
   readonly hooks: NamedHook[];
   /** Fire hook `name` again, so plugins started since catch up with the state the others saw. */
   replay(name: string): void {
-    this.hook(name)?.emit(undefined);
+    replayHook(this.hooks, name);
   }
   /** What the code column shows: a file, a subagent's steps or a call (null for nothing). */
-  readonly shown = signal<object | null>(null);
+  get shown(): Signal<object | null> {
+    return this.screen.shown;
+  }
   /** The keymaps, and the roles plugins play. */
   readonly keys: KeymapController;
   /** The session's approval mode: what asks for permission. */
@@ -102,22 +94,7 @@ export class Host extends ConversationHolder {
     this.folder = folder;
     this.session = session;
     // The one list of the hooks plugins listen to (widecode.d.ts and PLUGINS.md name the same ones: test/api.test.ts).
-    this.hooks = [
-      new NamedHook("conversationChanged", hookOn("conversationChanged", session.conversationState)),
-      new NamedHook("sessionsChanged", hookOn("sessionsChanged", computed(() => [session.sessionRows.value, session.skillRows.value]))),
-      new NamedHook("filesLoaded", hookOn("filesLoaded", folder.files)),
-      new NamedHook("statusLoaded", hookOn("statusLoaded", folder.status)),
-      new NamedHook("folderChanged", hookOnEvent(folder.changed)),
-      new NamedHook("baseChanged", hookOn("baseChanged", folder.base)),
-      new NamedHook("fileShown", hookOn("fileShown", this.shown)),
-      new NamedHook("requestOpened", session.requestOpened),
-      new NamedHook("messageSending", session.messageSending),
-      new NamedHook("keymapChanged", hookOn("keymapChanged", keys.keymap)),
-      new NamedHook("approvalChanged", hookOn("approvalChanged", approval.approval)),
-      new NamedHook("messageChanged", hookOn("messageChanged", screen.message)),
-      new NamedHook("toolsChanged", hookOn("toolsChanged", session.tools)),
-      new NamedHook("harnessChanged", hookOn("harnessChanged", session.harnessState)),
-    ];
+    this.hooks = buildHooks(session, folder, keys, approval, screen);
     this.screen.onNote = (text: string) => this.note(text);
     this.folder.onNote = (text: string) => this.note(text);
     this.session.onNote = (text: string) => this.note(text);
@@ -200,8 +177,7 @@ export class Host extends ConversationHolder {
 
   /** The hook plugins listen to under `name`; null for an unknown name. */
   hook(name: string): Emitter<unknown> | null {
-    const found = this.hooks.find((n) => n.name === name);
-    return found !== undefined ? found.hook : null;
+    return hookOf(this.hooks, name);
   }
 
   /** The keymaps there are: default, then the plugins'. */
