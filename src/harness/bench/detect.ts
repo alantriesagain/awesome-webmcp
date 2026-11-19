@@ -271,10 +271,20 @@ const readAfterEdit = (t: Transcript): Hit[] => {
   return hits;
 };
 
+// A command that exits otherwise than 0 is a failed call to the harness and none to opencode, so
+// bash's failures are counted apart from the tools': only the second compare across agents.
 const failedCall = (t: Transcript): Hit[] => {
   const hits: Hit[] = [];
   for (const c of t.calls) {
-    if (c.failed) hits.push(new Hit(c.n, clip(c.tool + ": " + c.result, 80)));
+    if (c.failed && !isBash(c)) hits.push(new Hit(c.n, clip(c.tool + ": " + c.result, 80)));
+  }
+  return hits;
+};
+
+const failedCommand = (t: Transcript): Hit[] => {
+  const hits: Hit[] = [];
+  for (const c of t.calls) {
+    if (c.failed && isBash(c)) hits.push(new Hit(c.n, clip(c.command + ": " + c.result, 80)));
   }
   return hits;
 };
@@ -334,7 +344,8 @@ export const detectors: Detector[] = [
   new Detector("refused-then-read", "A failed edit or write, a read of that path, then an edit or write of it.", refusedThenRead),
   new Detector("reread", "A read of a path already read in the run, with no edit or write between.", reread),
   new Detector("read-after-edit", "A read of a path whose last call was an edit or write that succeeded.", readAfterEdit),
-  new Detector("failed-call", "Any call that failed, with its tool and result.", failedCall),
+  new Detector("failed-call", "A call of a tool other than bash that failed, with its tool and result.", failedCall),
+  new Detector("failed-command", "A bash command the agent marked failed (the harness marks a command that exits otherwise than 0; opencode marks none).", failedCommand),
   new Detector("repeat-command", "The same bash command run again with no edit or write between.", repeatCommand),
   new Detector("verify-after-pass", "Tests run again after a run of them showed no failure and no edit or write between.", verifyAfterPass),
   new Detector("package-manager-on-web", "A bash command that asks a package registry on a web task.", packageManagerOnWeb),

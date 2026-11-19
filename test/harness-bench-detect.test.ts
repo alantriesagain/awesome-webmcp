@@ -91,9 +91,9 @@ const main = (): void => {
     callLine(1, "bash", "", Object.assign(new Opts(), { command: "make", failed: true, result: "make: boom" })),
     callLine(2, "read", "a.txt"),
   ]);
-  eq("failed-call fires on the failed call", ids(failed, "failed-call"), "1");
-  const failedHits = detector("failed-call").hitsOf(readTranscript(failed));
-  ok("failed-call names the tool and the start of the result", failedHits.length === 1 && failedHits[0].reason === "bash: make: boom");
+  eq("a failed bash command is failed-command, not failed-call", ids(failed, "failed-command") + " | " + ids(failed, "failed-call"), "1 | ");
+  const failedHits = detector("failed-command").hitsOf(readTranscript(failed));
+  ok("failed-command names the command and the start of the result", failedHits.length === 1 && failedHits[0].reason === "make: make: boom");
 
   const repeat = write("repeat.jsonl", [
     runLine("t", "harness", false),
@@ -200,7 +200,8 @@ const main = (): void => {
     "| refused-then-read | 1/1 | 0/0 |",
     "| reread | 0/0 | 1/1 |",
     "| read-after-edit | 0/0 | 0/0 |",
-    "| failed-call | 2/1 | 0/0 |",
+    "| failed-call | 1/1 | 0/0 |",
+    "| failed-command | 1/1 | 0/0 |",
     "| repeat-command | 1/1 | 0/0 |",
     "| verify-after-pass | 0/0 | 0/0 |",
     "| package-manager-on-web | 1/1 | 1/1 |",
@@ -215,9 +216,12 @@ const main = (): void => {
     "- alpha, opencode, opencode-1.jsonl, call 2: read again with no edit between",
     "",
     "### failed-call",
-    "Any call that failed, with its tool and result.",
-    "- beta, harness, harness-2.jsonl, call 1: bash: make: boom",
+    "A call of a tool other than bash that failed, with its tool and result.",
     "- beta, harness, harness-2.jsonl, call 2: edit: File has not been read",
+    "",
+    "### failed-command",
+    "A bash command the agent marked failed (the harness marks a command that exits otherwise than 0; opencode marks none).",
+    "- beta, harness, harness-2.jsonl, call 1: make: make: boom",
     "",
     "### repeat-command",
     "The same bash command run again with no edit or write between.",
