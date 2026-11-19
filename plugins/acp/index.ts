@@ -50,9 +50,14 @@ const EVENT_LOG_CHARS = 1024 * 1024;
 const HISTORY_LOG_CHARS = 8 * 1024 * 1024;
 /** Log lines a run keeps in its persisted transcript, as the conversation keeps them under its call. */
 const MAX_LOG_LINES = 200;
+/** How long an idle background run keeps its process for SendMessage, and how many such processes it keeps at most. */
+const IDLE_MS = 120000;
+const MAX_IDLE_RUNS = 6;
 
 /** A test seam: an update handler failure injected to exercise the run's failure path. */
 let crashOnUpdate = false;
+/** A test seam: how long an idle background run keeps its process. */
+let idleMs = IDLE_MS;
 
 /** Run one step of settling a call, going on when it throws: a host call failing must not stop the next step. */
 function attempt(work: () => void): void {
@@ -103,6 +108,7 @@ class SubagentRun {
   private readonly background: boolean;
   private readonly timeoutMs: number;
   private readonly onDone: () => void;
+  private readonly onIdle: (idle: boolean) => void;
   private proc: widecode.ProcessHandle | null = null;
   /** Whether this run holds a VM run in the box's count, released as it ends. */
   private vmRun = false;
@@ -135,11 +141,13 @@ class SubagentRun {
   /** The last part of its stderr without a newline, until the rest arrives. */
   private stderrTail = "";
   private timeoutGen = 0;
+  /** The idle timer's generation: a message to the run drops a pending idle stop. */
+  private idleGen = 0;
   private resolve: (text: string) => void = () => {};
   private reject: (error: Error) => void = () => {};
   readonly promise: Promise<string>;
 
-  constructor(api: widecode.Api, entry: Entry, target: TaskTarget, box: BoxRunner | null, boxFolder: string, cwd: string, worktree: string, model: string, callId: string, description: string, synthetic: boolean, background: boolean, timeoutMs: number, onDone: () => void) {
+  constructor(api: widecode.Api, entry: Entry, target: TaskTarget, box: BoxRunner | null, boxFolder: string, cwd: string, worktree: string, model: string, callId: string, description: string, synthetic: boolean, background: boolean, timeoutMs: number, onDone: () => void, onIdle: (idle: boolean) => void) {
     this.api = api;
     this.entry = entry;
     this.target = target;
@@ -154,6 +162,7 @@ class SubagentRun {
     this.background = background;
     this.timeoutMs = timeoutMs;
     this.onDone = onDone;
+    this.onIdle = onIdle;
     this.promise = new Promise<string>((resolve, reject) => {
       this.resolve = resolve;
       this.reject = reject;
@@ -220,6 +229,42 @@ class SubagentRun {
     if (!this.vmRun || this.box === null) return;
     this.vmRun = false;
     this.box.leaveVm();
+  }
+
+  /** Stop its process once, after its final answer has been read, and say so. */
+  private stopProcess(ms: number): void {
+    const proc = this.proc;
+    this.proc = null;
+    if (proc === null) return;
+    end(proc, ms);
+    this.api.note("acp: subagent " + this.callId + " process stopped");
+  }
+
+  /** Whether it waits idle for a message, holding a process for one. */
+  idle(): boolean {
+    return this.background && !this.closed && !this.busy;
+  }
+
+  /** A finished background run waits for a message for a while; then its process goes. */
+  private waitingIdle(): void {
+    const gen = ++this.idleGen;
+    this.onIdle(true);
+    this.api.after(idleMs, () =>
+      this.guard("its idle timer", () => {
+        if (gen === this.idleGen && !this.closed && !this.busy) this.retire();
+      }),
+    );
+  }
+
+  /** Stop an idle background run's process, keeping its card's result. */
+  retire(): void {
+    if (this.closed || this.busy) return;
+    this.idleGen++;
+    this.onIdle(false);
+    this.closed = true;
+    this.timeoutGen++;
+    this.stopProcess(1000);
+    attempt(() => this.onDone());
   }
 
   /** An exception while handling what the process said: settle the call, or just note it once it has a result. */
@@ -330,6 +375,8 @@ class SubagentRun {
   send(text: string): string {
     if (this.closed || this.proc === null) return "the subagent is not running";
     if (this.busy) return "the subagent is busy";
+    this.idleGen++;
+    this.onIdle(false);
     this.reported = false;
     this.reply = "";
     this.open = "";
@@ -347,13 +394,14 @@ class SubagentRun {
     this.closed = true;
     this.busy = false;
     this.timeoutGen++;
+    this.idleGen++;
+    this.onIdle(false);
     this.reported = true;
-    const proc = this.proc;
-    this.proc = null;
-    if (proc !== null) {
+    if (this.proc !== null) {
+      const proc = this.proc;
       attempt(() => proc.write(JSON.stringify({ jsonrpc: "2.0", method: "session/cancel", params: { sessionId: this.session } })));
-      end(proc, 1000);
     }
+    this.stopProcess(1000);
     this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: "stopped", summary: "stopped" });
     attempt(() => this.flush());
     attempt(() => this.persist());
@@ -368,6 +416,8 @@ class SubagentRun {
     this.closed = true;
     this.busy = false;
     this.timeoutGen++;
+    this.idleGen++;
+    this.onIdle(false);
     // A run that never reported keeps a stopped end in its transcript, so a later read does not say
     // it is still running. It is not sent to the conversation now, nor told to the parent.
     if (unsettled) {
@@ -375,10 +425,7 @@ class SubagentRun {
       this.keep({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: "stopped", summary: "stopped: " + why });
       attempt(() => this.persist());
     }
-    const proc = this.proc;
-    this.proc = null;
-    if (proc === null) return;
-    end(proc, 1000);
+    this.stopProcess(1000);
   }
 
   /** Whether it ran in another session than `session`, so it should stop with that session. */
@@ -398,13 +445,13 @@ class SubagentRun {
     this.closed = true;
     this.busy = false;
     this.timeoutGen++;
+    this.idleGen++;
+    this.onIdle(false);
     this.reported = true;
     this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: "failed", summary: text.split("\n")[0] });
     attempt(() => this.flush());
     attempt(() => this.persist());
-    const proc = this.proc;
-    this.proc = null;
-    if (proc !== null) end(proc, 1000);
+    this.stopProcess(1000);
     attempt(() => this.onDone());
     if (this.background) {
       attempt(() => this.notify(text, true));
@@ -481,9 +528,7 @@ class SubagentRun {
     attempt(() => this.persist());
     if (!this.background) {
       this.closed = true;
-      const proc = this.proc;
-      this.proc = null;
-      if (proc !== null) end(proc, 500);
+      this.stopProcess(500);
       attempt(() => this.onDone());
       if (error) this.reject(new Error(said));
       else this.resolve(this.worktree.length > 0 ? said + "\n\n[worktree: " + this.worktree + "]" : said);
@@ -493,6 +538,15 @@ class SubagentRun {
     this.reply = "";
     this.open = "";
     this.openKind = "";
+    if (this.proc === null) {
+      // Its process ended as it reported: there is none to keep for a message.
+      this.closed = true;
+      this.idleGen++;
+      this.onIdle(false);
+      attempt(() => this.onDone());
+      return;
+    }
+    this.waitingIdle();
   }
 
   /** Tell the main agent a background run finished or failed, when it is running to hear it. */
@@ -699,6 +753,8 @@ class SubagentRun {
       this.closed = true;
       this.busy = false;
       this.timeoutGen++;
+      this.idleGen++;
+      this.onIdle(false);
       attempt(() => this.api.note("acp: task " + this.callId + ": " + this.entry.name + " ended (exit code " + String(code) + ") after its result"));
       attempt(() => this.onDone());
       return;
@@ -710,6 +766,8 @@ class SubagentRun {
     }
     this.closed = true;
     this.reported = true;
+    this.idleGen++;
+    this.onIdle(false);
     this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: "stopped", summary: text });
     attempt(() => this.flush());
     attempt(() => this.persist());
@@ -730,6 +788,8 @@ widecode.plugin({
   defaults: () => ({ agents: DEFAULT_AGENTS }),
   activate(api) {
     crashOnUpdate = api.fs.env("WIDECODE_ACP_TEST_CRASH") === "update";
+    const idleEnv = Number(api.fs.env("WIDECODE_ACP_TEST_IDLE_MS"));
+    idleMs = idleEnv > 0 ? idleEnv : IDLE_MS;
     const section = api.settings.section();
     const agents = agentsOf(section);
     const tasks = tasksOf(section);
@@ -759,6 +819,20 @@ widecode.plugin({
     if (tasks.targets.length === 0) return;
     /** The live runs by id: a background run can be messaged or stopped after its call answered. */
     const runs = liveRuns;
+    /** The idle background runs, oldest first, so the pool stops its oldest past MAX_IDLE_RUNS. */
+    const idleRuns: string[] = [];
+    const idleChanged = (id: string, idle: boolean): void => {
+      const at = idleRuns.indexOf(id);
+      if (idle) {
+        if (at < 0) idleRuns.push(id);
+      } else if (at >= 0) idleRuns.splice(at, 1);
+      while (idleRuns.length > MAX_IDLE_RUNS) {
+        const oldest = idleRuns.shift();
+        if (oldest === undefined) break;
+        const run = runs.get(oldest);
+        if (run !== undefined && run.idle()) run.retire();
+      }
+    };
     /** The parent session the runs belong to: a run of a session left since is stopped. */
     let parentSession = api.agent.sessionId();
     api.on("conversationChanged", () => {
@@ -817,7 +891,7 @@ widecode.plugin({
           const run = new SubagentRun(api, entry, target, box, boxFolder, cwd, worktree, str(args.model).length > 0 ? str(args.model) : target.model, id, description, synthetic, args.run_in_background === true, tasks.timeoutMs, () => {
             runs.delete(id);
             if (onClose !== undefined) onClose();
-          });
+          }, (idle) => idleChanged(id, idle));
           if (!run.createCard()) throw new Error("the main agent cannot take a subagent card");
           runs.set(id, run);
           ctx.onCancel(() => run.cancel());
