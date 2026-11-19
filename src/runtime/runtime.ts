@@ -28,6 +28,8 @@ import { PluginProcess } from "@lightstart/plugins/process.ts";
 import { INSTALLED } from "../harness/paths.ts";
 import { PluginSource, foldersOf, isFolderPlugin, moduleFilesOf, printOf, sourcesIn } from "@lightstart/plugins/sources.ts";
 import { PRELUDE } from "./prelude.ts";
+import { BUILD_VERSION } from "./build-info.ts";
+import { fromOtherBuild, stampedBuild } from "./build-stamp.ts";
 import { PluginTable } from "./registry.ts";
 import { ProcessTable } from "./processes.ts";
 import { HostRouter } from "./router.ts";
@@ -53,6 +55,9 @@ const MEMORY_RELOAD_MS = 10 * 60 * 1000;
 /** A plugin a JS source registered, run through the runtime; `reg` is its registration in the prelude (the functions it made), `gen` the instance started last. */
 /** A plugin source as the status bar names it: a file's name, a folder plugin's folder (`notes/`). */
 const shownName = (file: string): string => (basename(file) === "index.js" ? basename(dirname(file)) + "/" : basename(file));
+
+/** The id a source's plugin has: a folder plugin's folder name, else its file name without `.js`. */
+const idIn = (file: string): string => (basename(file) === "index.js" ? basename(dirname(file)) : basename(file).replace(/\.js$/, ""));
 
 export class JsPlugin extends Plugin {
   readonly runtime: JsRuntime;
@@ -143,6 +148,10 @@ export class JsRuntime extends Bridge {
   private memoryReloadAt = 0;
   /** Why the next reload happens, said once it is done ("" for a reload the user asked for). */
   private reloadedFor = "";
+  /** The newer build whose plugins this binary already said it would not load ("" for none). */
+  private newerBuildTold = "";
+  /** Whether the plugins were loaded once already: a later load keeps a newer build's plugins out, the first lets them in and says so. */
+  private loadedOnce = false;
   private engine: JsEngine | null = null;
   private file = "";
   /** The file being evaluated again on its own, and what it registered meanwhile. */
@@ -250,11 +259,25 @@ export class JsRuntime extends Bridge {
     this.views.clear();
     if (!this.loadPrelude(engine)) return;
     const all = this.sources();
+    const loaded: PluginSource[] = [];
+    const stale: string[] = [];
+    let newer = "";
     for (const s of all) {
+      const build = stampedBuild(s.file);
+      const other = build.length > 0 && build !== BUILD_VERSION;
+      if (other) {
+        if (newer.length === 0) newer = build;
+        stale.push(idIn(s.file));
+        // A first start with a newer build's plugins is an old binary run against them: load them and say so. A later load keeps them out, as a reload does.
+        if (this.loadedOnce) continue;
+      }
       const r = this.evalSource(engine, s);
       if (r.status !== OK) this.fail(s.file + ": " + r.message());
+      loaded.push(s);
     }
-    this.table.loaded = all.filter((s) => this.inFolders(s.file));
+    this.table.loaded = loaded.filter((s) => this.inFolders(s.file));
+    this.loadedOnce = true;
+    this.tellNewer(newer, stale);
   }
 
   /** The prelude into a fresh context; false, and a problem, when it fails. */
@@ -393,7 +416,8 @@ export class JsRuntime extends Bridge {
   /**
    * Evaluate `file` again on its own (`source`, null when the file is gone): its new plugins
    * replace the ones it defined, the agent and every other plugin untouched. A source that fails
-   * keeps the previous plugins running. Deferred while a call into JS runs.
+   * keeps the previous plugins running. A file stamped with another build than this binary's is
+   * left as it runs, and the restart is said once. Deferred while a call into JS runs.
    */
   reloadFile(file: string, source: PluginSource | null): void {
     if (this.depth > 0) {
@@ -406,6 +430,11 @@ export class JsRuntime extends Bridge {
     const active = this.host.screen.active.peek();
     const tabs = this.host.screen.shownTabs();
     const old = this.table.defsFor(file);
+    if (source !== null && fromOtherBuild(file, BUILD_VERSION)) {
+      const ids = old.map((d) => d.id);
+      this.tellNewer(stampedBuild(file), ids.length > 0 ? ids : [idIn(file)]);
+      return;
+    }
     let fresh: JsPlugin[] = [];
     if (source !== null) {
       this.evaluating = file;
@@ -448,17 +477,28 @@ export class JsRuntime extends Bridge {
     this.host.screen.tell(source === null ? "removed " + shownName(file) + (retired.length > 0 ? ": " + retired.join(", ") : "") : "reloaded " + shownName(file) + (ids.length > 0 ? ": " + ids.join(", ") : ""));
   }
 
-  /** Read folder `dir` again and reload the files that differ from what was evaluated last: changed, added, removed. */
+  /** Read folder `dir` again and reload the files that differ from what was evaluated last: changed, added, removed; a file of another build than this binary's stays as it runs. */
   syncFolder(dir: string): void {
     const now = this.sourcesOf(dir);
     const before = this.table.loadedIn(dir);
-    this.table.replaceLoaded(dir, now);
-    for (const s of before) if (!now.some((n) => n.file === s.file)) this.reloadFile(s.file, null);
+    const keep: PluginSource[] = [];
+    const stale: string[] = [];
+    let newer = "";
     for (const n of now) {
+      const build = stampedBuild(n.file);
+      if (build.length > 0 && build !== BUILD_VERSION) {
+        if (newer.length === 0) newer = build;
+        stale.push(idIn(n.file));
+      } else keep.push(n);
+    }
+    this.table.replaceLoaded(dir, keep);
+    for (const s of before) if (!now.some((n) => n.file === s.file)) this.reloadFile(s.file, null);
+    for (const n of keep) {
       const prev = before.find((s) => s.file === n.file);
       const changed = prev === undefined || prev.code !== n.code || (isFolderPlugin(n.file) && this.prints.get(n.file) !== printOf(moduleFilesOf(n.file)));
       if (changed) this.reloadFile(n.file, n);
     }
+    this.tellNewer(newer, stale);
   }
 
   /** Evaluate `file` again once the running call returns (a plugin folder's file, relative to the project folder or absolute; "" for every plugin, a full reload): "" when taken, else why not. */
@@ -728,6 +768,13 @@ export class JsRuntime extends Bridge {
     if (this.errors.length > ERRORS_KEPT) this.errors.splice(0, this.errors.length - ERRORS_KEPT);
     this.host.note("plugins: " + text);
     this.host.screen.tell(text);
+  }
+
+  /** Say once per build, in the status bar and the log, that a newer widecode was installed and its plugins are not loaded. */
+  private tellNewer(build: string, ids: string[]): void {
+    if (build.length === 0 || this.newerBuildTold === build) return;
+    this.newerBuildTold = build;
+    this.fail("a newer widecode was installed: restart widecode to use it (" + ids.join(", ") + ")");
   }
 
   /** What a segment draws from, as JSON: the status line input, the folder's name, the message, the spinner, the time. */
