@@ -171,7 +171,7 @@ export const answerAgent = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
         const named = (options as { from?: unknown }).from;
         if (typeof named === "string") from = named;
       }
-      if (from.length === 0) h.session.messageSending.fire();
+      if (from.length === 0) h.session.messageSending.emit(undefined);
       const attached = attachImages(str(a[0]), h.workspace.folder);
       if (attached.error.length > 0) return answerText(objectText(["error", "images"], [json(attached.error), "0"]));
       const error = h.conversation.send(attached.text, attached.images, from);

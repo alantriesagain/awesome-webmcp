@@ -124,7 +124,7 @@ export class HostRouter {
         const fn = num(a[2]);
         if (hook === null) return refuse("no hook named " + name);
         const listener = new HookListener(this.rt, owner, name, fn);
-        hook.add(owner, (value?: unknown) => listener.fire(value));
+        hook.on((value: unknown) => listener.fire(value), owner);
         return answer(null);
       }
       case "tell":

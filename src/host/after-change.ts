@@ -2,8 +2,7 @@
 // value it holds when it starts, and a hook plugins hear the change on. A listener that changes the
 // state it hears is heard again after it returns, never nested; such re-deliveries stop after
 // `RERUN_MAX` in a row, and the log says so. Changes made elsewhere are all delivered.
-import { effect, untracked } from "@lightstart/light/signals";
-import { Hook } from "@lightstart/lib/hook.ts";
+import { type Emitter, effect, event, untracked } from "@lightstart/light/signals";
 import { log } from "@lightstart/lib/log.ts";
 
 /** How many deliveries in a row a hook made by `hookOn` makes for changes its own listeners made. */
@@ -24,8 +23,8 @@ export const afterChange = (state: { readonly value: unknown }, onChange: () => 
 };
 
 /** A hook fired after each change of `state`, for the plugins that listen under `name`. */
-export const hookOn = (name: string, state: { readonly value: unknown }): Hook => {
-  const hook = new Hook();
+export const hookOn = (name: string, state: { readonly value: unknown }): Emitter<unknown> => {
+  const hook = event<unknown>();
   // The re-deliveries in a row, and whether the last delivery's listeners changed the state.
   let reruns = 0;
   let causedByListeners = false;
@@ -37,15 +36,15 @@ export const hookOn = (name: string, state: { readonly value: unknown }): Hook =
       return;
     }
     const before = state.value;
-    hook.fire();
+    hook.emit(undefined);
     causedByListeners = state.value !== before;
   });
   return hook;
 };
 
-/** A hook fired for each value `occurrence` emits, for the plugins that listen under its name (the event's own queue keeps a listener's emits from nesting). */
-export const hookOnEvent = (occurrence: { on(listener: () => void): () => void }): Hook => {
-  const hook = new Hook();
-  occurrence.on(() => hook.fire());
+/** A hook carrying each value `occurrence` emits, for the plugins that listen under its name (an event's own queue keeps a listener's emits from nesting). */
+export const hookOnEvent = <T>(occurrence: Emitter<T>): Emitter<unknown> => {
+  const hook = event<unknown>();
+  occurrence.on((value: T) => hook.emit(value));
   return hook;
 };

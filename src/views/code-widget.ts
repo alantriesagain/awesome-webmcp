@@ -53,10 +53,10 @@ export class CodeWidget extends CodeTarget {
       this.tabs.show((this.tabs.activeIndex() + 1) % this.tabs.labels().length);
       return true;
     });
-    h.hook("statusLoaded")?.add(owner, () => {
+    h.hook("statusLoaded")?.on(() => {
       const open = pane.path.peek();
       if (open.length > 0 && pane.commit.peek().length === 0) pane.mark.value = h.folder.markOf(open);
-    });
+    }, owner);
   }
 
   override openAgent(id: string): void {

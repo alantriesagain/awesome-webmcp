@@ -12,7 +12,7 @@ import { Controller } from "@lightstart/light/controller/class.ts";
 import { Agent } from "../conversation/agent.ts";
 import { activityOf, stepOf } from "../conversation/activity.ts";
 import { Conversation } from "../conversation/conversation.ts";
-import { Hook } from "@lightstart/lib/hook.ts";
+import { event } from "@lightstart/light/signals";
 import { Harness, mergePermissions, PermissionRules } from "../services/harness.ts";
 import { PromptHistory } from "../conversation/history.ts";
 import { SessionRecords } from "../services/sessions.ts";
@@ -72,9 +72,9 @@ export class SessionController extends Controller {
   userColumns: unknown = null;
   userPermissions: unknown = null;
   /** A request became open in the request panel: its id, category, name and a one-line summary. */
-  readonly requestOpened = new Hook();
+  readonly requestOpened = event<unknown>();
   /** A message is about to be sent to the agent (`conversation` not started yet for a new session). */
-  readonly messageSending = new Hook();
+  readonly messageSending = event<unknown>();
   /** The tools plugins offer the agents: one added, or its plugin gone. */
   readonly tools = signal<readonly McpTool[]>([]);
   /** What the project's harness gives the agent (its rules, its prompt, its trust). */

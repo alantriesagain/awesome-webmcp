@@ -34,7 +34,7 @@ export class ChatWidget extends ChatTarget {
     this.owner = owner;
     this.composer = pane.composer;
     h.roles.chat = this;
-    h.hook("conversationChanged")?.add(owner, () => this.refreshConversation());
+    h.hook("conversationChanged")?.on(() => this.refreshConversation(), owner);
     const bind = new Binder(h.kernel.actions, owner, "chat");
     // The agent's question or plan takes the keys it uses while it is open (first, so the strip's and the history's come before).
     const panel = (key: KeyEvent): boolean => pane.panel.active && pane.panel.key(key, pane.input.isEmpty());

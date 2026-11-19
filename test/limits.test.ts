@@ -81,9 +81,9 @@ const main = async (): Promise<void> => {
   const written: string[] = [];
   c2.onWrite = (line: string) => written.push(line);
   let sending = 0;
-  app2.host.session.messageSending.add("test", () => {
+  app2.host.session.messageSending.on(() => {
     sending++;
-  });
+  }, "test");
   const promptOf = (line: string): string => {
     const v = JSON.parse(line) as { message?: { content?: { type?: string; text?: string }[] } };
     for (const b of v.message?.content ?? []) if (b.type === "text" && typeof b.text === "string") return b.text;

@@ -13,11 +13,10 @@ import { expandHome } from "@lightstart/lib/paths.ts";
 import { resolve } from "node:path";
 import { Conversation } from "../conversation/conversation.ts";
 import { removeLanguages } from "@lightstart/highlight/registry.ts";
-import { Hook } from "@lightstart/lib/hook.ts";
 import { KeymapController } from "./keymaps.ts";
 import { ApprovalController } from "./approval.ts";
 import { afterChange, hookOn, hookOnEvent } from "./after-change.ts";
-import { computed, signal } from "@lightstart/light/signals";
+import { type Emitter, computed, signal } from "@lightstart/light/signals";
 import { Roles } from "./roles.ts";
 import { Kernel } from "@lightstart/kernel/kernel.ts";
 import { FileChange } from "@lightstart/workspace/changes.ts";
@@ -28,12 +27,12 @@ import { FolderController } from "@lightstart/workspace/folder.ts";
 import { ScreenController } from "../screen/screen.ts";
 import { SessionController } from "./session.ts";
 
-/** A hook plugins listen to, and the name they listen to it under. */
+/** A hook plugins listen to (an event their listeners join under their own name), and the name they listen to it under. */
 export class NamedHook {
   readonly name: string;
-  readonly hook: Hook;
+  readonly hook: Emitter<unknown>;
 
-  constructor(name: string, hook: Hook) {
+  constructor(name: string, hook: Emitter<unknown>) {
     this.name = name;
     this.hook = hook;
   }
@@ -52,7 +51,7 @@ export class Host extends ConversationHolder {
   readonly hooks: NamedHook[];
   /** Fire hook `name` again, so plugins started since catch up with the state the others saw. */
   replay(name: string): void {
-    this.hook(name)?.fire();
+    this.hook(name)?.emit(undefined);
   }
   /** What the code column shows: a file, a subagent's steps or a call (null for nothing). */
   readonly shown = signal<object | null>(null);
@@ -164,7 +163,7 @@ export class Host extends ConversationHolder {
       if (id.length === 0 || this.seenRequests.has(id)) continue;
       this.seenRequests.add(id);
       if (loading || item.state !== "open") continue;
-      this.session.requestOpened.fire(this.requestNotice(item));
+      this.session.requestOpened.emit(this.requestNotice(item));
     }
   }
 
@@ -200,7 +199,7 @@ export class Host extends ConversationHolder {
   }
 
   /** The hook plugins listen to under `name`; null for an unknown name. */
-  hook(name: string): Hook | null {
+  hook(name: string): Emitter<unknown> | null {
     const found = this.hooks.find((n) => n.name === name);
     return found !== undefined ? found.hook : null;
   }
@@ -213,7 +212,7 @@ export class Host extends ConversationHolder {
     this.keys.removeOwner(owner);
     this.roles.removeOwner(owner);
     removeLanguages(owner);
-    for (const n of this.hooks) n.hook.remove(owner);
+    for (const n of this.hooks) n.hook.off(owner);
   }
 
   /** A line for the log, kept (the last NOTES_KEPT) for plugins to read. */
