@@ -111,7 +111,9 @@ const main = async (): Promise<void> => {
   const listed = (): string => w.chat.pane.strip.items.peek().map((s) => s.value + (s.detail.length > 0 ? " (" + s.detail + ")" : "")).join(",");
   setValue(input, "/mo");
   frames.flush();
-  eq("a command's name as it is typed", w.chat.pane.strip.items.peek().map((s) => s.value).join(","), "/model");
+  eq("a command's name as it is typed: the commands it starts", w.chat.pane.strip.items.peek().map((s) => s.value).join(","), "/mode,/model");
+  key(w, "down", "", false);
+  frames.flush();
   key(w, "enter", "", false);
   frames.flush();
   eq("Enter takes it and waits for its value, listing them", input.value() + "|" + listed(), "/model |opus[1m] (now),fable[1m] (F5)");

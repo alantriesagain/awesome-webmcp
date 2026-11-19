@@ -72,6 +72,14 @@ widecode.plugin({
       if (api.agent.approval() === "plan") applyApproval(beforePlanApproval);
       else applyApproval("plan");
     };
+    // The agent may leave plan mode on its own (a plan approved): the approval mode follows it back to the mode before plan.
+    let agentMode = api.agent.mode();
+    api.on("conversationChanged", () => {
+      const now = api.agent.mode();
+      const left = agentMode === "plan" && now !== "plan";
+      agentMode = now;
+      if (left && api.agent.approval() === "plan") api.agent.setApproval(beforePlanApproval);
+    });
     const modeCommand = (mode: string): void => {
       const wanted = mode.trim();
       if (wanted.length === 0) return api.tell("mode: " + api.agent.approval() + " (Shift+Tab cycles ask, auto, plan, full)");

@@ -270,7 +270,7 @@ const main = async (): Promise<void> => {
   chatSource.prepare(app.chat.pane.view.cols);
   for (let i = 0; i < chatSource.count(); i++) chatLines.push(chatSource.line(i, app.chat.pane.view.cols).runs.map((r) => r.text).join(""));
   const help = chatLines.join(" ").replace(/\s+/g, " ");
-  ok("/help lists what the plugins registered: commands with their help, key hints", help.includes("/effort") && help.includes("/resume (the folder's sessions") && help.includes("/model <name>") && help.includes("Shift+Tab plan") && help.includes("n/p changes"));
+  ok("/help lists what the plugins registered: commands with their help, key hints", help.includes("/effort") && help.includes("/resume (the folder's sessions") && help.includes("/model <name>") && help.includes("Shift+Tab mode") && help.includes("n/p changes"));
   app.chat.submit("/new");
   lines = screen();
   ok("/new starts over", has(lines, "A new session in this folder") && !has(lines, "<Me>: Rename the helper"));
