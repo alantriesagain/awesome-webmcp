@@ -19,6 +19,7 @@ import { SessionRecords } from "../services/sessions.ts";
 import { Store } from "../services/store.ts";
 import { Titler } from "../agent/titles.ts";
 import type { McpTool } from "../agent/mcp.ts";
+import type { SessionsRow, SkillsRow } from "../../.light/models.ts";
 import type { FolderController } from "@lightstart/workspace/folder.ts";
 import { replayHook, type NamedHook } from "./hooks.ts";
 
@@ -63,9 +64,9 @@ export class SessionController extends Controller {
   /** The folder's session records over the sessions model (null without a store). */
   records: SessionRecords | null = null;
   /** The folder's session rows, newest first (the records write them as they land). */
-  readonly sessionRows = signal<readonly Record<string, unknown>[]>([]);
+  readonly sessionRows = signal<readonly SessionsRow[]>([]);
   /** The folder's skill run rows (the records write them as they land). */
-  readonly skillRows = signal<readonly Record<string, unknown>[]>([]);
+  readonly skillRows = signal<readonly SkillsRow[]>([]);
   readonly titler = new Titler();
   /** The messages written in this folder (src/conversation/history.ts); this run's only without a store. */
   history = new PromptHistory("");

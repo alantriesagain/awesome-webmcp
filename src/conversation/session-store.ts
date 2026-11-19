@@ -3,7 +3,7 @@
 // rate limits as it last reported them. The app's store holds them wherever it keeps its data; the
 // conversation reads and writes them through this class.
 
-import { num, recordOf, text } from "@lightstart/lib/json.ts";
+import type { SessionsRow } from "../../.light/models.ts";
 
 export class SessionMeta {
   id = "";
@@ -27,25 +27,23 @@ export class SessionMeta {
   /** The agent the session belongs to ("claude", or the id a plugin's agent has), resumed with it; "" in a record from before it was kept. */
   agent = "";
 
-  /** A record from a parsed row or session file, `folder` its project. */
-  static of(value: unknown, folder: string): SessionMeta {
-    const f = recordOf(value);
+  /** A record from a sessions model row, `folder` its project. */
+  static of(row: SessionsRow, folder: string): SessionMeta {
     const m = new SessionMeta();
     m.folder = folder;
-    if (f === null) return m;
-    m.id = text(f.id, "");
-    m.title = text(f.title, "");
-    m.titleBy = text(f.titleBy, "");
-    m.createdMs = num(f.createdMs, 0);
-    m.updatedMs = num(f.updatedMs, 0);
-    m.costUsd = num(f.costUsd, 0);
-    m.thinkingTokens = num(f.thinkingTokens, 0);
-    m.model = text(f.model, "");
-    m.effort = text(f.effort, "");
-    m.contextWindow = num(f.contextWindow, 0);
-    m.baseCommit = text(f.baseCommit, "");
-    m.file = text(f.file, "");
-    m.agent = text(f.agent, "");
+    m.id = row.id;
+    m.title = row.title;
+    m.titleBy = row.titleBy;
+    m.createdMs = row.createdMs;
+    m.updatedMs = row.updatedMs;
+    m.costUsd = row.costUsd;
+    m.thinkingTokens = row.thinkingTokens;
+    m.model = row.model;
+    m.effort = row.effort;
+    m.contextWindow = row.contextWindow;
+    m.baseCommit = row.baseCommit;
+    m.file = row.file;
+    m.agent = row.agent;
     return m;
   }
 

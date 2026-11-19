@@ -9,6 +9,7 @@ import { signal } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { afterChange } from "../src/host/after-change.ts";
 import { SessionRecords } from "../src/services/sessions.ts";
+import type { SessionsRow, SkillsRow } from "../.light/models.ts";
 import { Store } from "../src/services/store.ts";
 import { openFolderStore } from "./support/records.ts";
 
@@ -21,8 +22,8 @@ const store = new Store(home);
 let fired = 0;
 // The folder's store, as the app's main store holds it.
 let db = await openFolderStore(project);
-const rows = signal<readonly Record<string, unknown>[]>([]);
-const skills = signal<readonly Record<string, unknown>[]>([]);
+const rows = signal<readonly SessionsRow[]>([]);
+const skills = signal<readonly SkillsRow[]>([]);
 afterChange(rows, () => fired++);
 const records = new SessionRecords(store, rows, skills);
 await records.open(project);
@@ -47,7 +48,7 @@ await records.settled();
 await records.close();
 await db.close();
 db = await openFolderStore(project);
-const again = new SessionRecords(store, signal<readonly Record<string, unknown>[]>([]), signal<readonly Record<string, unknown>[]>([]));
+const again = new SessionRecords(store, signal<readonly SessionsRow[]>([]), signal<readonly SkillsRow[]>([]));
 await again.open(project);
 const back = again.session("s-1", project);
 eq("a record round trip from fresh records", back !== null ? String(back.folder === project) + "|" + back.title + "|" + back.titleBy + "|" + String(back.costUsd) + "|" + String(back.contextWindow) + "|" + back.baseCommit : "none", "true|Fix the parser|user|0.5|1000000|abc123");

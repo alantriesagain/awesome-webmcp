@@ -6,7 +6,7 @@ import type { JsRuntime } from "../runtime/runtime.ts";
 import { HostAnswer } from "@lightstart/plugins/engine.ts";
 import { Limits } from "../conversation/session-store.ts";
 import type { ListedSession } from "./values.ts";
-import { SkillRunRow } from "../services/sessions.ts";
+import { SkillsRow } from "../../.light/models.ts";
 import { str, num, list, json, answer, answerText, objectText } from "./values.ts";
 
 /** A session record's fields as a plugin passes them, every one `unknown`. */
@@ -101,17 +101,18 @@ export const answerSessions = (rt: JsRuntime, name: string, a: unknown[]): HostA
       const r = a[0] !== null && typeof a[0] === "object" && !Array.isArray(a[0]) ? (a[0] as SkillRunFields) : null;
       const session = h.conversation.sessionId;
       if (records === null || r === null || str(r.skill).length === 0 || session.length === 0) return answer(false);
-      const row = new SkillRunRow();
       const callId = str(r.callId);
-      row.id = session + ":" + (callId.length > 0 ? callId : "typed:" + String(Math.max(0, num(r.startedMs))));
-      row.session = session;
-      row.agent = h.conversation.agent.id();
-      row.skill = str(r.skill);
-      row.typed = callId.length === 0;
-      row.state = str(r.state);
-      row.startedMs = Math.max(0, num(r.startedMs));
-      row.endedMs = Math.max(0, num(r.endedMs));
-      row.calls = Math.max(0, num(r.calls));
+      const row = new SkillsRow(
+        session + ":" + (callId.length > 0 ? callId : "typed:" + String(Math.max(0, num(r.startedMs)))),
+        session,
+        h.conversation.agent.id(),
+        str(r.skill),
+        callId.length === 0,
+        str(r.state),
+        Math.max(0, num(r.startedMs)),
+        Math.max(0, num(r.endedMs)),
+        Math.max(0, num(r.calls)),
+      );
       records.saveSkillRun(row);
       return answer(true);
     }

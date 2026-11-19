@@ -10,42 +10,12 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { LiveRows, modelQuery } from "@lightstart/light/model/binder";
 import { effect } from "@lightstart/light/signals";
-import { recordOf, text } from "@lightstart/lib/json.ts";
+import { recordOf } from "@lightstart/lib/json.ts";
 import { Limits, SessionMeta, SessionStore } from "../conversation/session-store.ts";
+import { SessionsRow, SkillsRow } from "../../.light/models.ts";
 import { sessions } from "../models/sessions.ts";
 import { skills } from "../models/skills.ts";
 import { Store } from "./store.ts";
-
-/** A skill run as the folder keeps it. */
-export class SkillRunRow {
-  id = "";
-  session = "";
-  agent = "";
-  skill = "";
-  typed = false;
-  state = "";
-  startedMs = 0;
-  endedMs = 0;
-  calls = 0;
-
-  toRow(): Record<string, unknown> {
-    return { id: this.id, session: this.session, agent: this.agent, skill: this.skill, typed: this.typed, state: this.state, startedMs: this.startedMs, endedMs: this.endedMs, calls: this.calls };
-  }
-
-  static of(r: Record<string, unknown>): SkillRunRow {
-    const o = new SkillRunRow();
-    o.id = text(r.id, "");
-    o.session = text(r.session, "");
-    o.agent = text(r.agent, "");
-    o.skill = text(r.skill, "");
-    o.typed = r.typed === true;
-    o.state = text(r.state, "");
-    o.startedMs = typeof r.startedMs === "number" ? r.startedMs : 0;
-    o.endedMs = typeof r.endedMs === "number" ? r.endedMs : 0;
-    o.calls = typeof r.calls === "number" ? r.calls : 0;
-    return o;
-  }
-}
 
 /** A skill's runs across the folder's sessions. */
 export class SkillUsage {
@@ -61,8 +31,8 @@ export class SkillUsage {
 }
 
 /** A signal the records write their rows into (the session controller's). */
-export interface RowSignal {
-  value: readonly Record<string, unknown>[];
+export interface RowSignal<T> {
+  value: readonly T[];
 }
 
 export class SessionRecords extends SessionStore {
@@ -70,16 +40,16 @@ export class SessionRecords extends SessionStore {
   /** The folder whose records these are ("" before one opens). */
   folder = "";
   onNote: ((text: string) => void) | null = null;
-  private rows: LiveRows<Record<string, unknown>> | null = null;
-  private skillRows: LiveRows<Record<string, unknown>> | null = null;
-  private readonly skillPending = new Map<string, SkillRunRow>();
+  private rows: LiveRows<SessionsRow> | null = null;
+  private skillRows: LiveRows<SkillsRow> | null = null;
+  private readonly skillPending = new Map<string, SkillsRow>();
   private following: (() => void) | null = null;
   private readonly pending = new Map<string, SessionMeta>();
   private chain: Promise<void> = Promise.resolve();
-  private readonly rowSink: RowSignal;
-  private readonly skillRowSink: RowSignal;
+  private readonly rowSink: RowSignal<SessionsRow>;
+  private readonly skillRowSink: RowSignal<SkillsRow>;
 
-  constructor(store: Store, sessions: RowSignal, skills: RowSignal) {
+  constructor(store: Store, sessions: RowSignal<SessionsRow>, skills: RowSignal<SkillsRow>) {
     super();
     this.store = store;
     this.rowSink = sessions;
@@ -91,13 +61,13 @@ export class SessionRecords extends SessionStore {
     await this.close();
     this.folder = folder;
     await this.importOld(join(folder, ".widecode", "sessions"), folder);
-    const rows = new LiveRows<Record<string, unknown>>();
+    const rows = new LiveRows(SessionsRow.of, "sessions");
     rows.use(modelQuery<Record<string, unknown>>(sessions, { order: "-updatedMs" }));
     this.rows = rows;
     const run = effect(() => {
       this.rowSink.value = rows.value;
     });
-    const kept = new LiveRows<Record<string, unknown>>();
+    const kept = new LiveRows(SkillsRow.of, "skills");
     kept.use(modelQuery<Record<string, unknown>>(skills, {}));
     this.skillRows = kept;
     const keptRun = effect(() => {
@@ -112,8 +82,8 @@ export class SessionRecords extends SessionStore {
   }
 
   /** Keep run `r` of a skill (written over when its id is kept already). */
-  saveSkillRun(r: SkillRunRow): void {
-    const row = r.toRow();
+  saveSkillRun(r: SkillsRow): void {
+    const row: Record<string, unknown> = { id: r.id, session: r.session, agent: r.agent, skill: r.skill, typed: r.typed, state: r.state, startedMs: r.startedMs, endedMs: r.endedMs, calls: r.calls };
     const id = r.id;
     this.skillPending.set(id, r);
     this.chain = this.chain
@@ -135,9 +105,9 @@ export class SessionRecords extends SessionStore {
 
   /** Each skill's runs kept in the folder, summed: how many, how many typed and failed, the last. */
   skillUsage(): SkillUsage[] {
-    const byId = new Map<string, SkillRunRow>();
+    const byId = new Map<string, SkillsRow>();
     const rows = this.skillRows;
-    if (rows !== null) for (const r of rows.peek()) byId.set(text(r.id, ""), SkillRunRow.of(r));
+    if (rows !== null) for (const r of rows.peek()) byId.set(r.id, r);
     for (const [id, r] of this.skillPending) byId.set(id, r);
     const out = new Map<string, SkillUsage>();
     for (const r of byId.values()) {
@@ -169,7 +139,7 @@ export class SessionRecords extends SessionStore {
     if (waiting !== undefined) return waiting;
     const rows = this.rows;
     if (rows === null) return null;
-    for (const r of rows.peek()) if (text(r.id, "") === id) return SessionMeta.of(r, this.folder);
+    for (const r of rows.peek()) if (r.id === id) return SessionMeta.of(r, this.folder);
     return null;
   }
 
@@ -230,9 +200,10 @@ export class SessionRecords extends SessionStore {
     this.skillRows = null;
     this.skillPending.clear();
     this.pending.clear();
-    const none: Record<string, unknown>[] = [];
+    const none: SessionsRow[] = [];
     this.rowSink.value = none;
-    this.skillRowSink.value = none;
+    const noSkills: SkillsRow[] = [];
+    this.skillRowSink.value = noSkills;
   }
 
   /** The records an earlier widecode kept as one JSON file per session, into the model once (the files stay). */
@@ -251,9 +222,12 @@ export class SessionRecords extends SessionStore {
       const f = recordOf(value);
       if (f === null) continue;
       if ((await sessions.get(id)) !== null) continue;
-      const m = SessionMeta.of(f, folder);
-      m.id = id;
-      rows.push(m.toRow());
+      const withId: Record<string, unknown> = {};
+      for (const key of Object.keys(f)) withId[key] = f[key];
+      withId.id = id;
+      const typed = SessionsRow.of(withId);
+      if (typed === null) continue;
+      rows.push(SessionMeta.of(typed, folder).toRow());
     }
     if (rows.length > 0) await sessions.addMany(rows);
   }
