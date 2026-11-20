@@ -1,0 +1,5 @@
+{
+  "prompt": "Work in this folder.\n\nPart `answer-from-code`: read the code in `answer-from-code/`. What port does the server listen on when no environment variable or flag says otherwise? Write just the number into `answer-from-code/answer.txt`.\n\nPart `edit-json` depends on `answer-from-code`: first read `answer-from-code/answer.txt` and copy its contents into `edit-json/PORT.txt`. Then, in `edit-json/package.json`, add an npm script named `lint` that runs `eslint .`, and raise the version's patch number by one. Change nothing else in `edit-json/package.json`.\n\nThe parts are otherwise independent.",
+  "parts": ["answer-from-code", "edit-json"],
+  "timeoutMs": 1200000
+}

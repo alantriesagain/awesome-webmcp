@@ -1,0 +1,5 @@
+{
+  "prompt": "Work in this folder.\n\nPart `fix-bug`: the tests in `fix-bug/` fail. Run `node test.mjs` there to see. Find the bug and fix it in `fix-bug/src/`, without changing `fix-bug/test.mjs`.\n\nPart `implement-slug`: implement `slugify` in `implement-slug/src/slug.mjs` as `implement-slug/README.md` describes. Keep the export as it is.\n\nPart `limit-concurrency`: `mapLimit` in `limit-concurrency/src/pool.mjs` should run `fn` over the items with at most `limit` calls in flight at once and resolve with the results in the items' order, rejecting with the first error. It runs everything at once and loses the order when calls finish out of turn. Fix it.\n\nThe parts are independent.",
+  "parts": ["fix-bug", "implement-slug", "limit-concurrency"],
+  "timeoutMs": 1500000
+}

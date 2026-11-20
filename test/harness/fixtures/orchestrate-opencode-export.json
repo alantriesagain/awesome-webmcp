@@ -1,0 +1,210 @@
+{
+  "info": {
+    "id": "ses_test",
+    "version": "1.19.5",
+    "cost": 0.003949392,
+    "tokens": {
+      "input": 10718,
+      "output": 323,
+      "reasoning": 0,
+      "cache": {
+        "read": 57732,
+        "write": 0
+      }
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "id": "msg_user"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Write the number into answer.txt."
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "cost": 0.00281436,
+        "tokens": {
+          "total": 10983,
+          "input": 9182,
+          "output": 41,
+          "reasoning": 0,
+          "cache": {
+            "write": 0,
+            "read": 1760
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "type": "tool",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "ls -1"
+            },
+            "output": "a.txt\nb.txt\n",
+            "title": "ls"
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "cost": 0.000187872,
+        "tokens": {
+          "total": 11084,
+          "input": 226,
+          "output": 46,
+          "reasoning": 0,
+          "cache": {
+            "write": 0,
+            "read": 10812
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "type": "tool",
+          "tool": "bash",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "cat package.json"
+            },
+            "output": "{\"name\":\"bench-app\"}\n",
+            "title": "cat"
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "cost": 0.000245148,
+        "tokens": {
+          "total": 11330,
+          "input": 363,
+          "output": 59,
+          "reasoning": 0,
+          "cache": {
+            "write": 0,
+            "read": 10908
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "type": "tool",
+          "tool": "read",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "package.json"
+            },
+            "output": "{\"name\":\"bench-app\",\"version\":\"1.4.2\"}\n",
+            "title": "read"
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "cost": 0.000333552,
+        "tokens": {
+          "total": 11728,
+          "input": 485,
+          "output": 101,
+          "reasoning": 0,
+          "cache": {
+            "write": 0,
+            "read": 11142
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "type": "tool",
+          "tool": "edit",
+          "state": {
+            "status": "completed",
+            "input": {
+              "file_path": "answer.txt",
+              "oldString": "8080",
+              "newString": "8443"
+            },
+            "output": "Successfully replaced 1 block.",
+            "title": "edit"
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "cost": 0.000191388,
+        "tokens": {
+          "total": 11783,
+          "input": 244,
+          "output": 41,
+          "reasoning": 0,
+          "cache": {
+            "write": 0,
+            "read": 11498
+          }
+        },
+        "finish": "tool-calls"
+      },
+      "parts": [
+        {
+          "type": "tool",
+          "tool": "bash",
+          "state": {
+            "status": "error",
+            "input": {
+              "command": "node check.mjs"
+            },
+            "output": "answer.txt says \"8080\"",
+            "title": "check"
+          }
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "cost": 0.000177072,
+        "tokens": {
+          "total": 11865,
+          "input": 218,
+          "output": 35,
+          "reasoning": 0,
+          "cache": {
+            "write": 0,
+            "read": 11612
+          }
+        },
+        "finish": "stop"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "Done."
+        }
+      ]
+    }
+  ]
+}

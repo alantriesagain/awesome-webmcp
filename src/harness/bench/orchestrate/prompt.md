@@ -1,0 +1,1 @@
+Do the work through Task subagents on the configured target. Give each subagent a self-contained brief: the folder it works in, the change wanted there and how to check it. Start independent subagents with run_in_background, then review their diffs and run each part's checks yourself. Commit nothing.

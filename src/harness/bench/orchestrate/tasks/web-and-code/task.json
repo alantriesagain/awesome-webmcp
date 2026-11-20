@@ -1,0 +1,5 @@
+{
+  "prompt": "Work in this folder.\n\nPart `search-release-date`: on what day (UTC) was version 1.5.2 of the npm package @earendil-works/pi-coding-agent published? Find it with your web search and fetch tools, not through npm, its registry or another package manager. Write just the date, as YYYY-MM-DD, into `search-release-date/answer.txt`.\n\nPart `edit-json`: in `edit-json/package.json`, add an npm script named `lint` that runs `eslint .`, and raise the version's patch number by one. Change nothing else.\n\nThe parts are independent.",
+  "parts": ["search-release-date", "edit-json"],
+  "timeoutMs": 1200000
+}

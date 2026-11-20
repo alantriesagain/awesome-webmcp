@@ -1,0 +1,5 @@
+{
+  "prompt": "Work in this folder.\n\nPart `add-flag`: add a `--json` flag to `add-flag/todo.mjs`. With it, `node todo.mjs list --json` prints the todos as a JSON array of objects with `id`, `title` and `done`, instead of the text lines. Without the flag it prints as it does now.\n\nPart `edit-json`: in `edit-json/package.json`, add an npm script named `lint` that runs `eslint .`, and raise the version's patch number by one. Change nothing else.\n\nThe parts are independent.",
+  "parts": ["add-flag", "edit-json"],
+  "timeoutMs": 1200000
+}

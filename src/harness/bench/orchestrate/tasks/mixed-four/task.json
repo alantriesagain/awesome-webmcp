@@ -1,0 +1,5 @@
+{
+  "prompt": "Work in this folder.\n\nPart `csv-quotes`: `parseCsv` in `csv-quotes/src/csv.mjs` mishandles quoted fields. Make it follow RFC 4180: a field in double quotes may hold commas, line breaks and doubled double quotes (\"\" stands for one \"); a line break at the very end adds no row; rows are arrays of strings. `node test.mjs` there has a few cases; it is not complete.\n\nPart `rename-symbol`: rename the function `fetchUserName` to `loadUserName` everywhere in `rename-symbol/`, its definition and every use. `node src/main.mjs` there must still print the same output.\n\nPart `keep-tests-green`: add support for day units and combined durations such as `1d12h` and `2h30m` to `parseInterval` in `keep-tests-green/src/interval.mjs`. Keep the existing tests passing and do not change them.\n\nPart `trace-config`: with no environment variables set, how many times does the worker in `trace-config/` retry a failed `billing` job before giving up? Write just the number into `trace-config/answer.txt`.\n\nThe parts are independent.",
+  "parts": ["csv-quotes", "rename-symbol", "keep-tests-green", "trace-config"],
+  "timeoutMs": 1800000
+}

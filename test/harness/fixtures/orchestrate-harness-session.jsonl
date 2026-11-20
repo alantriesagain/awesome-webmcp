@@ -1,0 +1,9 @@
+{"kind":"session","id":"s","cwd":"/work/repo","at":1}
+{"kind":"model","id":"e1","parentId":"s","at":2,"value":"opencode-go/deepseek-v4.1-flash"}
+{"kind":"message","id":"e2","parentId":"e1","at":3,"role":"user","parts":[{"kind":"text","text":"do the parts"}]}
+{"kind":"message","id":"e3","parentId":"e2","at":4,"role":"assistant","parts":[{"kind":"tool_call","callId":"call_1","name":"Task","inputJson":"{\"description\":\"a\",\"prompt\":\"p\",\"subagent_type\":\"deepseek\",\"run_in_background\":true}"}]}
+{"kind":"usage","id":"ue3","parentId":"e3","at":4,"data":{"input":100,"output":20,"cacheRead":30,"cacheWrite":0,"costUsd":0.001,"side":false}}
+{"kind":"message","id":"e4","parentId":"e3","at":5,"role":"user","parts":[{"kind":"tool_result","callId":"call_1","text":"subagent started: call_1"}]}
+{"kind":"message","id":"e5","parentId":"e4","at":6,"role":"assistant","parts":[{"kind":"tool_call","callId":"call_2","name":"Edit","inputJson":"{\"file_path\":\"a\"}"},{"kind":"tool_call","callId":"call_3","name":"Write","inputJson":"{\"file_path\":\"b\"}"},{"kind":"tool_call","callId":"call_4","name":"Task","inputJson":"{\"description\":\"b\",\"prompt\":\"q\",\"subagent_type\":\"deepseek\"}"}]}
+{"kind":"usage","id":"ue5","parentId":"e5","at":6,"data":{"input":200,"output":50,"cacheRead":10,"cacheWrite":5,"costUsd":0.002,"side":false}}
+{"kind":"message","id":"e6","parentId":"e5","at":7,"role":"user","parts":[{"kind":"tool_result","callId":"call_4","text":"done"}]}
