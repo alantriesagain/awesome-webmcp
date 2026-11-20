@@ -828,7 +828,7 @@ const main = async (): Promise<void> => {
       '  agent.registerCommand("inspect", { handler: (a, ctx) => {',
       "    const sm = ctx.sessionManager;",
       '    const entries = sm.getEntries();',
-      '    const custom = entries.filter((e) => e.type === "custom")[0];',
+      '    const custom = entries.filter((e) => e.type === "custom" && e.customType === "note")[0];',
       '    ctx.ui.notify("inspect:" + JSON.stringify({ id: sm.getSessionId(), file: sm.getSessionFile(), cwd: sm.getCwd(), leaf: sm.getLeafId(), header: sm.getHeader(), entries: entries.length, branch: sm.getBranch().map((e) => e.type), custom: custom === undefined ? null : sm.getEntry(custom.id) }));',
       "  } });",
       "} });",
@@ -845,11 +845,11 @@ const main = async (): Promise<void> => {
     const got = JSON.parse(String(params["message"]).slice("inspect:".length)) as Record<string, unknown>;
     ok("the manager names the session, its file, folder and leaf", got["id"] === sid && String(got["file"]).endsWith(sid + ".jsonl") && got["cwd"] === rig.folder && String(got["leaf"]).length > 0);
     eq("the header is pi's session header", String((got["header"] as Record<string, unknown>)["type"]) + ":" + String((got["header"] as Record<string, unknown>)["cwd"]), "session:" + rig.folder);
-    eq("the branch's types in order", (got["branch"] as string[]).join(","), "model_change,message,message,session_info,custom");
-    eq("every entry is there", String(got["entries"]), "5");
+    eq("the branch's types in order", (got["branch"] as string[]).join(","), "model_change,message,message,custom,session_info,custom");
+    eq("every entry is there, the request's usage among them as a custom entry", String(got["entries"]), "6");
     const custom = got["custom"] as Record<string, unknown>;
     ok("getEntry of the custom one keeps its type and data", custom !== null && custom["type"] === "custom" && custom["customType"] === "note" && JSON.stringify(custom["data"]) === '{"count":3}');
-    ok("the messages are pi message entries", (got["branch"] as string[]).length === 5);
+    ok("the messages are pi message entries", (got["branch"] as string[]).length === 6);
     rig.close();
   }
 

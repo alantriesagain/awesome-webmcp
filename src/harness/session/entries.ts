@@ -5,7 +5,7 @@
 // `firstKeptEntryId`), `custom` (an extension's state, outside the context). A message may be a
 // `custom_message` when `customType` is set. One flat class, told apart by `kind`; a line is
 // parsed as it is applied.
-import { listOf, num, parseJson, recordOf, str } from "@lightstart/lib/json.ts";
+import { listOf, num, objectText, parseJson, recordOf, str } from "@lightstart/lib/json.ts";
 import { Message, Part, partJson, partOf } from "../model/message.ts";
 
 export const SESSION = "session";
@@ -15,6 +15,8 @@ export const MODE = "mode";
 export const TITLE = "title";
 export const COMPACTION = "compaction";
 export const CUSTOM = "custom";
+/** A request's usage: its tokens and cost (`data`), the session's or a side request's (a subagent, a page read). */
+export const USAGE = "usage";
 
 export class Entry {
   readonly kind: string;
@@ -56,7 +58,8 @@ export class Entry {
     else if (this.kind === CUSTOM) {
       fields.push('"customType":' + JSON.stringify(this.customType));
       if (this.dataJson.length > 0) fields.push('"data":' + this.dataJson);
-    } else fields.push('"value":' + JSON.stringify(this.value));
+    } else if (this.kind === USAGE) fields.push('"data":' + (this.dataJson.length > 0 ? this.dataJson : "{}"));
+    else fields.push('"value":' + JSON.stringify(this.value));
     return "{" + fields.join(",") + "}";
   }
 
@@ -121,6 +124,14 @@ export class Entry {
     e.at = at;
     e.customType = customType;
     e.dataJson = dataJson;
+    return e;
+  }
+
+  /** A request's usage; `side` for a subagent's or a page read's, `costUsd` below 0 when unknown. */
+  static ofUsage(input: number, output: number, cacheRead: number, cacheWrite: number, costUsd: number, side: boolean, at: number): Entry {
+    const e = new Entry(USAGE);
+    e.at = at;
+    e.dataJson = objectText(["input", "output", "cacheRead", "cacheWrite", "costUsd", "side"], [String(input), String(output), String(cacheRead), String(cacheWrite), String(costUsd), side ? "true" : "false"]);
     return e;
   }
 

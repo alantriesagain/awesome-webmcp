@@ -2,7 +2,7 @@
 // AgentMessage (a custom one as `custom_message`), a model change, a compaction, the title as
 // `session_info`, a custom entry with its data, and anything else with its own fields.
 import { listOf, parseJson, recordOf } from "@lightstart/lib/json.ts";
-import { COMPACTION, CUSTOM, Entry, MESSAGE, MODEL, SESSION, TITLE } from "../session/entries.ts";
+import { COMPACTION, CUSTOM, Entry, MESSAGE, MODEL, SESSION, TITLE, USAGE } from "../session/entries.ts";
 import { messageToAgent, messagesToAgent } from "./messages.ts";
 
 const iso = (at: number): string => new Date(at).toISOString();
@@ -56,6 +56,12 @@ export const piEntry = (e: Entry): string => {
     const fields = base("custom", e);
     fields.push('"customType":' + JSON.stringify(e.customType));
     if (e.dataJson.length > 0) fields.push('"data":' + e.dataJson);
+    return "{" + fields.join(",") + "}";
+  }
+  // A request's usage is data kept beside the conversation, never the model's: pi's custom entry.
+  if (e.kind === USAGE) {
+    const fields = base("custom", e);
+    fields.push('"customType":"usage"', '"data":' + (e.dataJson.length > 0 ? e.dataJson : "{}"));
     return "{" + fields.join(",") + "}";
   }
   const fields = base(e.kind === SESSION ? "session" : e.kind.length > 0 ? e.kind : "unknown", e);

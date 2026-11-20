@@ -14,7 +14,7 @@
 // threshold; the file keeps the compaction, and a load starts the context from it. A prompt
 // template of the session's, `/name words`, is expanded as the user's message (the built-in
 // commands win).
-import { errorMessage, listOf, parseJson, recordOf, str } from "@lightstart/lib/json.ts";
+import { errorMessage, listOf, num, parseJson, recordOf, str } from "@lightstart/lib/json.ts";
 import { log } from "@lightstart/lib/log.ts";
 import { existsSync } from "node:fs";
 import { HarnessConfig } from "../config.ts";
@@ -28,7 +28,7 @@ import { ModelInfo, ModelRegistry, costUsd } from "../model/registry.ts";
 import { HarnessPaths } from "../paths.ts";
 import { SystemFacts, systemBlocks } from "../prompt/system.ts";
 import { scanTemplates, expandTemplate, TemplateInfo } from "../prompt/templates.ts";
-import { COMPACTION, CUSTOM, Entry, MESSAGE, MODE, MODEL, TITLE } from "../session/entries.ts";
+import { COMPACTION, CUSTOM, Entry, MESSAGE, MODE, MODEL, TITLE, USAGE } from "../session/entries.ts";
 import { replayPaced, replayUpdates } from "../session/replay.ts";
 import { SessionFile, SessionStore, sessionsJson } from "../session/store.ts";
 import { titleFor } from "../session/title.ts";
@@ -634,6 +634,13 @@ export class AcpAgent {
     this.write(s, Entry.ofMessage(m, Date.now()));
   }
 
+  /** A request's usage kept in the session's file (once the file has its first message), so a client reading it, or the session resumed, has what it cost. */
+  private usageEntry(s: HarnessSession, usage: Usage, cost: number, side: boolean): void {
+    const f = s.file;
+    if (f === null || f.leaf.length === 0) return;
+    this.write(s, Entry.ofUsage(usage.input, usage.output, usage.cacheRead, usage.cacheWrite, cost, side, Date.now()));
+  }
+
   /** A model, mode or title entry. */
   private note(s: HarnessSession, kind: string, value: string): void {
     this.write(s, Entry.ofValue(kind, "", value, Date.now()));
@@ -657,7 +664,11 @@ export class AcpAgent {
         if (s.options.set("model", e.value).length === 0) this.effortsOf(s.options, this.registry.model(e.value));
       } else if (e.kind === MODE) s.options.set("mode", e.value);
       else if (e.kind === TITLE) s.title = e.value;
-      else if (e.kind === COMPACTION) {
+      else if (e.kind === USAGE) {
+        // The cost so far comes back with the session; its context is the messages', counted again.
+        const cost = num(recordOf(parseJson(e.dataJson))?.["costUsd"], -1);
+        if (cost >= 0) s.costUsd = (s.costUsd < 0 ? 0 : s.costUsd) + cost;
+      } else if (e.kind === COMPACTION) {
         s.loop.summary = e.summary;
         const at = e.firstKeptEntryId.length > 0 ? messages.findIndex((m) => m.id === e.firstKeptEntryId) : -1;
         from = at >= 0 ? at : messages.length;
@@ -1128,6 +1139,7 @@ export class AcpAgent {
     listener.onUsage = (usage: Usage) => {
       s.used = usage.context();
       const cost = this.costOf(s, usage);
+      this.usageEntry(s, usage, cost, false);
       if (cost >= 0) s.costUsd = (s.costUsd < 0 ? 0 : s.costUsd) + cost;
       this.server.notify("session/update", usageUpdate(s.id, s.used, s.window, s.costUsd));
     };
@@ -1135,6 +1147,7 @@ export class AcpAgent {
     listener.onSubUsage = (usage: Usage) => {
       s.turnSubUsage.add(usage);
       const cost = this.costOf(s, usage);
+      this.usageEntry(s, usage, cost, true);
       if (cost < 0) return;
       s.costUsd = (s.costUsd < 0 ? 0 : s.costUsd) + cost;
       this.server.notify("session/update", usageUpdate(s.id, s.used, s.window, s.costUsd));

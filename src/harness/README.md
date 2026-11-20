@@ -14,7 +14,7 @@ widecode's own coding agent, the harness: a daemon of widecode's binary (`wideco
 | `model/` | the neutral message shape (parts: text, thinking with its signature, tool call, tool result, image); `client.ts` dispatching by the model's API; `openai.ts`, an OpenAI-compatible chat completions API (tool calls and their results as tool messages, a reasoning model's `reasoning_content` read and sent back on the assistant's messages, which DeepSeek and Kimi require with tools, thinking toggled or an effort by the model's kind, the cached share of the usage); `anthropic.ts`, the Anthropic Messages API as JSON text and its events read (thinking by the model's kind, Anthropic's extras for providers that take them: cache breakpoints, eager input streaming, the effort; a refusal or an error as the stream's end; 429, 529 and server errors tried again before anything streamed); `sse.ts`; `registry.ts`, the providers (Anthropic; DeepSeek through its Anthropic-format endpoint) and models with windows, prices, thinking kinds and efforts; the fake client scripted from a JSONL fixture (text, thinking, tool calls, a hold, an error) |
 | `http/stream.ts` | a streaming request behind one class, by `node` (http and https requests with per-chunk data events) or `curl` (`-N -i`, the body on stdin), chosen by the config's `http`; an idle timer, an abort |
 | `tools/` | the tools, named as Claude Code names them: `Read` (numbered lines, offset and limit, caps; what it read may be edited), `Write` (a whole file, its folders made, refused for an unread file), `Edit` (an exact unique string replaced, or every occurrence; CRLF, BOM and the mode kept; the patch with line numbers as the result), `Bash` (a command in the folder through `proc.ts`: its whole output written to `<store>/harness/output/<session>/<callId>.log`, 30 KB of it kept in the result with the file named when more was cut, a timeout, killed on abort; `run_in_background` starts it and answers at once with its id and file, up to 8 running together, its end sent to the session as a user message when idle or steered into a turn), `BashOutput` (a background command's output so far, from an offset or its last lines, whether it runs and its exit code), `BashStop` (ends one and its process group), `Grep` (ripgrep when on PATH, else grep), `Glob` (the workspace's file list, newest first), `LS`, `Skill` (a skill's instructions by name), `permissions.ts` (the calls `permissions.deny` refuses, the user's config's and a trusted project's, in Claude Code's syntax: Bash patterns over each simple command, gitignore-style paths for Read and Edit, WebFetch domains, tools and MCP servers whole; a refused call ends with its rule), `WebFetch` and `WebSearch` (`web.ts`: a page through the browser, else curl; a page with a prompt longer than 10,000 characters is read by the model, which answers the prompt from up to 100,000 characters of it, and the answer is the result, its cost counted as a subagent's (`harness.fetchModel` reads it on another model); a short page, or a call without a prompt, comes as markdown cut at 50,000 characters; a search over the backends in order until one gives results: SearXNG when `harness.search.searxng` names an instance, Brave's and Tavily's APIs with a key, Exa's hosted MCP server (no key needed), Google through the browser, DuckDuckGo's HTML page only when `harness.search.order` lists it); `browser.ts`, headless Chromium (the config's `harness.browser.command`, else Playwright's headless shell or Chromium under `~/.cache/ms-playwright`, else one on PATH) run once per page with a fresh profile under the store, its DOM printed after the scripts ran; `html.ts`, a page's HTML as markdown (its main content, links resolved); `mcp.ts`, the MCP servers the client gives a session (widecode's own over HTTP with its token): their tools listed when the session opens, offered as `mcp__<server>__<tool>` and titled `<server>_<tool>` for the client, a call read to the end of its event stream and dropped on abort; `patch.ts`, the Myers line diff and the unified patch the code column follows; the set of a mode (plan mode's read-only share), the tools' JSON for the API, an input checked against its schema before it runs |
-| `session/` | a session's file under `~/.widecode/harness/sessions/<folder key>/<id>.jsonl` in pi's shape (`entries.ts`: a header line, then entries with `id` and `parentId`, the branch the walk back from the last one: a message with its parts, a model or mode change, a title, a compaction); `store.ts`, the files: made on the first entry (a session never written leaves nothing), appended to, loaded as the branch, listed through the header and the tail (the last title), forked as a copy, removed with its Bash output folder; a tool result keeps its outcome as JSON, which `replay.ts` turns back into completed calls with their diffs when a load shows the turns again, paced; `title.ts`, the session's title asked of the provider's cheapest model with the agent package's naming prompt |
+| `session/` | a session's file under `~/.widecode/harness/sessions/<folder key>/<id>.jsonl` in pi's shape (`entries.ts`: a header line, then entries with `id` and `parentId`, the branch the walk back from the last one: a message with its parts, a model or mode change, a title, a compaction, and after each request its usage: the tokens, the cost, whether a side request's such as a subagent's or a page read, which a resumed session adds back to its cost and a plugin reads as a `custom` entry); `store.ts`, the files: made on the first entry (a session never written leaves nothing), appended to, loaded as the branch, listed through the header and the tail (the last title), forked as a copy, removed with its Bash output folder; a tool result keeps its outcome as JSON, which `replay.ts` turns back into completed calls with their diffs when a load shows the turns again, paced; `title.ts`, the session's title asked of the provider's cheapest model with the agent package's naming prompt |
 | `prompt/` | the system prompt (`system.ts`): stable blocks first, cached where the provider caches (the base text with how to use the tools, the folder and platform, the project's text from the client, the project's instructions, the skills), then a small block that changes (the date, plan mode's note) sent last and uncached; `context-files.ts`, AGENTS.md, CLAUDE.md and .claude/CLAUDE.md from the repository's root down to the folder (a trusted folder's), then `~/.widecode/harness/AGENTS.md`, cut at 32 KB a file and 128 KB in all, a file with another's text left out; `skills.ts`, the skills in the Agent Skills format from the folder's `.agents/skills`, `.claude/skills` and `.pi/skills` and each plugin folder's `skills` under its `.widecode/plugins` (trusted), the user's `~/.agents/skills`, `~/.claude/skills` and its synced folders, pi's `~/.pi/agent/skills` (`PI_CODING_AGENT_DIR` when set), each plugin folder's `skills` under the store's `plugins` and `~/.widecode/harness/skills`, listed by name and description (`disable-model-invocation` keeps one out of the prompt); `templates.ts`, prompt templates in pi's format from the folder's `.widecode/prompts` and `.pi/prompts` and each plugin folder's `prompts` under its `.widecode/plugins` (trusted), `~/.widecode/harness/prompts`, each plugin folder's `prompts` under the store's `plugins` and pi's `~/.pi/agent/prompts`, a file per command, its description from the frontmatter or the body's first line and its `argument-hint`, its body expanded from the shell-split words after the command (`$1`, `$@`, `${1:-default}`, `${@:N:L}`), offered as session commands |
 | `auth.ts` | the keys: the provider's environment variable, else `auth.json` |
 | `config.ts`, `paths.ts` | the `harness` section of config.json (`model`, `effort`, `fetchModel`, `compactAt`, `http`, `providers` with their models, prices and thinking kind); where the harness keeps its files, each session's Bash output under `harness/output/<session>` |
@@ -105,3 +105,67 @@ It talks to real models and spends real money; `--budget` stops starting runs on
 it. `test/harness-bench.test.ts` runs it on the fake model.
 
 The entry in config.json is a default of the ACP plugin, chosen with `"agent": "harness"` or `--agent harness`. A key: `DEEPSEEK_API_KEY` or `ANTHROPIC_API_KEY` in the environment, or `widecode --harness-auth deepseek` with the key on stdin. Tests: `test/harness-*.test.ts` (the ACP framing, the agent over the fake model with a tool batch, its session file, a load in another process and a resume, the Anthropic request and its events, the HTTP stream by both ways against `test/harness/fake-model.mjs`, the tools over a temp folder, the session store and the replay, the registry, costs and keys); the app's `test/harness-agent.test.ts` drives the daemon under node as the fake agent is driven, the Sessions tab and a side question's fork included.
+
+## The orchestration benchmark
+
+`bench/orchestrate/` measures orchestrators rather than single runs. An orchestrator (the harness, or
+Claude Code) is the main agent of a task made of several independent parts. Each part is one of the
+single-agent benchmark's tasks, copied into a subfolder of its own so the parts never collide. The
+task's prompt says what each folder needs; it does not say how to delegate. The run's
+`.widecode/prompt.md` is the same for every orchestrator: do the work through Task subagents on the
+configured target, give each a self-contained brief, start independent ones with
+`run_in_background`, review their diffs and run the checks yourself, commit nothing. The store's
+`config.json` sets the target (an ACP agent and model, `deepseek` on opencode by default) and
+`replaceClaudeSubagents`, so Claude Code and the harness both delegate through widecode's
+`mcp__widecode__Task`.
+
+Each run gets a fresh temp folder (each part's repository in a subfolder, one git commit) and a fresh
+temp store. `auth.json` is a symbolic link to `~/.widecode/auth.json`, never read or copied;
+`trusted.json` names the folder; `config.json` carries the orchestrator, the harness's model and the
+Task target. dist/widecode starts in the folder through `test/drive.py`'s App, driven by
+`drive_bridge.py`, the prompt is pasted and sent, and the run is followed until the app's log shows a
+turn ended, no background subagent is still out and nothing has changed for 30 seconds, or the
+task's time runs out. The screen is read once at the end. Then the app is closed and each part's
+`check.mjs` runs in its subfolder.
+
+```
+node src/harness/bench/orchestrate/run.mjs --orchestrator harness,claude --model <model> --tasks <names> --repeat 2
+node src/harness/bench/orchestrate/run.ts --report src/harness/bench/orchestrate/results/*.jsonl
+```
+
+The five tasks are `easy-two` (`add-flag`, `edit-json`), `medium-three` (`fix-bug`,
+`implement-slug`, `limit-concurrency`), `mixed-four` (`csv-quotes`, `rename-symbol`,
+`keep-tests-green`, `trace-config`), `cross-folder` (`answer-from-code`, then `edit-json`, which
+reads the port the first writes) and `web-and-code` (`search-release-date`, `edit-json`). A task
+passes when every part's check passes; each part's verdict is kept.
+
+The done signal is the app's log: `turn started` and `turn ended` are the conversation's state, and
+the acp plugin notes `background subagent <id> finished` or `failed` when a background Task run
+reports. The session file names the background ids the Task calls started (`subagent started: <id>`);
+a run is done only when every one of those has a finish line, no turn is open, and 30 seconds pass
+without a change. Log quiet alone would end a run while a silent subagent still worked.
+
+The record carries:
+
+- passed, and each part's verdict and check output.
+- the wall time, from sending the prompt to the done signal or the timeout.
+- the orchestrator's requests, input, output and cache tokens and cost. For the harness these are the
+  usage entries in `<store>/harness/sessions/<folder>/<id>.jsonl` (the session file). For Claude Code
+  they are its own transcript under `<projects>/<folder, non-alphanumerics as '-'>/<id>.jsonl`: each
+  assistant message's `usage`, and the result events' `total_cost_usd`, whose per-process totals are
+  summed as deltas. Subagent records (`parent_tool_use_id`) are left out.
+- the orchestrator's own `Edit` and `Write` calls (work it did instead of delegating) and its `Task`
+  calls, with how many ran in the background, read from the same session or transcript.
+- each subagent's cost and tokens. Subagents run on an opencode target, which keeps a session per
+  run; `opencode session list --format json` finds those whose directory is the run's folder and that
+  started during the run, and `opencode export <id>` gives each one's per-request tokens and cost.
+- the orchestrator's cost plus the subagents' cost as the total, and the paths of the session file,
+  app log and screen dump copied beside the record.
+
+Claude Code runs on the user's login and subscription through its CLI. The harness spends its own
+key, read from the user's `auth.json` through the link, as the single-agent benchmark does. The
+driver talks to real models: `--keep` leaves a run's folder and store to inspect. The commands that
+need no model are tested: `test/harness-bench-orchestrate.test.ts` covers the task loader, repo
+assembly, every check before and after its solution, the measure readers on fake session and export
+files, the done-signal reader on a sample log, the record round trip and the report. The pty run
+itself needs dist/widecode and a real orchestrator, so it is not tested.

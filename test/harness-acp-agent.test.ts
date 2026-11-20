@@ -146,13 +146,13 @@ const main = async (): Promise<void> => {
   const store = new SessionStore(paths.sessionsDir(folder));
   await until(() => agent.titleOf(sid).length > 0);
   const kinds = readFileSync(store.pathOf(sid), "utf8").split("\n").filter((l) => l.length > 0).map((l) => Entry.parse(l)).map((e) => (e === null ? "?" : e.kind === "message" ? e.role[0] + e.id : e.kind + (e.value.length > 0 ? ":" + e.value : "")));
-  eq("the file's entries", kinds.join(" "), "session model:fake/fake uu1 am1 title:Fake session title uu2 am2 uu3 am3 uu4 am4 uu5 am5 uu6 am6 uu7 mode:plan model:anthropic/claude-haiku-4-5 model:fake/fake");
+  eq("the file's entries", kinds.join(" "), "session model:fake/fake uu1 am1 usage title:Fake session title uu2 am2 usage uu3 am3 usage uu4 am4 usage uu5 am5 usage uu6 am6 usage uu7 usage mode:plan model:anthropic/claude-haiku-4-5 model:fake/fake");
   eq("the fork's file holds the branch and its own turn", String(existsSync(store.pathOf(fid))) + " " + readFileSync(store.pathOf(fid), "utf8").split("\n").filter((l) => l.includes('"text":"You said: what"')).length, "true 1");
   ok("the list: both, newest first, the title read from the tail", /^\{"sessions":\[\{"sessionId":"h-[^"]+","cwd":"[^"]+","title":"Fake session title","updatedAt":\d+\},\{"sessionId":"h-[^"]+","cwd":"[^"]+","title":"Fake session title","updatedAt":\d+\}\]\}$/.test((send("session/list", { cwd: folder }), /"result":(.*)\}$/.exec(taken()[0])?.[1] ?? "")));
 
   const named = send("session/prompt", { sessionId: sid, prompt: [{ type: "text", text: "/title Reading files" }] });
   const naming = taken();
-  ok("/title with words names the session so, outside the conversation", naming[0].includes('"text":"Titled: Reading files"') && naming[1].includes('"id":' + named + ',"result":{"stopReason":"end_turn"') && agent.titleOf(sid) === "Reading files" && readFileSync(store.pathOf(sid), "utf8").includes('"kind":"title","id":"e6","parentId":"e5","at":') && store.list(folder)[0].title === "Reading files");
+  ok("/title with words names the session so, outside the conversation", naming[0].includes('"text":"Titled: Reading files"') && naming[1].includes('"id":' + named + ',"result":{"stopReason":"end_turn"') && agent.titleOf(sid) === "Reading files" && /"kind":"title","id":"e\d+","parentId":"[^"]+","at":\d+,"value":"Reading files"/.test(readFileSync(store.pathOf(sid), "utf8")) && store.list(folder)[0].title === "Reading files");
   const asked = send("session/prompt", { sessionId: sid, prompt: [{ type: "text", text: "/title" }] });
   await until(() => out.some((l) => l.includes('"id":' + asked)));
   ok("/title alone asks the model again", taken()[0].includes('"text":"Titled: Fake session title"') && agent.titleOf(sid) === "Fake session title");
@@ -217,6 +217,23 @@ const main = async (): Promise<void> => {
   eq("a resume shows nothing again", out2.filter((l) => l.includes("session/update")).map((l) => /"sessionUpdate":"([^"]+)"/.exec(l)?.[1] ?? "?").join(","), "available_commands_update,usage_update");
   const cut = readFileSync(store.pathOf("h-cut"), "utf8").split("\n").filter((l) => l.length > 0);
   eq("the batch cut off by its process's end has its results, as errors", String(cut.length) + " " + (Entry.parse(cut[4])?.message().parts.map((p) => p.kind + ":" + p.callId + ":" + p.text + ":" + String(p.isError)).join(",") ?? "?"), "5 tool_result:call_9:interrupted:true");
+
+  // Each request's usage is kept in the file, so a session resumed elsewhere keeps what it cost.
+  const usageLines = readFileSync(store.pathOf(sid), "utf8").split("\n").filter((l) => l.includes('"kind":"usage"'));
+  ok("each request's usage is in the file, its tokens and whether a side request's", usageLines.length > 0 && usageLines.every((l) => /"data":\{"input":\d+,"output":\d+,"cacheRead":\d+,"cacheWrite":\d+,"costUsd":-?[\d.]+,"side":(true|false)\}/.test(l)));
+  writeFileSync(store.pathOf("h-paid"), [
+    '{"kind":"session","id":"h-paid","parentId":"","at":1,"cwd":' + JSON.stringify(folder) + ',"version":1}',
+    '{"kind":"model","id":"e1","parentId":"","at":1,"value":"fake/fake"}',
+    '{"kind":"message","id":"u1","parentId":"e1","at":2,"role":"user","parts":[{"kind":"text","text":"hi"}]}',
+    '{"kind":"message","id":"m1","parentId":"u1","at":3,"role":"assistant","parts":[{"kind":"text","text":"Hello."}]}',
+    '{"kind":"usage","id":"e2","parentId":"m1","at":4,"data":{"input":10,"output":3,"cacheRead":0,"cacheWrite":0,"costUsd":0.5,"side":false}}',
+    '{"kind":"usage","id":"e3","parentId":"e2","at":5,"data":{"input":40,"output":6,"cacheRead":0,"cacheWrite":0,"costUsd":0.25,"side":true}}',
+    '{"kind":"usage","id":"e4","parentId":"e3","at":6,"data":{"input":5,"output":1,"cacheRead":0,"cacheWrite":0,"costUsd":-1,"side":false}}',
+  ].join("\n") + "\n");
+  out2.splice(0, out2.length);
+  agent2.receive(new Incoming("session/resume", { sessionId: "h-paid", cwd: folder, mcpServers: [] }, "4"));
+  await until(() => out2.some((l) => l.includes('"id":4,')));
+  ok("resumed, its cost is what its usage entries say, an unknown one left out", out2.some((l) => l.includes('"sessionUpdate":"usage_update"') && l.includes('"cost":{"amount":0.75,"currency":"USD"}')));
 
   // A prompt template: `/greet words` is the template's body with the words put in.
   send("session/new", { cwd: folder, mcpServers: [], _meta: { widecode: { trusted: true } } });
