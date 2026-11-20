@@ -234,10 +234,16 @@ export const runOne = async (task: OrchestrateTask, partRoot: string, spec: Orch
   try {
     const args = ["--agent", spec.orchestrator];
     if (spec.orchestrator === "claude" && spec.model.length > 0) args.push("--model", spec.model);
-    const started = await bridge.request({ op: "start", folder: setup.folder, log: setup.log, args });
+    const started = await bridge.request({ op: "start", folder: setup.folder, log: setup.log, args, env: { WIDECODE_HOME: setup.store } });
+    // The app names its store in the log's first lines: a run on any other than its own would write
+    // to the user's (their state, their trust), so it stops there.
+    const storeSaid = /· store (\S+)/.exec(textOf(setup.log))?.[1] ?? "";
     if (started["ok"] !== true) {
       record.setupFailed = true;
       record.error = str(started["error"]);
+    } else if (storeSaid !== setup.store) {
+      record.setupFailed = true;
+      record.error = "widecode ran on the store " + (storeSaid.length > 0 ? storeSaid : "(none named)") + ", not the run's own " + setup.store + "; stopped";
     } else {
       const sentAt = Date.now();
       await bridge.request({ op: "send", text: task.prompt });

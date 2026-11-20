@@ -29,6 +29,9 @@ for line in sys.stdin:
     op = command.get("op", "")
     try:
         if op == "start":
+            # The run's own store and the like: App starts widecode with this process's environment.
+            for key, value in (command.get("env") or {}).items():
+                os.environ[key] = str(value)
             app = App(command["folder"], command["log"], args=tuple(command.get("args", [])), cols=int(command.get("cols", 200)), rows=int(command.get("rows", 50)))
             answer(ok=True)
         elif op == "send":
