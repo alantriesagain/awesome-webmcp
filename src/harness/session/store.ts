@@ -217,6 +217,8 @@ export class SessionStore {
 
   remove(id: string): boolean {
     const path = this.pathOf(id);
+    // The commands' whole output lives beside the folder's session files (`harness/output/<id>`).
+    rmSync(join(this.dir, "..", "..", "output", id), { recursive: true, force: true });
     if (!existsSync(path)) return false;
     rmSync(path, { force: true });
     return true;

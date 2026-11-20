@@ -67,7 +67,7 @@ const main = async (): Promise<void> => {
   };
   eq("every tool's schema is JSON", tools.tools.filter((t) => !parses(t.schemaJson)).map((t) => t.name).join(","), "");
   eq("and both tools lists", String(parses(tools.json(true))) + " " + String(parses(tools.openAiJson())), "true true");
-  eq("the set in plan mode", tools.forMode("plan").tools.map((t) => t.name).join(","), "Read,Grep,Glob,LS,Skill,WebFetch,WebSearch");
+  eq("the set in plan mode", tools.forMode("plan").tools.map((t) => t.name).join(","), "Read,BashOutput,Grep,Glob,LS,Skill,WebFetch,WebSearch");
   ok("the tools as the API takes them", tools.json(false).startsWith('[{"name":"Read","description":"Read a file') && tools.json(false).includes('"input_schema":{"type":"object","properties":{"file_path"') && !tools.json(false).includes("eager"));
   eq("an input checked: a missing field, a wrong type, not JSON, not an object, unknown tool, a good one", [tools.checkInput("Read", "{}"), tools.checkInput("Read", '{"file_path":3}'), tools.checkInput("Bash", "{nope"), tools.checkInput("Bash", "[1]"), tools.checkInput("Nope", "{}"), tools.checkInput("Bash", '{"command":"ls","timeout":5}')].join(" | "), "the input lacks file_path | file_path should be a string | the input is not valid JSON | the input is not an object | no tool named Nope | ");
   rmSync(folder, { recursive: true, force: true });

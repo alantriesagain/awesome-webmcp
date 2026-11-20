@@ -7,6 +7,7 @@
 // results, since a tool call without its result is refused by the next request. Before a request
 // the context's size is estimated (the last real count plus what came since) and compacted past
 // the threshold: the earlier messages summarized, the summary sent first from then on.
+import { rmSync } from "node:fs";
 import { Abort } from "./abort.ts";
 import { CompactionResult, KEEP_TOKENS, compactThreshold, contextAfter, cutPoint, summarize, withSummary } from "./compact.ts";
 import { LoopListener } from "./listener.ts";
@@ -17,6 +18,7 @@ import { McpLink } from "../tools/mcp.ts";
 import { FETCH_DIRECT, FETCH_READ, FetchedPage, WebSettings, fetchPage, pageOutcome } from "../tools/web.ts";
 import { DenyRule, deniedBy } from "../tools/permissions.ts";
 import { parseJson, recordOf, str } from "@lightstart/lib/json.ts";
+import { BashJobs } from "../tools/proc.ts";
 import { Tool, ToolContext, ToolOutcome, ToolSet } from "../tools/tool.ts";
 import { turnNote } from "../prompt/system.ts";
 import { ExtSession } from "../ext/extensions.ts";
@@ -76,6 +78,11 @@ export class LoopSession {
   pendingBefore: Message[] = [];
   /** The files read in the session (absolute paths): what Edit and Write may change. */
   readonly reads = new Set<string>();
+  /** Where Bash writes a call's whole output ("" for none), and the session's background commands. */
+  outputDir = "";
+  readonly bashJobs = new BashJobs();
+  /** How many subagents this session started, each with an output folder of its own. */
+  subCount = 0;
   /** The model's window, what the compaction threshold is cut from. */
   window = 200000;
   /** The session's MCP servers and their tools, offered beside the mode's. */
@@ -355,6 +362,8 @@ export class AgentLoop {
     sub.deny = s.deny;
     sub.vision = s.vision;
     sub.ext = s.ext;
+    // Its commands are its own, heard by nothing, stopped and their output removed when it ends.
+    sub.outputDir = s.outputDir.length > 0 ? s.outputDir + "-task" + String(++s.subCount) : "";
     const loop = new AgentLoop(this.client, this.tools.without("Task"));
     loop.fetchModel = this.fetchModel;
     loop.extras = this.extras;
@@ -375,6 +384,8 @@ export class AgentLoop {
       calls++;
     };
     const end = await loop.run(sub, prompt, inner, abort);
+    sub.bashJobs.stopAll();
+    if (sub.outputDir.length > 0) rmSync(sub.outputDir, { recursive: true, force: true });
     if (end.stopReason === CANCELLED || abort.aborted) return ToolOutcome.failed("interrupted");
     if (end.stopReason === FAILED) return ToolOutcome.failed("the subagent failed: " + end.error + (last.length > 0 ? "\n\nIts last words: " + last : ""));
     const o = new ToolOutcome();
@@ -533,6 +544,8 @@ export class AgentLoop {
     ctx.window = s.window;
     ctx.sessionId = s.id;
     ctx.hasUI = s.hasUI && s.id.length > 0;
+    ctx.outputDir = s.outputDir;
+    ctx.jobs = s.bashJobs;
     const sequential = calls.some((c) => {
       const t = tools.find(c.part.name);
       return t === null || t.mutating;
@@ -541,6 +554,7 @@ export class AgentLoop {
       if (abort.aborted) return;
       const p = c.part;
       const why = tools.checkInput(p.name, p.inputJson);
+      ctx.callId = p.callId;
       const onStart = listener.onToolStart;
       if (onStart !== null) onStart(p.callId, p.name, p.inputJson.length > 0 ? p.inputJson : "{}");
       let inputJson = p.inputJson.length > 0 ? p.inputJson : "{}";

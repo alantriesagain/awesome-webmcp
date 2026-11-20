@@ -5,7 +5,8 @@
 // the schema; one flat class and a switch, since an overridden method cannot be async natively.
 import { listOf, listText, objectText, parseJson, recordOf, str, strs } from "@lightstart/lib/json.ts";
 import { Abort } from "../loop/abort.ts";
-import { bashTool } from "./bash.ts";
+import { bashOutputTool, bashStopTool, bashTool } from "./bash.ts";
+import { BashJobs } from "./proc.ts";
 import { editTool } from "./edit.ts";
 import { globTool } from "./glob.ts";
 import { grepTool } from "./grep.ts";
@@ -39,6 +40,11 @@ export class ToolContext {
   /** The session the call belongs to, and whether its client takes extension UI. */
   sessionId = "";
   hasUI = false;
+  /** The call's id, what its output file is named after. */
+  callId = "";
+  /** Where Bash writes a call's whole output ("" for none), and the session's background commands. */
+  outputDir = "";
+  jobs: BashJobs | null = null;
 
   constructor(cwd: string, mode: string, reads: Set<string>) {
     this.cwd = cwd;
@@ -156,14 +162,18 @@ const SEARCH_SCHEMA = '{"type":"object","properties":{"query":{"type":"string"},
 const TASK_SCHEMA = '{"type":"object","properties":{"description":{"type":"string"},"prompt":{"type":"string","description":"The whole task; the subagent sees nothing of this conversation"},"subagent_type":{"type":"string","description":"general-purpose"}},"required":["description","prompt"]}';
 const LS_SCHEMA = '{"type":"object","properties":{"path":{"type":"string","description":"Folder to list (the folder by default)"}},"required":[]}';
 const READ_SCHEMA = '{"type":"object","properties":{"file_path":{"type":"string","description":"Absolute or relative path"},"offset":{"type":"integer","description":"Line to start from, 1-based"},"limit":{"type":"integer","description":"How many lines (2000 at most)"}},"required":["file_path"]}';
-const BASH_SCHEMA = '{"type":"object","properties":{"command":{"type":"string"},"timeout":{"type":"integer","description":"Timeout in ms (120000 default, 600000 max)"},"description":{"type":"string","description":"What it does, in a few words"}},"required":["command"]}';
+const BASH_SCHEMA = '{"type":"object","properties":{"command":{"type":"string"},"timeout":{"type":"integer","description":"Timeout in ms (120000 default, 600000 max; 4 h for a background command)"},"description":{"type":"string","description":"What it does, in a few words"},"run_in_background":{"type":"boolean","description":"Start it and answer at once; its end arrives as a message"}},"required":["command"]}';
+const BASH_OUTPUT_SCHEMA = '{"type":"object","properties":{"id":{"type":"string","description":"The background command, such as bash-1"},"since":{"type":"integer","description":"Start at this character offset"},"tail":{"type":"integer","description":"Only the last N lines"}},"required":["id"]}';
+const BASH_STOP_SCHEMA = '{"type":"object","properties":{"id":{"type":"string","description":"The background command, such as bash-1"}},"required":["id"]}';
 
 /** The built-in tools. */
 export const builtInTools = (): Tool[] => [
   new Tool("Read", "Read a file, its lines numbered: 16 KB without a limit, 2000 lines at most with one, 2000 characters per line.", READ_SCHEMA, "read", false),
   new Tool("Write", "Write a whole file, its folders made. Read an existing file first; prefer Edit for part of it.", WRITE_SCHEMA, "edit", true),
   new Tool("Edit", "Replace an exact string in a file; old_string must occur once (add context), unless replace_all in a file you have read.", EDIT_SCHEMA, "edit", true),
-  new Tool("Bash", "Run a bash command in the folder; 30 KB of output kept, its start and end. No interactive commands.", BASH_SCHEMA, "execute", true),
+  new Tool("Bash", "Run a bash command in the folder. Its whole output goes to a file under the harness store; 30 KB is kept inline. No interactive commands. With run_in_background it answers at once and its end arrives as a message.", BASH_SCHEMA, "execute", true),
+  new Tool("BashOutput", "Read a background command's output so far, whether it runs, and its exit code when done. Give since (characters) or tail (lines) to read part of it.", BASH_OUTPUT_SCHEMA, "read", false),
+  new Tool("BashStop", "Stop a background command, killing its process group.", BASH_STOP_SCHEMA, "execute", true),
   new Tool("Grep", "Search files for a regex: file, line number and line, 200 matches at most.", GREP_SCHEMA, "search", false),
   new Tool("Glob", "Find files by a glob over relative paths, newest first, 500 at most.", GLOB_SCHEMA, "search", false),
   new Tool("LS", "List a folder's entries (folders end with a slash).", LS_SCHEMA, "read", false),
@@ -173,7 +183,7 @@ export const builtInTools = (): Tool[] => [
   new Tool("WebSearch", "Search the web: numbered results with titles, addresses and snippets; read one with WebFetch.", SEARCH_SCHEMA, "fetch", false),
 ];
 
-const READ_ONLY = ["Read", "Grep", "Glob", "LS", "Skill", "WebFetch", "WebSearch"];
+const READ_ONLY = ["Read", "Grep", "Glob", "LS", "Skill", "WebFetch", "WebSearch", "BashOutput"];
 
 export class ToolSet {
   readonly tools: Tool[];
@@ -266,6 +276,10 @@ export class ToolSet {
         return editTool(input, ctx);
       case "Bash":
         return bashTool(input, ctx, abort, onOutput);
+      case "BashOutput":
+        return bashOutputTool(input, ctx);
+      case "BashStop":
+        return bashStopTool(input, ctx);
       case "Grep":
         return grepTool(input, ctx);
       case "Glob":

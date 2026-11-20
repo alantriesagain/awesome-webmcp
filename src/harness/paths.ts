@@ -27,6 +27,11 @@ export class HarnessPaths {
     return join(this.root(), "logs");
   }
 
+  /** Where a session's Bash calls keep their whole output, a file per call. */
+  outputDir(session: string): string {
+    return join(this.root(), "output", session);
+  }
+
   /** The sessions of `folder`: its path with every `/` made `-`, as Claude Code keys its projects. */
   sessionsDir(folder: string): string {
     return join(this.root(), "sessions", folder.replace(/[^A-Za-z0-9]/g, "-"));

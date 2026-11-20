@@ -175,10 +175,10 @@ const main = async (): Promise<void> => {
     return out.join("|");
   };
   await until(() => available().startsWith("harness|Read  ×1|Write|Edit  ×1|Bash  ×1"));
-  eq("the tools command answers the Available tab, with the calls counted", available().split("|").slice(0, 8).join("|"), "harness|Read  ×1|Write|Edit  ×1|Bash  ×1|Grep|Glob|LS");
+  eq("the tools command answers the Available tab, with the calls counted", available().split("|").slice(0, 8).join("|"), "harness|Read  ×1|Write|Edit  ×1|Bash  ×1|BashOutput|BashStop|Grep");
   eq("plan mode", c.setMode("plan"), "");
-  await until(() => available().startsWith("harness|Read  ×1|Grep"));
-  eq("plan mode offers the read-only tools", available().split("|").slice(0, 9).join("|"), "harness|Read  ×1|Grep|Glob|LS|Skill  ×1|WebFetch|WebSearch|widecode  MCP");
+  await until(() => available().startsWith("harness|Read  ×1|BashOutput|Grep"));
+  eq("plan mode offers the read-only tools", available().split("|").slice(0, 9).join("|"), "harness|Read  ×1|BashOutput|Grep|Glob|LS|Skill  ×1|WebFetch|WebSearch");
 
   const sessions = sent().split('"method":"session/new"').length - 1;
   const firstSession = c.sessionId;

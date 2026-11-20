@@ -33,6 +33,7 @@ import { replayPaced, replayUpdates } from "../session/replay.ts";
 import { SessionFile, SessionStore, sessionsJson } from "../session/store.ts";
 import { titleFor } from "../session/title.ts";
 import { McpLink, McpListing } from "../tools/mcp.ts";
+import { BashJob, backgroundEndText } from "../tools/proc.ts";
 import { Tool, ToolOutcome, ToolSet } from "../tools/tool.ts";
 import { WebSettings } from "../tools/web.ts";
 import { parseRules, rulesIn } from "../tools/permissions.ts";
@@ -205,6 +206,7 @@ export class AcpAgent {
   async shutdown(reason = "quit"): Promise<void> {
     const work: Promise<void>[] = [];
     for (const s of this.sessions.values()) {
+      s.loop.bashJobs.stopAll();
       const ext = s.ext;
       if (ext === null) continue;
       work.push(
@@ -222,8 +224,9 @@ export class AcpAgent {
     this.stop();
   }
 
-  /** Stop the plugins' folder watchers (the daemon is ending). */
+  /** Stop the sessions' background commands and the plugins' folder watchers (the daemon is ending). */
   stop(): void {
+    for (const s of this.sessions.values()) s.loop.bashJobs.stopAll();
     this.extensions.stop();
   }
 
@@ -593,6 +596,9 @@ export class AcpAgent {
     s.window = m !== null ? m.window : DEFAULT_WINDOW;
     s.loop.window = s.window;
     this.loop.extras = m === null || this.registry.extrasOf(m);
+    // A background command's end reaches the session as a user message, as pi.sendUserMessage does.
+    s.loop.outputDir = this.paths.outputDir(s.id);
+    s.loop.bashJobs.onEnd = (job: BashJob) => this.sendUserMessage(s, JSON.stringify(backgroundEndText(job)), "{}");
   }
 
   /** A session's answer to new, load, resume and fork: its id and options; then what it offers. */
