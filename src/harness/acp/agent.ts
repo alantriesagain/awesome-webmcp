@@ -113,6 +113,8 @@ export class HarnessSession {
   pendingCustomStarts: Message[] = [];
   /** The messages the turn in progress added. */
   turnMessages: Message[] = [];
+  /** What the turn's side requests used (a subagent's, WebFetch's reading of a page), counted into its answer's usage. */
+  turnSubUsage = new Usage();
   sentSeq = 0;
 
   constructor(id: string, options: ConfigOptions) {
@@ -1052,6 +1054,7 @@ export class AcpAgent {
     s.promptIds = ids;
     s.abort = new Abort();
     s.turnMessages = [];
+    s.turnSubUsage = new Usage();
     this.apply(s);
     s.loop.system = this.blocksFor(s);
     const ext = s.ext;
@@ -1124,6 +1127,7 @@ export class AcpAgent {
     };
     // A subagent's requests: their cost counts, the context shown stays the session's.
     listener.onSubUsage = (usage: Usage) => {
+      s.turnSubUsage.add(usage);
       const cost = this.costOf(s, usage);
       if (cost < 0) return;
       s.costUsd = (s.costUsd < 0 ? 0 : s.costUsd) + cost;
@@ -1203,7 +1207,11 @@ export class AcpAgent {
       }
     }
     const stop = end.stopReason === CANCELLED ? "cancelled" : end.stopReason === FAILED ? "end_turn" : end.stopReason;
-    const result = '{"stopReason":' + JSON.stringify(stop) + ',"usage":{"inputTokens":' + String(end.usage.input + end.usage.cacheRead + end.usage.cacheWrite) + ',"cachedReadTokens":' + String(end.usage.cacheRead) + ',"cachedWriteTokens":' + String(end.usage.cacheWrite) + ',"outputTokens":' + String(end.usage.output) + "}}";
+    // The turn's usage: its own requests and its side requests', so a client that prices tokens prices all it spent.
+    const u = new Usage();
+    u.add(end.usage);
+    u.add(s.turnSubUsage);
+    const result = '{"stopReason":' + JSON.stringify(stop) + ',"usage":{"inputTokens":' + String(u.input + u.cacheRead + u.cacheWrite) + ',"cachedReadTokens":' + String(u.cacheRead) + ',"cachedWriteTokens":' + String(u.cacheWrite) + ',"outputTokens":' + String(u.output) + "}}";
     for (const id of ids) {
       if (end.stopReason === FAILED) this.server.refuse(id, -32603, end.error);
       else this.server.answer(id, result);

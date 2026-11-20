@@ -74,6 +74,9 @@ const main = async (): Promise<void> => {
   const calls = out.filter((l2) => l2.includes('"sessionUpdate":"tool_call"'));
   ok("one call reaches the client: Task, with the subagent's type", calls.length === 1 && calls[0].includes('"title":"Task","kind":"other","status":"in_progress","rawInput":{"description":"Find the port","prompt":"look for the port in a.txt","subagent_type":"general-purpose"}'));
   ok("its end carries the report", out.some((l2) => l2.includes('"sessionUpdate":"tool_call_update"') && l2.includes('"text":"The port is 8443."')));
+  // The turn's two requests (10 in, 3 out each, the fake's default) and the subagent's two (10 and 40 in, 3 and 6 out).
+  const answer = out.find((l2) => l2.includes('"id":2,')) ?? "";
+  eq("the turn's usage counts the subagent's requests too", /"usage":(\{[^}]*\})/.exec(answer)?.[1] ?? answer, '{"inputTokens":70,"cachedReadTokens":0,"cachedWriteTokens":0,"outputTokens":15}');
   rmSync(folder, { recursive: true, force: true });
   done();
 };
