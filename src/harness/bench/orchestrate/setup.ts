@@ -67,6 +67,10 @@ export const createSetup = (task: OrchestrateTask, partRoot: string, spec: Setup
   if (existsSync(auth)) symlinkSync(auth, join(setup.store, "auth.json"));
   writeFileSync(join(setup.store, "trusted.json"), JSON.stringify([setup.folder], null, 2) + "\n");
   writeFileSync(join(setup.store, "config.json"), configText(spec));
+  // Widecode's approval mode "full": no orchestrator stops on a permission question nobody answers.
+  // Claude Code asked one on its first command writing outside the folder and waited out the run;
+  // the harness met none, so the comparison measured the question. widecode keeps the mode in state.json.
+  writeFileSync(join(setup.store, "state.json"), JSON.stringify({ approval: "full" }) + "\n");
   setup.log = join(setup.store, "app.log");
   return setup;
 };

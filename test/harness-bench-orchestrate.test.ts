@@ -52,6 +52,7 @@ const main = (): void => {
   const setup = createSetup(easy, partRoot, setupSpec);
   eq("a run's folder holds each part", readdirSync(setup.folder).filter((n) => !n.startsWith(".")).sort().join("+"), "add-flag+edit-json");
   eq("its guidance is the file it was given", readFileSync(join(setup.folder, ".widecode", "prompt.md"), "utf8"), "the guidance");
+  eq("its store starts in the full approval mode, so no orchestrator waits on a question", readFileSync(join(setup.store, "state.json"), "utf8").trim(), '{"approval":"full"}');
   const config = recordOf(JSON.parse(readFileSync(join(setup.store, "config.json"), "utf8")));
   const plugins = config !== null ? recordOf(config["plugins"]) : null;
   const acp = plugins !== null ? recordOf(plugins["acp"]) : null;
