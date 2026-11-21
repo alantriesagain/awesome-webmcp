@@ -163,6 +163,9 @@ export const readClaudeTranscript = (text: string): ClaudeMeasures => {
   let processCost = 0;
   let sawResult = false;
   const resultUsage = new TokenUse();
+  // Claude Code writes an assistant message's content blocks as lines of their own, each with the
+  // message's usage: a request counts once, by its message id.
+  const counted = new Set<string>();
   for (const line of text.split("\n")) {
     const r = parseLine(line);
     if (r === null) continue;
@@ -172,7 +175,11 @@ export const readClaudeTranscript = (text: string): ClaudeMeasures => {
       const message = recordOf(r["message"]);
       if (message === null) continue;
       const usage = recordOf(message["usage"]);
-      if (usage !== null) addUsage(out.usage, usage);
+      const id = str(message["id"]);
+      if (usage !== null && (id.length === 0 || !counted.has(id))) {
+        if (id.length > 0) counted.add(id);
+        addUsage(out.usage, usage);
+      }
       for (const value of listOf(message["content"])) {
         const block = recordOf(value);
         if (block === null || str(block["type"]) !== "tool_use") continue;
