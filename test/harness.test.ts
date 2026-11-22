@@ -12,7 +12,7 @@ import { request, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import { mergePlugins } from "../src/services/harness.ts";
+import { fixedPrompt, mergePlugins } from "../src/services/harness.ts";
 import { Store } from "../src/services/store.ts";
 import type { Widecode } from "../src/compose.ts";
 import { closeWidecode, openWidecode } from "./support/app.ts";
@@ -135,6 +135,12 @@ const main = async (): Promise<void> => {
 
   eq("the project's sections over the user's, per id", JSON.stringify(mergePlugins({ a: { x: 1 }, b: false, d: true }, { b: { y: 2 }, c: true })), '{"a":{"x":1},"b":{"y":2},"d":true,"c":true}');
   eq("one side alone is the other", JSON.stringify([mergePlugins(null, { a: 1 }), mergePlugins({ a: 1 }, null), mergePlugins(null, null)]), "[{\"a\":1},{\"a\":1},null]");
+
+  const withTask = fixedPrompt(["Task", "screen"], true);
+  ok("the fixed paragraph names widecode an orchestrator and the lead agent", withTask.startsWith("You are running inside widecode") && withTask.includes("agent orchestrator"));
+  ok("with Task, it says the Task tool starts subagents on other models in sandboxes", withTask.includes("Task tool starts subagents"));
+  const withoutTask = fixedPrompt(["screen"], true);
+  ok("a tool list without Task: the orchestrator paragraph, no Task tool", withoutTask.startsWith("You are running inside widecode") && withoutTask.includes("agent orchestrator") && !withoutTask.includes("Task tool"));
 
   // The harness plugin's tools, called as Claude Code calls them (with its token), over a painted screen.
   const root = new TRoot();

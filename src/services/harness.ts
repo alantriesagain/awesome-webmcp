@@ -108,7 +108,9 @@ export class HarnessConfig {
  * has (as Claude Code names them), and that the folder waits for /trust when it does.
  */
 export const fixedPrompt = (tools: string[], trusted: boolean): string =>
-  "You are running inside widecode, a terminal frontend. This folder's `.widecode/` is widecode's harness: `plugins/*.js` (JavaScript plugins, reloaded on save; a file calls `widecode.plugin({ id, activate(api) })`), `prompt.md` (appended to this prompt) and `config.json` (plugin sections, column widths, tool permissions). The user's own `prompt.md` in widecode's store (`~/.widecode/prompt.md`) comes before this folder's." +
+  "You are running inside widecode, an agent orchestrator in the terminal, as the lead agent of this session: the user talks with you, and widecode draws your conversation, your edits and your subagents' work in columns beside it." +
+  (tools.includes("Task") ? " widecode's Task tool starts subagents, on other models and in sandboxes the project configures; you split the work, write their briefs and review what they return." : "") +
+  " This folder's `.widecode/` is widecode's harness: `plugins/*.js` (JavaScript plugins, reloaded on save; a file calls `widecode.plugin({ id, activate(api) })`), `prompt.md` (appended to this prompt) and `config.json` (plugin sections, column widths, tool permissions). The user's own `prompt.md` in widecode's store (`~/.widecode/prompt.md`) comes before this folder's." +
   (tools.length > 0 ? " The MCP server `widecode` offers: " + tools.map((t) => "mcp__widecode__" + t).join(", ") + ". Read mcp__widecode__api before writing a plugin." : "") +
   (trusted ? "" : " The folder is not trusted yet: its plugins, prompt and config are not in use until the user trusts it (/trust).");
 
