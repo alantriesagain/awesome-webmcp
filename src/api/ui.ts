@@ -4,7 +4,13 @@
 import { PreludePart } from "@lightstart/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
 import { Language, addLanguage } from "@lightstart/highlight/registry.ts";
-import { TOKENIZERS, tokenizerFor } from "@lightstart/highlight/tokenizers.ts";
+import type { Peek } from "@lightstart/highlight";
+import { HlState, Token } from "@lightstart/highlight";
+import { cssToken } from "@lightstart/highlight/css.ts";
+import { htmlToken } from "@lightstart/highlight/html.ts";
+import { jsToken } from "@lightstart/highlight/javascript.ts";
+import { fencedLine, streamLine } from "@lightstart/highlight/line.ts";
+import { markdownLine } from "@lightstart/highlight/markdown.ts";
 import { BandPart, MenuEntry, SegmentContext, SegmentDef } from "../screen/contributions.ts";
 import { Command, Suggestion } from "@lightstart/kernel/commands.ts";
 import { Action } from "@lightstart/kernel/actions.ts";
@@ -24,6 +30,19 @@ interface Suggested {
   label?: unknown;
   detail?: unknown;
 }
+
+const TOKENIZERS = ["javascript", "typescript", "css", "html", "markdown"];
+
+type Tokenize = (text: string, state: HlState, peek: Peek) => Token[];
+
+const tokenizerFor = (name: string): Tokenize | null => {
+  if (name === "javascript") return (text: string, state: HlState, _peek: Peek): Token[] => streamLine(text, state, (stream, current) => jsToken(stream, current, false));
+  if (name === "typescript") return (text: string, state: HlState, _peek: Peek): Token[] => streamLine(text, state, (stream, current) => jsToken(stream, current, true));
+  if (name === "css") return (text: string, state: HlState, _peek: Peek): Token[] => streamLine(text, state, cssToken);
+  if (name === "html") return (text: string, state: HlState, _peek: Peek): Token[] => streamLine(text, state, htmlToken);
+  if (name === "markdown") return (text: string, state: HlState, peek: Peek): Token[] => markdownLine(text, state, fencedLine, peek).tokens;
+  return null;
+};
 
 /** A completer's answer (JSON text of an array) as suggestions; strings are their own label. */
 /** What runs plugin `owner`'s function `fn` for a key (its fields as JSON) and a count; true when the function answered true. */

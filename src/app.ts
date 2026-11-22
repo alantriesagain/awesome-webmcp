@@ -26,7 +26,7 @@ export default defineApp({
   },
   stores: {
     main: {
-      kind: (args) => (args.flag("ephemeral") ? "memory" : "jsonl"),
+      adapter: (args) => (args.flag("ephemeral") ? "memory" : "jsonl"),
       at: (args) => join(resolve(args.string("dir") ?? process.cwd()), ".widecode"),
     },
   },

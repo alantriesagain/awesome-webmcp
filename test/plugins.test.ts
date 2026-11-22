@@ -21,7 +21,7 @@ import type { Widecode } from "../src/compose.ts";
 import { Caret, Clip, DEFAULT_STYLE, KeyEvent, Screen, TRoot, frames, layout, mount, paint, unmount } from "@lightstart/light/native/tui";
 import { Line, LineSource, Run } from "@lightstart/tui/line-view.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
-import { LANGUAGES } from "@lightstart/highlight/languages.ts";
+import { GRAMMARS as LANGUAGES } from "@lightstart/highlight/grammar.ts";
 import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const W = 200;

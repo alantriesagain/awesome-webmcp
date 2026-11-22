@@ -31,8 +31,8 @@ const files = (existsSync(dir) ? readdirSync(dir).sort() : [])
   .filter((f) => f !== null);
 /** The languages plugin's list, from the package's one table. */
 const languagesOf = (code) => {
-  const table = readFileSync("node_modules/@lightstart/highlight/languages.ts", "utf8");
-  const re = /new LanguageEntry\("([^"]+)", (\[[^\]]*\]), (\[[^\]]*\])\)/g;
+  const table = readFileSync("node_modules/@lightstart/highlight/grammar.ts", "utf8");
+  const re = /\{ id: "([^"]+)", extensions: (\[[^\]]*\]), fences: (\[[^\]]*\]),/g;
   const lines = [];
   for (let m = re.exec(table); m !== null; m = re.exec(table)) lines.push("  { id: " + JSON.stringify(m[1]) + ", extensions: " + m[2] + ", fences: " + m[3] + ", tokenizer: " + JSON.stringify(m[1]) + " },");
   return code.replace(/const LANGUAGES(?:: [^=]+)? = \[\n[\s\S]*?\n\];/, "const LANGUAGES = [\n" + lines.join("\n") + "\n];");
