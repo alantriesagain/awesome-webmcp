@@ -24,3 +24,12 @@ Open issues found along the way, each with what is known.
 - A malformed key in the box's credentials file refuses the whole box (`box.mjs`), so a bad Claude
   token also stops opencode subagents. A bad key could be left out with a warning naming it, the
   box starting with the keys that are valid.
+- The orchestration benchmark's next round (`src/harness/bench/NOTES.md`): every task with repeats,
+  Claude Code against the harness on Opus. Claude Code's cost on the subscription is unknown in
+  its records; compute it from its tokens with the harness's price table. A run waiting on a
+  question should end at once as such, not wait out its time.
+- The harness as an orchestrator still lacks: a notice when a file it read changes on disk (a
+  subagent's edit, then a Write from memory, loses the subagent's work), stdio MCP servers (HTTP
+  only today), a model or a read-only kind for its own Task, timed wake-ups, and PDF reading.
+- The single benchmark's `--user-store` aside, a clean run makes an empty HOME under /tmp
+  (`harness-bench-home-*`) when the user has skills, and some are left behind after the run.
