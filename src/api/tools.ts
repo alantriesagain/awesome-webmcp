@@ -31,22 +31,33 @@ export const answerTools = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
     }
     case "tools.server": {
       // Where the server listens, the header that lets plugin `owner`'s agent in, the tools it sees with their kind of call, and a config file naming the server, once it listens; null with no tools for it, or when it cannot listen.
-      const owner = str(a[0]);
-      const fn = num(a[1]);
-      rt.settle(
-        owner,
-        fn,
-        mcp.start().then((url: string) => {
-          const tools: string[] = [];
-          for (const t of mcp.visible(owner)) tools.push(objectText(["name", "category"], [json(t.name), json(t.category)]));
-          if (url.length === 0 || tools.length === 0) return "null";
-          return objectText(["url", "headers", "tools", "file"], [json(url), '[{"name":"Authorization","value":' + json("Bearer " + mcp.tokenFor(owner)) + "}]", "[" + tools.join(",") + "]", json(mcp.configFile(owner))]);
-        }),
-      );
-      return answer(null);
+      return serveTool(rt, str(a[0]), [], num(a[1]));
+    }
+    case "tools.serverFor": {
+      // The same for plugin `owner`, limited to the tool names in `only` (every name when it is empty).
+      return serveTool(rt, str(a[0]), strs(a[1]), num(a[2]));
     }
   }
   return null;
+};
+
+/** Answer `tools.server` and `tools.serverFor`: the server for plugin `owner`, its tools limited to `only` when a name is given, settled through `fn`. */
+const serveTool = (rt: JsRuntime, owner: string, only: string[], fn: number): HostAnswer => {
+  const mcp = rt.mcp;
+  rt.settle(
+    owner,
+    fn,
+    mcp.start().then((url: string) => {
+      const tools: string[] = [];
+      for (const t of mcp.visible(owner)) {
+        if (only.length > 0 && !only.includes(t.name)) continue;
+        tools.push(objectText(["name", "category"], [json(t.name), json(t.category)]));
+      }
+      if (url.length === 0 || tools.length === 0) return "null";
+      return objectText(["url", "headers", "tools", "file"], [json(url), '[{"name":"Authorization","value":' + json("Bearer " + mcp.tokenFor(owner, only)) + "}]", "[" + tools.join(",") + "]", json(mcp.configFile(owner, only))]);
+    }),
+  );
+  return answer(null);
 };
 
 /** The `tools` namespace of the plugin API, its JS side: the calls these answers take. */
@@ -63,4 +74,5 @@ export const NAMESPACE_TOOLS = new PreludePart("tools", `        add: (t) =>
             }
           }), Array.from(t.except ?? [], String)),
         server: () => later("tools.server", id),
+        serverFor: (names) => later("tools.serverFor", id, Array.from(names ?? [], String)),
 `);

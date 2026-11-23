@@ -688,6 +688,8 @@ declare namespace widecode {
       add(tool: Tool): void;
       /** Where the server listens, the headers that let this plugin's agent in, the tools it sees and a config file naming the server (Claude Code's --mcp-config shape, readable by the user alone; "" when it could not be written), once it listens; null with no tools for it, or when it cannot listen. */
       server(): Promise<{ url: string; headers: { name: string; value: string }[]; tools: { name: string; category: string }[]; file: string } | null>;
+      /** The same server for this plugin's agent, its tools limited to the ones named (every tool it sees when the list is empty). */
+      serverFor(names: string[]): Promise<{ url: string; headers: { name: string; value: string }[]; tools: { name: string; category: string }[]; file: string } | null>;
     };
     /** Call `run` every `ms` while the plugin runs. */
     every(ms: number, run: () => void): void;

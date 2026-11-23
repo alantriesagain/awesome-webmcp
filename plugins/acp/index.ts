@@ -50,6 +50,34 @@ const EVENT_LOG_CHARS = 1024 * 1024;
 const HISTORY_LOG_CHARS = 8 * 1024 * 1024;
 /** Log lines a run keeps in its persisted transcript, as the conversation keeps them under its call. */
 const MAX_LOG_LINES = 200;
+/**
+ * The command a bwrap subagent runs in front of its agent when widecode offers it HostAction: it
+ * listens on the run's MCP port inside the jail (the next one over when the box's proxy port takes
+ * it) and forwards each connection through the box's proxy socket to the host's MCP server, as a
+ * CONNECT tunnel. The proxy lets in the host's MCP port for the run; nothing else on the host's
+ * loopback is reachable. Then it starts the agent, passing signals on and ending with it.
+ */
+const MCP_FORWARD =
+  'const net=require("net"),cp=require("child_process");' +
+  'const sock=process.argv[1],listen=Number(process.argv[2]),port=Number(process.argv[3]),cmd=process.argv.slice(4);' +
+  "const server=net.createServer((client)=>{client.on('error',()=>undefined);" +
+  "const up=net.connect(sock);let head='',open=false;" +
+  "up.on('error',()=>client.destroy());" +
+  "up.on('connect',()=>up.write('CONNECT 127.0.0.1:'+port+' HTTP/1.1\\r\\nHost: 127.0.0.1:'+port+'\\r\\n\\r\\n'));" +
+  "up.on('data',(chunk)=>{if(open)return;head+=chunk.toString('latin1');" +
+  "const end=head.indexOf('\\r\\n\\r\\n');if(end<0)return;open=true;" +
+  "if(!head.startsWith('HTTP/1.1 200')){client.destroy();up.destroy();return;}" +
+  "const rest=Buffer.from(head.slice(end+4),'latin1');if(rest.length>0)client.write(rest);" +
+  "up.removeAllListeners('data');client.pipe(up);up.pipe(client);" +
+  "client.on('close',()=>up.destroy());up.on('close',()=>client.destroy());});});" +
+  "let begun=false;" +
+  "const begin=()=>{if(begun)return;begun=true;const child=cp.spawn(cmd[0],cmd.slice(1),{stdio:'inherit'});" +
+  "const stop=()=>{try{server.close();}catch{}};" +
+  "for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>{try{child.kill(signal);}catch{}});" +
+  "child.on('error',(e)=>{process.stderr.write('• '+e.message+'\\n');stop();process.exit(1);});" +
+  "child.on('exit',(code,signal)=>{stop();process.exit(signal?1:code||0);});};" +
+  "server.on('error',(e)=>{if(e&&e.code==='EADDRINUSE')begin();else{process.stderr.write('• '+e.message+'\\n');process.exit(1);}});" +
+  "server.listen(listen,'127.0.0.1',()=>begin());";
 /** How long an idle background run keeps its process for SendMessage, and how many such processes it keeps at most. */
 const IDLE_MS = 120000;
 const MAX_IDLE_RUNS = 6;
@@ -110,6 +138,10 @@ class SubagentRun {
   private readonly onDone: () => void;
   private readonly onIdle: (idle: boolean) => void;
   private proc: widecode.ProcessHandle | null = null;
+  /** The MCP server port widecode's HostAction is served on (0 for none), its headers, and the URL this run's agent gets for it. */
+  private mcpPort = 0;
+  private mcpHeaders: { name: string; value: string }[] = [];
+  private servedUrl = "";
   /** Whether this run holds a VM run in the box's count, released as it ends. */
   private vmRun = false;
   private seq = 0;
@@ -300,6 +332,37 @@ class SubagentRun {
     return n > 0;
   }
 
+  /** The box's proxy socket on the host: the path `box.mjs` binds into the jail. */
+  private proxySocket(): string {
+    const dir = this.api.fs.env("WIDECODE_BOX_DIR");
+    return (dir.length > 0 ? dir : this.api.fs.home() + "/.cache/widecode/box") + "/proxy.sock";
+  }
+
+  /** The port an MCP URL names, 0 when it names none. */
+  private portOf(url: string): number {
+    const colon = url.lastIndexOf(":");
+    if (colon < 0) return 0;
+    const slash = url.indexOf("/", colon);
+    const port = Number(url.slice(colon + 1, slash > 0 ? slash : url.length));
+    return port > 0 && port < 65536 ? port : 0;
+  }
+
+  /**
+   * Find where widecode serves HostAction, for this run's agent: the server's port, its headers and
+   * the URL, which the launch rewrites to the forwarded port the box gives it. A project with no
+   * host action gets no server, as before.
+   */
+  private prepareMcp(): Promise<void> {
+    return this.api.tools.serverFor(["HostAction"]).then((s) => {
+      if (s === null) return;
+      const port = this.portOf(s.url);
+      if (port === 0) return;
+      this.mcpPort = port;
+      this.mcpHeaders = s.headers;
+      this.servedUrl = s.url;
+    });
+  }
+
   start(prompt: string): Promise<string> {
     this.runSession = this.api.agent.sessionId();
     this.busy = true;
@@ -307,6 +370,17 @@ class SubagentRun {
     this.emit({ type: "facts", id: this.callId, category: "agent", summary: this.target.name + ": " + this.description, agentType: this.target.name, agentTask: this.description, agentPrompt: prompt });
     this.emit({ type: "task", id: this.callId, taskId: this.callId, description: this.description, agentType: this.target.name, background: this.background });
     this.flush();
+    if (this.target.box.length === 0) return this.begin(prompt);
+    return this.prepareMcp().then(
+      () => this.begin(prompt),
+      (e: unknown) => {
+        this.fail("the host action server failed: " + (e instanceof Error ? e.message : String(e)));
+        return this.promise;
+      },
+    );
+  }
+
+  private begin(prompt: string): Promise<string> {
     if (this.target.box.length > 0) {
       if (this.box === null) {
         this.fail("no box is configured for " + this.target.name);
@@ -314,6 +388,7 @@ class SubagentRun {
       }
       const kind = this.target.box;
       if (kind === "vm") this.beginVm();
+      if (this.mcpPort > 0) this.box.setLocalMcp(this.mcpPort);
       this.emit({ type: "taskUpdate", id: this.callId, taskId: this.callId, status: "running", summary: "starting the box" });
       this.flush();
       return this.box.ensure(this.boxFolder, kind).then((why) => {
@@ -331,13 +406,25 @@ class SubagentRun {
   private launch(prompt: string, boxKind: string): Promise<string> {
     const command = resolved(this.api, this.entry.command);
     let words = command;
+    this.servedUrl = this.mcpPort > 0 ? "http://127.0.0.1:" + String(this.mcpPort) + "/mcp" : "";
     if (boxKind.length > 0 && this.box !== null) {
       if (boxKind === "bwrap") {
         const projects: string[] = ["--project", this.boxFolder];
         for (const p of this.box.config.projects) projects.push("--project", p);
-        words = ["node", this.box.config.script, "jail", "--proxy-port", String(this.box.config.proxyPort), ...projects, "--", ...command];
+        // The jail-inner already holds the proxy port inside; the forwarder takes another if they collide.
+        const local = this.mcpPort === this.box.config.proxyPort ? (this.mcpPort < 65535 ? this.mcpPort + 1 : this.mcpPort - 1) : this.mcpPort;
+        if (this.mcpPort > 0) this.servedUrl = "http://127.0.0.1:" + String(local) + "/mcp";
+        const run = this.mcpPort > 0 ? ["node", "-e", MCP_FORWARD, this.proxySocket(), String(local), String(this.mcpPort), ...command] : command;
+        words = ["node", this.box.config.script, "jail", "--proxy-port", String(this.box.config.proxyPort), ...projects, "--", ...run];
       } else {
-        words = ["node", this.box.config.script, "ssh", "--forward-proxy", String(this.box.config.proxyPort), "--", ...command];
+        const extra: string[] = [];
+        if (this.mcpPort > 0) {
+          // A port of its own per run, so two subagents in the one guest never ask for the same forward.
+          const remote = 20000 + Math.floor(Math.random() * 40000);
+          extra.push("--forward", String(remote) + ":" + String(this.mcpPort));
+          this.servedUrl = "http://127.0.0.1:" + String(remote) + "/mcp";
+        }
+        words = ["node", this.box.config.script, "ssh", "--forward-proxy", String(this.box.config.proxyPort), ...extra, "--", ...command];
       }
     }
     const p = this.api.process.spawn(words, { cwd: this.cwd }, {
@@ -469,7 +556,8 @@ class SubagentRun {
   }
 
   private newSession(prompt: string): void {
-    this.rpc("session/new", { cwd: this.cwd, mcpServers: [] }, (result, error) => {
+    const servers: unknown[] = this.mcpPort > 0 && this.servedUrl.length > 0 ? [{ type: "http", name: "widecode", url: this.servedUrl, headers: this.mcpHeaders }] : [];
+    this.rpc("session/new", { cwd: this.cwd, mcpServers: servers }, (result, error) => {
       if (result === null) {
         this.fail(error.length > 0 ? error : "no session");
         return;

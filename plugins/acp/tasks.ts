@@ -13,13 +13,14 @@ export interface TaskTarget {
   box: string;
 }
 
-/** The box a boxed target runs in: the box script, the host proxy's port, the memory the box gets, the folders it shares beside the session's, its backend kind and, for the VM, the idle minutes before it stops. */
+/** The box a boxed target runs in: the box script, the host proxy's port, the memory the box gets, the folders it shares beside the session's, its backend kind, the domains its proxy allows beside the defaults (["*"] for any host) and, for the VM, the idle minutes before it stops. */
 interface BoxConfig {
   script: string;
   proxyPort: number;
   memory: number;
   projects: string[];
   kind: "bwrap" | "vm";
+  allow: string[];
   idleMinutes: number;
 }
 
@@ -44,7 +45,7 @@ export const tasksOf = (section: unknown): TasksConfig => {
     const memory = typeof b.memory === "number" && b.memory >= 512 ? Math.floor(b.memory) : 4096;
     const idleMinutes = typeof b.idleMinutes === "number" && b.idleMinutes > 0 ? b.idleMinutes : 10;
     kind = str(b.kind) === "vm" ? "vm" : "bwrap";
-    out.box = { script: str(b.script), proxyPort, memory, projects: list(b.projects).filter((w): w is string => typeof w === "string" && w.length > 0), kind, idleMinutes };
+    out.box = { script: str(b.script), proxyPort, memory, projects: list(b.projects).filter((w): w is string => typeof w === "string" && w.length > 0), kind, allow: list(b.allow).filter((w): w is string => typeof w === "string" && w.length > 0), idleMinutes };
   }
   const targets = obj(t?.targets);
   if (targets !== null)
@@ -74,6 +75,8 @@ export class BoxRunner {
   private readonly api: widecode.Api;
   readonly config: BoxConfig;
   private proxy: widecode.ProcessHandle | null = null;
+  /** The local MCP port the running proxy lets in (0 for none): a boxed subagent's HostAction calls go through it. */
+  private localMcp = 0;
   private chain: Promise<void> = Promise.resolve();
   private vmRuns = 0;
   private idleGen = 0;
@@ -121,9 +124,23 @@ export class BoxRunner {
     });
   }
 
+  /** If a boxed run brings HostAction, the proxy must let that run's MCP port in; an earlier proxy without it goes. */
+  setLocalMcp(port: number): void {
+    if (port === this.localMcp) return;
+    this.localMcp = port;
+    if (this.proxy !== null) {
+      this.proxy.stop(1000);
+      this.proxy = null;
+    }
+  }
+
   private startProxy(): Promise<void> {
     if (this.proxy !== null && this.proxy.started) return Promise.resolve();
-    const command = ["node", this.config.script, "proxy", "--port", String(this.config.proxyPort)];
+    const base = this.config.script;
+    const script = base.endsWith("/box.mjs") ? base.slice(0, base.length - "box.mjs".length) + "proxy.mjs" : base;
+    const command = ["node", script, "proxy", "--port", String(this.config.proxyPort)];
+    if (this.config.allow.length > 0) command.push("--allow-extra", this.config.allow.join(","));
+    if (this.localMcp > 0) command.push("--allow-local", String(this.localMcp));
     const p = this.api.process.spawn(command, {}, {
       lines: (lines) => {
         for (const l of lines) this.api.note("box proxy: " + l);

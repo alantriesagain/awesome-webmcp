@@ -75,14 +75,16 @@ export class McpTool {
   }
 }
 
-/** An agent's plugin as a client of the server: the token its requests carry. */
+/** An agent's plugin as a client of the server: the token its requests carry, and the tools only it may use (empty for every tool its owner sees). */
 export class McpClient {
   readonly owner: string;
   readonly token: string;
+  readonly only: string[];
 
-  constructor(owner: string, token: string) {
+  constructor(owner: string, token: string, only: string[]) {
     this.owner = owner;
     this.token = token;
+    this.only = only;
   }
 }
 
@@ -138,10 +140,11 @@ export class McpServer {
     this.name = name;
   }
 
-  /** The token of plugin `owner`'s requests, made on its first ask and kept for the process. */
-  tokenFor(owner: string): string {
-    for (const c of this.clients) if (c.owner === owner) return c.token;
-    const c = new McpClient(owner, randomBytes(24).toString("hex"));
+  /** The token of plugin `owner`'s requests, made on its first ask and kept for the process; with `only`, a client of its own that may use those tools alone. */
+  tokenFor(owner: string, only: string[] = []): string {
+    const key = only.join("\u0000");
+    for (const c of this.clients) if (c.owner === owner && c.only.join("\u0000") === key) return c.token;
+    const c = new McpClient(owner, randomBytes(24).toString("hex"), only);
     this.clients.push(c);
     return c.token;
   }
@@ -172,13 +175,20 @@ export class McpServer {
     return this.visible(owner).map((t) => t.name);
   }
 
-  /** An MCP config file for plugin `owner`'s agent (Claude Code's `--mcp-config` shape), written for the user alone; "" when it cannot be written. */
-  configFile(owner: string): string {
+  /** The tools `client` may use: its owner's, limited to `client.only` when it names a subset. */
+  private visibleFor(client: McpClient): McpTool[] {
+    const tools = this.visible(client.owner);
+    return client.only.length > 0 ? tools.filter((t) => client.only.includes(t.name)) : tools;
+  }
+
+  /** An MCP config file for plugin `owner`'s agent (Claude Code's `--mcp-config` shape), written for the user alone; "" when it cannot be written. With `only`, a file of its own for the client that may use those tools alone. */
+  configFile(owner: string, only: string[] = []): string {
     if (this.url.length === 0) return "";
     try {
       if (this.runDir.length === 0) this.runDir = mkdtempSync(join(tmpdir(), this.name + "-mcp-"));
-      const path = join(this.runDir, owner + ".json");
-      writeFileSync(path, '{"mcpServers":{' + JSON.stringify(this.name) + ':{"type":"http","url":' + JSON.stringify(this.url) + ',"headers":{"Authorization":' + JSON.stringify("Bearer " + this.tokenFor(owner)) + "}}}}\n", { mode: 0o600 });
+      const name = only.length > 0 ? owner + "-" + only.join("-").replace(/[^A-Za-z0-9_.-]/g, "_") : owner;
+      const path = join(this.runDir, name + ".json");
+      writeFileSync(path, '{"mcpServers":{' + JSON.stringify(this.name) + ':{"type":"http","url":' + JSON.stringify(this.url) + ',"headers":{"Authorization":' + JSON.stringify("Bearer " + this.tokenFor(owner, only)) + "}}}}\n", { mode: 0o600 });
       chmodSync(path, 0o600);
       return path;
     } catch {
@@ -306,7 +316,7 @@ export class McpServer {
     if (method === "ping") return this.json(res, result(id, "{}"));
     if (method === "tools/list") {
       const tools: string[] = [];
-      for (const t of this.visible(client.owner)) tools.push('{"name":' + JSON.stringify(t.name) + ',"description":' + JSON.stringify(t.description) + ',"inputSchema":' + t.schema + "}");
+      for (const t of this.visibleFor(client)) tools.push('{"name":' + JSON.stringify(t.name) + ',"description":' + JSON.stringify(t.description) + ',"inputSchema":' + t.schema + "}");
       return this.json(res, result(id, '{"tools":[' + tools.join(",") + "]}"));
     }
     if (method === "tools/call") return this.call(id, p, res, client);
@@ -316,7 +326,7 @@ export class McpServer {
   private call(rpcId: string, p: Params, res: ServerResponse, client: McpClient): void {
     const name = typeof p.name === "string" ? p.name : "";
     let tool: McpTool | null = null;
-    for (const t of this.visible(client.owner)) if (t.name === name) tool = t;
+    for (const t of this.visibleFor(client)) if (t.name === name) tool = t;
     if (tool === null) return this.json(res, failure(rpcId, -32602, this.name + " has no tool " + name));
     const meta = params(p._meta) as Meta;
     const token = typeof meta.progressToken === "string" || typeof meta.progressToken === "number" ? JSON.stringify(meta.progressToken) : "";

@@ -256,7 +256,7 @@ settings), `protected-paths` (a rule on Write and Edit), `inline-bash` (`input`)
 | `agentPart` | the messages between this plugin's app part and its agent part in the harness: `send(type, data)` (false when the agent has no such channel), `on(type, listener)` (answers a stop function) |
 | `state.keymap`, `keys.keymap` | the keymap in use (`"default"`, or a plugin's id); a keymap a plugin brings, for /keymap and config.json's `"keymap"` (hook `keymapChanged`) |
 | `agents`, `conversation` | `register({ id, name, start, send, … })` an agent the conversation can talk to; `apply(events)` its messages, as the conversation's changes (see Agents below); `ask(request)` a question or plan for the user from one of widecode's tools, a promise of the reply |
-| `tools` | `add({ name, description, input, call(args) })` one of widecode's own tools, which agents call over MCP; `server()` where widecode's MCP server listens, for an agent's plugin to offer it (see widecode's own tools below) |
+| `tools` | `add({ name, description, input, call(args) })` one of widecode's own tools, which agents call over MCP; `server()` where widecode's MCP server listens, for an agent's plugin to offer it, and `serverFor(names)` the same limited to the tools named (see widecode's own tools below) |
 | `plugins` | the plugins as the runtime holds them, for the harness plugin: `list()` (every registration with its file and state, running, failed, off, replaced or stopped, and the last errors), `reload(file)` (a plugin folder's file evaluated again once the call returns; "" for every plugin), `check(code, file)` (a source evaluated in a context of its own, nothing registered: its plugins, errors and warnings), `api()` (PLUGINS.md and widecode.d.ts as the binary carries them) |
 | `harness` | `info()`: the project's `.widecode/` as it stands (present, trusted, its plugin files, its prompt, its config beside the user's and the result of one over the other, the tools the agent sees) |
 | `sessions`, `store`, `titles` | the folder's sessions with the agent (their titles, first and last prompts, folder, model, time and size) and `rev()`, which moves when the agent's list changed; widecode's record of a session; the skill runs the folder keeps (`saveSkillRun`, `skillUsage`: each skill's runs across sessions, typed, failed, the last); short titles Claude writes for Claude Code's sessions |
@@ -494,7 +494,7 @@ targets:
         "targets": {
           "deepseek": { "agent": "opencode", "model": "opencode-go/deepseek-v4.1-flash", "description": "A cheap subagent", "box": true }
         },
-        "box": { "script": "box/box.mjs", "kind": "bwrap", "idleMinutes": 10, "proxyPort": 8888, "memory": 4096, "projects": [] },
+        "box": { "script": "box/box.mjs", "kind": "bwrap", "idleMinutes": 10, "proxyPort": 8888, "memory": 4096, "projects": [], "allow": [] },
         "maxConcurrent": 4,
         "timeoutMs": 1800000
       }
@@ -506,7 +506,9 @@ targets:
 A target names an entry in `agents`, its model and what it is for. Its `box` is `true` to use the
 `box.kind` backend, `"bwrap"` or `"vm"` to pick one for that target, or absent or `false` to run it
 on the host. `box.kind` is `"bwrap"` (the default) or `"vm"`. Both read the box's `status --json`
-and start its host proxy when needed. A bwrap run goes through the box script
+and start its host proxy when needed. `box.allow` adds domains to the proxy's default allow list,
+or `["*"]` allows every host, so a boxed subagent can research the web; its projects are shared
+with whatever it reads. A bwrap run goes through the box script
 (`<script> jail --proxy-port <proxyPort> --project <folder> --project <project>... -- <entry
 command>`) and needs no VM. A VM run goes through `<script> ssh --forward-proxy <proxyPort> -- <entry
 command>`, and before the first such run widecode starts the box with the session's folder and
@@ -534,8 +536,11 @@ section with targets; without one only Claude Code's own subagents are offered. 
 is another agent, `/subagents` says its subagents run through widecode's Task on the targets and
 changes nothing. A main agent that names no tool-use id (an
 ACP agent) announces the Task call itself, and the run goes under that call's card; when no
-announced call matches, the tool makes a card itself. Subagents are not given
-widecode's MCP server, so they cannot call Task again. With `isolation: "worktree"` the run starts
+announced call matches, the tool makes a card itself. A subagent is given widecode's MCP server
+with only `HostAction` on it, never Task, so it can ask for a host action but cannot call Task
+again. A bwrap run reaches it through a forwarder in the jail that tunnels to the host's MCP port
+over the box's proxy socket; a VM run through a `--forward` of that port. With
+`isolation: "worktree"` the run starts
 in a git worktree under `.worktrees/<id>` and answers with its path and branch; widecode adds
 `.worktrees/` to the repository's `.git/info/exclude` when it makes the first one.
 `worktreeSetup` is a list of shell lines run in the new worktree before the subagent starts, each
@@ -574,7 +579,8 @@ Context Protocol: `src/agent`'s `McpServer` listens on 127.0.0.1, at a port the 
 agent's plugin asks where (`api.tools.server()`: the URL, the `Authorization` header with that
 plugin's own token, the tools its agent sees with their categories, and a config file naming the
 server in Claude Code's `--mcp-config` shape, readable by the user alone, so the token never shows in
-a process list). It answers `initialize`, `ping`, `tools/list` and `tools/call`, each for the tools the
+a process list; `api.tools.serverFor(names)` is the same with only the named tools, which is how a
+boxed subagent gets `HostAction` alone). It answers `initialize`, `ping`, `tools/list` and `tools/call`, each for the tools the
 token's agent sees; a call waiting on the user
 sends a progress notification every 10 s, which keeps the agent's client from timing out. An agent
 names a tool after the server, so that it cannot be taken for one of its own: opencode's
@@ -609,12 +615,23 @@ mode gives is logged with `api.note`.
 
 `plugins/box/index.ts` brings `HostAction`: an agent asks the host to run one of the commands a project
 configures, the request panel shows the command and the agent's reason under the call, and the user
-approves each run. Only the user's or a trusted project's `config.json` defines them, so an agent
-cannot add one, and the agent's reason is shown, never run. Its section is
+approves each run unless the action is read-only and marked so. Only the user's or a trusted
+project's `config.json` defines them, so an agent cannot add one, and the agent's reason is shown,
+never run. Its section is
 `{ "hostActions": { "install": { "run": "node_modules/.bin/light install", "description": "build widecode and install it into ~/.local/bin", "timeoutMs": 900000 } } }`,
 with `timeoutMs` ten minutes by default. The command runs in the session's folder, and its exit code
 and last 60 lines of output go back to the agent. `Run it` and `Don't run` are the choices; without
 approval the call answers that the user did not approve it. `/box` lists the actions configured.
+
+An action may take one argument, named by a glob pattern: `"arg": "social/queue/*.json"` (`*`
+matches any run, `?` one character). The tool then takes an `arg` that must match the whole
+pattern, hold no shell metacharacters and no `..`, and resolve inside the session's folder; it is
+shell-quoted, replacing a literal `{arg}` in `run` or appended to it. An action without `"arg"`
+refuses one. `"approve": "never"` is for a read-only action: it runs without asking and is noted in
+the log. `"show": true` has an action with an argument copy the file the argument names into a host
+temp folder a boxed agent cannot reach, show the copy whole in the approval question (a file over
+4000 characters is refused) and run the command on the copy, so the user approves the exact plan
+rather than a file name, and the plan that runs is that one. A boxed subagent gets only this tool over MCP, through the box's proxy (see Agents below).
 
 ## The harness
 
@@ -777,7 +794,7 @@ phase, the agent's events) and the screen as it was.
 | `claude` | Claude Code as the agent: its CLI over stream-json, its records read into the conversation, its transcripts resumed and listed, its status line data, its skills (from disk before it starts); `/subagents` (Claude Code's own, widecode's Task, or both) | `id`, `projects`, `configDir`, `keepSubagents` | the subagents in use: the mode and its model |
 | `acp` | the agents spoken to over ACP, opencode and the DeepSeek Harness by default: their session, started with widecode, their turns, calls, diffs, todo lists, subagents, permissions, model, effort and mode (config options), and sessions; widecode's MCP server offered to them; `Task`, `TaskStop` and `SendMessage`, subagents over configured ACP targets, in the foreground or background | `agents`, `tasks` | sessions made and not written to, deleted when left |
 | `ask` | widecode's tools for an agent without its own: `AskUser` (questions in the request panel), `PresentPlan` (a plan to approve, leaving plan mode) | `names` | |
-| `box` | host actions: `HostAction` asks the user to run a command only the host can run (an install, a deploy), and runs it in the session's folder when approved; `/box` lists the configured actions | `hostActions` (`run`, `description`, `timeoutMs` for each) | |
+| `box` | host actions: `HostAction` asks the user to run a command only the host can run (an install, a deploy), and runs it in the session's folder when approved, or without asking when `approve` is `never`; an action with an argument has it matched, quoted and shown; `/box` lists the configured actions | `hostActions` (`run`, `description`, `timeoutMs`, `arg` as a glob, `approve`, `show` for each) | |
 | `harness` | widecode's tools for the agent to probe and reshape widecode itself, over the MCP server: `screen`, `state`, `log`, `api`, `check`, `reload`, `config` (The harness, above) | | |
 | `languages` | JavaScript, TypeScript, JSON, CSS, HTML, Markdown | | |
 | `emacs` | the emacs keymap, in use unless config.json or /keymap says otherwise: Ctrl+F/B, Ctrl+P/N, Alt+D, Alt+< and Alt+>; the composer has readline's other keys already | | |

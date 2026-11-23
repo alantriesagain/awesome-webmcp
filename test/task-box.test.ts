@@ -63,6 +63,58 @@ const lastSessionCwd = (file: string): string => {
   return "";
 };
 
+interface NamedUrl {
+  name: string;
+  url: string;
+}
+
+const lastSessionServers = (file: string): NamedUrl[] => {
+  if (!existsSync(file)) return [];
+  const lines = readFileSync(file, "utf8")
+    .split("\n")
+    .filter((line) => line.trim().length > 0);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = JSON.parse(lines[i]) as { method?: unknown; params?: { mcpServers?: unknown } };
+    if (m.method !== "session/new" || !Array.isArray(m.params?.mcpServers)) continue;
+    const out: NamedUrl[] = [];
+    for (const v of m.params.mcpServers) {
+      if (typeof v !== "object" || v === null) continue;
+      const s = v as { name?: unknown; url?: unknown };
+      if (typeof s.name === "string" && typeof s.url === "string") out.push({ name: s.name, url: s.url });
+    }
+    return out;
+  }
+  return [];
+};
+
+const lastSessionToken = (file: string): string => {
+  if (!existsSync(file)) return "";
+  const lines = readFileSync(file, "utf8")
+    .split("\n")
+    .filter((line) => line.trim().length > 0);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = JSON.parse(lines[i]) as { method?: unknown; params?: { mcpServers?: unknown } };
+    if (m.method !== "session/new" || !Array.isArray(m.params?.mcpServers)) continue;
+    for (const v of m.params.mcpServers) {
+      if (typeof v !== "object" || v === null) continue;
+      const s = v as { name?: unknown; headers?: unknown };
+      if (s.name !== "widecode" || !Array.isArray(s.headers)) continue;
+      for (const h of s.headers) {
+        if (typeof h !== "object" || h === null) continue;
+        const header = h as { name?: unknown; value?: unknown };
+        if (header.name === "Authorization" && typeof header.value === "string" && header.value.startsWith("Bearer ")) return header.value.slice(7);
+      }
+    }
+  }
+  return "";
+};
+
+const portOf = (url: string): number => {
+  const colon = url.lastIndexOf(":");
+  const slash = url.indexOf("/", colon);
+  return Number(url.slice(colon + 1, slash > 0 ? slash : url.length));
+};
+
 const reads = (state: string): { running: boolean; projects: string[]; proxy: boolean } => {
   const parsed = JSON.parse(readFileSync(state, "utf8")) as { running?: unknown; projects?: unknown; proxy?: unknown };
   return { running: parsed.running === true, projects: Array.isArray(parsed.projects) ? parsed.projects.map(String) : [], proxy: parsed.proxy === true };
@@ -85,10 +137,11 @@ const main = async (): Promise<void> => {
   execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-q", "--allow-empty", "-m", "start"], { cwd: folder });
 
   const config = {
+    box: { hostActions: { ping: { run: "true", description: "ping the host" } } },
     acp: {
       agents: { fake: { name: "Fake", command: ["node", fake, "--log", acpLog] } },
       tasks: {
-        box: { script: fakeBox, kind: "vm", proxyPort: 8899, memory: 2048, projects: [other] },
+        box: { script: fakeBox, kind: "vm", proxyPort: 8899, memory: 2048, projects: [other], allow: ["example.com"] },
         targets: {
           deepseek: { agent: "fake", model: "fake/large", description: "a boxed test subagent", box: true },
           host: { agent: "fake", description: "a host subagent" },
@@ -116,8 +169,16 @@ const main = async (): Promise<void> => {
   const ssh = afterFirst.filter((x) => x.cmd === "ssh");
   const proxy = afterFirst.filter((x) => x.cmd === "proxy");
   const up = afterFirst.filter((x) => x.cmd === "up");
-  ok("it goes through ssh --forward-proxy", ssh.length === 1 && ssh[0].args.slice(0, 4).join(" ") === "--forward-proxy 8899 -- node" && ssh[0].args.includes(fake));
+  ok("it goes through ssh --forward-proxy", ssh.length === 1 && ssh[0].args.slice(0, 3).join(" ") === "--forward-proxy 8899 --forward" && ssh[0].args.includes("--") && ssh[0].args.includes(fake));
   ok("the first run starts the proxy", proxy.length === 1 && proxy[0].args.includes("--port") && proxy[0].args.includes("8899"));
+  ok("the project's allow list goes to the proxy", proxy[0].args.includes("--allow-extra") && proxy[0].args.includes("example.com"));
+  const hostMcpPort = portOf(url);
+  ok("the proxy lets in the run's MCP port", proxy[0].args.includes("--allow-local") && proxy[0].args.includes(String(hostMcpPort)));
+  const vmServers = lastSessionServers(acpLog);
+  const vmUrl = vmServers.find((s) => s.name === "widecode")?.url ?? "";
+  const vmRemote = portOf(vmUrl);
+  ok("the subagent gets widecode's server at a forwarded port", vmRemote > 0 && vmRemote !== hostMcpPort && vmUrl.endsWith("/mcp"));
+  ok("the ssh call forwards that port to the host's MCP port", ssh[0].args.includes("--forward") && ssh[0].args.includes(String(vmRemote) + ":" + String(hostMcpPort)));
   ok("and the box with the session folder and projects", up.length === 1 && up[0].args.includes(folder) && up[0].args.includes(other) && up[0].args.includes("2048"));
   eq("the box state says it runs with them", reads(join(boxDir, "fake-box.json")).projects.join(","), folder + "," + other);
   c.model.closeTurn(null);
@@ -203,13 +264,15 @@ const main = async (): Promise<void> => {
   const bwrapOther = mkdtempSync(join(tmpdir(), "widecode-task-bwrap-other-"));
   const bwrapDir = mkdtempSync(join(tmpdir(), "widecode-task-bwrap-state-"));
   const bwrapLog = join(bwrapDir, "calls.jsonl");
+  const bwrapAcpLog = join(bwrapDir, "acp.jsonl");
   process.env.FAKE_BOX_DIR = bwrapDir;
   process.env.FAKE_BOX_LOG = bwrapLog;
   execFileSync("git", ["init", "-q"], { cwd: bwrapFolder });
   execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-q", "--allow-empty", "-m", "start"], { cwd: bwrapFolder });
   const bwrapApp = await open(bwrapFolder, {
+    box: { hostActions: { ping: { run: "true", description: "ping the host" } } },
     acp: {
-      agents: { fake: { name: "Fake", command: ["node", fake] } },
+      agents: { fake: { name: "Fake", command: ["node", fake, "--log", bwrapAcpLog] } },
       tasks: {
         box: { script: fakeBox, proxyPort: 8899, projects: [bwrapOther] },
         targets: { deepseek: { agent: "fake", box: true } },
@@ -237,6 +300,15 @@ const main = async (): Promise<void> => {
     "--proxy-port 8899 --project " + bwrapFolder + " --project " + bwrapOther + " -- node",
   );
   ok("and runs the entry's command", bwrapJail.length === 1 && bwrapJail[0].args.includes(fake));
+  const bwrapMcpPort = portOf(bwrapUrl);
+  const bwrapServers = lastSessionServers(bwrapAcpLog);
+  const bwrapMcpUrl = bwrapServers.find((s) => s.name === "widecode")?.url ?? "";
+  ok("the subagent gets widecode's server on the run's own MCP port", bwrapMcpUrl === "http://127.0.0.1:" + String(bwrapMcpPort) + "/mcp");
+  ok("the jail runs a forwarder in front of the agent", bwrapJail.length === 1 && bwrapJail[0].args.includes("-e") && bwrapJail[0].args.some((a) => a.endsWith("/proxy.sock")) && bwrapJail[0].args.includes(String(bwrapMcpPort)));
+  const bwrapScoped = await send(bwrapUrl, lastSessionToken(bwrapAcpLog), '{"jsonrpc":"2.0","id":1,"method":"tools/list"}');
+  ok("the boxed subagent's token lists HostAction alone", bwrapScoped.includes('\"name\":\"HostAction\"') && !bwrapScoped.includes('\"name\":\"Task\"') && !bwrapScoped.includes('\"name\":\"AskUser\"'));
+  const bwrapProxy = bwrapCalls.filter((x) => x.cmd === "proxy");
+  ok("and the proxy lets that port in", bwrapProxy.length === 1 && bwrapProxy[0].args.includes("--allow-local") && bwrapProxy[0].args.includes(String(bwrapMcpPort)));
   eq("bwrap starts the proxy", String(bwrapCalls.filter((x) => x.cmd === "proxy").length), "1");
   eq("bwrap never starts a VM", String(bwrapCalls.filter((x) => x.cmd === "up").length), "0");
   closeWidecode(bwrapApp.w);

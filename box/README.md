@@ -24,6 +24,7 @@ node box/box.mjs provision
 node box/box.mjs up [--memory <MB>] [--cpus <n>] [--port <host>[:<guest>]]... <folder> [<folder>...]
 node box/box.mjs ssh [--forward-proxy <port>] [--forward <remotePort>:<hostPort>]... [--] [cmd...]
 node box/box.mjs proxy [--port N] [--allow domain,...]
+node box/proxy.mjs proxy [--port N] [--allow domain,...] [--allow-extra domain,...] [--allow-local N]
 node box/box.mjs jail --proxy-port <port> [--project <dir>]... [--dry-run] -- <cmd...>
 node box/box.mjs creds
 node box/box.mjs down [--if-idle]
@@ -101,6 +102,25 @@ answers 403 to everything else. It logs every allowed and refused request to `pr
 directory, writes its pid to `proxy.pid`, and runs until `down` or a signal stops it. It removes a
 stale socket before listening, sets the new one to mode 600, and removes it when it stops.
 
+`box/proxy.mjs` is the same proxy with the project-facing options widecode uses: `--allow-extra`
+adds domains to the defaults, `--allow` replaces them, `*` allows every host, and `--allow-local
+<port>` lets `127.0.0.1:<port>` through, the port widecode serves `HostAction` on for a boxed
+subagent. It keeps `proxy.pid`, `proxy.sock` and `proxy.log` in the same state directory, so
+`status`, `down` and `box.mjs proxy` see it as the box's proxy. `up` and the jail command's proxy
+are started by widecode with this one.
+
+A project's box config may give `"allow": [domains]`, added to the default list, or `"allow":
+["*"]` for any host, so its boxed subagents can research the web. A boxed subagent with web access
+shares the projects in its box with whatever it reads.
+
+An action in the box plugin's `hostActions` may take one argument, a glob in `"arg"` such as
+`social/queue/*.json`; the tool's `arg` must match it, hold no shell metacharacters and no `..`, and
+resolve inside the session's folder, and replaces a `{arg}` in `run` or is appended as the last
+argument. `"approve": "never"` runs a read-only action without the question. `"show": true` copies
+the argument's file into a host temp folder the box cannot reach, shows the copy whole in the
+question (a file over 4000 characters is refused) and runs the command on the copy, so a boxed agent
+cannot change the file between the approval and the run.
+
 `ssh` runs as `agent` with the box key, `BatchMode=yes` and the box's own `known_hosts`. It puts
 `~/.local/bin` and `~/.opencode/bin` first on the remote `PATH`, so `claude` and `opencode` resolve
 without a login shell, and sources `/home/agent/.config/widecode-box/env` when it exists, so the
@@ -161,7 +181,10 @@ The proxy socket is bound at its state path. The environment is cleared and gets
 Inside, bwrap runs `node box.mjs jail-inner --proxy-port <port> --socket <path> -- <cmd...>`. That
 part listens on `127.0.0.1:<port>`, pipes each connection to the proxy socket, reads
 `~/.config/widecode-box/env` from the jail home and adds `CLAUDE_CODE_OAUTH_TOKEN` to the child's
-environment when it is set, then starts the command.
+environment when it is set, then starts the command. A boxed subagent that has `HostAction` runs a
+forwarder as its command: the forwarder listens on the host MCP port inside the jail and tunnels
+each connection through the proxy socket (a `CONNECT` to that port, which `--allow-local` permits)
+to widecode's MCP server on the host.
 
 Before starting bwrap, `jail` writes the jail home's `.config/widecode-box/env` (mode 600) and
 merges the `opencode-go` entry into `.local/share/opencode/auth.json` (mode 600), from
