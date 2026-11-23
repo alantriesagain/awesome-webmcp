@@ -144,16 +144,16 @@ terminal: `{"chat": "35%", "tools": 40, "files": 30}` (the code column takes the
 dragged wins over the config until `/columns reset`; when the code column would get under 20 cells,
 the others give way.
 
-Under the columns, the status band, in parts as wide as the columns above. Under the chat, the
-session as a table (the config's lines are its rows; cell i of each row as wide as the widest, so
-like things stack; each row's last cell, the text, grows): folder, model and effort, mode; context
-and the 5-hour and weekly limits as meters; cost, time, cache; then the title and the app's
-messages. Under the tools column, what Claude is doing and for how
-long (✻ while it thinks), the calls by kind (read, write, run, agents), and the thinking tokens. Under the code column, the
-changes (the branch among them): how many files and lines against the
-base, the open file and where its view is among its changes, then every changed file newest first
-with its lines added and removed, how long ago it changed, ● when Claude edited it; a press opens
-one, and `[` `]` (files and code columns) or Alt+↑↓ (anywhere) walk them.
+Under the columns, the status band, in parts as wide as the columns above. Across the chat and
+tools columns, the session as a table (the config's lines are its rows; cell i of each row as wide
+as the widest, so like things stack; each row's last cell, the text, grows): folder, context,
+cache; branch, the 5-hour limit, the time and cost, the calls by kind (read, write, run, agents),
+and what Claude is doing for how long (✻ while it thinks); model and effort, the weekly limit, the
+mode and the box, the thinking tokens, and the app's messages. Across the files and code columns,
+the changes (the branch among them): how many files and lines against the base, the open file and
+where its view is among its changes, then every changed file newest first with its lines added and
+removed, how long ago it changed, ● when Claude edited it; a press opens one, and `[` `]` (files
+and code columns) or Alt+↑↓ (anywhere) walk them.
 
 widecode is a native core and JavaScript plugins, one per feature (the chat and code columns'
 wiring, the Tools, Agents, Files, Sessions and Git tabs, the changes and status bars, the models,
@@ -221,9 +221,10 @@ once. A session
 gets a short title written by Claude after its first turn (a separate call: haiku, no tools, nothing
 saved; `"sessions": {"titles": false}` turns it off); `/rename` sets one, `/title` asks again. The
 status tables are the status plugin's section, `{"separator": " │ ", "lines": [[...], ...],
-"toolsLines": [[...], ...]}` (the one under the chat, the one under the tools column): each line
+"toolsLines": [[...], ...]}` (the one across the chat and tools columns, the one under the tools
+column when set): each line
 lists its cells, a cell being a segment (`project branch model effort mode title context
-limit5h limitWeek cache activity tools calls thinking cost duration queued note`, or one another
+limit5h limitWeek cache activity tools calls thinking cost duration queued note message`, or one another
 plugin registers; `spacer` pushes the cells after it to the right edge), a list of them (joined by "
 · "), an object that restyles one (`{"segment": "cost", "fg": "#98c379", "label": "spent"}`), or a
 command (`{"command": "~/.claude/statusline.sh", "interval": 5}`) that gets Claude Code's status

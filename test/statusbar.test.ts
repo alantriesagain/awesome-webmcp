@@ -69,15 +69,25 @@ const main = async (): Promise<void> => {
   let w = await make("{}");
   const table = draw(w, 164);
   eq("the default table: three rows", String(table.length), "3");
-  ok("row 1: folder, context, cost, the title last", table[0].startsWith(" ◆ demo-") && table[0].replace(/ +/g, " ").endsWith("│ ctx ▰▱▱▱▱▱▱▱ 10% 21k/200k │ $0.02 │ List file edits"));
-  ok("row 2: model and effort in one cell, the 5h limit, time, the key hints last", table[1].startsWith(" Haiku 4.5 · low │ 5h  ▱▱▱▱▱▱▱▱   5% ↻") && table[1].includes("Enter sends"));
-  ok("row 3: the mode, the week, the cache", table[2].startsWith(" bypass ") && table[2].includes("│ wk  ▰▰▰▰▰▱▱▱  65% ↻") && table[2].includes("│ cache ● ") && table[2].endsWith(" 92% hit · 0 miss"));
-  ok("no branch (the code column's strip has it), no calls (the tools column's)", !table.join("|").includes("main") && !table.join("|").includes("calls"));
-  eq("the columns line up: every rule at the same place in every row", rules(table[1]), rules(table[0]));
+  ok("row 1: folder, context, the cache, the title last", table[0].startsWith(" ◆ demo-") && table[0].includes("│ ctx ▰▱▱▱▱▱▱▱  10% 21k/200k") && table[0].includes("│ cache ● ") && table[0].includes(" 92% hit · 0 miss") && table[0].endsWith("│ List file edits"));
+  ok("row 2: the branch, the 5h limit, time and cost in one cell, the calls by kind, the activity last", table[1].startsWith(" main ") && table[1].includes("│ 5h  ▱▱▱▱▱▱▱▱   5% ↻") && table[1].includes("│ 0s · $0.02") && table[1].includes("│ R 0 W 2 X 0 A 0 │ ↳ Bash npm test"));
+  ok("row 3: model and effort in one cell, the week, the mode, the thinking", table[2].startsWith(" Haiku 4.5 · low │") && table[2].includes("│ wk  ▰▰▰▰▰▱▱▱  65% ↻") && table[2].includes("│ bypass") && table[2].endsWith("│ think 267"));
+  ok("no calls column", !table.join("|").includes("calls"));
+  eq("the columns line up: the first three rules at the same place in every row", rules(table[1]).split(",").slice(0, 3).join(","), rules(table[0]));
   eq("and in the third", rules(table[2]).split(",").slice(0, 2).join(","), rules(table[0]).split(",").slice(0, 2).join(","));
   const meters = [table[0].indexOf("▰"), table[1].indexOf("▱"), table[2].indexOf("▰")];
   eq("the meters stack: their bars start in the same column", String(meters[1] === meters[0] && meters[2] === meters[0]), "true");
-  eq("under the tools column: the running tool, its calls by kind, its thinking", draw(w, 60, "tools-status").join(" | "), " ↳ Bash npm test |  R 0 W 2 X 0 A 0 |  think 267");
+  ok("no tools strip by default: the table above already spans it", bandOf(w, "tools-status") === null);
+  w.host.screen.tell("saved");
+  ok("the message segment shows the message alone, not the hints", draw(w, 164)[2].endsWith("│ saved"));
+  w.host.conversation.info.title = "A title far longer than the room the bar has left for it at this width";
+  const clipped = draw(w, 74);
+  ok("a last cell longer than the bar ends in an ellipsis inside it", clipped[0].endsWith("…") && clipped.every((r) => r.length <= 70));
+  ok("narrow: columns dropped before the text", !clipped[0].includes("cache"));
+  closeWidecode(w);
+
+  w = await make('{"status": {"toolsLines": [[["activity"]], [["tools"]], [["thinking"]]]}}');
+  eq("a configured tools strip under the tools column: the running tool, its calls by kind, its thinking", draw(w, 60, "tools-status").join(" | "), " ↳ Bash npm test |  R 0 W 2 X 0 A 0 |  think 267");
   const info = w.host.conversation.info;
   info.activity = "thinking";
   info.activitySince = Date.now() - 3200;
@@ -87,10 +97,6 @@ const main = async (): Promise<void> => {
   ok("and while Claude Code compacts the conversation", draw(w, 60, "tools-status")[0] === " ✻ compacting…");
   info.activity = "";
   eq("nothing running: an empty row", draw(w, 60, "tools-status")[0], "");
-  w.host.conversation.info.title = "A title far longer than the room the bar has left for it at this width";
-  const clipped = draw(w, 74);
-  ok("a last cell longer than the bar ends in an ellipsis inside it", clipped[0].endsWith("…") && clipped.every((r) => r.length <= 70));
-  ok("narrow: columns dropped before the text", !clipped[0].includes("cache"));
   closeWidecode(w);
 
   w = await make('{"status": {"separator": " · ", "lines": [["cost", "model"], [{"segment": "calls", "fg": "#ff0000", "label": "n"}, "spacer", "nope"]]}}');
@@ -119,7 +125,7 @@ const main = async (): Promise<void> => {
   w = await make("{}");
   const pressed = bandOf(w);
   const row3 = draw(w, 164)[2];
-  if (pressed !== null) pressed.pressAt(1, 2);
+  if (pressed !== null) pressed.pressAt(2, 2);
   eq("a press on the model cell switches the model", w.host.conversation.modelName, "fable[1m]");
   if (pressed !== null) pressed.pressAt(2, row3.indexOf("bypass") + 1);
   eq("a press on the mode toggles plan mode", w.host.conversation.model.permissionMode, "plan");
@@ -129,10 +135,13 @@ const main = async (): Promise<void> => {
   eq("the previous default becomes the table", rules(draw(w, 164)[0]).split(",").length >= 3 ? "table" : "old", "table");
   closeWidecode(w);
   w = await make('{"status": {"separator": " │ ", "lines": [["project", "context", "cache", "cost", "title"], ["branch", "limit5h", "tools", "duration", "activity"], [["model", "effort"], "limitWeek", ["calls", "thinking"], "mode", "note"]]}}');
-  ok("an earlier default, as written, becomes the current one", draw(w, 164)[1].startsWith(" Haiku 4.5 · low │ 5h"));
+  ok("an earlier default, as written, becomes the current one", draw(w, 164)[2].startsWith(" Haiku 4.5 · low │ wk  ▰▰▰▰▰▱▱▱  65% ↻"));
   closeWidecode(w);
   w = await make('{"status": {"separator": " │ ", "lines": [["project", "context", "cache", "cost", "title"], ["branch", "limit5h", "tools", "duration", "activity"], [["model", "effort"], "limitWeek", "calls", "mode", "note"]]}}');
-  ok("the last default, as written, too: no branch, no calls", draw(w, 164)[1].startsWith(" Haiku 4.5 · low │ 5h") && !draw(w, 164).join("|").includes("calls"));
+  ok("the last default, as written, too: the new table, no calls", draw(w, 164)[2].startsWith(" Haiku 4.5 · low │ wk  ▰▰▰▰▰▱▱▱  65% ↻") && !draw(w, 164).join("|").includes("calls"));
+  closeWidecode(w);
+  w = await make('{"status": {"separator": " │ ", "lines": [["project", "context", "cost", "title"], [["model", "effort"], "limit5h", "duration", "note"], ["mode", "limitWeek", "cache", "peers"]]}}');
+  ok("the current default as it was written, untouched, moves to the new one", draw(w, 164)[0].includes("│ cache ") && draw(w, 164)[2].startsWith(" Haiku 4.5 · low │ wk "));
   closeWidecode(w);
 
   const reader = JSON.stringify("calls=$(grep -o '\"calls\":[0-9]*'); printf '\\033[1;32m%s\\033[0m cols=%s\\nsecond line\\n' \"$calls\" \"$COLUMNS\"");

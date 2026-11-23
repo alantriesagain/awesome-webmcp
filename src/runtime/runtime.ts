@@ -781,7 +781,7 @@ export class JsRuntime extends Bridge {
   segmentContext(ctx: SegmentContext): string {
     if (ctx.now !== this.ctxNow) {
       this.ctxNow = ctx.now;
-      this.ctxJson = objectText(["info", "folderName", "note", "busy", "spinner", "now"], [ctx.info.json(ctx.now), json(ctx.folderName), json(ctx.note), json(ctx.busy), json(ctx.spinner), json(ctx.now)]);
+      this.ctxJson = objectText(["info", "folderName", "message", "note", "busy", "spinner", "now"], [ctx.info.json(ctx.now), json(ctx.folderName), json(ctx.message), json(ctx.note), json(ctx.busy), json(ctx.spinner), json(ctx.now)]);
     }
     return this.ctxJson;
   }

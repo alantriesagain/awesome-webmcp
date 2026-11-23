@@ -106,6 +106,8 @@ declare namespace widecode {
     id: string;
     /** The column it sits under, as wide as it: "chat", "tools", "side" or "code"; "" (default): the last one. */
     under?: string;
+    /** The last column the strip reaches, so it spans from `under` through `to` (as wide as those columns together); "" or absent: only `under`. */
+    to?: string;
     order?: number;
     lines(width: number): Row[];
     press?(row: number, x: number): void;
@@ -142,6 +144,8 @@ declare namespace widecode {
     /** Claude Code's status line input (model, context_window, rate_limits, cost, ...). */
     info: StatusInfo;
     folderName: string;
+    /** The latest message alone, "" when there is none. */
+    message: string;
     /** The latest message, or the key hints. */
     note: string;
     busy: boolean;
@@ -709,6 +713,8 @@ declare namespace widecode {
       real(): boolean;
       /** The status bar's message, or the key hints when there is none. */
       note(): string;
+      /** The status bar's message alone, "" when there is none. */
+      message(): string;
       /** The keymap in use: "default", or the id a plugin's brought. */
       keymap(): string;
       /** The screen as drawn: the named columns (every column for []) each cropped to its cells, the band under them included; refused where nothing draws. */

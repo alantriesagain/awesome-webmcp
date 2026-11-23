@@ -170,7 +170,8 @@ widecode.plugin({
 
     const band = api.ui.band({
       id: "changes",
-      under: "code",
+      under: "side",
+      to: "code",
       order: 1,
       lines,
       press: (row, x) => {

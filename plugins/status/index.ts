@@ -1,14 +1,14 @@
-// The session's status: a table under the chat and one under the tools column, each laid out by
-// config.json (the status section's `lines` and `toolsLines`), each line a row of cells, a cell one
-// segment or several joined by " · ", cell i of every row as wide as the widest so like things
-// stack, each row's last cell free to grow (the text: title, activity, hints). Segments come from
-// any plugin by name (this one draws the session's: folder, branch, effort, the approval mode when it
-// is not ask, title, context,
-// limits, cache, activity and its clock, tools, calls, thinking, cost, time, queued, the message or
-// hints); a cell can also run the user's command, which gets Claude Code's status line JSON on stdin
-// and prints colored lines. A press on a cell runs its segment's press (the mode toggles plan mode,
-// the title says how to rename). The message cell reads the status message as the core draws, so a
-// new message redraws the table by itself.
+// The session's status: a table spanning the chat and tools columns, and optionally one under the
+// tools column alone, each laid out by config.json (the status section's `lines` and `toolsLines`),
+// each line a row of cells, a cell one segment or several joined by " · ", cell i of every row as
+// wide as the widest so like things stack, each row's last cell free to grow (the text: title,
+// activity, hints). Segments come from any plugin by name (this one draws the session's: folder,
+// branch, effort, the approval mode when it is not ask, title, context, limits, cache, activity and
+// its clock, tools, calls, thinking, cost, time, queued, the message or the message alone); a cell
+// can also run the user's command, which gets Claude Code's status line JSON on stdin and prints
+// colored lines. A press on a cell runs its segment's press (the mode toggles plan mode, the title
+// says how to rename). The message cells read the status message as the core draws, so a new
+// message redraws the table by itself.
 
 type Run = widecode.Run;
 
@@ -41,20 +41,21 @@ const RIGHT_GAP = 4;
 const COMMAND_MS = 2000;
 const DEBOUNCE_MS = 300;
 
-/** Under the chat: the session (the branch is on the code column's strip, the calls under the tools column). */
+/** Across the chat and tools columns: the session, its work and its clocks. */
 const DEFAULT_LINES = [
-  [["project"], ["context"], ["cost"], ["title"]],
-  [["model", "effort"], ["limit5h"], ["duration"], ["note"]],
-  [["mode"], ["limitWeek"], ["cache"], ["peers"]],
+  [["project"], ["context"], ["cache"], ["title"]],
+  [["branch"], ["limit5h"], ["duration", "cost"], ["tools"], ["activity"]],
+  [["model", "effort"], ["limitWeek"], ["mode", "box"], ["thinking"], ["peers", "message"]],
 ];
-/** Under the tools column: what Claude is doing and for how long, its calls by kind, and its thinking (the calls' total would repeat their kinds' sum). */
-const DEFAULT_TOOLS_LINES = [[["activity"]], [["tools"]], [["thinking"]]];
+/** Under the tools column alone: nothing by default (the table above already spans it). */
+const DEFAULT_TOOLS_LINES: string[][][] = [];
 /** The defaults earlier versions wrote, replaced by the current one where untouched: a shape of plain segments, and the lines as written. */
 const PREVIOUS_DEFAULT = "project branch model effort mode title spacer note|context limit5h limitWeek cache|activity tools calls thinking cost duration";
 const PREVIOUS_LINES = [
   JSON.stringify([["project", "context", "cost", "title"], [["model", "effort"], "limit5h", "duration", "note"], ["mode", "limitWeek", "cache"]]),
   JSON.stringify([["project", "context", "cache", "cost", "title"], ["branch", "limit5h", "tools", "duration", "activity"], [["model", "effort"], "limitWeek", ["calls", "thinking"], "mode", "note"]]),
   JSON.stringify([["project", "context", "cache", "cost", "title"], ["branch", "limit5h", "tools", "duration", "activity"], [["model", "effort"], "limitWeek", "calls", "mode", "note"]]),
+  JSON.stringify([["project", "context", "cost", "title"], [["model", "effort"], "limit5h", "duration", "note"], ["mode", "limitWeek", "cache", "peers"]]),
 ];
 const COLOR = /^(#[0-9a-fA-F]{6}|[0-9]{1,3}|default|gray|grey|black|red|green|yellow|blue|magenta|cyan|white|bright(black|red|green|yellow|blue|magenta|cyan|white))$/;
 
@@ -142,6 +143,7 @@ const SEGMENTS: Record<string, (ctx: widecode.SegmentContext) => Run[]> = {
   duration: (ctx) => (ctx.info.cost.total_duration_ms > 0 ? [run(elapsed(ctx.info.cost.total_duration_ms), DIM)] : []),
   queued: (ctx) => (ctx.info.widecode.queued > 0 ? [run(String(ctx.info.widecode.queued) + " queued", WARN)] : []),
   note: (ctx) => (ctx.note.length > 0 ? [run(ctx.note, DIM)] : []),
+  message: (ctx) => (ctx.message.length > 0 ? [run(ctx.message, DIM)] : []),
 };
 
 /** A line of terminal output with ANSI escapes as runs: SGR colors and styles kept, other escapes dropped, a hyperlink's text kept. */
@@ -341,8 +343,8 @@ widecode.plugin({
       api.ui.segment({ name, draw, press: presses[name] });
     }
 
-    /** A table of `specs` on the band under column `under`: its commands, its rows, its strip. */
-    const table = (specs: Spec[][], id: string, under: string, order: number): { refresh(): void; rerun(): void } => {
+    /** A table of `specs` on the band from column `under` through `to`: its commands, its rows, its strip. */
+    const table = (specs: Spec[][], id: string, under: string, to: string, order: number): { refresh(): void; rerun(): void } => {
       // The user's commands: each run's lines kept until the next; a run at most every 300 ms, and every `interval` seconds when set.
       const commands = new Map<number, { spec: Spec; out: Run[][]; running: boolean; queued: boolean }>();
       specs.flat().forEach((s, i) => {
@@ -379,7 +381,7 @@ widecode.plugin({
       const draw = (cells: number): Run[][] => {
         const now = Date.now();
         const info = api.state.info();
-        const ctx: widecode.SegmentContext = { info, folderName: api.state.active().folderName, note: api.state.note(), busy: api.agent.running(), spinner: T.spinner(now), now };
+        const ctx: widecode.SegmentContext = { info, folderName: api.state.active().folderName, message: api.state.message(), note: api.state.note(), busy: api.agent.running(), spinner: T.spinner(now), now };
         let index = 0;
         rows = [];
         for (const line of specs) {
@@ -440,6 +442,7 @@ widecode.plugin({
       const band = api.ui.band({
         id,
         under,
+        to,
         order,
         lines: (cells) => {
           barWidth = cells;
@@ -464,8 +467,8 @@ widecode.plugin({
         },
       };
     };
-    const tables = [table(lines, "status", "chat", 0)];
-    if (toolsLines.length > 0) tables.push(table(toolsLines, "tools-status", "tools", 10));
+    const tables = [table(lines, "status", "chat", "tools", 0)];
+    if (toolsLines.length > 0) tables.push(table(toolsLines, "tools-status", "tools", "", 10));
     // Redrawn as the session changes and every second (the clocks, the countdowns); the spinner is a live run the host moves on its own.
     api.every(1000, () => {
       for (const t of tables) t.refresh();

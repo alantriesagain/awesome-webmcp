@@ -1,8 +1,8 @@
 // ffi: @lightstart/plugins/native/ffi.json
 // The changes: `diff --numstat -z` parsed (a binary file, a rename, a tab in a name); on a temp
 // repository the changed files with their marks and line counts (modified, deleted, untracked,
-// binary), newest first, Claude's edits marked. In the app, the JS plugin's strip of the band: split
-// from the status table at the chat's edge, its rows (summary, cells with names told apart by their
+// binary), newest first, Claude's edits marked. In the app, the JS plugin's strip of the band:
+// spanning the files and code columns, its rows (summary, cells with names told apart by their
 // folder, the open file highlighted, "+N more" when they do not fit), presses on them, and [ ] /
 // Alt+↑↓ walking the changed files.
 import { spawnSync } from "node:child_process";
@@ -87,11 +87,11 @@ const main = async (): Promise<void> => {
   await app.host.session.load(app.host.folder, app.host.hooks);
   const screen = (): string[] => headless.screen();
   const band = screen().slice(H - 3);
+  const side = app.shell.xOf("side");
+  const code = app.shell.xOf("code");
   const split = band[0].indexOf("│ 6 files");
-  const widths = app.shell.widths();
-  let left = 0;
-  for (const w of widths.slice(0, -1)) left += w;
-  ok("the band: the session under the chat, the changes under the code column", band[0].startsWith(" ◆ widecode-changes-") && split === left && band[1].indexOf("│ no file open") === left);
+  ok("the band: the session across the chat and tools, the changes across the files and code", band[0].startsWith(" ◆ widecode-changes-") && split === side && band[1].indexOf("│ no file open") === side);
+  ok("the changes strip spans both columns' cells, not clipped at the files column", band[0].length > code && band[0].slice(code).trim().length > 0);
   let strip: JsBand | null = null;
   for (const b of app.host.screen.band) if (b.id === "changes" && b.view instanceof JsBand) strip = b.view;
   const bar = (width: number): Line[] => (strip !== null ? strip.lines(width) : []);

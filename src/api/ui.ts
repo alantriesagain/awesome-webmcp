@@ -153,9 +153,9 @@ export const answerUi = (rt: JsRuntime, name: string, a: unknown[]): HostAnswer 
     }
     case "ui.band": {
       const owner = str(a[0]);
-      const b = new JsBand(rt, str(a[1]), owner, num(a[4]), num(a[5]));
+      const b = new JsBand(rt, str(a[1]), owner, num(a[5]), num(a[6]));
       rt.views.addBand(b);
-      h.screen.addBand(owner, new BandPart(str(a[1]), str(a[2]), num(a[3]), b));
+      h.screen.addBand(owner, new BandPart(str(a[1]), str(a[2]), str(a[3]), num(a[4]), b));
       return answer(null);
     }
     case "ui.menu": {
@@ -205,11 +205,12 @@ export const answerUi = (rt: JsRuntime, name: string, a: unknown[]): HostAnswer 
       // A compiled plugin's segment, drawn for a JS one (the status table) from the context it was given.
       const def = h.screen.segments.find(str(a[0]));
       if (def === null) return answer(null);
-      const given = a[1] !== null && typeof a[1] === "object" && !Array.isArray(a[1]) ? (a[1] as { folderName?: unknown; note?: unknown; busy?: unknown; spinner?: unknown; now?: unknown }) : null;
+      const given = a[1] !== null && typeof a[1] === "object" && !Array.isArray(a[1]) ? (a[1] as { folderName?: unknown; message?: unknown; note?: unknown; busy?: unknown; spinner?: unknown; now?: unknown }) : null;
       const ctx = new SegmentContext();
       ctx.info = h.conversation.info;
       if (given !== null) {
         ctx.folderName = str(given.folderName);
+        ctx.message = str(given.message);
         ctx.note = str(given.note);
         ctx.busy = given.busy === true;
         ctx.spinner = str(given.spinner);
@@ -310,7 +311,7 @@ export const NAMESPACE_UI = new PreludePart("ui", `        panel: (p) => {
         },
         band: (b) => {
           const bid = String(b.id);
-          call("ui.band", id, bid, String(b.under ?? ""), Number(b.order ?? 50), fn((width) => b.lines(width)), typeof b.press === "function" ? fn((row, x) => { b.press(row, x); }) : -1);
+          call("ui.band", id, bid, String(b.under ?? ""), String(b.to ?? ""), Number(b.order ?? 50), fn((width) => b.lines(width)), typeof b.press === "function" ? fn((row, x) => { b.press(row, x); }) : -1);
           return Object.freeze({ refresh: () => call("ui.refresh", id, bid) });
         },
         segment: (s) => {

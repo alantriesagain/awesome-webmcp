@@ -589,9 +589,31 @@ export class Shell extends View {
     const dragged = this.columnDrag;
     const columns = this.screen.columns;
     const widths = this.laidOut(cols);
-    // The band in parts as wide as the columns above them: each strip under the column it names.
+    // The band in parts as wide as the columns above them: each strip under the column it names,
+    // or across the columns it spans from `under` through `to`.
     const last = columns.length > 0 ? columns[columns.length - 1].id : "";
     const under = (b: BandPart): string => (this.screen.column(b.under) !== null ? b.under : last);
+    /** The index `b` reaches: its `to` when that is a column to the right of its `under`, else `under`'s own. */
+    const reach = (b: BandPart): number => {
+      const from = columns.findIndex((c) => c.id === under(b));
+      if (from < 0 || b.to.length === 0) return from;
+      const to = columns.findIndex((c) => c.id === b.to);
+      return to > from ? to : from;
+    };
+    /** The last column of the group starting at `from`: the furthest `to` of the strips under its columns, their own groups chained in. */
+    const groupEnd = (from: number): number => {
+      let end = from;
+      for (let i = from; i <= end && i < columns.length; i++) {
+        for (const b of this.screen.band) if (under(b) === columns[i].id) end = Math.max(end, reach(b));
+      }
+      return end;
+    };
+    const groups: { from: number; to: number }[] = [];
+    for (let i = 0; i < columns.length; ) {
+      const end = groupEnd(i);
+      groups.push({ from: i, to: end });
+      i = end + 1;
+    }
     const edge = this.edge.value;
     return html`<div flex=1 bg=${palette.screenBg} @mousehover=${() => {
       this.edge.value = -1;
@@ -621,10 +643,16 @@ export class Shell extends View {
           this.dropColumn(e);
         }}></wc-column>`);
       })}</div>
-      <div direction="row" bg=${palette.bandBg}>${columns.map((c, i) => {
-        const w = widths[i];
-        const parts = this.screen.band.filter((b) => under(b) === c.id);
-        return html`<div direction="row" width=${w > 0 ? w : null} flex=${w > 0 ? 0 : 1}>${parts.map((b) =>
+      <div direction="row" bg=${palette.bandBg}>${groups.map((g) => {
+        const ids = columns.slice(g.from, g.to + 1).map((c) => c.id);
+        const parts = this.screen.band.filter((b) => ids.includes(under(b)));
+        let w = 0;
+        let flex = false;
+        for (let i = g.from; i <= g.to; i++) {
+          if (widths[i] > 0) w += widths[i];
+          else flex = true;
+        }
+        return html`<div direction="row" width=${flex ? null : w} flex=${flex ? 1 : 0}>${parts.map((b) =>
           html`<div flex=1>${b.view}</div>`,
         )}</div>`;
       })}</div>

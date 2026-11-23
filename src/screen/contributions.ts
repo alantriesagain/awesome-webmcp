@@ -124,14 +124,17 @@ export class BandPart {
   readonly id: string;
   /** The column it sits under ("chat", "side", "code"), as wide as it; "" or a column that is not there: under the last one. */
   readonly under: string;
+  /** The last column it reaches, so it spans from `under` through `to`; "" or not to the right of `under`: only `under`. */
+  readonly to: string;
   readonly order: number;
   readonly view: View;
   /** The plugin that added it (set by the host). */
   owner = "";
 
-  constructor(id: string, under: string, order: number, view: View) {
+  constructor(id: string, under: string, to: string, order: number, view: View) {
     this.id = id;
     this.under = under;
+    this.to = to;
     this.order = order;
     this.view = view;
   }
@@ -141,6 +144,8 @@ export class BandPart {
 export class SegmentContext {
   info = new StatusInfo();
   folderName = "";
+  /** The latest message for the user alone, "" when there is none. */
+  message = "";
   /** The latest message for the user, or key hints. */
   note = "";
   busy = false;
