@@ -5,11 +5,17 @@
 // replaces), or a plan (approve, or keep planning with the composer's text as feedback). The set
 // is sent once every question has an answer; Esc declines it. The finished reply goes to
 // the conversation, and the agent's adapter writes it as its agent expects (conversation/requests.ts).
+// The question takes one line, clipped to the panel, so the options stay on screen however long it
+// is; the transcript above shows it whole.
 import { palette } from "@lightstart/tui/palette.ts";
+import { clipText } from "@lightstart/tui/text.ts";
 import { Item, PLAN } from "../conversation/model.ts";
 import { ChatHost } from "./host.ts";
 import { Answer, Question, Reply } from "../conversation/requests.ts";
 import { type KeyEvent, type MouseEvent, TemplateResult, View, html } from "@lightstart/light/native/tui";
+
+/** The question's cells before the panel has a width (its first frame): the chat column's usual width less the border. */
+const QUESTION_CELLS = 50;
 
 /** What the user has done on one question: the options marked (a multi-select) and the answer recorded, if any. */
 export class Draft {
@@ -291,7 +297,7 @@ export class RequestPanel extends View {
     const keys = (q.multi ? "↑↓ move · Space marks · Enter answers" : "↑↓ or a number chooses · Enter answers") + (several ? " · ←→ other questions" : "") + " · Esc declines";
     return html`<div border title=${title} fg=${palette.warn}><div fg=${palette.paneText}>
       ${several ? this.strip() : html``}
-      <p bold>${q.question}</p>
+      <p wrap="none" bold>${clipText(q.question, this.box.w > 2 ? this.box.w - 2 : QUESTION_CELLS)}</p>
       ${rows}
       <p fg=${palette.dim}>${keys}</p>
     </div></div>`;

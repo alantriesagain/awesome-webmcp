@@ -265,6 +265,44 @@ const main = async (): Promise<void> => {
   unmount(app5.shell);
   closeWidecode(app5);
 
+  // A long question in a short terminal stays one row, so the options under it remain visible.
+  const root6 = new TRoot();
+  const w6 = 160;
+  const h6 = 18;
+  const app6 = await openWidecode({
+    folder: process.cwd(),
+    before: (w: Widecode) => {
+      w.shell.resize(w6);
+      mount(w.shell, root6);
+    },
+  });
+  const c6 = app6.host.conversation;
+  const paint6 = (): string => {
+    for (let i = 0; i < 3; i++) {
+      frames.flush();
+      layout(root6, w6, h6, DEFAULT_STYLE);
+    }
+    const s = new Screen(w6, h6);
+    paint(root6, s, new Clip(0, 0, w6, h6), DEFAULT_STYLE, new Caret(), null);
+    return s.text();
+  };
+  const longRequest = c6.model.openRequest("req-long", "AskUserQuestion", "", null);
+  const longQuestion = new Question();
+  longQuestion.question = "Which of these many possible approaches would you prefer for this task, considering the tradeoffs ".repeat(10).trim();
+  longQuestion.header = "Approach";
+  longQuestion.options.push(new Choice("Allow once", "the first option"));
+  longQuestion.options.push(new Choice("Deny", "the second option"));
+  longQuestion.options.push(new Choice("Defer", "the third option"));
+  longRequest.questions.push(longQuestion);
+  longRequest.category = "question";
+  c6.changed();
+  const longText = paint6();
+  ok("a long question is clipped to one row and the options stay visible", longText.includes("3. Defer") && longText.includes("…"));
+  ok("the long question does not push the rows past the screen", !longText.includes(longQuestion.question));
+
+  unmount(app6.shell);
+  closeWidecode(app6);
+
   done();
 };
 
