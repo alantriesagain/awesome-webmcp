@@ -129,7 +129,7 @@ export class CodeSource extends LineSource {
     if (!this.wrap || (width === this.wrapWidth && this.file === this.wrapFile)) return;
     this.wrapWidth = width;
     this.wrapFile = this.file;
-    const cols = Math.max(8, width - this.gutter());
+    const cols = Math.max(8, width - this.gutter() - 1);
     const starts: number[] = [];
     const cells: number[] = [];
     const indents: number[] = [];
@@ -175,8 +175,14 @@ export class CodeSource extends LineSource {
     return lo;
   }
 
-  line(index: number, _width: number): Line {
-    if (!this.wrap) return this.codeLine(index);
+  line(index: number, width: number): Line {
+    if (!this.wrap) {
+      const full = this.codeLine(index);
+      const l = new Line();
+      l.bg = full.bg;
+      l.runs = sliceRuns(full.runs, 0, Math.max(0, width - 1));
+      return l;
+    }
     const at = this.lineOf(index);
     const full = this.codeLine(at);
     const gutter = this.gutter();
