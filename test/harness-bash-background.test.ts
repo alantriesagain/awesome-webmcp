@@ -22,15 +22,7 @@ import { BashJobs } from "../src/harness/tools/proc.ts";
 import { ToolOutcome, ToolSet, builtInTools } from "../src/harness/tools/tool.ts";
 import { ToolContext } from "../src/harness/tools/tool.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
-
-const until = (what: () => boolean): Promise<void> =>
-  new Promise<void>((settle) => {
-    const tick = (): void => {
-      if (what()) settle();
-      else setTimeout(tick, 10);
-    };
-    tick();
-  });
+import { until } from "./support/until.ts";
 
 const wait = (ms: number): Promise<void> => new Promise<void>((settle) => setTimeout(settle, ms));
 

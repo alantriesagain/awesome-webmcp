@@ -39,6 +39,11 @@ Open issues found along the way, each with what is known.
   (also used for columns) and `mergePermissions` (`src/services/harness.ts`) are separate merge
   policies, and keymap, agent and log read only from the user's `config.json`, with no project
   merge at all.
+- On macOS, `test/trust-run.test.ts` passes every check and prints its tally, then never exits
+  under node (seen for 30 minutes on the Mac, with no child process left): something the run
+  opened keeps the event loop alive there, likely a watcher, though the test stops the plugin
+  watcher and closes the workspace. It exits at once on Linux. light test's timeout now ends it as a
+  timed-out FAIL; the cause is not found yet.
 - `test/plugins.test.ts`'s "every built-in plugin answers its defaults" flakes on whether the
   `skills` plugin's default carries a `*` (its value is not plain `true`): seen passing and failing
   across two otherwise identical node-only runs with no change to that plugin in between. Not

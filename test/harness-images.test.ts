@@ -20,18 +20,10 @@ import { ModelRegistry } from "../src/harness/model/registry.ts";
 import { HarnessPaths } from "../src/harness/paths.ts";
 import { ToolContext, ToolSet, builtInTools } from "../src/harness/tools/tool.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "./support/until.ts";
 
 /** A 1×1 PNG. */
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-
-const until = (what: () => boolean): Promise<void> =>
-  new Promise<void>((settle) => {
-    const tick = (): void => {
-      if (what()) settle();
-      else setTimeout(tick, 10);
-    };
-    tick();
-  });
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "harness-images-"));

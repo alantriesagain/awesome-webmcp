@@ -23,6 +23,7 @@ import { Entry } from "../src/harness/session/entries.ts";
 import { SessionStore } from "../src/harness/session/store.ts";
 import { ToolSet, builtInTools } from "../src/harness/tools/tool.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "./support/until.ts";
 
 const FIXTURE = [
   '{"match":"hello","text":"Hello, world.","thinking":"Thinking about it.","input":12,"output":4}',
@@ -32,15 +33,6 @@ const FIXTURE = [
   '{"match":"hold","text":"Holding","hold":true}',
   '{"match":"fail","error":"model unavailable"}',
 ].join("\n");
-
-const until = (what: () => boolean): Promise<void> =>
-  new Promise<void>((settle) => {
-    const tick = (): void => {
-      if (what()) settle();
-      else setTimeout(tick, 10);
-    };
-    tick();
-  });
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "harness-agent-"));

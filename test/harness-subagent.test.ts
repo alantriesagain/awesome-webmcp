@@ -19,6 +19,7 @@ import { Usage } from "../src/harness/model/message.ts";
 import { HarnessPaths } from "../src/harness/paths.ts";
 import { ToolOutcome, ToolSet, builtInTools } from "../src/harness/tools/tool.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
+import { until } from "./support/until.ts";
 
 const FIXTURE = [
   '{"match":"delegate","text":"Delegating.","tools":[{"name":"Task","input":{"description":"Find the port","prompt":"look for the port in a.txt","subagent_type":"general-purpose"}}]}',
@@ -28,15 +29,6 @@ const FIXTURE = [
   '{"match":"empty","text":"Trying.","tools":[{"name":"Task","input":{"description":"Nothing","prompt":"  "}}]}',
   '{"match":"result","text":"It refused."}',
 ].join("\n");
-
-const until = (what: () => boolean): Promise<void> =>
-  new Promise<void>((settle) => {
-    const tick = (): void => {
-      if (what()) settle();
-      else setTimeout(tick, 10);
-    };
-    tick();
-  });
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "harness-sub-"));

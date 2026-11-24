@@ -18,6 +18,7 @@ import { ModelClient, ModelRequest } from "../../src/harness/model/client.ts";
 import { FakeClient } from "../../src/harness/model/fake.ts";
 import { HarnessPaths } from "../../src/harness/paths.ts";
 import { ToolSet, builtInTools } from "../../src/harness/tools/tool.ts";
+import { until } from "./until.ts";
 
 /** The folder holding the generated sources, from the member's folder or the repository's root. */
 /** The built-in plugins as the app's prepare step wrote them for a test run: dist/plugins-test/<id>/. */
@@ -34,15 +35,7 @@ export const builtinSources = (ids: string[]): PluginSource[] => {
   return out;
 };
 
-/** Wait until `what` holds. */
-export const until = (what: () => boolean): Promise<void> =>
-  new Promise<void>((settle) => {
-    const tick = (): void => {
-      if (what()) settle();
-      else setTimeout(tick, 10);
-    };
-    tick();
-  });
+export { until };
 
 /** The `text` of the first text part in a line, with its JSON escapes applied. */
 const textIn = (line: string): string => {

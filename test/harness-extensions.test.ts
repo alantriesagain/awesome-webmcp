@@ -25,15 +25,7 @@ import { HarnessPaths } from "../src/harness/paths.ts";
 import { SessionStore } from "../src/harness/session/store.ts";
 import { ToolSet, builtInTools } from "../src/harness/tools/tool.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
-
-const until = (what: () => boolean): Promise<void> =>
-  new Promise<void>((settle) => {
-    const tick = (): void => {
-      if (what()) settle();
-      else setTimeout(tick, 10);
-    };
-    tick();
-  });
+import { until } from "./support/until.ts";
 
 const waitUpTo = async (what: () => boolean, ms: number): Promise<boolean> => {
   const end = Date.now() + ms;
