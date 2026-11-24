@@ -120,7 +120,7 @@ const main = async (): Promise<void> => {
   w = await openWidecode({ folder: repo, plugins: JSON.parse('{"agents": false}'), load: true, before: mountApp });
   let lines = show(w);
   eq("agents off: the side tabs stay on the top edge", tabs(w, lines), "Files 1 Sessions Git");
-  ok("agents off: no Agents tab, nothing opens a subagent", !w.host.screen.panels.some((p) => p.id === "agents") && w.host.screen.panelsIn("tools").map((p) => p.id).join(" ") === "calls available");
+  ok("agents off: no Agents tab, nothing opens a subagent", !w.host.screen.panels.some((p) => p.id === "agents") && w.host.screen.panelsIn("tools").map((p) => p.id).join(" ") === "calls available queue");
   end(w);
 
   w = await openWidecode({ folder: repo, plugins: JSON.parse('{"git": false}'), load: true, before: mountApp });
@@ -200,7 +200,7 @@ const main = async (): Promise<void> => {
   const bare = await openWidecode({ folder: repo, start: false });
   const defaults = bare.defaults();
   closeWidecode(bare);
-  eq("every built-in plugin answers its defaults", defaults.map((d) => d.id + (d.value === true ? "" : "*")).join(" "), "acp* agents alerts* ask* box changes chat claude* claude-rules code dirty-repo-guard emacs files git git-checkpoint harness inline-bash languages menus models* peers* permission-gate* pi* protected-paths* sessions* skills status* todo tools tools-switch vi");
+  eq("every built-in plugin answers its defaults", defaults.map((d) => d.id + (d.value === true ? "" : "*")).join(" "), "acp* agents alerts* ask* box changes chat claude* claude-rules code dirty-repo-guard emacs files git git-checkpoint harness inline-bash languages menus models* peers* permission-gate* pi* protected-paths* queue sessions* skills status* todo tools tools-switch vi");
   rmSync(repo, { recursive: true, force: true });
   done();
 };

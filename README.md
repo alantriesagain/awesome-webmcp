@@ -67,6 +67,8 @@ interrupts,
 Shift+Tab toggles plan mode, `@` completes a path (Tab takes it; `@image.png` attaches the image),
 `/resume`, `/new`, `/compact [instructions]`, `/model <name>`, `/effort <level>`, `/plan`,
 `/btw <question>` (a side question, answered in the chat and kept out of the conversation),
+`/queue [text]` (a draft saved for later, in the tools column's Queue tab: the text after it, else
+the composer's),
 `/keymap <name>` (the keys in use: emacs unless told otherwise, with Ctrl+F/B/P/N and Alt+D beside
 readline's; default, readline's alone; or vi, with insert and normal modes in the composer, Esc
 between them; kept for the next run),
@@ -90,7 +92,7 @@ step and the turn, over the messages queued for it; a message sent while Claude 
 sent at once. After `/compact`, the chat says how much context it freed and the context meter drops
 at once.
 
-The tools column, right of the chat, has three tabs. Tools: every call, under the message it answers,
+The tools column, right of the chat, has four tabs. Tools: every call, under the message it answers,
 each with where it stands (a spinner while it runs, then ● done, failed or stopped), what it was
 given, and how long it took (its clock moving while it runs); ↑↓ and Enter or a press show a call
 whole in the code column: its command or input, and its output or change (Esc returns to the file).
@@ -100,7 +102,10 @@ it starts, an ACP agent through its entry's tools command (opencode's `opencode 
 <mode>`, read again when the mode changes, whose permission rules say what the mode denies, limits
 to some files or asks for: in plan mode, edit and write only on plan files). A press on a tool says
 all of that in the status bar. Agents: the session's subagents, where each stands and what it is
-doing or reported; a press shows one's steps in the code column, live while it runs.
+doing or reported; a press shows one's steps in the code column, live while it runs. Queue: the
+drafts saved with `/queue`, one line each, the tab's badge counting them; a press puts one back in
+the composer (what the composer held takes its place in the queue), and it is sent only when you
+send it.
 
 The files column has five tabs on its top edge (a press on one, or Tab in the
 column; F4 or `/resume` opens Sessions). Files: an All │ Changed switch (a press, or `c`), then the tree, changed names in their
