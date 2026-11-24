@@ -1,14 +1,13 @@
 // ffi: @lightstart/plugins/native/ffi.json
 // A turn Claude Code stopped at a rate limit: the limit is said as itself (not "Error: success"),
-// and the request panel offers waiting, changing model (/model in the composer) or sending the
-// message again when the limit resets. Limits are kept per agent (services/store.ts), so another
-// agent's status does not show Claude Code's windows.
+// and the message is sent again automatically when the limit resets, with no question to answer.
+// Limits are kept per agent (services/store.ts), so another agent's status does not show Claude
+// Code's windows.
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { Limits } from "../src/conversation/session-store.ts";
-import { Answer, Reply } from "../src/conversation/requests.ts";
 import { NOTICE } from "../src/conversation/model.ts";
 import type { Widecode } from "../src/compose.ts";
 import { Store } from "../src/services/store.ts";
@@ -18,16 +17,9 @@ import { closeWidecode, openWidecode } from "./support/app.ts";
 
 const limit = (): string => '{"type":"result","subtype":"success","is_error":true,"result":"You\'ve hit your session limit · resets 1pm (America/Sao_Paulo)"}';
 
-/** Answer the open request with `label`. */
-const choose = (c: Conversation, label: string): void => {
-  const open = c.model.openRequests();
-  if (open.length === 0) return;
-  const reply = new Reply("answered");
-  const a = new Answer(open[0].questions[0].question, false);
-  a.labels.push(label);
-  reply.answers.push(a);
-  c.respond(open[0], reply);
-};
+/** Whether the conversation said a notice whose text includes `text`. */
+const said = (c: Conversation, text: string): boolean =>
+  c.model.turns.some((t) => t.after.children.concat(t.body.children).some((i) => i.kind === NOTICE && i.text.includes(text)));
 
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "widecode-limits-"));
@@ -44,26 +36,8 @@ const main = async (): Promise<void> => {
 
   ok("the limit error is said as itself", await until(() => c.model.turns.some((t) => t.after.children.concat(t.body.children).some((i) => i.kind === NOTICE && i.text.includes("You've hit your session limit")))));
   ok("and not as an empty result", !c.model.turns.some((t) => t.after.children.concat(t.body.children).some((i) => i.kind === NOTICE && i.text === "Error: success")));
-  ok("the limit is put to the user", await until(() => c.model.openRequests().length > 0));
-  const asked = c.model.openRequests()[0];
-  const labels = asked !== undefined ? asked.questions[0].options.map((o) => o.label) : [];
-  eq("with waiting, changing model, or retrying", labels.slice(0, 2).join(" | "), "Wait | Change model");
-  ok("and when the retry will come", labels.length === 3 && labels[2].startsWith("Retry in "));
-
-  choose(c, "Wait");
-  ok("waiting closes it and sends nothing", await until(() => c.model.openRequests().length === 0));
-  eq("nothing was written to the agent", String(c.model.pending.length), "0");
-
-  limitTurn();
-  ok("another limit asks again", await until(() => c.model.openRequests().length > 0));
-  choose(c, "Change model");
-  ok("changing model puts /model in the composer", await until(() => app.chat.pane.input.value() === "/model "));
-
-  limitTurn();
-  ok("a third limit asks once more", await until(() => c.model.openRequests().length > 0));
-  const third = c.model.openRequests()[0];
-  choose(c, third !== undefined ? third.questions[0].options[2].label : "");
-  ok("retrying is scheduled for the reset", await until(() => app.host.screen.message.peek().startsWith("retrying in ")));
+  ok("no question is put to the user", await until(() => app.host.screen.message.peek().startsWith("retrying in ")) && c.model.openRequests().length === 0);
+  ok("a retry is scheduled automatically for the reset", said(c, "Retry scheduled when the limit resets"));
 
   // A send from a finished task arrives while a retry waits: it does not fire messageSending, and
   // the retry still sends the user's message (not the task's report).
@@ -92,16 +66,13 @@ const main = async (): Promise<void> => {
   eq("the user's message is sent", c2.send("the user's message", []), "");
   c2.model.openTurn("go", 0, true);
   c2.receive('{"type":"result","subtype":"success","is_error":true,"result":"You\'ve hit your session limit · resets in 1 second"}');
-  ok("a short limit is put to the user", await until(() => c2.model.openRequests().length > 0));
-  const short = c2.model.openRequests()[0];
-  choose(c2, short !== undefined ? short.questions[0].options[2].label : "");
-  ok("the retry is scheduled", await until(() => app2.host.screen.message.peek().startsWith("retrying in ")));
+  ok("a short limit is retried automatically, no question asked", await until(() => app2.host.screen.message.peek().startsWith("retrying in ")) && c2.model.openRequests().length === 0);
   const answer = app2.js.answer("agent.send", JSON.stringify(["the task finished", { from: "task" }]));
   const sent = JSON.parse(answer.text) as { error: string };
   eq("a send from a task is accepted", sent.error, "");
   eq("and does not fire messageSending", String(sending), "0");
   ok("and the retry stays scheduled", app2.host.screen.message.peek().startsWith("retrying in "));
-  ok("the retry fires and resends the user's message", await until(() => written.length > 0 && promptOf(written[written.length - 1]) === "the user's message", 12000));
+  ok("the retry fires on its own and resends the user's message", await until(() => written.length > 0 && promptOf(written[written.length - 1]) === "the user's message", 12000));
   closeWidecode(app2);
   rmSync(folder2, { recursive: true, force: true });
 

@@ -756,40 +756,14 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     flush();
   };
 
-  /** The turn stopped by a limit: say what it was, and let the user wait, switch model, or send the message again when it resets. */
+  /** The turn stopped by a limit: send the message again automatically when it resets. Switching models is still /model, typed. */
   const offerLimit = (text: string): void => {
     if (retryAt > 0) return;
     const now = Date.now();
     const reset = resetOf(text);
     const known = reset > 0;
     const when = known ? (reset > now ? reset : now + 3000) : now + 5 * 60000;
-    const left = widecode.util.elapsed(Math.max(0, when - now));
-    const retryLabel = known ? "Retry in " + left : "Retry in 5 min";
-    api.conversation
-      .ask({
-        category: "question",
-        name: "Claude limit",
-        questions: [
-          {
-            question: "Claude hit its limit. How should widecode go on?",
-            header: "Limit",
-            options: [
-              { label: "Wait", description: "do nothing; send a message yourself when you are ready" },
-              { label: "Change model", description: "put /model in the composer to pick another model" },
-              { label: retryLabel, description: known ? "send the same message again when the limit resets" : "the reset time is unknown; try again in five minutes" },
-            ],
-          },
-        ],
-      })
-      .then((reply) => {
-        if (reply.state !== "answered" || reply.answers.length === 0) return;
-        const label = reply.answers[0].labels.length > 0 ? reply.answers[0].labels[0] : "";
-        if (label === "Change model") {
-          api.composer.set(["/model "], 0, 7);
-          api.actions.focus("chat");
-          api.tell("pick the model to switch to");
-        } else if (label === retryLabel) scheduleRetry(when, known);
-      });
+    scheduleRetry(when, known);
   };
 
   return {
