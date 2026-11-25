@@ -2,7 +2,7 @@
 // The DeepSeek Harness (`dsh`, --agent dsh) as an ACP agent (plugins/acp/index.ts), here the fake
 // (test/fake-acp.mjs --dsh): it advertises session/list and session/resume but no session/load, no
 // fork and no modes, and its session's config options are `model` (category `model`, opaque
-// ["provider","model"] values) and `reasoning_effort` (category `thought_level`). widecode's own
+// ["provider","model"] values) and `reasoning_effort` (category `thought_level`). lightcode's own
 // tools still reach it (mcpCapabilities.http). A process that ends is started again on the same
 // session with session/resume (never session/load), and a past session pressed in the Sessions tab
 // is resumed without replaying its turns, with a notice saying so. A plan mode it does not offer is
@@ -11,8 +11,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Item, NOTICE, TEXT, THINKING, TOOL, Turn } from "../src/conversation/model.ts";
-import type { Widecode } from "../src/compose.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import type { Lightcode } from "../src/compose.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
@@ -21,17 +21,17 @@ import { until } from "@lightstart/test/headless.ts";
 const kinds = (items: Item[]): string => items.map((i: Item) => (i.kind === THINKING ? "thinking" : i.kind === TEXT ? "text" : i.kind === TOOL ? "tool" : i.kind === NOTICE ? "notice:" + i.text : "other")).join(",");
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-deepseek-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-deepseek-"));
   writeFileSync(join(folder, "a.txt"), "one\n");
   const log = join(folder, "deepseek.log");
   const fake = join(process.cwd(), "test/fake-acp.mjs");
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     plugins: {
       models: { agents: { dsh: ['["deepseek-official","deepseek-flash"]', '["deepseek-official","deepseek-v4-pro"]'] } },
       acp: { agents: { dsh: { name: "DeepSeek Harness", command: ["node", fake, "--dsh", "--log", log] } } },
     },
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.host.session.agentId.value = "dsh";
     },
   });
@@ -71,9 +71,9 @@ const main = async (): Promise<void> => {
   };
 
   eq("the DeepSeek Harness agent, not opencode", c.agent.id() + " " + c.agent.name(), "dsh DeepSeek Harness");
-  ok("its session starts with widecode, model and effort known before any message", (await until(() => c.info.modelId === '["deepseek-official","deepseek-flash"]')) && c.started && sent().includes('"method":"session/new"') && !sent().includes('"method":"session/prompt"'));
+  ok("its session starts with lightcode, model and effort known before any message", (await until(() => c.info.modelId === '["deepseek-official","deepseek-flash"]')) && c.started && sent().includes('"method":"session/new"') && !sent().includes('"method":"session/prompt"'));
   eq("the model's opaque value and its efforts (the provider default is the empty value)", c.info.modelId + " " + c.agent.choices().efforts.map((e) => e.value).join(","), '["deepseek-official","deepseek-flash"] ,off,low,high,max');
-  ok("widecode's MCP tools are offered to it (it takes HTTP)", sent().includes('"name":"widecode"'));
+  ok("lightcode's MCP tools are offered to it (it takes HTTP)", sent().includes('"name":"lightcode"'));
   ok("it does not claim session/load, fork or modes", !sent().includes("session/load"));
 
   ok("a turn", await turn("hello"));
@@ -106,7 +106,7 @@ const main = async (): Promise<void> => {
   c.reset();
   ok("/new: a new session on the next message", (await turn("hello")) && c.sessionId === "fake-2");
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

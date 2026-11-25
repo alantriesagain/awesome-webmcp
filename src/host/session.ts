@@ -1,7 +1,7 @@
 // The session as the host holds it: the conversation with the agent (another folder opens with a
 // conversation of its own), the agents plugins brought and the one talked to, whether the folder
 // is trusted (the agent works there and its harness runs), the store, the folder's session records
-// (a light model over .widecode/sessions.jsonl, followed live) and the title writer, the
+// (a light model over .lightcode/sessions.jsonl, followed live) and the title writer, the
 // folder's message history, the project's harness and the user's config parts the harness is
 // merged over. The agent chosen and the trust are signals; the hooks announce the conversation's
 // changes to plugins. One of light's controllers, as the app's state is.
@@ -51,7 +51,7 @@ export class SessionController extends Controller {
     const c = this.current.value;
     return [c, c.revision.value];
   });
-  /** The project's harness, `.widecode/` in the folder. */
+  /** The project's harness, `.lightcode/` in the folder. */
   harness: Harness;
   /** Whether the user trusts the folder: the agent works here and the folder's harness runs. True without a store; else as the store remembers, until /trust. */
   readonly trusted = signal(true);
@@ -59,7 +59,7 @@ export class SessionController extends Controller {
   readonly agentId = signal("claude");
   /** The agents plugins brought. */
   readonly agents: Agent[] = [];
-  /** widecode's store (null with --ephemeral) and the title writer, shared by every conversation. */
+  /** lightcode's store (null with --ephemeral) and the title writer, shared by every conversation. */
   store: Store | null = null;
   /** The folder's session records over the sessions model (null without a store). */
   records: SessionRecords | null = null;
@@ -120,7 +120,7 @@ export class SessionController extends Controller {
       await records.open(folder);
     }
     this.conversation.store = this.records;
-    this.history = new PromptHistory(store !== null ? join(folder, ".widecode") : "");
+    this.history = new PromptHistory(store !== null ? join(folder, ".lightcode") : "");
     // A fresh status that starts from the limits the store saw last.
     this.conversation.reset();
   }
@@ -213,7 +213,7 @@ export class SessionController extends Controller {
     return mergePermissions(this.userPermissions, this.harness.config().permissions);
   }
 
-  /** Keep a message the user wrote in `folder`, for the composer's ↑ (the project's .widecode/ ignores itself first). */
+  /** Keep a message the user wrote in `folder`, for the composer's ↑ (the project's .lightcode/ ignores itself first). */
   remember(text: string, folder: string): void {
     const store = this.store;
     if (store !== null) store.ignoreIn(folder, true);
@@ -222,7 +222,7 @@ export class SessionController extends Controller {
 
   /** Load the file list and git status, then announce the conversation (the screen's first fill). */
   async load(folder: FolderController, hooks: NamedHook[]): Promise<void> {
-    // A .widecode/ from before it ignored itself would show among the changes.
+    // A .lightcode/ from before it ignored itself would show among the changes.
     const store = this.store;
     if (store !== null) store.ignoreIn(folder.workspace.folder, false);
     await folder.load();

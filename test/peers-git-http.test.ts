@@ -11,7 +11,7 @@ import { Daemon, DaemonOptions, DaemonPaths, Peer, Registry, isPrivateAddress, n
 import { SpawnOptions, spawnCapped } from "@lightstart/lib/process.ts";
 import { done, eq, eqn, ok } from "@lightstart/test/assert.ts";
 
-const root = mkdtempSync(join(tmpdir(), "widecode-peers-git-"));
+const root = mkdtempSync(join(tmpdir(), "lightcode-peers-git-"));
 const store = join(root, "store");
 mkdirSync(store);
 

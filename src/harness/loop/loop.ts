@@ -57,7 +57,7 @@ export class TurnEnd {
 export class LoopSession {
   /** The session's id, what its extension dialogs go out with ("" for a subagent's). */
   id = "";
-  /** Whether the client takes `_widecode/ui` (a session's extensions may ask it). */
+  /** Whether the client takes `_lightcode/ui` (a session's extensions may ask it). */
   hasUI = false;
   /** The context: the messages since the last compaction. */
   messages: Message[] = [];

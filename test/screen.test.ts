@@ -7,13 +7,13 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { KeyEvent, MouseEvent, hitTest, insertText } from "@lightstart/light/native/tui";
 import { projectDir } from "./support/claude-records.ts";
 import { Store } from "../src/services/store.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { Headless } from "@lightstart/test/headless.ts";
-import { currentWidecode, openWidecode } from "./support/app.ts";
+import { currentLightcode, openLightcode } from "./support/app.ts";
 import { openFolder } from "../src/host/actions.ts";
 
 const W = 200;
@@ -87,16 +87,16 @@ writeFileSync(join(sessionDir, "aaaaaaaa-1111-2222-3333-444444444444", "subagent
 
 const main = async (): Promise<void> => {
   // Claude Code's config folder, empty: the Skills tab lists none of this machine's.
-  const configDir = mkdtempSync(join(tmpdir(), "widecode-screen-config-"));
+  const configDir = mkdtempSync(join(tmpdir(), "lightcode-screen-config-"));
   const config: unknown = { claude: { projects, configDir }, sessions: { terminal: false } };
-  const widecodeHome = mkdtempSync(join(tmpdir(), "code-screen-widecode-"));
-  const store = new Store(widecodeHome);
+  const lightcodeHome = mkdtempSync(join(tmpdir(), "code-screen-lightcode-"));
+  const store = new Store(lightcodeHome);
   store.trust(repo);
-  let app = await openWidecode({
+  let app = await openLightcode({
     folder: repo,
     plugins: config,
     load: true,
-    before: async (w: Widecode) => {
+    before: async (w: Lightcode) => {
       await w.host.session.useStore(store);
       w.host.session.titler.executable = join(process.cwd(), "test", "fake-title.sh");
       w.shell.resize(W);
@@ -231,7 +231,7 @@ const main = async (): Promise<void> => {
   const records = app.host.session.records;
   if (records !== null) await records.settled();
   const stored = records !== null ? records.session("bbbbbbbb-1111-2222-3333-444444444444", repo) : null;
-  ok("kept in the project's .widecode", stored !== null && stored.title === "Rename the helper" && stored.titleBy === "claude" && existsSync(join(repo, ".widecode", "sessions.jsonl")));
+  ok("kept in the project's .lightcode", stored !== null && stored.title === "Rename the helper" && stored.titleBy === "claude" && existsSync(join(repo, ".lightcode", "sessions.jsonl")));
   ok("the highlighted session's details show in the code column, with the ways to open it", has(lines, "Session · Helper rename · Esc back") && has(lines, "when    just now") && has(lines, "Enter  open it here") && has(lines, "no terminal to open it in") && app.host.roles.code.inAgent());
   app.shell.handleKey(key("down", ""));
   lines = screen();
@@ -325,13 +325,13 @@ const main = async (): Promise<void> => {
   lines = screen();
   ok("/open while Claude works only warns", statusOf(lines).includes("Claude is still working here") && app.host.workspace.folder === repo);
   await openFolder(other);
-  app = currentWidecode();
+  app = currentLightcode();
   lines = screen();
   ok("/open again switches the folder: its files, outside git", has(lines, " All 1│ Changed 0 ") && has(lines, "plain.txt") && !has(lines, "app.js") && app.host.workspace.folder === other);
   ok("and the chat starts over there", has(lines, "A new session in this folder"));
   eq("and the chosen agent talks to the new conversation", app.host.conversation.agent.owner, "claude");
   await openFolder(repo);
-  app = currentWidecode();
+  app = currentLightcode();
   rmSync(other, { recursive: true, force: true });
 
   app.host.conversation.resume("aaaaaaaa-1111-2222-3333-444444444444", "Helper rename");
@@ -353,7 +353,7 @@ const main = async (): Promise<void> => {
   app.host.workspace.close();
   rmSync(repo, { recursive: true, force: true });
   rmSync(projects, { recursive: true, force: true });
-  rmSync(widecodeHome, { recursive: true, force: true });
+  rmSync(lightcodeHome, { recursive: true, force: true });
   done();
 };
 

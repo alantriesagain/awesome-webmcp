@@ -8,12 +8,12 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { Line, LineSource, Run } from "@lightstart/light/native/tui/lines.ts";
 import { copyRows, DEFAULT_STYLE, frames, hitTest, layout, MouseEvent, mount, selectRuns, TElement, TRoot, unmount } from "@lightstart/light/native/tui";
 import { wrap } from "@lightstart/tui/text.ts";
 import { done, eq } from "@lightstart/test/assert.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
 class Rows extends LineSource {
   lines: Line[] = [];
@@ -40,17 +40,17 @@ eq("the selection drawn inverse on its cells", selectRuns(l, 3, 8).map((r) => (r
 const decoded = (osc: string): string => Buffer.from(osc.slice("\x1b]52;c;".length, osc.length - 1), "base64").toString("utf8");
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-selection-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-selection-"));
   const long = "export const config = { " + "name: 'x', ".repeat(30) + "};";
   writeFileSync(join(folder, "code.ts"), "const alpha = 1;\nconst beta = 2;\nconst gamma = 3;\n" + long + "\n");
   writeFileSync(join(folder, "notes.md"), "# notes\n");
   const root = new TRoot();
   const W = 160;
   const H = 24;
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     load: true,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.shell.resize(W);
       mount(w.shell, root);
     },
@@ -102,7 +102,7 @@ const main = async (): Promise<void> => {
   const up = (copied[copied.length - 1] ?? "").split("\n").map((l) => l.trim());
   eq("a drag up from there selects to the end of the last line", up.join("|"), "code.ts|notes.md");
   unmount(w.shell);
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

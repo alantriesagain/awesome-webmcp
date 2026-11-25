@@ -37,7 +37,7 @@ export class ToolResult {
   images = 0;
   /** The full result's length in characters, the note's count when the agent only saw a cut one. */
   size = 0;
-  /** Who cut the result: "agent", "widecode", or "" for none. */
+  /** Who cut the result: "agent", "lightcode", or "" for none. */
   truncated = "";
   /** The change the call made (an edit's hunks); empty for other calls. */
   patch: PatchHunk[] = [];
@@ -269,13 +269,13 @@ export class ChatModel {
   permissionMode = "";
   /** The session holds records before the ones loaded ("load earlier" reads them). */
   earlier = false;
-  /** The effort the agent reports ("" when it reports none: the one widecode asked for stands). */
+  /** The effort the agent reports ("" when it reports none: the one lightcode asked for stands). */
   effort = "";
   cwd = "";
   /** The agent's latest status ("requesting", "compacting", …). */
   status = "";
   slashCommands: string[] = [];
-  /** The tools the agent has, once it says (`availableKnown`), and its MCP servers; `ownKnown` false when it lists none of its own (widecode's may be there). */
+  /** The tools the agent has, once it says (`availableKnown`), and its MCP servers; `ownKnown` false when it lists none of its own (lightcode's may be there). */
   available: ToolInfo[] = [];
   servers: ServerInfo[] = [];
   availableKnown = false;

@@ -10,12 +10,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Answer, Reply } from "../src/conversation/requests.ts";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
-const echo = `widecode.plugin({
+const echo = `lightcode.plugin({
   id: "echo-agent",
   activate(api) {
     let proc = null;
@@ -76,12 +76,12 @@ const wait = (ms: number): Promise<void> =>
   });
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-agent-plugin-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-agent-plugin-"));
   writeFileSync(join(folder, "a.txt"), "a\n");
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     load: true,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.js.extra = [new PluginSource("echo.js", echo)];
       w.host.session.agentId.value = "echo";
     },
@@ -131,7 +131,7 @@ const main = async (): Promise<void> => {
   eq("Claude Code again", w.host.session.useAgent("claude") + c.agent.id(), "claude");
   eq("an agent no plugin brought: said", w.host.session.useAgent("nope"), "no agent named nope (there are opencode, dsh, harness, claude, pi, echo)");
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

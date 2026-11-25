@@ -21,9 +21,9 @@ import { done, eq } from "@lightstart/test/assert.ts";
 
 const folder = mkdtempSync(join(tmpdir(), "harness-deny-"));
 const config = join(folder, "config.json");
-writeFileSync(config, JSON.stringify({ permissions: { deny: ["Bash(git push *)", "Bash(rm -rf:*)", "Read(./.env)", "Read(secrets/)", "Edit(/etc/**)", "Read(~/.ssh/**)", "Read(**/*.pem)", "WebFetch(domain:example.com)", "WebSearch", "mcp__widecode__reload", "mcp__other", "not a rule("] } }));
+writeFileSync(config, JSON.stringify({ permissions: { deny: ["Bash(git push *)", "Bash(rm -rf:*)", "Read(./.env)", "Read(secrets/)", "Edit(/etc/**)", "Read(~/.ssh/**)", "Read(**/*.pem)", "WebFetch(domain:example.com)", "WebSearch", "mcp__lightcode__reload", "mcp__other", "not a rule("] } }));
 const rules = parseRules(rulesIn(config));
-eq("the rules it reads", rules.map((r) => r.tool + (r.specifier.length > 0 ? "(" + r.specifier + ")" : "")).join(" "), "Bash(git push *) Bash(rm -rf:*) Read(./.env) Read(secrets/) Edit(/etc/**) Read(~/.ssh/**) Read(**/*.pem) WebFetch(domain:example.com) WebSearch mcp__widecode__reload mcp__other");
+eq("the rules it reads", rules.map((r) => r.tool + (r.specifier.length > 0 ? "(" + r.specifier + ")" : "")).join(" "), "Bash(git push *) Bash(rm -rf:*) Read(./.env) Read(secrets/) Edit(/etc/**) Read(~/.ssh/**) Read(**/*.pem) WebFetch(domain:example.com) WebSearch mcp__lightcode__reload mcp__other");
 const home = "/home/u";
 const denied = (tool: string, input: unknown): string => deniedBy(rules, tool, (input as Record<string, unknown>) ?? {}, folder, home);
 eq("Bash: a command the glob matches, in a compound line too", [denied("Bash", { command: "git push origin main" }), denied("Bash", { command: "git status && git push" }), denied("Bash", { command: "git pull" })].join(" | "), "Bash(git push *) | Bash(git push *) | ");
@@ -33,8 +33,8 @@ eq("a folder's contents, by Read and by LS", [denied("Read", { file_path: "secre
 eq("Edit from the root covers Write; Read of it is let be", [denied("Write", { file_path: "/etc/hosts", content: "" }), denied("Edit", { file_path: "/etc/x/y.conf" }), denied("Read", { file_path: "/etc/hosts" })].join(" | "), "Edit(/etc/**) | Edit(/etc/**) | ");
 eq("in the home, at any depth", [denied("Read", { file_path: "/home/u/.ssh/id_ed25519" }), denied("Read", { file_path: "deep/keys/server.pem" })].join(" | "), "Read(~/.ssh/**) | Read(**/*.pem)");
 eq("WebFetch by domain and its subdomains", [denied("WebFetch", { url: "https://example.com/x" }), denied("WebFetch", { url: "https://docs.example.com/" }), denied("WebFetch", { url: "https://notexample.com/" })].join(" | "), "WebFetch(domain:example.com) | WebFetch(domain:example.com) | ");
-eq("a tool whole; MCP tools by name and by server", [denied("WebSearch", { query: "x" }), denied("mcp__widecode__reload", {}), denied("mcp__widecode__state", {}), denied("mcp__other__thing", {})].join(" | "), "WebSearch | mcp__widecode__reload |  | mcp__other");
-eq("the tools listing's rules: everything allowed, the tools denied whole", listingRules(rules), '[{"permission":"*","pattern":"*","action":"allow"},{"permission":"WebSearch","pattern":"*","action":"deny"},{"permission":"widecode_reload","pattern":"*","action":"deny"},{"permission":"other_*","pattern":"*","action":"deny"}]');
+eq("a tool whole; MCP tools by name and by server", [denied("WebSearch", { query: "x" }), denied("mcp__lightcode__reload", {}), denied("mcp__lightcode__state", {}), denied("mcp__other__thing", {})].join(" | "), "WebSearch | mcp__lightcode__reload |  | mcp__other");
+eq("the tools listing's rules: everything allowed, the tools denied whole", listingRules(rules), '[{"permission":"*","pattern":"*","action":"allow"},{"permission":"WebSearch","pattern":"*","action":"deny"},{"permission":"lightcode_reload","pattern":"*","action":"deny"},{"permission":"other_*","pattern":"*","action":"deny"}]');
 eq("no rules, none listed", listingRules([]), "[]");
 
 const main = async (): Promise<void> => {

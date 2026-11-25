@@ -1,4 +1,4 @@
-// widecode's host as the chat's views see it (src/chat's ChatHost): each answer the host's own of
+// lightcode's host as the chat's views see it (src/chat's ChatHost): each answer the host's own of
 // the moment, over the controllers that hold it.
 import { ChatHost } from "../chat/host.ts";
 import { ChatTarget, ToolsTarget } from "../chat/roles.ts";

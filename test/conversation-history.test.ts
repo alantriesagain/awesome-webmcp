@@ -1,4 +1,4 @@
-// The folder's message history: appended to .widecode/history.jsonl, walked newest first with a
+// The folder's message history: appended to .lightcode/history.jsonl, walked newest first with a
 // repeat in a row walked once, a message added after the walk began leading it; past its size the
 // log moves aside to history.1.jsonl (an older one to .2) and the walk reads across them in order,
 // nothing lost; without a folder to write in, this run's messages only.
@@ -18,8 +18,8 @@ const walk = (h: PromptHistory): string => {
   return out.join(",");
 };
 
-const folder = mkdtempSync(join(tmpdir(), "widecode-history-"));
-const dir = join(folder, ".widecode");
+const folder = mkdtempSync(join(tmpdir(), "lightcode-history-"));
+const dir = join(folder, ".lightcode");
 const h = new PromptHistory(dir);
 for (const t of ["a", "b", "b", "c"]) h.add(t, "s1", 1000);
 h.add("   ", "s1", 1000);
@@ -38,7 +38,7 @@ for (const t of ["f", "g"]) small.add(t, "s2", 4000);
 ok("and again: the older one to .2", existsSync(join(dir, "history.2.jsonl")));
 eq("the walk reads across the files in order, nothing lost", walk(new PromptHistory(dir)), "g,f,e,d,c,b,a");
 
-const cappedDir = join(mkdtempSync(join(tmpdir(), "widecode-history-cap-")), ".widecode");
+const cappedDir = join(mkdtempSync(join(tmpdir(), "lightcode-history-cap-")), ".lightcode");
 const capped = new PromptHistory(cappedDir);
 capped.maxBytes = 1;
 for (let i = 0; i < 15; i++) capped.add("m" + String(i), "s", i);

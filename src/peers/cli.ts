@@ -1,4 +1,4 @@
-// `widecode --peers-daemon [--port <n>] [--name <name>] [--bind <address>] [--no-discovery] [--sync-ms <n>]`: the daemon as a
+// `lightcode --peers-daemon [--port <n>] [--name <name>] [--bind <address>] [--no-discovery] [--sync-ms <n>]`: the daemon as a
 // process. Its log is a file of its own under the store's logs; SIGTERM and a state file that went
 // away (a `/peers stop`, or a daemon that replaced this one) end it; the servers keep it alive.
 import { join } from "node:path";
@@ -13,7 +13,7 @@ const argValue = (args: string[], name: string): string | null => {
 /** Run the daemon over the store at `storeRoot` with the process's `args`; settles with the exit code when it stops. */
 export const peersDaemonMain = (storeRoot: string, args: string[], build: string): Promise<number> =>
   new Promise((resolve) => {
-    nameLog("widecode-peers");
+    nameLog("lightcode-peers");
     openLogIn(join(storeRoot, "logs"), 5);
     log(build + " peers daemon");
     const o = new DaemonOptions();
@@ -30,7 +30,7 @@ export const peersDaemonMain = (storeRoot: string, args: string[], build: string
     void startDaemon(storeRoot, o, (line: string) => log(line)).then((r: Daemon | string) => {
       if (typeof r === "string") {
         log("not started: " + r);
-        console.error("widecode peers: " + r);
+        console.error("lightcode peers: " + r);
         resolve(1);
         return;
       }

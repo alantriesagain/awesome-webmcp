@@ -16,14 +16,14 @@ export interface SubagentTarget {
   model: string;
 }
 
-/** What the acp plugin's tasks say: whether it offers widecode's Task, whether the config replaces Claude's own subagents, and the targets. */
+/** What the acp plugin's tasks say: whether it offers lightcode's Task, whether the config replaces Claude's own subagents, and the targets. */
 export interface SubagentTasks {
   offered: boolean;
   replace: boolean;
   targets: SubagentTarget[];
 }
 
-/** The subagents the session runs, Claude Code's own, widecode's Task, or both, on `model` for Claude's (`""`: inherited). */
+/** The subagents the session runs, Claude Code's own, lightcode's Task, or both, on `model` for Claude's (`""`: inherited). */
 export interface SubagentChoice {
   mode: string;
   model: string;
@@ -73,7 +73,7 @@ export const allowResponse = (requestId: string, input: unknown, folder = "", ke
 export const denyResponse = (requestId: string, message: string): string =>
   '{"type":"control_response","response":{"subtype":"success","request_id":' + JSON.stringify(requestId) + ',"response":{"behavior":"deny","message":' + JSON.stringify(message) + "}}}";
 
-/** Claude Code's permission mode for widecode's approval mode. */
+/** Claude Code's permission mode for lightcode's approval mode. */
 export const permissionModeOf = (approval: string): string => {
   if (approval === "auto") return "acceptEdits";
   if (approval === "plan") return "plan";

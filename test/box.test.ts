@@ -13,7 +13,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { TOOL } from "../src/conversation/model.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
 
@@ -37,7 +37,7 @@ const callBody = (id: number, arguments_: unknown, toolUseId: string): string =>
 };
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-box-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-box-"));
   const marker = join(folder, "marker.txt");
   const run = "printf 'hello\\n' > marker.txt; echo done; echo err >&2";
   const hostActions = {
@@ -48,7 +48,7 @@ const main = async (): Promise<void> => {
     plan: { run: "cat {arg}", description: "run a plan file", arg: "plans/*.txt", show: true },
     loose: { run: "true", description: "any path", arg: "*" },
   };
-  const w = await openWidecode({ folder, plugins: { box: { hostActions: hostActions } }, load: true });
+  const w = await openLightcode({ folder, plugins: { box: { hostActions: hostActions } }, load: true });
   const c = w.host.conversation;
   const url = await w.js.mcp.start();
   const token = w.js.mcp.tokenFor("claude");
@@ -174,39 +174,39 @@ const main = async (): Promise<void> => {
   w.host.roles.chat.submit("/box");
   eq("/box lists the actions", w.host.screen.message.peek(), "host actions: install, write, append, readonly, plan, loose");
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
 
-  const emptyFolder = mkdtempSync(join(tmpdir(), "widecode-box-empty-"));
-  const empty = await openWidecode({ folder: emptyFolder, plugins: { box: { hostActions: {} } }, load: true });
+  const emptyFolder = mkdtempSync(join(tmpdir(), "lightcode-box-empty-"));
+  const empty = await openLightcode({ folder: emptyFolder, plugins: { box: { hostActions: {} } }, load: true });
   const emptyUrl = await empty.js.mcp.start();
   const emptyListed = await send(emptyUrl, empty.js.mcp.tokenFor("claude"), '{"jsonrpc":"2.0","id":0,"method":"tools/list"}');
   ok("no actions configured: no tool", !emptyListed.includes('"name":"HostAction"'));
   empty.host.roles.chat.submit("/box");
   eq("/box says there are none", empty.host.screen.message.peek(), "no host actions configured");
-  closeWidecode(empty);
+  closeLightcode(empty);
   rmSync(emptyFolder, { recursive: true, force: true });
 
-  const offFolder = mkdtempSync(join(tmpdir(), "widecode-box-off-"));
-  const off = await openWidecode({ folder: offFolder, plugins: { box: false }, load: true });
+  const offFolder = mkdtempSync(join(tmpdir(), "lightcode-box-off-"));
+  const off = await openLightcode({ folder: offFolder, plugins: { box: false }, load: true });
   const offUrl = await off.js.mcp.start();
   const offListed = await send(offUrl, off.js.mcp.tokenFor("claude"), '{"jsonrpc":"2.0","id":0,"method":"tools/list"}');
   ok("the plugin switched off offers no tool", !offListed.includes('"name":"HostAction"'));
-  closeWidecode(off);
+  closeLightcode(off);
   rmSync(offFolder, { recursive: true, force: true });
 
   // The jail's bwrap argv, the proxy's unix socket and down --if-idle. The jail is checked with
   // --dry-run, so the test needs no bubblewrap; the live jail is checked on the host.
   const boxScript = join(process.cwd(), "box/box.mjs");
-  const boxEnv = (state: string) => ({ ...process.env, WIDECODE_BOX_DIR: state });
+  const boxEnv = (state: string) => ({ ...process.env, LIGHTCODE_BOX_DIR: state });
   const quote = (value: string): string => `'${value.replace(/'/g, "'\\''")}'`;
   const runBox = (folder: string | null, args: string[], env: NodeJS.ProcessEnv) => {
     const command = `exec node ${args.map(quote).join(" ")}`;
     return spawnSync("sh", ["-c", folder === null ? command : `cd ${quote(folder)} && ${command}`], { encoding: "utf8", env });
   };
-  const jailState = mkdtempSync(join(tmpdir(), "widecode-box-jail-"));
-  const jailProject = mkdtempSync(join(tmpdir(), "widecode-box-project-"));
-  mkdirSync(join(jailProject, ".widecode"));
+  const jailState = mkdtempSync(join(tmpdir(), "lightcode-box-jail-"));
+  const jailProject = mkdtempSync(join(tmpdir(), "lightcode-box-project-"));
+  mkdirSync(join(jailProject, ".lightcode"));
   mkdirSync(join(jailProject, ".git"));
   mkdirSync(join(jailProject, ".worktrees", "task-1"), { recursive: true });
   writeFileSync(join(jailProject, ".worktrees", "task-1", ".git"), "gitdir: " + join(jailProject, ".git", "worktrees", "task-1") + "\n");
@@ -228,7 +228,7 @@ const main = async (): Promise<void> => {
   };
   ok("the jail uses unshare-all and dies with its parent", argv.includes("--unshare-all") && argv.includes("--die-with-parent"));
   ok("the project is bound read-write", triple("--bind", jailProject, jailProject));
-  ok("its .widecode is read-only when present", triple("--ro-bind", join(jailProject, ".widecode"), join(jailProject, ".widecode")));
+  ok("its .lightcode is read-only when present", triple("--ro-bind", join(jailProject, ".lightcode"), join(jailProject, ".lightcode")));
   ok("its .git is read-only whole", triple("--ro-bind", join(jailProject, ".git"), join(jailProject, ".git")));
   const tree = join(jailProject, ".worktrees", "task-1");
   ok("its .worktrees and each worktree are mount points", triple("--bind", join(jailProject, ".worktrees"), join(jailProject, ".worktrees")) && triple("--bind", tree, tree));
@@ -251,7 +251,7 @@ const main = async (): Promise<void> => {
       setenv("https_proxy") === proxyUrl && setenv("http_proxy") === proxyUrl &&
       setenv("NO_PROXY") === "localhost,127.0.0.1",
   );
-  const outside = mkdtempSync(join(tmpdir(), "widecode-box-outside-"));
+  const outside = mkdtempSync(join(tmpdir(), "lightcode-box-outside-"));
   const cwdRefused = runBox(
     outside,
     [boxScript, "jail", "--proxy-port", "8899", "--project", jailProject, "--dry-run", "--", "true"],
@@ -263,7 +263,7 @@ const main = async (): Promise<void> => {
   rmSync(jailProject, { recursive: true, force: true });
   rmSync(jailState, { recursive: true, force: true });
 
-  const proxyState = mkdtempSync(join(tmpdir(), "widecode-box-proxy-"));
+  const proxyState = mkdtempSync(join(tmpdir(), "lightcode-box-proxy-"));
   const freePort = await new Promise<number>((resolve, reject) => {
     const probe = net.createServer();
     probe.once("error", reject);
@@ -330,7 +330,7 @@ const main = async (): Promise<void> => {
         resolve(text);
       }, 3000);
     });
-  const proxyExtraState = mkdtempSync(join(tmpdir(), "widecode-box-proxy-extra-"));
+  const proxyExtraState = mkdtempSync(join(tmpdir(), "lightcode-box-proxy-extra-"));
   const localTarget = net.createServer((client) => client.end("hello\n"));
   const localPort = await new Promise<number>((resolve) => {
     localTarget.listen(0, "127.0.0.1", () => {
@@ -379,7 +379,7 @@ const main = async (): Promise<void> => {
   });
   rmSync(proxyExtraState, { recursive: true, force: true });
 
-  const proxyLocalState = mkdtempSync(join(tmpdir(), "widecode-box-proxy-local-"));
+  const proxyLocalState = mkdtempSync(join(tmpdir(), "lightcode-box-proxy-local-"));
   const proxyLocalPort = await new Promise<number>((resolve, reject) => {
     const probe = net.createServer();
     probe.once("error", reject);
@@ -415,7 +415,7 @@ const main = async (): Promise<void> => {
   localTarget.close();
   rmSync(proxyLocalState, { recursive: true, force: true });
 
-  const idleState = mkdtempSync(join(tmpdir(), "widecode-box-idle-"));
+  const idleState = mkdtempSync(join(tmpdir(), "lightcode-box-idle-"));
   mkdirSync(join(idleState, "sessions"));
   const stale = join(idleState, "sessions", "999999");
   writeFileSync(stale, "");
@@ -424,7 +424,7 @@ const main = async (): Promise<void> => {
   ok("and removes the stale file", !existsSync(stale));
   rmSync(idleState, { recursive: true, force: true });
 
-  const liveState = mkdtempSync(join(tmpdir(), "widecode-box-live-"));
+  const liveState = mkdtempSync(join(tmpdir(), "lightcode-box-live-"));
   mkdirSync(join(liveState, "sessions"));
   const live = join(liveState, "sessions", String(process.pid));
   writeFileSync(live, "");

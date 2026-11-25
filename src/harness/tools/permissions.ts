@@ -1,5 +1,5 @@
 // The calls the harness refuses: the `permissions.deny` rules of the user's config.json and of a
-// trusted project's `.widecode/config.json`, in Claude Code's syntax. The harness asks no
+// trusted project's `.lightcode/config.json`, in Claude Code's syntax. The harness asks no
 // permission (every other call runs), so a deny rule is the one guard: `Bash` or `Bash(<pattern>)`
 // (the pattern a glob over each simple command of the line, `*` any text; `npm run test:*` the old
 // prefix form), `Read(<path>)` and `Edit(<path>)` (a gitignore-style path: `./x` and `x/` in the
@@ -131,7 +131,7 @@ export const listingRules = (rules: DenyRule[]): string => {
   if (whole.length === 0) return "[]";
   const out = ['{"permission":"*","pattern":"*","action":"allow"}'];
   for (const r of whole) {
-    // An MCP tool as the plugin names widecode's: `widecode_<tool>`, a whole server `widecode_*`.
+    // An MCP tool as the plugin names lightcode's: `lightcode_<tool>`, a whole server `lightcode_*`.
     const m = /^mcp__([A-Za-z0-9_-]+?)(?:__(.+))?$/.exec(r.tool);
     const name = m !== null ? m[1] + "_" + (m[2] !== undefined ? m[2] : "*") : r.tool;
     out.push('{"permission":' + JSON.stringify(name) + ',"pattern":"*","action":"deny"}');

@@ -1,6 +1,6 @@
 // The project's instructions for agents: AGENTS.md, CLAUDE.md and .claude/CLAUDE.md in each folder
 // from the repository's root down to the session's folder (a trusted folder's only), then the
-// user's own `~/.widecode/harness/AGENTS.md`. A file is cut at 32 KB and all of them at 128 KB; a
+// user's own `~/.lightcode/harness/AGENTS.md`. A file is cut at 32 KB and all of them at 128 KB; a
 // file whose text another one had already (CLAUDE.md often links AGENTS.md) is left out.
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";

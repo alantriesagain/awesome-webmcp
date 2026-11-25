@@ -1,9 +1,9 @@
 # ACP, as the `acp` plugin uses it
 
 ACP, the Agent Client Protocol (agentclientprotocol.com), is JSON-RPC 2.0 over the agent's stdin
-and stdout, one message per line. widecode is the client; `plugins/acp/index.ts` speaks it.
+and stdout, one message per line. lightcode is the client; `plugins/acp/index.ts` speaks it.
 
-Measured on opencode 1.19.2 with `test/probe/acp.mjs` (`WIDECODE_LIVE=1`, on
+Measured on opencode 1.19.2 with `test/probe/acp.mjs` (`LIGHTCODE_LIVE=1`, on
 opencode's free `big-pickle` model, in a temporary repository): a reply, a bash call, a read and an
 edit, a cancel during `sleep 30`, `session/list`, and a second process loading the session. Every
 line both ways is in `test/fixtures/acp-opencode.ndjson` (`{"dir":"out"|"in","t":ms,"raw":"<line>"}`,
@@ -11,7 +11,7 @@ the repository written as /tmp/PROJECT), with what it showed in `acp-opencode.no
 `test/fake-acp.mjs --replay` plays it back for `test/acp-opencode.test.ts`; without
 `--replay` the fake is a scripted agent that speaks as 1.19 does, or as 1.2.10 did with
 `--legacy` (read from that version's source). Rerun the probe after an opencode upgrade:
-`WIDECODE_LIVE=1 node test/probe/acp.mjs` (`--models` lists the models and stops).
+`LIGHTCODE_LIVE=1 node test/probe/acp.mjs` (`--models` lists the models and stops).
 
 ## Launch
 
@@ -20,10 +20,10 @@ opencode acp
 ```
 
 In the folder, with `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT` removed from the environment (the
-core's `api.process.spawn` does this for every agent). The process serves every session; widecode
+core's `api.process.spawn` does this for every agent). The process serves every session; lightcode
 keeps one running and starts it again on the next message if it ends.
 
-## Calls widecode makes
+## Calls lightcode makes
 
 | Call | Params | Answer |
 |---|---|---|
@@ -41,10 +41,10 @@ keeps one running and starts it again on the next message if it ends.
 
 A past session is reopened with `session/load` when the agent advertises `loadSession`, its turns
 replayed; else with `session/resume` when it advertises that (the DeepSeek Harness: its earlier
-turns are not shown, and widecode says so); else a new session starts.
+turns are not shown, and lightcode says so); else a new session starts.
 
-`mcpServers` is `[{type: "http", name: "widecode", url, headers: [{name: "Authorization", value:
-"Bearer <token>"}]}]`, widecode's own tools (PLUGINS.md), when the agent's `mcpCapabilities.http` is
+`mcpServers` is `[{type: "http", name: "lightcode", url, headers: [{name: "Authorization", value:
+"Bearer <token>"}]}]`, lightcode's own tools (PLUGINS.md), when the agent's `mcpCapabilities.http` is
 true and a plugin added a tool; `[]` else.
 
 A config option is `{id, name, category, type: "select", currentValue, options}`, its options
@@ -58,7 +58,7 @@ model, effort or mode may take.
 
 `session/update` notifications, `{sessionId, update: {sessionUpdate, …}}`:
 
-| `sessionUpdate` | Fields | widecode shows |
+| `sessionUpdate` | Fields | lightcode shows |
 |---|---|---|
 | `agent_message_chunk` | `messageId, content: {type: "text", text}` | the reply; chunks of one message joined, another message another block |
 | `agent_thought_chunk` | the same (`messageId` is the thought's part) | thinking |
@@ -79,7 +79,7 @@ A call's `kind` is `read`, `edit`, `delete`, `move`, `search`, `execute`, `think
 kind}]}` with kinds `allow_once`, `allow_always`, `reject_once`, `reject_always`. The request panel
 asks it as a question of those options; the answer is `{outcome: {outcome: "selected", optionId}}`,
 or `{outcome: "cancelled"}` for one withdrawn by a cancel (ACP asks the client to answer those
-before it cancels). A request widecode does not offer (`fs/*`, `terminal/*`) is answered with
+before it cancels). A request lightcode does not offer (`fs/*`, `terminal/*`) is answered with
 error -32601.
 
 ## opencode 1.19.2
@@ -91,17 +91,17 @@ error -32601.
   as text content, and `rawOutput: {output, metadata}`, its kind and locations left out. So a
   call's line comes from its input once it has one, a command's line is the command, and a call's
   kind is remembered from its first updates.
-- A command's location is the folder it runs in; widecode lists no file for it.
+- A command's location is the folder it runs in; lightcode lists no file for it.
 - An edit's `diff` content holds the strings replaced (`oldString`, `newString`), numbered from 1;
   `rawOutput.metadata.diff` and `filediff.patch` hold the unified diff with the file's line numbers,
-  which widecode shows. (1.2's `filediff` held the whole file `before` and `after`, and widecode
+  which lightcode shows. (1.2's `filediff` held the whole file `before` and `after`, and lightcode
   diffs those.)
 - A todo list is a `todowrite` call with the list in its input (`todos: [{content, status,
   priority}]`), and a subagent a `task` call (kind `think`) with `subagent_type`, `description`
-  and `prompt`; widecode reads both from the input. 1.2 also sent the list as a `plan`.
+  and `prompt`; lightcode reads both from the input. 1.2 also sent the list as a `plan`.
 - A loaded session replays its messages, each call as a `tool_call` and a `completed` update.
-- A cancel answers the prompt `cancelled`, then reports `used: 0`; widecode keeps the context it
-  had. (1.2 answered `end_turn`, so widecode remembers that the user cancelled.)
+- A cancel answers the prompt `cancelled`, then reports `used: 0`; lightcode keeps the context it
+  had. (1.2 answered `end_turn`, so lightcode remembers that the user cancelled.)
 - Permissions are asked for what opencode's config marks `ask`; the request's `toolCall.title` is
   a summary of the call (a command, a path).
 - `usage_update` follows each turn and each load; the prompt's answer carries the turn's tokens.
@@ -126,17 +126,17 @@ error -32601.
   session is made. A skill is not one of `available_commands_update`'s commands (those are
   `.opencode/command/*.md`), so one is asked for in words.
 - A live call's first `tool_call` is titled with its tool's name (`bash`, `read`, `edit`,
-  `widecode_AskUser`); a loaded session's calls come titled with what they did, so their tool is
+  `lightcode_AskUser`); a loaded session's calls come titled with what they did, so their tool is
   not known.
 - A server in `mcpServers` with a `type` is an HTTP (or SSE) one, without a stdio command; opencode
   connects to it while it makes or loads the session (the same name and config once per process)
-  and names its tools `<server>_<tool>` (`widecode_AskUser`, characters other than letters, digits,
+  and names its tools `<server>_<tool>` (`lightcode_AskUser`, characters other than letters, digits,
   `_` and `-` made `_`). A call is a `tool_call` titled with
   that name, kind `other`. Its MCP client sends a progress token with each call and starts its
   60 s timeout again on each progress notification.
 - Under ACP opencode leaves out its own question tool (on only for its app, CLI and desktop
   clients, or with `OPENCODE_ENABLE_QUESTION_TOOL`, and it does not forward the question over ACP)
-  and its plan tool (its CLI only, with `OPENCODE_EXPERIMENTAL_PLAN_MODE`): widecode's
+  and its plan tool (its CLI only, with `OPENCODE_EXPERIMENTAL_PLAN_MODE`): lightcode's
   `AskUser` and `PresentPlan` stand in for them.
 - A `session/prompt` sent while a turn runs is taken into that turn: opencode's next step reads it
   (sent during a `sleep 6` call, "also say BANANA" was in the turn's reply), and both prompts are
@@ -145,9 +145,9 @@ error -32601.
   answers `{sessionId, configOptions}`; a prompt there answers from the session's context, and the
   fork stays in opencode's list (titled "… (fork #1)") until `opencode session delete <id>`.
 - `session/new` makes a session opencode keeps at once, titled "New session - <time>", before
-  anything is written to it. widecode makes one at launch (its config options say the models and
+  anything is written to it. lightcode makes one at launch (its config options say the models and
   efforts), so one left unwritten is deleted with `opencode session delete <id>` when it is left for
-  another, or by the next widecode when this one quit on it.
+  another, or by the next lightcode when this one quit on it.
 - A mode set during a turn holds from the next prompt: opencode keeps it with the session and
   passes it with each `session/prompt`, so the turn goes on in the mode it started in.
 - `opencode auth login` with no argument picks a provider; `-p <provider>` names it. An argument

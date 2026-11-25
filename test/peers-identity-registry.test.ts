@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { Identity, Peer, Registry, SharedRepo, loadOrCreateIdentity, newIdentity, newToken, peerIdOf, sameSecret } from "../src/peers/index.ts";
 import { done, eq, eqn, ok } from "@lightstart/test/assert.ts";
 
-const root = mkdtempSync(join(tmpdir(), "widecode-peers-id-"));
+const root = mkdtempSync(join(tmpdir(), "lightcode-peers-id-"));
 
 {
   const me = newIdentity("laptop");

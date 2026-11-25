@@ -7,9 +7,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { approve, pathsOf } from "../plugins/acp/approval.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { Store } from "../src/services/store.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { done, eq } from "@lightstart/test/assert.ts";
 
 const folder = "/work/project";
@@ -39,26 +39,26 @@ const main = async (): Promise<void> => {
   eq("a call's paths: its locations and its input's path fields", pathsOf([folder + "/a.txt"], { filePath: folder + "/b.txt", paths: [folder + "/c.txt"], command: "rm" }).join(","), folder + "/a.txt," + folder + "/b.txt," + folder + "/c.txt");
 
   // The mode is kept across a run.
-  const home = mkdtempSync(join(tmpdir(), "widecode-approval-home-"));
-  const dir = mkdtempSync(join(tmpdir(), "widecode-approval-"));
-  const first = await openWidecode({ folder: dir, state: new Store(home).stateFile() });
+  const home = mkdtempSync(join(tmpdir(), "lightcode-approval-home-"));
+  const dir = mkdtempSync(join(tmpdir(), "lightcode-approval-"));
+  const first = await openLightcode({ folder: dir, state: new Store(home).stateFile() });
   eq("a new run asks", first.host.approval.approval.peek(), "ask");
   first.host.approval.set("auto");
   eq("set, the signal says so", first.host.approval.approval.peek(), "auto");
-  closeWidecode(first);
-  const next = await openWidecode({ folder: dir, state: new Store(home).stateFile() });
+  closeLightcode(first);
+  const next = await openLightcode({ folder: dir, state: new Store(home).stateFile() });
   eq("the next run starts on the mode kept", next.host.approval.approval.peek(), "auto");
-  closeWidecode(next);
+  closeLightcode(next);
   rmSync(home, { recursive: true, force: true });
   rmSync(dir, { recursive: true, force: true });
 
   // Shift+Tab cycles through the chat plugin, the fake ACP agent offering a plan mode.
   const fake = join(process.cwd(), "test/fake-acp.mjs");
-  const chatFolder = mkdtempSync(join(tmpdir(), "widecode-approval-chat-"));
-  const w = await openWidecode({
+  const chatFolder = mkdtempSync(join(tmpdir(), "lightcode-approval-chat-"));
+  const w = await openLightcode({
     folder: chatFolder,
     plugins: { acp: { agents: { fake: { name: "Fake", command: ["node", fake] } } } },
-    before: (app: Widecode) => {
+    before: (app: Lightcode) => {
       app.host.session.agentId.value = "fake";
     },
   });
@@ -78,7 +78,7 @@ const main = async (): Promise<void> => {
   eq("/mode sets one", w.host.approval.approval.peek(), "full");
   w.host.roles.chat.submit("/mode yolo");
   eq("/mode refuses another", w.host.screen.message.peek(), "/mode takes ask, auto, plan or full (now full)");
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(chatFolder, { recursive: true, force: true });
   done();
 };

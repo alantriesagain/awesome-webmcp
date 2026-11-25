@@ -51,13 +51,13 @@ export class Host extends ConversationHolder {
   /** Called with lines worth logging; on quitting; on F12. */
   onLog: ((text: string) => void) | null = null;
   onQuit: (() => void) | null = null;
-  /** Start the app again over another folder (the widecode controller); set once the app is composed. */
+  /** Start the app again over another folder (the lightcode controller); set once the app is composed. */
   onOpen: ((folder: string) => Promise<void>) | null = null;
   onDump: (() => void) | null = null;
   /** The last lines of the log, for a plugin's state.log. */
   readonly notes: string[] = [];
   /**
-   * The program that runs as the peers daemon (`<it> --peers-daemon`): the widecode binary itself,
+   * The program that runs as the peers daemon (`<it> --peers-daemon`): the lightcode binary itself,
    * set by the real entry alone (startup.ts, never under --selftest). Empty, the peers bridge only
    * looks for a daemon and never starts one: a test, or any other program hosting the app, must not
    * run itself again. The daemon it would start ran the app, whose plugin started another, once.
@@ -65,7 +65,7 @@ export class Host extends ConversationHolder {
   peersLauncher = "";
   /**
    * Whether this is the real app the user runs (startup.ts), not a test or a selftest: a plugin
-   * that reaches the user's desktop alerts only here. The real entry sets it; composeWidecode does not.
+   * that reaches the user's desktop alerts only here. The real entry sets it; composeLightcode does not.
    */
   real = false;
   private editSeq = 0;
@@ -82,7 +82,7 @@ export class Host extends ConversationHolder {
     this.approval = approval;
     this.folder = folder;
     this.session = session;
-    // The one list of the hooks plugins listen to (widecode.d.ts and PLUGINS.md name the same ones: test/api.test.ts).
+    // The one list of the hooks plugins listen to (lightcode.d.ts and PLUGINS.md name the same ones: test/api.test.ts).
     this.hooks = buildHooks(session, folder, keys, approval, screen);
     this.screen.onNote = (text: string) => this.note(text);
     this.folder.onNote = (text: string) => this.note(text);

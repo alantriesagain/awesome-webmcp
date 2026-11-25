@@ -78,13 +78,13 @@ const PLAN = {
   required: ["action"],
 };
 
-widecode.plugin({
+lightcode.plugin({
   id: "todo",
   agent(agent) {
     let state: TodoState = { todos: [], nextId: 1 };
 
     /** The answer to a call: the list's text and its details now. */
-    const answer = (text: string, error = false): widecode.AgentToolResult => ({ content: [{ type: "text", text: text }], details: detailsOf(state), isError: error });
+    const answer = (text: string, error = false): lightcode.AgentToolResult => ({ content: [{ type: "text", text: text }], details: detailsOf(state), isError: error });
 
     agent.on("session_start", (_event, ctx) => {
       const found = stateOnBranch(ctx.sessionManager.getBranch());

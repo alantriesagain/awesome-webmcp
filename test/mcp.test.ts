@@ -1,5 +1,5 @@
 // ffi: @lightstart/plugins/native/ffi.json
-// widecode's own tools over its MCP server (src/agent/mcp.ts), added by plugins (api.tools): the
+// lightcode's own tools over its MCP server (src/agent/mcp.ts), added by plugins (api.tools): the
 // server refuses a request without its token, on another path or not a POST, answers initialize
 // (the client's version when it knows it), a notification, tools/list (the ask plugin's AskUser and
 // PresentPlan, a test plugin's), a call as an event stream (its tool's text, JSON for a value that
@@ -18,12 +18,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Item, TEXT, Turn } from "../src/conversation/model.ts";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -31,7 +31,7 @@ const wait = (ms: number): Promise<void> =>
   });
 
 /** A test plugin's tools: echo answers its arguments (a value, so JSON), boom throws, hold never answers. */
-const probe = `widecode.plugin({
+const probe = `lightcode.plugin({
   id: "probe",
   activate(api) {
     let cancelled = 0;
@@ -62,7 +62,7 @@ const send = (url: string, path: string, token: string, method: string, body: st
   });
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-mcp-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-mcp-"));
   const log = join(folder, "fake.log");
   const oldLog = join(folder, "old.log");
   const fake = join(process.cwd(), "test/fake-acp.mjs");
@@ -74,11 +74,11 @@ const main = async (): Promise<void> => {
       },
     },
   };
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     plugins: config,
     load: true,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.js.extra = [new PluginSource("probe.js", probe)];
       w.host.session.agentId.value = "fake";
     },
@@ -96,7 +96,7 @@ const main = async (): Promise<void> => {
   eq("another path", await send(url, "/other", acpToken, "POST", "{}"), "404 text/plain not found");
   eq("a token no agent plugin was given", await send(url, "/mcp", "nope", "POST", "{}"), "401 text/plain unauthorized");
   eq("not a POST", await send(url, "/mcp", acpToken, "GET", ""), "405 text/plain only POST");
-  eq("initialize: the client's version", await post('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26"}}'), '200 application/json {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{}},"serverInfo":{"name":"widecode","version":"1"}}}');
+  eq("initialize: the client's version", await post('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26"}}'), '200 application/json {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{}},"serverInfo":{"name":"lightcode","version":"1"}}}');
   ok("a version it does not know: its own", (await post('{"jsonrpc":"2.0","id":"a","method":"initialize","params":{"protocolVersion":"1999-01-01"}}')).includes('"id":"a","result":{"protocolVersion":"2025-06-18"'));
   eq("a notification", await post('{"jsonrpc":"2.0","method":"notifications/initialized"}'), "202  ");
   const listed = await post('{"jsonrpc":"2.0","id":2,"method":"tools/list"}');
@@ -113,18 +113,18 @@ const main = async (): Promise<void> => {
   ok("a new ask makes a new token", mcp.tokenFor("probe") !== probeToken);
   const forClaude = await send(url, "/mcp", claudeToken, "POST", '{"jsonrpc":"2.0","id":"c","method":"tools/list"}');
   eq("the ask plugin's tools are kept from Claude Code, which has its own", (JSON.parse(forClaude.slice(forClaude.indexOf("{"))) as { result: { tools: { name: string }[] } }).result.tools.map((t) => t.name).join(","), "screen,state,log,reload,api,check,config,echo,boom,hold,ctx,cancel,cancelled");
-  ok("and a call of one with its token finds no such tool", (await send(url, "/mcp", claudeToken, "POST", '{"jsonrpc":"2.0","id":"d","method":"tools/call","params":{"name":"AskUser","arguments":{}}}')).includes("widecode has no tool AskUser"));
+  ok("and a call of one with its token finds no such tool", (await send(url, "/mcp", claudeToken, "POST", '{"jsonrpc":"2.0","id":"d","method":"tools/call","params":{"name":"AskUser","arguments":{}}}')).includes("lightcode has no tool AskUser"));
   ok("with their input's schema", listed.includes('"required":["questions"]}') && listed.includes('"inputSchema":{"type":"object","properties":{"plan":{"type":"string","description":"The whole plan, in markdown."}},"required":["plan"]}'));
   eq("a call: an event stream", await post('{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{"x":1}}}'), '200 text/event-stream event: message|data: {"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":"{\\"got\\":1}"}],"isError":false}}||');
   ok("an error thrown", (await post('{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"boom"}}')).includes('"text":"it broke"}],"isError":true'));
-  ok("a tool it has not", (await post('{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"nope"}}')).includes('"id":5,"error":{"code":-32602,"message":"widecode has no tool nope"}'));
-  ok("a method it has not", (await post('{"jsonrpc":"2.0","id":6,"method":"resources/list"}')).includes('"error":{"code":-32601,"message":"widecode offers no resources/list"}'));
+  ok("a tool it has not", (await post('{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"nope"}}')).includes('"id":5,"error":{"code":-32602,"message":"lightcode has no tool nope"}'));
+  ok("a method it has not", (await post('{"jsonrpc":"2.0","id":6,"method":"resources/list"}')).includes('"error":{"code":-32601,"message":"lightcode offers no resources/list"}'));
   ok("not JSON", (await post("nope")).includes('"id":null,"error":{"code":-32700'));
   const held = post('{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"hold","arguments":{}}}');
   await wait(100);
   w.js.reload();
   const answered = await held;
-  ok("a call still waiting when the plugins reload is answered (no progress without a token)", !answered.includes("notifications/progress") && answered.includes("widecode's plugins reloaded") && answered.includes('"isError":true'));
+  ok("a call still waiting when the plugins reload is answered (no progress without a token)", !answered.includes("notifications/progress") && answered.includes("lightcode's plugins reloaded") && answered.includes('"isError":true'));
   const progressed = post('{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"hold","arguments":{},"_meta":{"progressToken":"p1"}}}');
   await wait(100);
   w.js.reload();
@@ -159,15 +159,15 @@ const main = async (): Promise<void> => {
 
   const q = await asking("question");
   eq("AskUser: its question in the panel", q === null ? "none" : [q.category, q.name, q.questions[0].question, q.questions[0].header, q.questions[0].options.map((o) => o.label + ":" + o.description).join(",")].join(" | "), "question | AskUser | Which color? | Color | Red:warm,Blue:");
-  ok("the agent was given the server and its token", readFileSync(log, "utf8").includes('"mcpServers":[{"type":"http","name":"widecode","url":"' + url + '","headers":[{"name":"Authorization","value":"Bearer ' + acpToken + '"}]}]'));
-  ok("drawn as the agent asking, not as a call", chat().includes("◆ Fake asks") && chat().some((l: string) => l.includes("Which color?")) && !chat().some((l: string) => l.includes("widecode_AskUser")));
+  ok("the agent was given the server and its token", readFileSync(log, "utf8").includes('"mcpServers":[{"type":"http","name":"lightcode","url":"' + url + '","headers":[{"name":"Authorization","value":"Bearer ' + acpToken + '"}]}]'));
+  ok("drawn as the agent asking, not as a call", chat().includes("◆ Fake asks") && chat().some((l: string) => l.includes("Which color?")) && !chat().some((l: string) => l.includes("lightcode_AskUser")));
   await until(() => c.model.tool("call_AskUser") !== null);
   const asked = c.model.tool("call_AskUser");
   eq("the call, as the Tools tab names it", asked === null ? "none" : asked.category + " | " + asked.name + " | " + asked.summary, "question | Ask | Which color?");
   await wait(100);
   panel.key(new KeyEvent("char", "1", false, false, false), true);
   ok("the turn ends once answered", await until(idle));
-  eq("the choice reached the agent, with progress meanwhile", said(last()), 'Tools: AskUser,PresentPlan,screen,state,log,reload,api,check,config,echo,boom,hold,ctx,cancel,cancelled; progress: yes; widecode 2025-06-18 answered: The user answered:\n"Which color?": Red');
+  eq("the choice reached the agent, with progress meanwhile", said(last()), 'Tools: AskUser,PresentPlan,screen,state,log,reload,api,check,config,echo,boom,hold,ctx,cancel,cancelled; progress: yes; lightcode 2025-06-18 answered: The user answered:\n"Which color?": Red');
   eq("and the call holds the answer; the request is answered", (c.model.tool("call_AskUser")?.result?.text ?? "") + " | " + (q !== null ? q.state : ""), 'The user answered:\n"Which color?": Red | answered');
 
   await asking("question");
@@ -175,7 +175,7 @@ const main = async (): Promise<void> => {
   ok("the user's own words", (await until(idle)) && said(last()).endsWith('"Which color?": Green, with stripes'));
 
   w.host.roles.chat.typed("call state {}");
-  ok("a harness plugin tool called by the agent: widecode's state, the plugins with their states among it", (await until(idle)) && said(last()).includes("answered: {") && said(last()).includes('"id":"harness"') && said(last()).includes('"state":"running"'));
+  ok("a harness plugin tool called by the agent: lightcode's state, the plugins with their states among it", (await until(idle)) && said(last()).includes("answered: {") && said(last()).includes('"id":"harness"') && said(last()).includes('"state":"running"'));
 
   const withdrawn = await asking("question");
   c.interrupt();
@@ -210,18 +210,18 @@ const main = async (): Promise<void> => {
   eq("another agent", w.host.session.useAgent("old"), "");
   c.reset();
   w.host.roles.chat.typed("question");
-  ok("one without MCP over HTTP is given none", (await until(() => c.model.turns.length > 0 && said(last()) === "No widecode server.")) && readFileSync(oldLog, "utf8").includes('"mcpServers":[]'));
+  ok("one without MCP over HTTP is given none", (await until(() => c.model.turns.length > 0 && said(last()) === "No lightcode server.")) && readFileSync(oldLog, "utf8").includes('"mcpServers":[]'));
 
-  closeWidecode(w);
+  closeLightcode(w);
 
   /** An app with the ask plugin's section `section`, talking to the fake: what it says to "question", the request, the call. */
   const withSection = async (section: unknown, answer: boolean): Promise<string> => {
     const config: unknown = { ask: section, harness: section !== false, acp: { agents: { fake: { name: "Fake", command: ["node", fake] } } } };
-    const w2 = await openWidecode({
+    const w2 = await openLightcode({
       folder,
       plugins: config,
       load: true,
-      before: (w: Widecode) => {
+      before: (w: Lightcode) => {
         w.host.session.agentId.value = "fake";
       },
     });
@@ -238,14 +238,14 @@ const main = async (): Promise<void> => {
     }
     await until(() => !c2.model.running && lastSaid().length > 0);
     out += lastSaid();
-    closeWidecode(w2);
+    closeLightcode(w2);
     return out;
   };
 
   const renamed: unknown = { names: { question: "ask_user", plan: "SubmitPlan" } };
-  eq("renamed in its section: offered and drawn by those names", await withSection(renamed, true), 'ask_user | question Ask | Tools: ask_user,SubmitPlan,screen,state,log,reload,api,check,config; progress: no; widecode 2025-06-18 answered: The user answered:\n"Which color?": Blue');
+  eq("renamed in its section: offered and drawn by those names", await withSection(renamed, true), 'ask_user | question Ask | Tools: ask_user,SubmitPlan,screen,state,log,reload,api,check,config; progress: no; lightcode 2025-06-18 answered: The user answered:\n"Which color?": Blue');
   // The ask and harness plugins switched off (no tools left): no server for the agent.
-  eq("switched off: the agent gets no server", await withSection(false, false), "No widecode server.");
+  eq("switched off: the agent gets no server", await withSection(false, false), "No lightcode server.");
 
   rmSync(folder, { recursive: true, force: true });
   done();

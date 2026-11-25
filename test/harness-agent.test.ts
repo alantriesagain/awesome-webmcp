@@ -1,15 +1,15 @@
 // ffi: @lightstart/plugins/native/ffi.json
-// widecode's own agent, the harness (src/harness), as the acp plugin drives it under node
+// lightcode's own agent, the harness (src/harness), as the acp plugin drives it under node
 // (`node src/harness/main.ts --harness`, the entry's command in the config, as the real one
-// is the binary with `--harness`): its session starts with widecode, with its model, effort and
-// mode as config options; the project's prompt and trust reach it in `_meta.widecode` with the
+// is the binary with `--harness`): its session starts with lightcode, with its model, effort and
+// mode as config options; the project's prompt and trust reach it in `_meta.lightcode` with the
 // session and each prompt (the daemon's trace says so); a reply from the fake model's fixture
 // streams into the chat with its thinking; a message sent meanwhile steers the turn and is
 // answered with it; Esc cancels a held turn; a model error is a notice; /new starts another
 // session; the tools command answers the Available tab; the chosen harness shows as the agent; the
 // Sessions tab lists the first session with the title the fake model gave, opening it again shows
 // its turns from its file, /title names it, a side question runs in a fork forgotten after, the
-// folder's skill shows in the Skills tab and a Skill call is a run of it, AskUser over widecode's
+// folder's skill shows in the Skills tab and a Skill call is a run of it, AskUser over lightcode's
 // MCP server puts its question in the request panel and takes the answer back,
 // /compact summarizes the conversation and the status bar shows the context after.
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -18,8 +18,8 @@ import { join } from "node:path";
 import { Item, TEXT, THINKING, TOOL, Turn } from "../src/conversation/model.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
 import { skillRuns } from "../src/conversation/skills.ts";
-import type { Widecode } from "../src/compose.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import type { Lightcode } from "../src/compose.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
@@ -28,8 +28,8 @@ import { until } from "@lightstart/test/headless.ts";
 const kinds = (items: Item[]): string => items.map((i: Item) => (i.kind === THINKING ? "thinking" : i.kind === TEXT ? "text:" + i.text : "other")).join(",");
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-harness-"));
-  const home = mkdtempSync(join(tmpdir(), "widecode-harness-home-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-harness-"));
+  const home = mkdtempSync(join(tmpdir(), "lightcode-harness-home-"));
   writeFileSync(join(folder, "a.txt"), "one\n");
   mkdirSync(join(folder, ".claude", "skills", "greet"), { recursive: true });
   writeFileSync(join(folder, ".claude", "skills", "greet", "SKILL.md"), "---\ndescription: Greet the user\n---\nSay hello warmly.\n");
@@ -47,7 +47,7 @@ const main = async (): Promise<void> => {
       '{"match":"fail","error":"model unavailable"}',
       '{"match":"greet","text":"Loading the skill.","tools":[{"name":"Skill","input":{"name":"greet"}}]}',
       '{"match":"result","text":"Hello, warmly."}',
-      '{"match":"ask","text":"Asking.","tools":[{"name":"mcp__widecode__AskUser","input":{"questions":[{"question":"Which color?","header":"Color","options":[{"label":"Red","description":"warm"},{"label":"Blue"}]}]}}]}',
+      '{"match":"ask","text":"Asking.","tools":[{"name":"mcp__lightcode__AskUser","input":{"questions":[{"question":"Which color?","header":"Color","options":[{"label":"Red","description":"warm"},{"label":"Blue"}]}]}}]}',
       '{"match":"result","text":"Red it is."}',
     ].join("\n") + "\n",
   );
@@ -70,10 +70,10 @@ const main = async (): Promise<void> => {
       },
     },
   };
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     plugins: config,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.host.session.agentId.value = "harness";
     },
   });
@@ -90,14 +90,14 @@ const main = async (): Promise<void> => {
     return until(() => c.model.turns.length > before && idle());
   };
 
-  ok("the session starts with widecode: its model and effort", await until(() => c.info.modelId === "fake/fake" && c.model.effort === "high"));
+  ok("the session starts with lightcode: its model and effort", await until(() => c.info.modelId === "fake/fake" && c.model.effort === "high"));
   eq("the modes it offers", c.agent.choices().modes.map((m) => m.value).join(","), "build,plan");
   eq("the agent's name", c.agent.name(), "harness");
-  ok("the session was made with the project's prompt and trust in _meta", sent().includes('"method":"session/new"') && sent().includes('"_meta":{"widecode":{"systemPrompt":"You are running inside widecode') && sent().includes('"trusted":true'));
+  ok("the session was made with the project's prompt and trust in _meta", sent().includes('"method":"session/new"') && sent().includes('"_meta":{"lightcode":{"systemPrompt":"You are running inside lightcode') && sent().includes('"trusted":true'));
 
   ok("a reply from the fixture", await turn("hello there"));
   eq("its thinking, then its text", kinds(last().body.children), "thinking,text:Hello, world.");
-  ok("the prompt carried _meta too", sent().includes('"method":"session/prompt"') && sent().split('"_meta":{"widecode"').length > 2);
+  ok("the prompt carried _meta too", sent().includes('"method":"session/prompt"') && sent().split('"_meta":{"lightcode"').length > 2);
   ok("the usage reached the status", c.info.contextInput + c.info.contextOutput > 0 || c.model.model.length > 0);
 
   // A message sent mid-turn steers the turn and is answered with it.
@@ -133,7 +133,7 @@ const main = async (): Promise<void> => {
   eq("the call: a skill, the skill's text as its result", loaded === null || loaded.result === null ? "" : loaded.category + " " + loaded.summary + " | " + loaded.result.text, "skill greet | The skill greet, from " + join(folder, ".claude", "skills", "greet") + ":\n\nSay hello warmly.");
   eq("a run of it in the Skills tab", skillRuns(c.model).map((r) => r.name + " " + r.state).join(","), "greet done");
 
-  // widecode's own tools over its MCP server: AskUser's question in the request panel, the answer back to the model.
+  // lightcode's own tools over its MCP server: AskUser's question in the request panel, the answer back to the model.
   w.host.roles.chat.submit("ask me");
   ok("AskUser's question in the request panel", await until(() => c.model.openRequests().length === 1));
   const asked = c.model.openRequests()[0];
@@ -218,7 +218,7 @@ const main = async (): Promise<void> => {
   ok("and the session goes on from the summary", await turn("what now"));
   eq("the reply", last().body.children.filter((i: Item) => i.kind === TEXT).map((i: Item) => i.text).join("|"), "You said: what now");
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });
   done();

@@ -1,4 +1,4 @@
-// The session records widecode keeps in a project: a light model over `<folder>/.widecode/sessions.jsonl`,
+// The session records lightcode keeps in a project: a light model over `<folder>/.lightcode/sessions.jsonl`,
 // one row per session the agent ran there, its id the agent's session id. The fields are what the
 // Sessions tab and a resume read back: the title and who gave it, when it was made and last changed,
 // its cost and thinking tokens across the agent's processes, the model and effort it ran on, the

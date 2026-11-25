@@ -23,8 +23,8 @@ const msOf = (v: unknown): number => {
 };
 
 /** Sessions as an agent lists them (session/list's, or its command's JSON), those of `folder`, newest first. */
-export const sessionsOf = (v: unknown, folder: string): widecode.AgentSession[] => {
-  const out: widecode.AgentSession[] = [];
+export const sessionsOf = (v: unknown, folder: string): lightcode.AgentSession[] => {
+  const out: lightcode.AgentSession[] = [];
   for (const x of list(v)) {
     const s = obj(x);
     if (s === null) continue;
@@ -37,7 +37,7 @@ export const sessionsOf = (v: unknown, folder: string): widecode.AgentSession[] 
   return out.sort((a, b) => (b.mtimeMs ?? 0) - (a.mtimeMs ?? 0));
 };
 
-/** A session made and not written to yet (the agent keeps it as any other): whose agent, its id, the widecode process that made it, its folder; kept in the plugin's state until it is deleted. */
+/** A session made and not written to yet (the agent keeps it as any other): whose agent, its id, the lightcode process that made it, its folder; kept in the plugin's state until it is deleted. */
 interface Fresh {
   agent: string;
   id: string;
@@ -45,7 +45,7 @@ interface Fresh {
   folder: string;
 }
 
-const freshOf = (api: widecode.Api): Fresh[] => {
+const freshOf = (api: lightcode.Api): Fresh[] => {
   const out: Fresh[] = [];
   const kept = obj(api.settings.state());
   for (const x of list(kept?.fresh)) {
@@ -55,16 +55,16 @@ const freshOf = (api: widecode.Api): Fresh[] => {
   return out;
 };
 
-export const rememberFresh = (api: widecode.Api, f: Fresh): void => api.settings.setState({ fresh: [...freshOf(api).filter((k) => k.id !== f.id), f] });
+export const rememberFresh = (api: lightcode.Api, f: Fresh): void => api.settings.setState({ fresh: [...freshOf(api).filter((k) => k.id !== f.id), f] });
 
-export const dropFresh = (api: widecode.Api, sid: string): void => api.settings.setState({ fresh: freshOf(api).filter((k) => k.id !== sid) });
+export const dropFresh = (api: lightcode.Api, sid: string): void => api.settings.setState({ fresh: freshOf(api).filter((k) => k.id !== sid) });
 
 /** This process's id (Linux), 0 when unknown; whether process `pid` runs. */
-export const ownPid = (api: widecode.Api): number => parseInt((api.fs.text("/proc/self/stat") ?? "").split(" ")[0], 10) || 0;
-const alive = (api: widecode.Api, pid: number): boolean => pid > 0 && api.fs.stat("/proc/" + String(pid)) !== null;
+export const ownPid = (api: lightcode.Api): number => parseInt((api.fs.text("/proc/self/stat") ?? "").split(" ")[0], 10) || 0;
+const alive = (api: lightcode.Api, pid: number): boolean => pid > 0 && api.fs.stat("/proc/" + String(pid)) !== null;
 
 /** Delete session `sid` of `entry` with its forget command, run in `folder`, the outcome noted as `what`. */
-export const deleteSession = (api: widecode.Api, entry: Entry, folder: string, sid: string, what: string): void => {
+export const deleteSession = (api: lightcode.Api, entry: Entry, folder: string, sid: string, what: string): void => {
   if (entry.forget.length === 0) return;
   const words = resolved(api, entry.forget).map((w) => w.split("{session}").join(sid));
   api.process.run("cd " + quote(folder) + " && " + words.map(quote).join(" "), "", 15000).then(
@@ -73,8 +73,8 @@ export const deleteSession = (api: widecode.Api, entry: Entry, folder: string, s
   );
 };
 
-/** The sessions made and left (their widecode process gone, or this one, which made them before it started over), but `except`, forgotten and deleted; one of an agent no longer in the section is forgotten. */
-export const sweep = (api: widecode.Api, agents: Record<string, Entry>, except: string): void => {
+/** The sessions made and left (their lightcode process gone, or this one, which made them before it started over), but `except`, forgotten and deleted; one of an agent no longer in the section is forgotten. */
+export const sweep = (api: lightcode.Api, agents: Record<string, Entry>, except: string): void => {
   const own = ownPid(api);
   for (const f of freshOf(api)) {
     const entry = agents[f.agent];

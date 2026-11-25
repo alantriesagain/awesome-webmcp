@@ -6,16 +6,16 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { KeyEvent, MouseEvent, TElement, hitTestLayers } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { Headless } from "@lightstart/test/headless.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
 const W = 200;
 const H = 24;
 
-const menus = `widecode.plugin({
+const menus = `lightcode.plugin({
   id: "test-menus",
   activate(api) {
     api.keys.action({ id: "test.greet", scope: "", help: "greet", key: ["ctrl+char:g"], run: () => { api.tell("menu ran"); return true; } });
@@ -26,11 +26,11 @@ const menus = `widecode.plugin({
 });`;
 
 const main = async (): Promise<void> => {
-  const repo = mkdtempSync(join(tmpdir(), "widecode-menu-"));
+  const repo = mkdtempSync(join(tmpdir(), "lightcode-menu-"));
   writeFileSync(join(repo, "a.txt"), "a\n");
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder: repo,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.js.extra = [new PluginSource("test-menus.js", menus)];
     },
   });
@@ -47,7 +47,7 @@ const main = async (): Promise<void> => {
   };
 
   let lines = screen();
-  ok("the bar is the first row, with the brand and the menu", lines[0].includes("◆ widecode") && lines[0].includes(" Test"));
+  ok("the bar is the first row, with the brand and the menu", lines[0].includes("◆ lightcode") && lines[0].includes(" Test"));
   ok("the columns start under it, a blank row between", lines[1].trim() === "" && lines[2].includes(" Chat "));
   const bar = w.shell.menuBar.menus.value;
   eq("the built-in menus come first, then the plugin's", bar.map((m) => m.title).join(" "), "Session Pane View Help Test");
@@ -92,7 +92,7 @@ const main = async (): Promise<void> => {
   ok("a plugin removed leaves no menu", !lines[0].includes(" Test") && !w.host.screen.menuEntries.some((e) => e.menu === "Test"));
 
   headless.unmount();
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(repo, { recursive: true, force: true });
   done();
 };

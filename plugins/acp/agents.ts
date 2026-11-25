@@ -1,5 +1,5 @@
 // The agents section: each entry the conversation can talk to, the defaults the plugin ships
-// (opencode, the DeepSeek Harness, widecode's harness), and the reading of an entry from config.json.
+// (opencode, the DeepSeek Harness, lightcode's harness), and the reading of an entry from config.json.
 
 import { obj, str, list } from "./json.ts";
 
@@ -16,7 +16,7 @@ export interface Entry {
   forget: string[];
   /** Whether the agent takes a prompt into the turn that runs (opencode does): a message queued meanwhile goes after its next call. */
   midTurn: boolean;
-  /** widecode's own agent, the harness: the project's prompt and trust go to it in `_meta.widecode`, and `{widecode}` in its commands is the running binary. */
+  /** lightcode's own agent, the harness: the project's prompt and trust go to it in `_meta.lightcode`, and `{lightcode}` in its commands is the running binary. */
   own: boolean;
 }
 
@@ -43,18 +43,18 @@ export const DEFAULT_AGENTS: Record<string, Entry> = {
   },
   harness: {
     name: "harness",
-    command: ["{widecode}", "--harness"],
-    sessions: ["{widecode}", "--harness-sessions"],
-    tools: ["{widecode}", "--harness-tools", "{mode}"],
-    skills: ["{widecode}", "--harness-skills"],
-    forget: ["{widecode}", "--harness-forget", "{session}"],
+    command: ["{lightcode}", "--harness"],
+    sessions: ["{lightcode}", "--harness-sessions"],
+    tools: ["{lightcode}", "--harness-tools", "{mode}"],
+    skills: ["{lightcode}", "--harness-skills"],
+    forget: ["{lightcode}", "--harness-forget", "{session}"],
     midTurn: true,
     own: true,
   },
 };
 
-/** `words` with `{widecode}` made the running binary's path (the harness's commands). */
-export const resolved = (api: widecode.Api, words: string[]): string[] => words.map((w) => (w === "{widecode}" ? api.fs.executable() : w));
+/** `words` with `{lightcode}` made the running binary's path (the harness's commands). */
+export const resolved = (api: lightcode.Api, words: string[]): string[] => words.map((w) => (w === "{lightcode}" ? api.fs.executable() : w));
 
 /** The section's agents over the defaults: an entry needs a command (a list of words). */
 export const agentsOf = (section: unknown): Record<string, Entry> => {

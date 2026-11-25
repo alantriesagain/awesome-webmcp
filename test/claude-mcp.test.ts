@@ -1,5 +1,5 @@
 // ffi: @lightstart/plugins/native/ffi.json
-// widecode's tools served to Claude Code: the CLI is started with --mcp-config naming a file the
+// lightcode's tools served to Claude Code: the CLI is started with --mcp-config naming a file the
 // user alone reads, which carries the server's address and this plugin's token; with that token the
 // server lists the tools not excepted for Claude (a test plugin's, not the ask plugin's AskUser and
 // PresentPlan); a tool added while the CLI runs (a plugin file saved) is picked up at the turn's end,
@@ -10,8 +10,8 @@ import { request, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import type { Widecode } from "../src/compose.ts";
-import { openWidecode } from "./support/app.ts";
+import type { Lightcode } from "../src/compose.ts";
+import { openLightcode } from "./support/app.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
@@ -19,10 +19,10 @@ import { until } from "@lightstart/test/headless.ts";
 const fixtures = join(process.cwd(), "test", "fixtures");
 const fake = join(process.cwd(), "test", "fake-claude.mjs");
 
-const probe = `widecode.plugin({ id: "probe", activate(api) {
+const probe = `lightcode.plugin({ id: "probe", activate(api) {
   api.tools.add({ name: "probe_tool", description: "a probe", input: { type: "object", properties: {} }, call: () => "probed" });
 } });`;
-const later = `widecode.plugin({ id: "later", activate(api) {
+const later = `lightcode.plugin({ id: "later", activate(api) {
   api.tools.add({ name: "later_tool", description: "added later", input: { type: "object", properties: {} }, call: () => "later" });
 } });`;
 
@@ -49,14 +49,14 @@ const toolNames = (answer: string): string => {
 };
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-claude-mcp-"));
-  const dir = join(folder, ".widecode", "plugins");
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-claude-mcp-"));
+  const dir = join(folder, ".lightcode", "plugins");
   mkdirSync(dir, { recursive: true });
   const args = join(folder, "args.txt");
   const logs: string[] = [];
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.host.conversation.executable = fake;
       w.host.conversation.extraArgs.push("--fixture", join(fixtures, "ask.ndjson"), "--record-args", args);
       w.js.dirs = [dir];
@@ -77,8 +77,8 @@ const main = async (): Promise<void> => {
   const file = at >= 0 ? argv[at + 1] : "";
   ok("the CLI was started with --mcp-config naming a file", at >= 0 && file.length > 0 && !argv.includes("--resume"));
   eq("the file is the user's alone", (statSync(file).mode & 0o777).toString(8), "600");
-  const config = JSON.parse(readFileSync(file, "utf8")) as { mcpServers: { widecode: { type: string; url: string; headers: { Authorization: string } } } };
-  eq("and names the server and this plugin's token", [config.mcpServers.widecode.type, config.mcpServers.widecode.url === mcp.url, config.mcpServers.widecode.headers.Authorization === "Bearer " + token].join(" "), "http true true");
+  const config = JSON.parse(readFileSync(file, "utf8")) as { mcpServers: { lightcode: { type: string; url: string; headers: { Authorization: string } } } };
+  eq("and names the server and this plugin's token", [config.mcpServers.lightcode.type, config.mcpServers.lightcode.url === mcp.url, config.mcpServers.lightcode.headers.Authorization === "Bearer " + token].join(" "), "http true true");
   eq("with that token the server lists the tools not excepted for Claude, the harness plugin's first", toolNames(await post(mcp.url, token, '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')), "screen,state,log,reload,api,check,config,probe_tool");
   ok("the ask plugin's tools stay Claude's own", !toolNames(await post(mcp.url, token, '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')).includes("AskUser"));
   ok("a call with it answers", (await post(mcp.url, token, '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"probe_tool","arguments":{}}}')).includes('"text":"probed"'));

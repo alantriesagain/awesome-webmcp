@@ -542,10 +542,10 @@ const within = (p: Promise<RpcReply>, ms: number): Promise<RpcReply> =>
     });
   });
 
-/** The user's store: $WIDECODE_HOME, else ~/.widecode. */
+/** The user's store: $LIGHTCODE_HOME, else ~/.lightcode. */
 const userStoreRoot = (): string => {
-  const env = process.env["WIDECODE_HOME"] ?? "";
-  return env.length > 0 ? env : join(process.env["HOME"] ?? "", ".widecode");
+  const env = process.env["LIGHTCODE_HOME"] ?? "";
+  return env.length > 0 ? env : join(process.env["HOME"] ?? "", ".lightcode");
 };
 
 /** Whether the user has skills or prompt templates under HOME (or pi's agent folder) that the harness would read. */
@@ -655,7 +655,7 @@ const runPiTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult> => 
   cpSync(join(task.dir, "repo"), work, { recursive: true });
   git(work, ["init", "-q", "-b", "main"]);
   git(work, ["add", "-A"]);
-  git(work, ["-c", "user.email=bench@widecode", "-c", "user.name=bench", "commit", "-qm", "the task"]);
+  git(work, ["-c", "user.email=bench@lightcode", "-c", "user.name=bench", "commit", "-qm", "the task"]);
   // A folder of its own, so the user's pi settings and extensions never load; the key is pi's to run.
   // Its one MCP server is Exa's, whose web search the harness and opencode use too, its tools
   // declared to the model as the others' are.
@@ -663,7 +663,7 @@ const runPiTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult> => 
   const home = process.env["HOME"] ?? "";
   writeFileSync(
     join(agentDir, "auth.json"),
-    JSON.stringify({ opencode: { type: "api_key", key: "!jq -r .opencode.key " + join(home, ".widecode", "auth.json") } }),
+    JSON.stringify({ opencode: { type: "api_key", key: "!jq -r .opencode.key " + join(home, ".lightcode", "auth.json") } }),
   );
   writeFileSync(join(agentDir, "mcp.json"), JSON.stringify({ mcpServers: { exa: { url: EXA_MCP, exposure: "direct" } } }));
   const env: Record<string, string> = {};
@@ -804,7 +804,7 @@ export const runTask = async (task: BenchTask, spec: RunSpec): Promise<RunResult
   cpSync(join(task.dir, "repo"), work, { recursive: true });
   git(work, ["init", "-q", "-b", "main"]);
   git(work, ["add", "-A"]);
-  git(work, ["-c", "user.email=bench@widecode", "-c", "user.name=bench", "commit", "-qm", "the task"]);
+  git(work, ["-c", "user.email=bench@lightcode", "-c", "user.name=bench", "commit", "-qm", "the task"]);
   // A harness run gets a store of its own, so the user's skills, prompts, plugins, MCP servers and
   // config never reach the agent; its auth.json is a link to the user's, so the key is never copied.
   // An opencode run gets an empty config folder, so its instructions, MCP servers, agents and

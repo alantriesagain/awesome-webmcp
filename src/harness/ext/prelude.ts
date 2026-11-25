@@ -1,7 +1,7 @@
-// The JS side of the harness's agent API: light's prelude first, for the `widecode` global a plugin's
+// The JS side of the harness's agent API: light's prelude first, for the `lightcode` global a plugin's
 // top level reads (its `util` and `theme`), then the harness's own global over it, which records a
 // definition's `agent(agent)` part and never runs `activate`. The agent object keeps pi's design under
-// widecode's names: its handlers and tool tables, the answer path for a callback that returns a
+// lightcode's names: its handlers and tool tables, the answer path for a callback that returns a
 // promise (the prelude tells the host the call's id and the settled value or error, and the host
 // keeps the turn going meanwhile), and its settings. Mirrors the app runtime's toolCall/toolDone shape.
 import { buildPrelude } from "@lightstart/plugins/prelude.ts";
@@ -12,7 +12,7 @@ const HARNESS_THEME = '{"dim":"#666666","ok":"#5fd75f","bad":"#ff5f5f","warn":"#
 /** A plugin's `agent` part over the engine: evaluated after light's prelude, in the same context. */
 const AGENT_RUNTIME: string = `"use strict";
 (() => {
-  const base = globalThis.__widecodeBase;
+  const base = globalThis.__lightcodeBase;
   const parse = JSON.parse;
   const stringify = JSON.stringify;
   const fns = [];
@@ -287,12 +287,12 @@ const AGENT_RUNTIME: string = `"use strict";
   globalThis.__extForget = (f) => {
     for (const id of Object.keys(defs)) if (defs[id].file === f) delete defs[id];
   };
-  globalThis.widecode = Object.freeze({
+  globalThis.lightcode = Object.freeze({
     version: base.version,
     util: base.util,
     theme: base.theme,
     plugin(def) {
-      if (def === null || typeof def !== "object" || typeof def.id !== "string") throw new Error("widecode.plugin: a plugin needs an id");
+      if (def === null || typeof def !== "object" || typeof def.id !== "string") throw new Error("lightcode.plugin: a plugin needs an id");
       if (typeof def.agent !== "function") {
         delete defs[def.id];
         return;
@@ -310,7 +310,7 @@ const AGENT_RUNTIME: string = `"use strict";
   // The agent part of a plugin id for one instance: the host calls this per plugin, so its budget applies.
   const startAgent = fn((id, inst) => {
     const d = defs[id];
-    if (d === undefined) throw new Error("widecode.plugin: no agent for " + id);
+    if (d === undefined) throw new Error("lightcode.plugin: no agent for " + id);
     d.agent(agentFor(d.id + "\\u0000" + d.file, inst));
   });
   globalThis.__agentStartId = startAgent;
@@ -347,5 +347,5 @@ const AGENT_RUNTIME: string = `"use strict";
   };
 })();`;
 
-/** The prelude of a plugin engine: light's `__widecodeBase`, then the harness's `widecode` and agent. */
-export const EXT_PRELUDE: string = buildPrelude("__widecodeBase", HARNESS_THEME, "") + "\n" + AGENT_RUNTIME;
+/** The prelude of a plugin engine: light's `__lightcodeBase`, then the harness's `lightcode` and agent. */
+export const EXT_PRELUDE: string = buildPrelude("__lightcodeBase", HARNESS_THEME, "") + "\n" + AGENT_RUNTIME;

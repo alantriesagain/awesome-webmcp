@@ -70,10 +70,10 @@ export class Plugins {
     k.commands.add(new Command("/reload", "", "evaluate every JS plugin again (the agent restarts and resumes the session)", "plugins", (_arg: string) => this.js.reload()));
   }
 
-  /** The /trust command, per start (the kernel is new each start); the widecode controller adds it after /log. */
+  /** The /trust command, per start (the kernel is new each start); the lightcode controller adds it after /log. */
   registerCommands(): void {
     const commands = this.host.kernel.commands;
-    commands.add(new Command("/trust", "", "trust this folder: the agent works here and its own harness (.widecode: plugins, prompt, config) runs, now and on every launch", "plugins", (_arg: string) => this.trustHere()));
+    commands.add(new Command("/trust", "", "trust this folder: the agent works here and its own harness (.lightcode: plugins, prompt, config) runs, now and on every launch", "plugins", (_arg: string) => this.trustHere()));
   }
 
   /** The /trust action and onboarding's trust answer: trust the folder from now on, saying so ("" without a store). */

@@ -5,7 +5,7 @@
 // prompt, context dropping a message, a handler that throws (the turn goes on), one in a busy loop
 // (switched off, the turn goes on), a trusted folder's plugin loaded and an untrusted one's not, a
 // built-in replaced by a store plugin of the same id, a plugin switched off by config.json, the
-// plugin's settings, a plugin's top-level widecode.util and widecode.theme, and a session with no
+// plugin's settings, a plugin's top-level lightcode.util and lightcode.theme, and a session with no
 // agent parts making no engine.
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -75,7 +75,7 @@ class Rig {
   }
 
   extensionFile(name: string, code: string, project = false): void {
-    const dir = project ? join(this.folder, ".widecode", "plugins") : join(this.home, "plugins");
+    const dir = project ? join(this.folder, ".lightcode", "plugins") : join(this.home, "plugins");
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, name), code);
   }
@@ -92,9 +92,9 @@ class Rig {
     return id;
   }
 
-  /** initialize, saying whether the client takes `_widecode/ui`. */
+  /** initialize, saying whether the client takes `_lightcode/ui`. */
   initialize(ui: boolean): void {
-    const params: Record<string, unknown> = ui ? { clientCapabilities: { _meta: { widecode: { ui: true } } } } : { clientCapabilities: {} };
+    const params: Record<string, unknown> = ui ? { clientCapabilities: { _meta: { lightcode: { ui: true } } } } : { clientCapabilities: {} };
     this.send("initialize", params);
   }
 
@@ -110,13 +110,13 @@ class Rig {
     return id;
   }
 
-  /** A `_widecode/ui` request, taken out of the output; `method` the dialog's, when given. */
+  /** A `_lightcode/ui` request, taken out of the output; `method` the dialog's, when given. */
   async uiRequest(method?: string): Promise<{ id: number; params: Record<string, unknown> }> {
     let got: { id: number; params: Record<string, unknown> } | null = null;
     await until(() => {
       for (let i = 0; i < this.out.length; i++) {
         const line = this.out[i];
-        if (!/"id":\d+,"method":"_widecode\/ui"/.test(line)) continue;
+        if (!/"id":\d+,"method":"_lightcode\/ui"/.test(line)) continue;
         const msg = JSON.parse(line) as { id: number; params: Record<string, unknown> };
         if (method !== undefined && msg.params["method"] !== method) continue;
         this.out.splice(i, 1);
@@ -128,13 +128,13 @@ class Rig {
     return got as unknown as { id: number; params: Record<string, unknown> };
   }
 
-  /** A `_widecode/ui` notification with `method`, taken out of the output. */
+  /** A `_lightcode/ui` notification with `method`, taken out of the output. */
   async uiNotification(method: string): Promise<Record<string, unknown>> {
     let got: Record<string, unknown> | null = null;
     await until(() => {
       for (let i = 0; i < this.out.length; i++) {
         const line = this.out[i];
-        if (!/"method":"_widecode\/ui"/.test(line) || /"id":\d+/.test(line)) continue;
+        if (!/"method":"_lightcode\/ui"/.test(line) || /"id":\d+/.test(line)) continue;
         const msg = JSON.parse(line) as { params: Record<string, unknown> };
         if (msg.params["method"] !== method) continue;
         this.out.splice(i, 1);
@@ -146,12 +146,12 @@ class Rig {
     return got as unknown as Record<string, unknown>;
   }
 
-  /** Every `_widecode/plugin` notification now in the output. */
+  /** Every `_lightcode/plugin` notification now in the output. */
   pluginNotifications(): Record<string, unknown>[] {
     const out: Record<string, unknown>[] = [];
     for (let i = 0; i < this.out.length; i++) {
       const line = this.out[i];
-      if (!/"method":"_widecode\/plugin"/.test(line) || /"id":\d+/.test(line)) continue;
+      if (!/"method":"_lightcode\/plugin"/.test(line) || /"id":\d+/.test(line)) continue;
       const msg = JSON.parse(line) as { params: Record<string, unknown> };
       out.push(msg.params);
       this.out.splice(i, 1);
@@ -160,12 +160,12 @@ class Rig {
     return out;
   }
 
-  /** Every `_widecode/ui` notification with `method` now in the output. */
+  /** Every `_lightcode/ui` notification with `method` now in the output. */
   uiNotifications(method: string): Record<string, unknown>[] {
     const out: Record<string, unknown>[] = [];
     for (let i = 0; i < this.out.length; i++) {
       const line = this.out[i];
-      if (!/"method":"_widecode\/ui"/.test(line) || /"id":\d+/.test(line)) continue;
+      if (!/"method":"_lightcode\/ui"/.test(line) || /"id":\d+/.test(line)) continue;
       const msg = JSON.parse(line) as { params: Record<string, unknown> };
       if (msg.params["method"] !== method) continue;
       out.push(msg.params);
@@ -220,7 +220,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"calltool","text":"Calling.","tools":[{"name":"echo","input":{"text":"hi"}}]}', '{"match":"result","text":"Echoed."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerTool({ name: "echo", label: "Echo", description: "Echo the text", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] }, execute: async (id, params) => ({ content: [{ type: "text", text: "echo: " + params.text }], details: { seen: params.text } }) });',
       '  agent.registerCommand("hello", { description: "Say hello", handler: (args) => {} });',
       "} });",
@@ -253,7 +253,7 @@ const main = async (): Promise<void> => {
     writeFileSync(join(rig.folder, "a.txt"), "first\n");
     writeFileSync(join(rig.folder, "b.txt"), "second\n");
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.on("before_agent_start", (e) => ({ systemPrompt: e.systemPrompt + "\\nEXTRA" }));',
       '  agent.on("tool_call", (e) => {',
       '    if (e.toolName === "Bash" && String(e.input.command).indexOf("rm -rf") >= 0) return { block: true, reason: "not here" };',
@@ -287,7 +287,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"boomtool","text":"Running.","tools":[{"name":"Bash","input":{"command":"echo hi"}}]}', '{"match":"result","text":"Went on."}'].join("\n"));
     const logFile = rig.logFile();
-    rig.extension(['widecode.plugin({ id: "ext", agent(agent) {', '  agent.on("tool_call", () => { throw new Error("nope"); });', "} });"].join("\n"));
+    rig.extension(['lightcode.plugin({ id: "ext", agent(agent) {', '  agent.on("tool_call", () => { throw new Error("nope"); });', "} });"].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
     await rig.prompt(sid, "boomtool");
     const turn = rig.taken();
@@ -300,7 +300,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
     const logFile = rig.logFile();
-    rig.extension(['widecode.plugin({ id: "ext", agent(agent) {', '  agent.on("before_agent_start", () => { while (true) {} });', "} });"].join("\n"));
+    rig.extension(['lightcode.plugin({ id: "ext", agent(agent) {', '  agent.on("before_agent_start", () => { while (true) {} });', "} });"].join("\n"));
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
     await rig.prompt(sid, "hello");
     eq("the turn goes on without the handler", text(rig.taken()), "Hello there.");
@@ -310,14 +310,14 @@ const main = async (): Promise<void> => {
 
   // A trusted folder's extension loads; the same folder untrusted keeps it out.
   {
-    const code = ['widecode.plugin({ id: "ext", agent(agent) {', '  agent.on("tool_call", (e) => { if (e.toolName === "Bash") return { block: true, reason: "trusted only" }; });', "} });"].join("\n");
+    const code = ['lightcode.plugin({ id: "ext", agent(agent) {', '  agent.on("tool_call", (e) => { if (e.toolName === "Bash") return { block: true, reason: "trusted only" }; });', "} });"].join("\n");
     const rig = new Rig(['{"match":"run","text":"Running.","tools":[{"name":"Bash","input":{"command":"echo hi"}}]}', '{"match":"result","text":"Done."}', '{"match":"run","text":"Running.","tools":[{"name":"Bash","input":{"command":"echo hi"}}]}', '{"match":"result","text":"Done."}'].join("\n"));
     rig.extension(code, true);
-    const untrusted = rig.session({ cwd: rig.folder, mcpServers: [], _meta: { widecode: { trusted: false } } });
+    const untrusted = rig.session({ cwd: rig.folder, mcpServers: [], _meta: { lightcode: { trusted: false } } });
     await rig.prompt(untrusted, "run it");
     const free = rig.taken();
     ok("an untrusted folder's extension is not loaded", !toolText(free).includes("trusted only") && toolText(free).includes("hi"));
-    const trusted = rig.session({ cwd: rig.folder, mcpServers: [], _meta: { widecode: { trusted: true } } });
+    const trusted = rig.session({ cwd: rig.folder, mcpServers: [], _meta: { lightcode: { trusted: true } } });
     await rig.prompt(trusted, "run it");
     ok("a trusted one is", toolText(rig.taken()).includes("trusted only"));
     rig.close();
@@ -327,7 +327,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"sleepblock","text":"Running.","tools":[{"name":"Bash","input":{"command":"echo hi"}}]}', '{"match":"result","text":"Blocked after sleep."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.on("tool_call", async () => { await agent.exec("sleep", ["0.03"]); return { block: true, reason: "slept first" }; });',
       "} });",
     ].join("\n"));
@@ -343,7 +343,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"slowtool","text":"Calling.","tools":[{"name":"slow","input":{}}]}', '{"match":"result","text":"Slow done."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerTool({ name: "slow", label: "Slow", description: "Answer later", parameters: { type: "object" }, execute: async () => { await agent.exec("sleep", ["0.03"]); return { content: [{ type: "text", text: "after sleep" }] }; } });',
       "} });",
     ].join("\n"));
@@ -360,7 +360,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"asktool","text":"Asking.","tools":[{"name":"pick","input":{}}]}', '{"match":"result","text":"Picked."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerTool({ name: "pick", label: "Pick", description: "Ask the user", parameters: { type: "object" }, execute: async (id, params, signal, onUpdate, ctx) => ({ content: [{ type: "text", text: String(ctx.hasUI) + ":" + String(await ctx.ui.select("Which?", ["a", "b"])) }] }) });',
       "} });",
     ].join("\n"));
@@ -381,7 +381,7 @@ const main = async (): Promise<void> => {
     const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
     const logFile = rig.logFile();
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("slowcmd", { description: "Answer later", handler: async (args, ctx) => { await agent.exec("sleep", ["0.03"]); ctx.ui.notify("command slept"); } });',
       "} });",
     ].join("\n"));
@@ -399,7 +399,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"first","text":"First answer."}', '{"match":"second","text":"Second answer."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.on("before_agent_start", async () => { await agent.exec("sleep", ["0.04"]); });',
       "} });",
     ].join("\n"));
@@ -418,7 +418,7 @@ const main = async (): Promise<void> => {
     const rig = new Rig(['{"match":"budget","text":"Went on."}'].join("\n"));
     const logFile = rig.logFile();
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.on("before_agent_start", async () => { await agent.exec("sleep", ["0.02"]); while (true) {} });',
       "} });",
     ].join("\n"));
@@ -429,7 +429,7 @@ const main = async (): Promise<void> => {
     rig.close();
   }
 
-  // A confirm over _widecode/ui: false blocks the call, true lets it run.
+  // A confirm over _lightcode/ui: false blocks the call, true lets it run.
   {
     const rig = new Rig([
       '{"match":"askno","text":"Running.","tools":[{"name":"Bash","input":{"command":"echo hi"}}]}',
@@ -438,7 +438,7 @@ const main = async (): Promise<void> => {
       '{"match":"result","text":"Yes done."}',
     ].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.on("tool_call", async (e, ctx) => {',
       '    if (e.toolName !== "Bash") return;',
       '    const yes = await ctx.ui.confirm("Run it?", "really run it");',
@@ -468,7 +468,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("askselect", { handler: async (a, ctx) => { const v = await ctx.ui.select("Pick", ["a", "b"]); ctx.ui.notify("sel:" + String(v)); } });',
       '  agent.registerCommand("askinput", { handler: async (a, ctx) => { const v = await ctx.ui.input("Name"); ctx.ui.notify("in:" + String(v)); } });',
       '  agent.registerCommand("asktimeout", { handler: async (a, ctx) => { const v = await ctx.ui.confirm("Wait", "nobody", { timeout: 50 }); ctx.ui.notify("to:" + String(v)); } });',
@@ -500,7 +500,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("wait", { handler: async (a, ctx) => { const v = await ctx.ui.select("Pick", ["a"]); ctx.ui.notify("after:" + String(v)); } });',
       "} });",
     ].join("\n"));
@@ -519,7 +519,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("ask", { handler: async (a, ctx) => { const v = await ctx.ui.select("Pick", ["x", "y"]); ctx.ui.notify("picked:" + String(v)); } });',
       "} });",
     ].join("\n"));
@@ -544,7 +544,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("uiall", { handler: (a, ctx) => {',
       '    ctx.ui.notify("hello", "warning");',
       '    ctx.ui.setStatus("k", "busy");',
@@ -579,7 +579,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("askconfirm", { handler: async (a, ctx) => { const v = await ctx.ui.confirm("Sure?"); if (v === false) throw new Error("default confirm"); } });',
       "} });",
     ].join("\n"));
@@ -588,7 +588,7 @@ const main = async (): Promise<void> => {
     rig.taken();
     await rig.prompt(sid, "/askconfirm");
     const turn = rig.taken();
-    ok("the confirm answered false without a request", text(turn).includes("default confirm") && !turn.some((line) => line.includes("_widecode/ui")));
+    ok("the confirm answered false without a request", text(turn).includes("default confirm") && !turn.some((line) => line.includes("_lightcode/ui")));
     rig.close();
   }
 
@@ -596,7 +596,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  let n = 0;',
       '  agent.registerCommand("count", { handler: (a, ctx) => { n++; ctx.ui.notify(String(n)); } });',
       "} });",
@@ -619,7 +619,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"twice","text":"Twice.","tools":[{"name":"mark","input":{"n":1}},{"name":"mark","input":{"n":2}}]}', '{"match":"result","text":"Marked."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerTool({ name: "mark", label: "Mark", description: "Mark n", parameters: { type: "object", properties: { n: { type: "number" } } }, execute: async (id, params) => ({ content: [{ type: "text", text: "marked " + params.n }], details: { n: params.n } }) });',
       '  agent.registerCommand("results", { handler: (a, ctx) => { const got = ctx.sessionManager.getBranch().filter((e) => e.type === "message" && e.message.role === "toolResult").map((e) => e.message.toolName + ":" + e.message.details.n); ctx.ui.notify(got.join(",") + "|" + String(ctx.sessionManager.getEntry(ctx.sessionManager.getBranch().filter((e) => e.type === "message" && e.message.role === "toolResult")[1].id) !== null)); } });',
       "} });",
@@ -638,7 +638,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("reg", { handler: (a, ctx) => { agent.registerCommand("late", { handler: (b, c) => { c.ui.notify("late"); } }); ctx.ui.notify("registered"); } });',
       "} });",
     ].join("\n"));
@@ -659,7 +659,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("exechi", { handler: async (a, ctx) => { const r = await agent.exec("printf", ["hi"]); ctx.ui.notify("hi:" + r.stdout + ":" + String(r.code)); } });',
       '  agent.registerCommand("execfail", { handler: async (a, ctx) => { const r = await agent.exec("false", []); ctx.ui.notify("fail:" + String(r.code)); } });',
       '  agent.registerCommand("exitsh", { handler: async (a, ctx) => { const r = await agent.exec("sh", ["-c", "exit 3"]); ctx.ui.notify("sh:" + String(r.code)); } });',
@@ -695,7 +695,7 @@ const main = async (): Promise<void> => {
     const root = join(folder, "home");
     const paths = new HarnessPaths(root);
     mkdirSync(join(root, "plugins"), { recursive: true });
-    writeFileSync(join(root, "plugins", "ext.js"), 'widecode.plugin({ id: "ext", activate(api) {} });');
+    writeFileSync(join(root, "plugins", "ext.js"), 'lightcode.plugin({ id: "ext", activate(api) {} });');
     const one = new ExtensionsRegistry(paths).forSession(folder, true);
     ok("a plugin with only activate makes no engine", one.engine === null);
     rmSync(folder, { recursive: true, force: true });
@@ -703,9 +703,9 @@ const main = async (): Promise<void> => {
 
   // A built-in source with an agent part handed to the registry, replaced by a store plugin of the same id.
   {
-    const builtin = new PluginSource("builtin:gate.js", 'widecode.plugin({ id: "gate", agent(agent) { agent.registerCommand("builtin", { handler() {} }); } });');
+    const builtin = new PluginSource("builtin:gate.js", 'lightcode.plugin({ id: "gate", agent(agent) { agent.registerCommand("builtin", { handler() {} }); } });');
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"), [builtin]);
-    rig.extension('widecode.plugin({ id: "gate", agent(agent) { agent.registerCommand("store", { handler() {} }); } });');
+    rig.extension('lightcode.plugin({ id: "gate", agent(agent) { agent.registerCommand("store", { handler() {} }); } });');
     rig.session({ cwd: rig.folder, mcpServers: [] });
     const made = rig.taken();
     ok("the store plugin replaced the built-in's agent part", made.some((line) => line.includes('"name":"store"')) && !made.some((line) => line.includes('"name":"builtin"')));
@@ -718,13 +718,13 @@ const main = async (): Promise<void> => {
     const root = join(folder, "home");
     const paths = new HarnessPaths(root);
     mkdirSync(join(root, "plugins"), { recursive: true });
-    writeFileSync(join(root, "plugins", "ext.js"), 'widecode.plugin({ id: "ext", agent(agent) { agent.registerCommand("off", { handler() {} }); } });');
+    writeFileSync(join(root, "plugins", "ext.js"), 'lightcode.plugin({ id: "ext", agent(agent) { agent.registerCommand("off", { handler() {} }); } });');
     writeFileSync(join(root, "config.json"), '{"plugins":{"ext":false}}');
     const off = new ExtensionsRegistry(paths).forSession(folder, true);
     ok("the user's false makes no engine", off.engine === null);
     writeFileSync(join(root, "config.json"), '{"plugins":{}}');
-    mkdirSync(join(folder, ".widecode"), { recursive: true });
-    writeFileSync(join(folder, ".widecode", "config.json"), '{"plugins":{"ext":false}}');
+    mkdirSync(join(folder, ".lightcode"), { recursive: true });
+    writeFileSync(join(folder, ".lightcode", "config.json"), '{"plugins":{"ext":false}}');
     const loose = new ExtensionsRegistry(paths).forSession(folder, false);
     ok("an untrusted folder's false is not read", loose.engine !== null);
     loose.stopWatching();
@@ -737,7 +737,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("settings", { handler: (a, ctx) => { ctx.ui.notify(JSON.stringify(agent.settings())); } });',
       "} });",
     ].join("\n"));
@@ -750,14 +750,14 @@ const main = async (): Promise<void> => {
     rig.close();
   }
 
-  // A plugin's top level reads widecode.util, widecode.theme and widecode.version.
+  // A plugin's top level reads lightcode.util, lightcode.theme and lightcode.version.
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      "const u = widecode.util;",
-      "const T = widecode.theme;",
-      'const label = u.str("ok") + ":" + String(widecode.version) + ":" + String(T.dim.length > 0);',
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      "const u = lightcode.util;",
+      "const T = lightcode.theme;",
+      'const label = u.str("ok") + ":" + String(lightcode.version) + ":" + String(T.dim.length > 0);',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("theme", { handler: (a, ctx) => { ctx.ui.notify(label); } });',
       "} });",
     ].join("\n"));
@@ -765,7 +765,7 @@ const main = async (): Promise<void> => {
     const sid = rig.session({ cwd: rig.folder, mcpServers: [] });
     rig.taken();
     await rig.prompt(sid, "/theme");
-    eq("widecode.util and widecode.theme exist at a plugin's top level", String((await rig.uiNotification("notify"))["message"]), "ok:1:true");
+    eq("lightcode.util and lightcode.theme exist at a plugin's top level", String((await rig.uiNotification("notify"))["message"]), "ok:1:true");
     rig.close();
   }
 
@@ -783,7 +783,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("save", { handler: (a, ctx) => { agent.appendEntry("note", { count: 3, marker: "custom-marker" }); ctx.ui.notify("saved"); } });',
       "} });",
     ].join("\n"));
@@ -815,7 +815,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("save", { handler: () => { agent.appendEntry("note", { count: 3 }); } });',
       '  agent.registerCommand("inspect", { handler: (a, ctx) => {',
       "    const sm = ctx.sessionManager;",
@@ -849,7 +849,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("rename", { handler: (a, ctx) => { agent.setSessionName("Fresh name"); ctx.ui.notify("name:" + String(agent.getSessionName())); } });',
       "} });",
     ].join("\n"));
@@ -870,7 +870,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("sendnow", { handler: () => { agent.sendUserMessage("hello now"); } });',
       "} });",
     ].join("\n"));
@@ -891,7 +891,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"slow","text":"First answer."}', '{"match":"steer","text":"Steered answer."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.on("before_agent_start", (e) => { if (e.prompt === "slow") agent.sendUserMessage("steer words", { deliverAs: "steer" }); });',
       "} });",
     ].join("\n"));
@@ -907,7 +907,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"slow","text":"First answer."}', '{"match":"follow","text":"Followed answer."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.on("before_agent_start", (e) => { if (e.prompt === "slow") agent.sendUserMessage("follow after", { deliverAs: "followUp" }); });',
       "} });",
     ].join("\n"));
@@ -926,7 +926,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"custom","text":"Saw custom."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("sendcustom", { handler: () => { agent.sendMessage({ customType: "note", content: "custom words", display: true, details: { a: 1 } }, { triggerTurn: true }); } });',
       "} });",
     ].join("\n"));
@@ -945,7 +945,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"slow","text":"First answer."}', '{"match":"injected","text":"Injected answer."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.on("before_agent_start", (e) => { if (e.prompt === "slow") agent.sendMessage({ customType: "inject", content: "injected words", display: true }, { deliverAs: "steer" }); });',
       "} });",
     ].join("\n"));
@@ -964,7 +964,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"slow","text":"First answer."}', '{"match":"after","text":"After answer."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.on("before_agent_start", (e) => { if (e.prompt === "slow") agent.sendMessage({ customType: "later", content: "next words", display: true }, { deliverAs: "nextTurn" }); });',
       "} });",
     ].join("\n"));
@@ -984,7 +984,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("reg", { handler: () => { agent.registerCommand("late", { handler: (b, c) => { c.ui.notify("late"); } }); } });',
       "} });",
     ].join("\n"));
@@ -1004,7 +1004,7 @@ const main = async (): Promise<void> => {
     const logFile = rig.logFile();
     const code = (reply: string): string =>
       [
-        'widecode.plugin({ id: "ext", agent(agent) {',
+        'lightcode.plugin({ id: "ext", agent(agent) {',
         '  agent.on("session_shutdown", (e, ctx) => { ctx.ui.notify("shutdown:" + e.reason); });',
         '  agent.on("session_start", (e, ctx) => { ctx.ui.notify("start:" + e.reason); });',
         '  agent.registerCommand("hello", { handler: (a, ctx) => { ctx.ui.notify("' + reply + '"); } });',
@@ -1035,7 +1035,7 @@ const main = async (): Promise<void> => {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     const counter = (id: string): string =>
       [
-        'widecode.plugin({ id: "' + id + '", agent(agent) {',
+        'lightcode.plugin({ id: "' + id + '", agent(agent) {',
         "  let n = 0;",
         '  agent.registerCommand("' + id + '", { handler: (a, ctx) => { ctx.ui.notify("' + id + ':" + String(++n)); } });',
         "} });",
@@ -1060,7 +1060,7 @@ const main = async (): Promise<void> => {
   // A removed file takes its command away.
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
-    rig.extension('widecode.plugin({ id: "ext", agent(agent) { agent.registerCommand("gone", { handler: () => {} }); } });');
+    rig.extension('lightcode.plugin({ id: "ext", agent(agent) { agent.registerCommand("gone", { handler: () => {} }); } });');
     rig.initialize(true);
     rig.session({ cwd: rig.folder, mcpServers: [] });
     const made = rig.taken();
@@ -1079,7 +1079,7 @@ const main = async (): Promise<void> => {
     const rig = new Rig(['{"match":"hello","text":"Hi."}'].join("\n"));
     const logFile = rig.logFile();
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.on("before_agent_start", () => { while (true) {} });',
       '  agent.registerCommand("fixed", { handler: (a, ctx) => { ctx.ui.notify("fixed:v1"); } });',
       "} });",
@@ -1091,7 +1091,7 @@ const main = async (): Promise<void> => {
     await rig.prompt(sid, "hello");
     rig.taken();
     ok("the busy loop switches the plugin off", readFileSync(logFile, "utf8").includes("switched off"));
-    rig.extension('widecode.plugin({ id: "ext", agent(agent) { agent.registerCommand("fixed", { handler: (a, ctx) => { ctx.ui.notify("fixed:ok"); } }); } });');
+    rig.extension('lightcode.plugin({ id: "ext", agent(agent) { agent.registerCommand("fixed", { handler: (a, ctx) => { ctx.ui.notify("fixed:ok"); } }); } });');
     await rig.agent!.extensions.forSession(rig.folder, false).syncNow();
     await rig.prompt(sid, "/fixed");
     eq("the fixed code runs after the change", await notifyStarting(rig, "fixed:"), "fixed:ok");
@@ -1104,7 +1104,7 @@ const main = async (): Promise<void> => {
     const logFile = rig.logFile();
     const code = (reply: string): string =>
       [
-        'widecode.plugin({ id: "ext", agent(agent) {',
+        'lightcode.plugin({ id: "ext", agent(agent) {',
         '  agent.on("session_shutdown", (e, ctx) => { ctx.ui.notify("shutdown:" + e.reason); });',
         '  agent.on("session_start", (e, ctx) => { ctx.ui.notify("start:" + e.reason); });',
         '  agent.registerCommand("hello", { handler: (a, ctx) => { ctx.ui.notify("' + reply + '"); } });',
@@ -1130,7 +1130,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"hello","text":"Hi."}', '{"match":"again","text":"Again."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("onlyread", { handler: (a, ctx) => { agent.setActiveTools(["Read", "Nope"]); ctx.ui.notify("active:" + JSON.stringify(agent.getActiveTools())); } });',
       '  agent.registerCommand("readbash", { handler: () => { agent.setActiveTools(["Read", "Bash"]); } });',
       "} });",
@@ -1157,7 +1157,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerTool({ name: "echo", label: "Echo", description: "Echo the text", parameters: { type: "object", properties: { text: { type: "string" } } }, execute: async () => ({ content: [] }) });',
       '  agent.registerCommand("list", { handler: (a, ctx) => { ctx.ui.notify("tools:" + JSON.stringify(agent.getAllTools().filter((t) => t.source !== "builtin"))); } });',
       "} });",
@@ -1178,7 +1178,7 @@ const main = async (): Promise<void> => {
     other.efforts = ["low", "medium", "high"];
     rig.agent!.registry.models.push(other);
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("setmodel", { handler: async (a, ctx) => { ctx.ui.notify("model:" + String(await agent.setModel("fake/other"))); } });',
       '  agent.registerCommand("badmodel", { handler: async (a, ctx) => { ctx.ui.notify("bad:" + String(await agent.setModel("nope/nope"))); } });',
       '  agent.registerCommand("seteffort", { handler: async (a, ctx) => { ctx.ui.notify("effort:" + String(await agent.setThinkingLevel("low")) + ":" + agent.getThinkingLevel()); } });',
@@ -1208,9 +1208,9 @@ const main = async (): Promise<void> => {
   // Events go between the plugins of one session's instance, never to another session's.
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
-    rig.extensionFile("a.js", 'widecode.plugin({ id: "a", agent(agent) { agent.registerCommand("emit", { handler: () => { agent.events.emit("ping", { n: 1 }); } }); } });');
+    rig.extensionFile("a.js", 'lightcode.plugin({ id: "a", agent(agent) { agent.registerCommand("emit", { handler: () => { agent.events.emit("ping", { n: 1 }); } }); } });');
     rig.extensionFile("b.js", [
-      'widecode.plugin({ id: "b", agent(agent) {',
+      'lightcode.plugin({ id: "b", agent(agent) {',
       "  const got = [];",
       '  agent.events.on("ping", (d) => { got.push(d.n); });',
       '  agent.registerCommand("seen", { handler: (a, ctx) => { ctx.ui.notify("seen:" + JSON.stringify(got)); } });',
@@ -1234,7 +1234,7 @@ const main = async (): Promise<void> => {
     const rig = new Rig(['{"match":"order","text":"Calling.","tools":[{"name":"Read","input":{"file_path":"a.txt"}}]}', '{"match":"result","text":"Done."}'].join("\n"));
     writeFileSync(join(rig.folder, "a.txt"), "first\n");
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.on("agent_start", (e, ctx) => { ctx.ui.notify("agent_start"); });',
       '  agent.on("turn_start", (e, ctx) => { ctx.ui.notify("turn_start:" + e.turnIndex); });',
       '  agent.on("turn_end", (e, ctx) => { ctx.ui.notify("turn_end:" + e.turnIndex + ":" + e.toolResults.length); });',
@@ -1256,7 +1256,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"changed","text":"Saw changed."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.on("input", (e) => {',
       '    if (e.text === "handle me") return { action: "handled" };',
       '    if (e.text === "transform me") return { action: "transform", text: "changed words" };',
@@ -1283,7 +1283,7 @@ const main = async (): Promise<void> => {
     other.efforts = ["low", "medium", "high"];
     rig.agent!.registry.models.push(other);
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.on("model_select", (e, ctx) => { ctx.ui.notify("model:" + e.previousModel + ">" + e.model + ":" + e.source); });',
       "} });",
     ].join("\n"));
@@ -1301,7 +1301,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"hello","text":"Hello there."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.on("session_before_compact", (e) => {',
       '    if (e.reason === "manual" && e.customInstructions === "stop") return { cancel: true };',
       '    return { compaction: { summary: "Plugin summary: " + e.customInstructions } };',
@@ -1330,7 +1330,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"hello","text":"Hi."}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "gate", agent(agent) {',
+      'lightcode.plugin({ id: "gate", agent(agent) {',
       '  agent.on("session_before_fork", (event, ctx) => { ctx.ui.notify("fork:" + event.reason); return { cancel: true }; });',
       "} });",
     ].join("\n"));
@@ -1342,7 +1342,7 @@ const main = async (): Promise<void> => {
     const answer = rig.out.find((line) => line.includes('"id":' + id + ",")) ?? "";
     ok("the fork is refused with the plugin's name", answer.includes('"error"') && answer.includes("refused by plugin gate"));
     eq("a fork the user asked for has reason fork", String((await rig.uiNotification("notify"))["message"]), "fork:fork");
-    const sideId = rig.send("session/fork", { sessionId: sid, cwd: rig.folder, mcpServers: [], _meta: { widecode: { side: true } } });
+    const sideId = rig.send("session/fork", { sessionId: sid, cwd: rig.folder, mcpServers: [], _meta: { lightcode: { side: true } } });
     await until(() => rig.out.some((line) => line.includes('"id":' + sideId + ",")));
     eq("a side question's has reason side", String((await rig.uiNotification("notify"))["message"]), "fork:side");
     rig.close();
@@ -1353,7 +1353,7 @@ const main = async (): Promise<void> => {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     const logFile = rig.logFile();
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.on("session_shutdown", (e, ctx) => { ctx.ui.notify("shutdown:" + e.reason); });',
       '  agent.on("session_start", (e, ctx) => { ctx.ui.notify("start:" + e.reason); });',
       "} });",
@@ -1373,10 +1373,10 @@ const main = async (): Promise<void> => {
     rig.close();
   }
 
-  // The agent part sends to the app as `_widecode/plugin`, only to a client that takes widecode's UI.
+  // The agent part sends to the app as `_lightcode/plugin`, only to a client that takes lightcode's UI.
   {
     const code = [
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("appsend", { handler: () => { agent.app.send("ping", { n: 1, text: "hi" }); } });',
       "} });",
     ].join("\n");
@@ -1393,7 +1393,7 @@ const main = async (): Promise<void> => {
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extension([
-      'widecode.plugin({ id: "ext", agent(agent) {',
+      'lightcode.plugin({ id: "ext", agent(agent) {',
       '  agent.registerCommand("appsend", { handler: () => { agent.app.send("ping", { n: 1 }); } });',
       "} });",
     ].join("\n"));
@@ -1405,27 +1405,27 @@ const main = async (): Promise<void> => {
     rig.close();
   }
 
-  // A `_widecode/plugin` message from the app reaches that plugin's listener in that session, and no other.
+  // A `_lightcode/plugin` message from the app reaches that plugin's listener in that session, and no other.
   {
     const rig = new Rig(['{"match":"never","text":"ok"}'].join("\n"));
     rig.extensionFile(
       "one.js",
-      ['widecode.plugin({ id: "one", agent(agent) {', '  agent.app.on("ping", (data) => { agent.setSessionName("one:" + data.name); });', "} });"].join("\n"),
+      ['lightcode.plugin({ id: "one", agent(agent) {', '  agent.app.on("ping", (data) => { agent.setSessionName("one:" + data.name); });', "} });"].join("\n"),
     );
     rig.extensionFile(
       "two.js",
-      ['widecode.plugin({ id: "two", agent(agent) {', '  agent.app.on("ping", (data) => { agent.setSessionName("two:" + data.name); });', "} });"].join("\n"),
+      ['lightcode.plugin({ id: "two", agent(agent) {', '  agent.app.on("ping", (data) => { agent.setSessionName("two:" + data.name); });', "} });"].join("\n"),
     );
     rig.initialize(true);
     const one = rig.session({ cwd: rig.folder, mcpServers: [] });
     const two = rig.session({ cwd: rig.folder, mcpServers: [] });
     rig.taken();
-    rig.send("_widecode/plugin", { sessionId: one, plugin: "one", type: "ping", data: { name: "a" } });
+    rig.send("_lightcode/plugin", { sessionId: one, plugin: "one", type: "ping", data: { name: "a" } });
     ok("the message reaches the plugin's listener", await waitUpTo(() => rig.agent!.titleOf(one) === "one:a", 1000));
-    rig.send("_widecode/plugin", { sessionId: one, plugin: "two", type: "ping", data: { name: "b" } });
+    rig.send("_lightcode/plugin", { sessionId: one, plugin: "two", type: "ping", data: { name: "b" } });
     ok("another plugin hears its own type and not the first", await waitUpTo(() => rig.agent!.titleOf(one) === "two:b", 1000));
     eq("another session did not hear it", rig.agent!.titleOf(two), "");
-    rig.send("_widecode/plugin", { sessionId: two, plugin: "one", type: "ping", data: { name: "c" } });
+    rig.send("_lightcode/plugin", { sessionId: two, plugin: "one", type: "ping", data: { name: "c" } });
     ok("the same plugin in another session hears its own", await waitUpTo(() => rig.agent!.titleOf(two) === "one:c", 1000));
     eq("the first session kept its own last message", rig.agent!.titleOf(one), "two:b");
     rig.close();

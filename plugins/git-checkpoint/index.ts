@@ -47,7 +47,7 @@ const restoredOf = (branch: unknown[]): Restored => {
   return { checkpoints: checkpoints, next: next };
 };
 
-widecode.plugin({
+lightcode.plugin({
   id: "git-checkpoint",
   agent(agent) {
     let checkpoints: Checkpoint[] = [];
@@ -85,7 +85,7 @@ widecode.plugin({
           return;
         }
         const lines: string[] = [];
-        for (const c of checkpoints) lines.push(String(c.n) + "  " + widecode.util.age(Date.now() - c.at) + " ago  " + c.commit.slice(0, 7));
+        for (const c of checkpoints) lines.push(String(c.n) + "  " + lightcode.util.age(Date.now() - c.at) + " ago  " + c.commit.slice(0, 7));
         ctx.ui.notify(lines.join("\n"));
       },
     });

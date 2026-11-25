@@ -8,7 +8,7 @@ const SHOWN_LINES = 20;
 /** The first lines of `status`, at most SHOWN_LINES. */
 const firstLines = (status: string): string => status.trim().split("\n").slice(0, SHOWN_LINES).join("\n");
 
-widecode.plugin({
+lightcode.plugin({
   id: "dirty-repo-guard",
   agent(agent) {
     agent.on("session_before_fork", async (event, ctx) => {

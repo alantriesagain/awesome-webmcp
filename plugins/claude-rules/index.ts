@@ -2,8 +2,8 @@
 // turn's system prompt, each under a heading with its file name, so a project's rules reach the
 // model without a tool call. A folder without that directory leaves the system prompt alone.
 
-const MARKER = "@@widecode-rule ";
-const SCRIPT = 'for f in .claude/rules/*.md; do [ -f "$f" ] || continue; printf "@@widecode-rule %s\\n" "$f"; cat "$f"; printf "\\n"; done';
+const MARKER = "@@lightcode-rule ";
+const SCRIPT = 'for f in .claude/rules/*.md; do [ -f "$f" ] || continue; printf "@@lightcode-rule %s\\n" "$f"; cat "$f"; printf "\\n"; done';
 
 /** The file name in `path`: what follows its last "/". */
 const baseName = (path: string): string => {
@@ -33,7 +33,7 @@ const rulesIn = (text: string): string => {
   return sections.join("\n\n");
 };
 
-widecode.plugin({
+lightcode.plugin({
   id: "claude-rules",
   agent(agent) {
     agent.on("before_agent_start", async (event) => {

@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { JsPanel } from "../src/runtime/views.ts";
 import { DaemonPaths, Peer, Registry } from "../src/peers/index.ts";
 import { KeyEvent, TRoot, mount, unmount } from "@lightstart/light/native/tui";
-import { openWidecode } from "./support/app.ts";
+import { openLightcode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const wait = (ms: number): Promise<void> =>
@@ -18,13 +18,13 @@ const wait = (ms: number): Promise<void> =>
     setTimeout(() => resolve(), ms);
   });
 
-const root = mkdtempSync(join(tmpdir(), "widecode-git-peers-"));
+const root = mkdtempSync(join(tmpdir(), "lightcode-git-peers-"));
 const store = join(root, "store");
 const repo = join(root, "repo");
 const theirs = join(root, "theirs");
 mkdirSync(store);
 mkdirSync(repo);
-process.env["WIDECODE_HOME"] = store;
+process.env["LIGHTCODE_HOME"] = store;
 
 const git = (args: string): string => {
   const r = spawnSync("sh", ["-c", "GIT_TERMINAL_PROMPT=0 git -c user.email=t@t -c user.name=t -c init.defaultBranch=main " + args], { encoding: "utf8" });
@@ -46,7 +46,7 @@ git("-C " + repo + " remote add mac " + theirs);
 git("-C " + repo + " fetch -q mac");
 
 const main = async (): Promise<void> => {
-  const app = await openWidecode({ folder: repo });
+  const app = await openLightcode({ folder: repo });
   const tree = new TRoot();
   app.shell.resize(200);
   mount(app.shell, tree);

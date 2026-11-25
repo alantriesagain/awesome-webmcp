@@ -70,7 +70,7 @@ export class AgentRig {
   private n = 0;
 
   constructor(fixture: string, ids: string[]) {
-    this.folder = mkdtempSync(join(tmpdir(), "widecode-agent-rig-"));
+    this.folder = mkdtempSync(join(tmpdir(), "lightcode-agent-rig-"));
     this.home = join(this.folder, "home");
     mkdirSync(this.home, { recursive: true });
     this.paths = new HarnessPaths(this.home);
@@ -112,9 +112,9 @@ export class AgentRig {
     return id;
   }
 
-  /** initialize, saying whether the client takes `_widecode/ui`. */
+  /** initialize, saying whether the client takes `_lightcode/ui`. */
   initialize(ui: boolean): void {
-    const params: Record<string, unknown> = ui ? { clientCapabilities: { _meta: { widecode: { ui: true } } } } : { clientCapabilities: {} };
+    const params: Record<string, unknown> = ui ? { clientCapabilities: { _meta: { lightcode: { ui: true } } } } : { clientCapabilities: {} };
     this.send("initialize", params);
   }
 
@@ -130,13 +130,13 @@ export class AgentRig {
     return id;
   }
 
-  /** A `_widecode/ui` request, taken out of the output; `method` the dialog's, when given. */
+  /** A `_lightcode/ui` request, taken out of the output; `method` the dialog's, when given. */
   async uiRequest(method?: string): Promise<{ id: number; params: Record<string, unknown> }> {
     let got: { id: number; params: Record<string, unknown> } | null = null;
     await until(() => {
       for (let i = 0; i < this.out.length; i++) {
         const line = this.out[i];
-        if (!/"id":\d+,"method":"_widecode\/ui"/.test(line)) continue;
+        if (!/"id":\d+,"method":"_lightcode\/ui"/.test(line)) continue;
         const msg = JSON.parse(line) as { id: number; params: Record<string, unknown> };
         if (method !== undefined && msg.params["method"] !== method) continue;
         this.out.splice(i, 1);
@@ -148,13 +148,13 @@ export class AgentRig {
     return got as unknown as { id: number; params: Record<string, unknown> };
   }
 
-  /** A `_widecode/ui` notification with `method`, taken out of the output. */
+  /** A `_lightcode/ui` notification with `method`, taken out of the output. */
   async uiNotification(method: string): Promise<Record<string, unknown>> {
     let got: Record<string, unknown> | null = null;
     await until(() => {
       for (let i = 0; i < this.out.length; i++) {
         const line = this.out[i];
-        if (!/"method":"_widecode\/ui"/.test(line) || /"id":\d+/.test(line)) continue;
+        if (!/"method":"_lightcode\/ui"/.test(line) || /"id":\d+/.test(line)) continue;
         const msg = JSON.parse(line) as { params: Record<string, unknown> };
         if (msg.params["method"] !== method) continue;
         this.out.splice(i, 1);

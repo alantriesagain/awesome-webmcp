@@ -1,13 +1,13 @@
-# widecode: a native app on light
+# lightcode: a native app on light
 
-This repository is widecode, the Claude Code frontend for wide terminals: a light app,
+This repository is lightcode, the Claude Code frontend for wide terminals: a light app,
 TypeScript on light's native core (signals, `html` templates, the view core, the terminal host
 `native/tui`), compiled by scriptc into one static binary with no JavaScript engine (no Node, Bun or
 Deno at runtime). The one engine allowed is an embedded QuickJS for plugins a user changes while the
 app runs (`@lightstart/plugins`); the core stays compiled. The repository root is the app, one member of a
 pnpm workspace that links light: `light` is the checkout beside this one (`../light`, linked at the
 root and consumed as `@lightstart/light`), and light's packages for native apps (`@lightstart/<name>`,
-light's `packages/README.md`) are members too. What widecode needs from the framework (a widget, a
+light's `packages/README.md`) are members too. What lightcode needs from the framework (a widget, a
 host capability, a fix in the renderer) goes into light, and what any native app could use goes into
 light's packages; the rest is here. The compiler is the scriptc release pinned in `package.json`
 (0.4.12), installed at the root; `SCRIPTC` names another.
@@ -15,24 +15,24 @@ light's packages; the rest is here. The compiler is the scriptc release pinned i
 | Path | What it is |
 |---|---|
 | `light/packages/native/*`, `light/packages/tui/*` | light's packages: `@lightstart/native` (`light`, the tooling: build, run, selftest, test, coverage, typecheck, check, install), `lib`, `highlight`, `plugins`, `workspace`, `test`, `kernel`, `ui`, `markdown` (light's `packages/README.md`) |
-| `src/agent` | the MCP server widecode serves its own tools with, the session titles and the Claude CLI it runs for them |
-| `src/conversation` | the conversation with an agent, agent-neutral: the model, the events, the agent role, requests, status, the lines a view draws, the session records widecode keeps |
+| `src/agent` | the MCP server lightcode serves its own tools with, the session titles and the Claude CLI it runs for them |
+| `src/conversation` | the conversation with an agent, agent-neutral: the model, the events, the agent role, requests, status, the lines a view draws, the session records lightcode keeps |
 | `src/screen` | the screen plugins contribute to: columns, tabs, band strips, segments, `ScreenController`, the column element |
 | `src/code` | the code column: a file with its changes in place, the view, a subagent's steps, a call's page, the `CodeTarget` role |
 | `src/chat` | the chat views: the transcript with the composer, the request panel, the completion strip, the Tools tab, the `ChatTarget` and `ToolsTarget` roles, on a `ChatHost` the app provides |
-| `src/harness` | widecode's own coding agent, the harness: a daemon of the binary (`widecode --harness`) speaking ACP over stdio to the ACP plugin, talking to model APIs directly, running its own tools, keeping its own sessions |
-| `src/peers` | the LAN git bridge's daemon (`widecode --peers-daemon`): discovery, pairing, the repositories each peer has |
+| `src/harness` | lightcode's own coding agent, the harness: a daemon of the binary (`lightcode --harness`) speaking ACP over stdio to the ACP plugin, talking to model APIs directly, running its own tools, keeping its own sessions |
+| `src/peers` | the LAN git bridge's daemon (`lightcode --peers-daemon`): discovery, pairing, the repositories each peer has |
 | `src/` (the rest) | the app on `@lightstart/app`: `app.ts` (its flags), `modes/` (`--version`, `--harness`, `--peers-daemon`), `controllers/` (the app's named controllers), `host/` (`Host`, `SessionController`, the keymaps, the roles), `compose.ts`, `views/` (`app-root.ts` the root view), `services/`, `runtime/` (the plugin runtime), `api/` (the plugin API's answers) |
-| `plugins/` | the built-in plugins, `plugins/<id>/index.ts`, typed against `widecode.d.ts` (`PLUGINS.md`) |
+| `plugins/` | the built-in plugins, `plugins/<id>/index.ts`, typed against `lightcode.d.ts` (`PLUGINS.md`) |
 | `test/` | the tests (`test/*.test.ts`, the harness's and the other folders' prefixed with theirs: `harness-*.test.ts`), their fixtures and fakes |
 | `box/` | the sandbox subagents run in: a bubblewrap jail or a VM (`box/README.md`) |
-| `.widecode/` | this project's harness, which the agent edits |
+| `.lightcode/` | this project's harness, which the agent edits |
 
 ## Git and commits
 
 - **NEVER add `Co-Authored-By:` or `Claude-Session:` trailers to a commit message.**
 - **This repo is not synced with a remote. Never push, pull, fetch, or mention the remote's state; local commits and merges are the whole workflow.**
-- A commit message is `<area>: <what changed>` (the area is the part of the app: `widecode`,
+- A commit message is `<area>: <what changed>` (the area is the part of the app: `lightcode`,
   `harness`, `peers`, `docs`, `repo`), then a body of plain paragraphs saying what
   changed and why. The prose rules below apply.
 - Checks come in three sizes, so a change is tried in seconds and the whole native run happens once
@@ -85,11 +85,11 @@ light's packages; the rest is here. The compiler is the scriptc release pinned i
 
 ## The app
 
-- widecode is an app on `@lightstart/app` (REDESIGN.md is the plan it follows). `src/app.ts`
+- lightcode is an app on `@lightstart/app` (REDESIGN.md is the plan it follows). `src/app.ts`
   declares its flags, which the terminal host parses before anything starts (`app.args.string`,
   `app.args.flag`); `src/modes/` are the runs that are not the interface (`--version`,
   `--harness`, `--peers-daemon`); `light app` writes the entry, `.light/main.ts`, which is the
-  `native.entry`. `src/controllers/widecode.ts` starts the app (the log, the signals, the
+  `native.entry`. `src/controllers/lightcode.ts` starts the app (the log, the signals, the
   workspace, the store, the plugins) and finishes it once the root view, `src/views/app-root.ts`,
   is mounted (focus, the trail of frames, quit, load, resume, onboarding, a selftest).
   `src/host/` are `Controller` subclasses whose signal fields the views read in their render and
@@ -115,13 +115,13 @@ light's packages; the rest is here. The compiler is the scriptc release pinned i
   `// ffi: <manifest>` (it reaches native calls bound by that manifest; node preloads the
   manifest folder's stand-in) or `// node-only` (it walks the file system).
 
-## widecode's plugins
+## lightcode's plugins
 
-widecode is a native core and JS plugins (`PLUGINS.md`). The core is compiled: the
+lightcode is a native core and JS plugins (`PLUGINS.md`). The core is compiled: the
 packages above, and in the app its controllers, views, the plugin runtime (`src/runtime/`: the
 `JsRuntime` over `@lightstart/plugins`' engine, the JS-drawn views, the agents plugins bring, the prelude)
 and the API's answers (`src/api/`, a file per namespace). Every feature is a plugin running in
-QuickJS: the built-in ones are `plugins/<id>/`, type-checked against `widecode.d.ts`, and
+QuickJS: the built-in ones are `plugins/<id>/`, type-checked against `lightcode.d.ts`, and
 normal files once built: `scripts/builtin-plugins.mjs` (the app's prepare step) writes each into
 `dist/plugins/<id>/` with its types stripped, a development build and the tests read them there,
 and `light install` writes them into the user's plugin folder (`scripts/install-plugins.mjs`,
@@ -136,7 +136,7 @@ part").
   plugin of layers (`plugins/vi/index.ts`). What a plugin needs from the core is one call per need: the
   prelude (`src/runtime/prelude.ts`, the namespaces `@lightstart/plugins` builds the prelude around), its
   answer in its namespace's `src/api/<file>.ts` (`src/runtime/runtime.ts` dispatches to them), its
-  type in `widecode.d.ts`; `test/api.test.ts` checks the three agree. Heavy work (git, the tree,
+  type in `lightcode.d.ts`; `test/api.test.ts` checks the three agree. Heavy work (git, the tree,
   diffs, rendering the conversation) stays native; a plugin decides what to show and draws rows
   for the visible window.
 - Values cross as JSON; what the core answers later is a promise the runtime settles. A call into a
@@ -148,23 +148,23 @@ part").
 - The run's log is on by default, a file per run under the store (`@lightstart/lib/log.ts`, README's
   settings paragraph). Natively an error has no stack, so the entry has `trail` around it: a key
   (`shell.ts`), a plugin's call (`runtime.ts`), the agent's events (`api/agent.ts`) and a frame's
-  phases (`controllers/widecode.ts`) enter and leave it, and the uncaught-exception monitor there logs the
+  phases (`controllers/lightcode.ts`) enter and leave it, and the uncaught-exception monitor there logs the
   error with what was open, the latest entries, the session and the turn, and the screen. A new
   place work runs from (a timer's callback, a process's lines) enters the trail too. The `crash`
   selftest checks the entry.
-- A project's `.widecode/` is its harness (`src/services/harness.ts`, PLUGINS.md "The harness"):
+- A project's `.lightcode/` is its harness (`src/services/harness.ts`, PLUGINS.md "The harness"):
   `plugins/*.js`, `prompt.md` (appended to the agent's system prompt after a fixed paragraph that
-  says the agent runs inside widecode and names the tools it has) and `config.json` (over the
+  says the agent runs inside lightcode and names the tools it has) and `config.json` (over the
   user's), in use once the folder is trusted (asked on the first launch there, or `/trust`; the agent
   stays out of an untrusted folder) and watched, each part applying on its own. What the agent
-  may change about widecode goes in this folder, never in the compiled core. Tool permissions are
+  may change about lightcode goes in this folder, never in the compiled core. Tool permissions are
   Claude Code's rules (`permissions` in either config.json), handed to the CLI with `--settings` and
   enforced by it; a `can_use_tool` that is not a question or a plan is a permission the request
   panel puts to the user. The harness plugin (`plugins/harness/index.ts`) is how the agent probes: the
   tools `screen`, `state`, `log`, `api`, `check`, `reload` and `config` over `api.plugins`,
   `api.harness` and `api.state`; `scripts/builtin-plugins.mjs` embeds PLUGINS.md and
-  `widecode.d.ts` into `src/runtime/docs.ts` (generated, ignored) for `api`, and writes the build's version and time into `src/runtime/build-info.ts` (generated, ignored), which `--version`, the log's first line and the status bar's first message say.
-- A plugin's tests drive it through the app (`createWidecode`) and start with
+  `lightcode.d.ts` into `src/runtime/docs.ts` (generated, ignored) for `api`, and writes the build's version and time into `src/runtime/build-info.ts` (generated, ignored), which `--version`, the log's first line and the status bar's first message say.
+- A plugin's tests drive it through the app (`createLightcode`) and start with
   `// ffi: @lightstart/plugins/native/ffi.json`, so `light test` runs them natively with QuickJS and under
   node with the package's `wcjs-node.mjs`. A plugin switched off has a test too.
 
@@ -173,7 +173,7 @@ part").
 `light` compiles with `$SCRIPTC` when it is set, else the scriptc release pinned in
 `package.json` (0.4.12), installed at the workspace root. The root's `scriptc` is
 `tools/scriptc-node`: the release's `@scriptc/compiler` run under node, since npm's native
-`scriptc` binary segfaults on widecode's entry (vercel-labs/scriptc#3595); switch back to
+`scriptc` binary segfaults on lightcode's entry (vercel-labs/scriptc#3595); switch back to
 the npm `scriptc` package once a release fixes that. To move to another release before then,
 change the version in `tools/scriptc-node/package.json` (its own and `@scriptc/compiler`'s),
 port any change to upstream's `packages/cli/src/main.ts` between the two tags into
@@ -214,9 +214,9 @@ rules the code follows today:
   `stream-json`, an ACP agent (`opencode acp`) over stdio. Never bundle an agent's binary or embed
   an SDK that wraps it (the Agent SDK is a wrapper around Claude Code's binary).
 - The conversation is agent-neutral (`src/conversation`) and every agent is a plugin of the app:
-  Claude Code's is widecode's `plugins/claude/index.ts`, ACP agents' `plugins/acp/index.ts`, over `api.agents`,
+  Claude Code's is lightcode's `plugins/claude/index.ts`, ACP agents' `plugins/acp/index.ts`, over `api.agents`,
   `api.process.spawn`, `api.fs` and `api.conversation.apply`.
-- widecode's own tools for an agent (`plugins/ask/index.ts`: a question, a plan to approve, both in the
+- lightcode's own tools for an agent (`plugins/ask/index.ts`: a question, a plan to approve, both in the
   request panel) are plugins over `api.tools`, served by `src/agent`'s MCP server (127.0.0.1, a
   token per agent plugin, no library), named by the app. A tool names the agent plugins whose
   agents do not see it (`except`): the ask plugin's except Claude Code, which keeps AskUserQuestion

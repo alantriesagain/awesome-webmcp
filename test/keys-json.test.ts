@@ -12,12 +12,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
 import { Store } from "../src/services/store.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
-const vi = `widecode.plugin({
+const vi = `lightcode.plugin({
   id: "vi-test",
   activate(api) {
     const layer = api.keys.layer("vi-normal", { "": { f9: "app.focus.code" } });
@@ -30,13 +30,13 @@ const vi = `widecode.plugin({
 });`;
 
 /** An app over `home`'s store, with the vi test plugin, started as main starts it (keys.json, the keymap kept or config.json's). */
-const start = async (folder: string, home: string, config: unknown): Promise<Widecode> => {
+const start = async (folder: string, home: string, config: unknown): Promise<Lightcode> => {
   const store = new Store(home);
   let plugins: unknown = null;
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     start: false,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.js.extra = [new PluginSource("vi.js", vi)];
       const read = store.loadConfig(w.defaults());
       w.host.keys.onRead = () => store.readKeys();
@@ -51,12 +51,12 @@ const start = async (folder: string, home: string, config: unknown): Promise<Wid
 };
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-keys-json-"));
-  const home = mkdtempSync(join(tmpdir(), "widecode-keys-json-home-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-keys-json-"));
+  const home = mkdtempSync(join(tmpdir(), "lightcode-keys-json-home-"));
   writeFileSync(join(home, "keys.json"), '{ "": { "f6": "app.focus.code", "f8": "vi.hello", "f5": null }, "code": { "char:n": null } }\n');
   const w = await start(folder, home, null);
-  const press = (app: Widecode, name: string, text = ""): boolean => app.shell.handleKey(new KeyEvent(name, text, false, false, false));
-  const said = (app: Widecode): string => app.host.screen.message.peek();
+  const press = (app: Lightcode, name: string, text = ""): boolean => app.shell.handleKey(new KeyEvent(name, text, false, false, false));
+  const said = (app: Lightcode): string => app.host.screen.message.peek();
 
   ok("keys.json rebinds a core action's key: F6 goes to the code column", press(w, "f6") && w.host.screen.active.peek() === "code");
   ok("binds a key to a plugin's action", press(w, "f8") && said(w) === "hello from vi");
@@ -87,20 +87,20 @@ const main = async (): Promise<void> => {
   ok("switched: the plugin turned its layer on from the hook", said(w) === "keymap vi" && press(w, "f9") && w.host.screen.active.peek() === "code");
   const command = w.host.kernel.commands.find("/keymap");
   eq("the names complete", command !== null && command.onComplete !== null ? command.onComplete("v").map((s) => s.value + (s.detail.length > 0 ? ":" + s.detail : "")).join(",") : "none", "vi:now");
-  closeWidecode(w);
+  closeLightcode(w);
 
   // The next start: the choice kept in state.json comes before config.json's "keymap".
   writeFileSync(join(home, "config.json"), '{ "keymap": "emacs", "plugins": {} }\n');
   const w2 = await start(folder, home, null);
   ok("kept for the next run, before config.json's", w2.host.keys.keymap.value === "vi" && press(w2, "f9") && w2.host.screen.active.peek() === "code");
-  closeWidecode(w2);
+  closeLightcode(w2);
 
   // config.json's "keymap" when nothing is kept.
-  const home2 = mkdtempSync(join(tmpdir(), "widecode-keys-json-home2-"));
+  const home2 = mkdtempSync(join(tmpdir(), "lightcode-keys-json-home2-"));
   writeFileSync(join(home2, "config.json"), '{ "keymap": "vi", "plugins": {} }\n');
   const w3 = await start(folder, home2, null);
   ok("config.json chooses the keymap at start", w3.host.keys.keymap.value === "vi" && press(w3, "f9") && w3.host.screen.active.peek() === "code");
-  closeWidecode(w3);
+  closeLightcode(w3);
 
   rmSync(folder, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });

@@ -1,6 +1,6 @@
 // The daemon's agent: the ACP methods over one or more sessions. A session holds the loop's state
 // (its messages, the system prompt's blocks, the model, effort and mode, the folder), the client's
-// `_meta.widecode` (the project's prompt and trust), the MCP servers it was given, its config
+// `_meta.lightcode` (the project's prompt and trust), the MCP servers it was given, its config
 // options (the models by provider, the current model's efforts, the modes), the usage and cost so
 // far, its file under the store (every message, a model or mode change, its title, appended as
 // they happen; made on the first message, so a session never written leaves nothing), and the
@@ -71,7 +71,7 @@ export class HarnessSession {
   cwd = "";
   /** The MCP servers the client gave, as JSON text. */
   mcpServersText = "[]";
-  /** The project's prompt text and trust, from `_meta.widecode`. */
+  /** The project's prompt text and trust, from `_meta.lightcode`. */
   harnessText = "";
   trusted = false;
   readonly options: ConfigOptions;
@@ -178,7 +178,7 @@ export class AcpAgent {
   readonly paths: HarnessPaths;
   /** What the web tools have (the browser, the search backends), set by the daemon. */
   web = new WebSettings();
-  /** Whether the client said it takes `_widecode/ui` (initialize's `clientCapabilities._meta.widecode.ui`). */
+  /** Whether the client said it takes `_lightcode/ui` (initialize's `clientCapabilities._meta.lightcode.ui`). */
   hasUI = false;
   private readonly sessions = new Map<string, HarnessSession>();
   readonly extensions: ExtensionsRegistry;
@@ -194,10 +194,10 @@ export class AcpAgent {
     this.platform = platform;
     this.paths = paths;
     const ui = new ExtUiHost();
-    ui.request = (paramsText: string) => this.server.sendRequest("_widecode/ui", paramsText);
-    ui.notify = (paramsText: string) => this.server.notify("_widecode/ui", paramsText);
+    ui.request = (paramsText: string) => this.server.sendRequest("_lightcode/ui", paramsText);
+    ui.notify = (paramsText: string) => this.server.notify("_lightcode/ui", paramsText);
     ui.app = (paramsText: string) => {
-      if (this.hasUI) this.server.notify("_widecode/plugin", paramsText);
+      if (this.hasUI) this.server.notify("_lightcode/plugin", paramsText);
     };
     this.extensions = new ExtensionsRegistry(paths, ui, builtins);
   }
@@ -422,9 +422,9 @@ export class AcpAgent {
     switch (m.method) {
       case "initialize": {
         const caps = p !== null ? recordOf(p["clientCapabilities"]) : null;
-        const meta = caps !== null ? recordOf(recordOf(caps["_meta"])?.["widecode"]) : null;
+        const meta = caps !== null ? recordOf(recordOf(caps["_meta"])?.["lightcode"]) : null;
         this.hasUI = meta !== null && meta["ui"] === true;
-        this.server.answer(m.idText, '{"protocolVersion":1,"agentCapabilities":' + CAPABILITIES + ',"authMethods":[],"agentInfo":{"name":"widecode-harness","version":' + JSON.stringify(this.build) + "}}");
+        this.server.answer(m.idText, '{"protocolVersion":1,"agentCapabilities":' + CAPABILITIES + ',"authMethods":[],"agentInfo":{"name":"lightcode-harness","version":' + JSON.stringify(this.build) + "}}");
         return;
       }
       case "session/new": {
@@ -456,7 +456,7 @@ export class AcpAgent {
       case "session/set_config_option":
         this.setOption(m.idText, p);
         return;
-      case "_widecode/plugin": {
+      case "_lightcode/plugin": {
         const s = p !== null ? this.sessionOf(p) : null;
         if (s === null || p === null || s.ext === null) return;
         const data = p["data"] === undefined ? "null" : JSON.stringify(p["data"]);
@@ -471,7 +471,7 @@ export class AcpAgent {
         return;
       }
       default:
-        if (m.idText.length > 0) this.server.refuse(m.idText, -32601, "widecode's harness does not offer " + m.method);
+        if (m.idText.length > 0) this.server.refuse(m.idText, -32601, "lightcode's harness does not offer " + m.method);
     }
   }
 
@@ -481,9 +481,9 @@ export class AcpAgent {
     return s === undefined ? null : s;
   }
 
-  /** What the client says in `_meta.widecode`: the project's prompt and trust, kept on the session. */
+  /** What the client says in `_meta.lightcode`: the project's prompt and trust, kept on the session. */
   private takeMeta(s: HarnessSession, p: Record<string, unknown> | null): void {
-    const meta = p !== null ? recordOf(recordOf(p["_meta"])?.["widecode"]) : null;
+    const meta = p !== null ? recordOf(recordOf(p["_meta"])?.["lightcode"]) : null;
     if (meta === null) return;
     if (typeof meta["systemPrompt"] === "string") s.harnessText = str(meta["systemPrompt"]);
     if (typeof meta["trusted"] === "boolean") s.trusted = meta["trusted"] === true;
@@ -590,8 +590,8 @@ export class AcpAgent {
     s.loop.web = this.web;
     s.loop.vision = m0 !== null && m0.vision;
     s.loop.ext = s.ext;
-    // The user's rules, and a trusted project's (its .widecode/config.json, read again as the session goes).
-    s.loop.deny = parseRules(s.trusted && s.cwd.length > 0 ? this.config.denyRules.concat(rulesIn(join(s.cwd, ".widecode", "config.json"))) : this.config.denyRules);
+    // The user's rules, and a trusted project's (its .lightcode/config.json, read again as the session goes).
+    s.loop.deny = parseRules(s.trusted && s.cwd.length > 0 ? this.config.denyRules.concat(rulesIn(join(s.cwd, ".lightcode", "config.json"))) : this.config.denyRules);
     const m = this.registry.model(s.options.model);
     s.window = m !== null ? m.window : DEFAULT_WINDOW;
     s.loop.window = s.window;
@@ -738,7 +738,7 @@ export class AcpAgent {
     }
     const fromExt = from.ext;
     if (fromExt !== null && fromExt.engine !== null) {
-      const side = recordOf(recordOf(p !== null ? p["_meta"] : null)?.["widecode"])?.["side"] === true;
+      const side = recordOf(recordOf(p !== null ? p["_meta"] : null)?.["lightcode"])?.["side"] === true;
       const answer = await fromExt.beforeFork(side ? "side" : "fork", this.extContext(from, null));
       if (answer.cancel) {
         this.server.refuse(idText, -32602, "the fork was refused by plugin " + answer.plugin);

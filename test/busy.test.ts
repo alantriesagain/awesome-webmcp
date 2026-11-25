@@ -8,7 +8,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { contentText, rec, str } from "./support/claude-records.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
@@ -29,12 +29,12 @@ const wait = (ms: number): Promise<void> =>
   });
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-busy-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-busy-"));
   writeFileSync(join(folder, "a.txt"), "a\n");
 
   /** Replays a fixture into a fresh conversation, calling `at` after each record with the chat's lines. */
   const replay = async (name: string, at: (record: string, lines: string[]) => void): Promise<void> => {
-    const w = await openWidecode({ folder });
+    const w = await openLightcode({ folder });
     const c = w.host.conversation;
     const source = w.chat.pane.source;
     const chat = (): string[] => {
@@ -69,7 +69,7 @@ const main = async (): Promise<void> => {
       }
       at(what, chat());
     }
-    closeWidecode(w);
+    closeLightcode(w);
   };
 
   const seen = new Map<string, string[]>();
@@ -99,7 +99,7 @@ const main = async (): Promise<void> => {
   eq("waiting for the user's answer: not busy", activity(asked.get("control_request:AskUserQuestion") ?? []), "");
 
   // The clock runs from the moment the message was sent.
-  const w = await openWidecode({ folder });
+  const w = await openLightcode({ folder });
   const c = w.host.conversation;
   const source = w.chat.pane.source;
   c.model.send("hello", 0);
@@ -113,7 +113,7 @@ const main = async (): Promise<void> => {
   }
   eq("a second later, its clock says so", line, "Sending… 1s");
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

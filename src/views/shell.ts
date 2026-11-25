@@ -106,7 +106,7 @@ export class Shell extends View {
   constructor() {
     super();
     this.box.flex = 1;
-    this.menuBar.brand.value = "◆ widecode";
+    this.menuBar.brand.value = "◆ lightcode";
     for (const spec of TAB_COLUMNS) {
       this.tabs.set(spec.id, new TabColumn(spec.id));
     }
@@ -570,7 +570,7 @@ export class Shell extends View {
     for (const scope of scopes) for (const hint of k.keys.hints(scope)) if (!hints.includes(hint)) hints.push(hint);
     const composer = k.keys.hints("input");
     const text =
-      "Commands: " + commands.join(", ") + ". Keys: " + columns + ", " + hints.join(", ") + ". In the composer: " + composer.join(", ") + ". Keymap: " + this.keys.keymap.value + " (/keymap lists them; ~/.widecode/keys.json rebinds). A press on a \"· N tools\" line shows those calls in the Tools tab, on a call there shows it whole.";
+      "Commands: " + commands.join(", ") + ". Keys: " + columns + ", " + hints.join(", ") + ". In the composer: " + composer.join(", ") + ". Keymap: " + this.keys.keymap.value + " (/keymap lists them; ~/.lightcode/keys.json rebinds). A press on a \"· N tools\" line shows those calls in the Tools tab, on a call there shows it whole.";
     this.conversation.model.notice(text, "info", "", "");
     this.conversation.changed();
   }

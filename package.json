@@ -1,16 +1,16 @@
 {
-  "name": "widecode",
+  "name": "lightcode",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.11.0",
-  "description": "widecode, the Claude Code frontend for wide terminals: chat, files and code side by side, a native core on light compiled by scriptc and JS plugins.",
+  "description": "lightcode, the Claude Code frontend for wide terminals: chat, files and code side by side, a native core on light compiled by scriptc and JS plugins.",
   "scripts": {
     "check": "light check",
     "typecheck": "light typecheck",
     "test": "light test",
     "coverage": "light coverage",
     "verify": "pnpm check && pnpm typecheck && pnpm test && pnpm coverage",
-    "widecode": "light run"
+    "lightcode": "light run"
   },
   "dependencies": {
     "@lightstart/app": "link:light/packages/app",
@@ -39,7 +39,7 @@
   },
   "native": {
     "entry": ".light/main.ts",
-    "binary": "widecode",
+    "binary": "lightcode",
     "ffi": [
       "@lightstart/plugins/native/ffi.json",
       "@lightstart/lib/native/ffi.json"
@@ -60,7 +60,7 @@
           ],
           [
             "the build names its version and time",
-            "^ *[0-9]* widecode .* built 20[0-9][0-9]-"
+            "^ *[0-9]* lightcode .* built 20[0-9][0-9]-"
           ],
           [
             "tree: 4 files, 2 changed",
@@ -133,7 +133,7 @@
             "selftest ok"
           ]
         ],
-        "homeEnv": "WIDECODE_HOME",
+        "homeEnv": "LIGHTCODE_HOME",
         "home": {
           "config.json": {
             "plugins": {}
@@ -141,7 +141,7 @@
         }
       },
       "fake-acp": {
-        "homeEnv": "WIDECODE_HOME",
+        "homeEnv": "LIGHTCODE_HOME",
         "home": {
           "config.json": {
             "agent": "fake",
@@ -174,7 +174,7 @@
             "selftest allowed; the call said: removed"
           ],
           [
-            "AskUser over widecode's MCP server opened the panel",
+            "AskUser over lightcode's MCP server opened the panel",
             "selftest panel open: AskUser"
           ],
           [
@@ -188,7 +188,7 @@
         ]
       },
       "harness": {
-        "homeEnv": "WIDECODE_HOME",
+        "homeEnv": "LIGHTCODE_HOME",
         "home": {
           "config.json": {
             "agent": "harness",
@@ -198,26 +198,26 @@
                   "harness": {
                     "name": "harness",
                     "command": [
-                      "{widecode}",
+                      "{lightcode}",
                       "--harness",
                       "--harness-fake",
                       "test/fixtures/harness-model.jsonl"
                     ],
                     "tools": [
-                      "{widecode}",
+                      "{lightcode}",
                       "--harness-tools",
                       "{mode}"
                     ],
                     "skills": [
-                      "{widecode}",
+                      "{lightcode}",
                       "--harness-skills"
                     ],
                     "sessions": [
-                      "{widecode}",
+                      "{lightcode}",
                       "--harness-sessions"
                     ],
                     "forget": [
-                      "{widecode}",
+                      "{lightcode}",
                       "--harness-forget",
                       "{session}"
                     ],
@@ -239,7 +239,7 @@
             "selftest harness ran a command: true; screen shows PONG: true"
           ],
           [
-            "AskUser over widecode's MCP server opened the panel",
+            "AskUser over lightcode's MCP server opened the panel",
             "selftest panel open: AskUser"
           ],
           [
@@ -415,7 +415,7 @@
       },
       "live-acp": {
         "live": "opencode",
-        "homeEnv": "WIDECODE_HOME",
+        "homeEnv": "LIGHTCODE_HOME",
         "home": {
           "config.json": {
             "agent": "opencode"
@@ -442,7 +442,7 @@
       },
       "live-acp-ask": {
         "live": "opencode",
-        "homeEnv": "WIDECODE_HOME",
+        "homeEnv": "LIGHTCODE_HOME",
         "home": {
           "config.json": {
             "agent": "opencode"
@@ -454,7 +454,7 @@
         ],
         "checks": [
           [
-            "widecode's AskUser opened the panel",
+            "lightcode's AskUser opened the panel",
             "selftest panel open: AskUser"
           ],
           [
@@ -469,7 +469,7 @@
       },
       "live-acp-plan": {
         "live": "opencode",
-        "homeEnv": "WIDECODE_HOME",
+        "homeEnv": "LIGHTCODE_HOME",
         "home": {
           "config.json": {
             "agent": "opencode"
@@ -481,7 +481,7 @@
         ],
         "checks": [
           [
-            "widecode's PresentPlan opened the panel",
+            "lightcode's PresentPlan opened the panel",
             "selftest panel open: PresentPlan"
           ],
           [
@@ -546,7 +546,7 @@
           ],
           [
             "the executable",
-            "^exe: /.*widecode$"
+            "^exe: /.*lightcode$"
           ],
           [
             "the raw backtrace",
@@ -558,7 +558,7 @@
           ],
           [
             "how to symbolize by hand",
-            "^symbolize by hand: addr2line -f -C -e /.*widecode 0x"
+            "^symbolize by hand: addr2line -f -C -e /.*lightcode 0x"
           ],
           [
             "a symbolized frame",
@@ -568,7 +568,7 @@
         "outputChecks": [
           [
             "stderr names the log",
-            "widecode crashed (SIGSEGV). Log: .*\\.log"
+            "lightcode crashed (SIGSEGV). Log: .*\\.log"
           ],
           [
             "the terminal left the alt screen",

@@ -26,7 +26,7 @@ const stringsOf = (value: unknown, fallback: string[]): string[] => {
   return out;
 };
 
-widecode.plugin({
+lightcode.plugin({
   id: "permission-gate",
   defaults: () => ({ patterns: DEFAULT_PATTERNS.slice() }),
   agent(agent) {

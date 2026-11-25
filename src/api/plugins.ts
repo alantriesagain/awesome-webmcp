@@ -18,7 +18,7 @@ class CheckHandler extends HostHandler {
       this.registered.push(args);
       return answer(null);
     }
-    return refuse("widecode: " + name + " is not available while a file is checked");
+    return refuse("lightcode: " + name + " is not available while a file is checked");
   }
 }
 
@@ -43,10 +43,10 @@ export const checkSource = (rt: JsRuntime, code: string, file: string): SourceCh
   const out = new SourceCheck();
   const handler = new CheckHandler();
   const engine = new JsEngine(handler, CHECK_MEMORY_MB, CHECK_BUDGET_MS);
-  const prelude = engine.eval(rt.prelude, "widecode:prelude");
+  const prelude = engine.eval(rt.prelude, "lightcode:prelude");
   if (prelude.status !== OK) out.errors.push("the plugin prelude: " + prelude.message());
   else {
-    engine.eval("__file(" + JSON.stringify(file) + ")", "widecode:file");
+    engine.eval("__file(" + JSON.stringify(file) + ")", "lightcode:file");
     const r = engine.eval("(function () {\n" + code + "\n})();", file);
     if (r.status !== OK) out.errors.push(r.message());
   }
@@ -63,7 +63,7 @@ export const checkSource = (rt: JsRuntime, code: string, file: string): SourceCh
     for (const q of requires) if (!known.includes(q) && !out.ids.includes(q)) out.warnings.push(id + " requires " + q + ", which no plugin provides");
     for (const running of rt.plugins) if (running.id === id && running.file !== file) out.warnings.push(id + " would replace the running plugin " + id + " (" + running.file + ")");
   }
-  if (out.errors.length === 0 && handler.registered.length === 0) out.errors.push("the file registers no plugin: call widecode.plugin({ id, activate(api) })");
+  if (out.errors.length === 0 && handler.registered.length === 0) out.errors.push("the file registers no plugin: call lightcode.plugin({ id, activate(api) })");
   if (GLOBAL_WRITE.test(code)) out.warnings.push("a write to globalThis reaches every plugin and outlives a reload of the file");
   return out;
 };

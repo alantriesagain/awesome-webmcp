@@ -63,7 +63,7 @@ const editCounts = (call: Call, input: Rec): string => {
 };
 
 /** The call's facts from its tool, input and result; paths in its line relative to `folder`. */
-export const describe = (call: Call, folder: string): widecode.CallFacts => {
+export const describe = (call: Call, folder: string): lightcode.CallFacts => {
   const relative = (path: string): string => (folder.length > 0 && path.startsWith(folder + "/") ? path.slice(folder.length + 1) : path);
   const name = call.name;
   const category = categoryOf(name);
@@ -104,7 +104,7 @@ export const describe = (call: Call, folder: string): widecode.CallFacts => {
       const status = str(todo.status);
       todos.push({ text: str(todo.content), state: status === "completed" ? "done" : status === "in_progress" ? "doing" : "todo" });
     }
-  const facts: widecode.CallFacts = {
+  const facts: lightcode.CallFacts = {
     category,
     summary,
     paths: path.length > 0 ? [path] : [],
@@ -147,7 +147,7 @@ export const inputJson = (input: unknown): string => {
 };
 
 /** The user's reply to a question or plan with `input`, as the response object's JSON text. */
-export const replyJson = (input: unknown, reply: widecode.AgentReply): string => {
+export const replyJson = (input: unknown, reply: lightcode.AgentReply): string => {
   if (reply.state === "approved") return '{"behavior":"allow","updatedInput":' + inputJson(input) + ',"updatedPermissions":[{"type":"setMode","mode":"bypassPermissions","destination":"session"}]}';
   if (reply.state !== "answered") return '{"behavior":"deny","message":' + JSON.stringify(reply.message) + "}";
   let a = "";

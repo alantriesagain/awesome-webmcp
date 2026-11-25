@@ -6,13 +6,13 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_STYLE, MouseEvent, TElement, TRoot, frames, hitTest, layout, mount, unmount } from "@lightstart/light/native/tui";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-column-order-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-column-order-"));
   writeFileSync(join(folder, "a.txt"), "a\n");
-  const w = await openWidecode({ folder });
+  const w = await openLightcode({ folder });
   const root = new TRoot();
   const W = 200;
   const H = 24;
@@ -65,7 +65,7 @@ const main = async (): Promise<void> => {
   eq("state.json keeps the order", JSON.stringify(w.host.kernel.settings.state("columnOrder")), '["tools","side","code","chat"]');
 
   unmount(w.shell);
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

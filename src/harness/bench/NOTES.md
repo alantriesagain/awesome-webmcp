@@ -15,7 +15,7 @@ DeepSeek, where a page kept in the cached conversation is cheaper).
 
 ## The setup on this machine
 
-- Keys: `~/.widecode/auth.json` holds `deepseek` and `opencode` (OpenCode Zen, pay as you go). The
+- Keys: `~/.lightcode/auth.json` holds `deepseek` and `opencode` (OpenCode Zen, pay as you go). The
   session's own subagents run on `opencode-go/deepseek-v4.1-flash`, OpenCode Go, a separate plan.
   Zen has no balance API: its console at opencode.ai shows the credit.
 - pi 1.5.2 is installed with npm (`~/.nvm/versions/node/v25.3.0/bin/pi`). `~/.pi/agent/auth.json`
@@ -54,7 +54,7 @@ efficiency. The harness's remaining gap is about one request more per task. What
 
 ## Orchestrators
 
-The harness as widecode's main agent, delegating through widecode's Task to DeepSeek Flash on
+The harness as lightcode's main agent, delegating through lightcode's Task to DeepSeek Flash on
 OpenCode Go. On DeepSeek V4 Pro it passed every part (9/9) but delegated only the four-part task,
 doing the two- and three-part ones itself despite the guidance. On Opus 5.5, one run each:
 
@@ -71,8 +71,8 @@ the three- to four-part and web tasks, with repeats, are the next round.
 
 ## What went wrong, so it does not again
 
-- The orchestration runner first started widecode without `WIDECODE_HOME`, on the user's store: it
-  rewrote `~/.widecode/state.json` once (columns, chosen models). It now passes the run's store and
+- The orchestration runner first started lightcode without `LIGHTCODE_HOME`, on the user's store: it
+  rewrote `~/.lightcode/state.json` once (columns, chosen models). It now passes the run's store and
   stops when the app names another.
 - Claude Code's first runs waited twenty minutes on a permission question nobody answers; each
   run's store now starts in the "full" approval mode, the same for every orchestrator.

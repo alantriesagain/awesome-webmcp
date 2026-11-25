@@ -4,18 +4,18 @@
 // text, so they add no hints to the status bar: the menu row says what each does.
 
 /** An action running command `text`, for a menu row. */
-const commandAction = (api: widecode.Api, id: string, text: string): void => {
+const commandAction = (api: lightcode.Api, id: string, text: string): void => {
   api.keys.action({ id, run: () => api.commands.run(text) });
 };
 
 /** Move the active column one place: -1 left, 1 right. */
-const moveActive = (api: widecode.Api, step: number): boolean => {
+const moveActive = (api: lightcode.Api, step: number): boolean => {
   const columns = api.state.columns();
   for (let i = 0; i < columns.length; i++) if (columns[i].active) return api.ui.moveColumn(columns[i].id, i + step);
   return false;
 };
 
-widecode.plugin({
+lightcode.plugin({
   id: "menus",
   activate(api) {
     commandAction(api, "menus.new", "/new");

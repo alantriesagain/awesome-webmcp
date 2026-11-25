@@ -1,5 +1,5 @@
 // ffi: @lightstart/plugins/native/ffi.json
-// widecode's Task tool (the acp plugin): a Claude call with its tool-use id starts an ACP subagent
+// lightcode's Task tool (the acp plugin): a Claude call with its tool-use id starts an ACP subagent
 // on a target's agent and model, its thought and words stream under the call, the call shows as a
 // subagent and the Agents tab follows it, and the MCP result is its last words. Cancelling the MCP
 // call stops the subagent and marks it stopped.
@@ -12,8 +12,8 @@ import { AGENT, NOTICE, TEXT, THINKING, TOOL } from "../src/conversation/model.t
 import { itemLines, RenderContext } from "../src/conversation/render.ts";
 import { agentsOf } from "../src/conversation/agents.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
-import type { Widecode } from "../src/compose.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import type { Lightcode } from "../src/compose.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { Store } from "../src/services/store.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
@@ -47,7 +47,7 @@ const lastSessionCwd = (file: string): string => {
 };
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-task-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-task-"));
   const log = join(folder, "fake.log");
   const config: unknown = {
     acp: {
@@ -55,7 +55,7 @@ const main = async (): Promise<void> => {
       tasks: { targets: { deepseek: { agent: "fake", model: "fake/large", description: "a test subagent" } }, maxConcurrent: 1 },
     },
   };
-  const w = await openWidecode({ folder, plugins: config, load: true });
+  const w = await openLightcode({ folder, plugins: config, load: true });
   const c = w.host.conversation;
   const url = await w.js.mcp.start();
   const token = w.js.mcp.tokenFor("claude");
@@ -96,7 +96,7 @@ const main = async (): Promise<void> => {
 
   c.model.closeTurn(null);
   c.model.openTurn("main", 0, true);
-  const elsewhere = mkdtempSync(join(tmpdir(), "widecode-task-elsewhere-"));
+  const elsewhere = mkdtempSync(join(tmpdir(), "lightcode-task-elsewhere-"));
   c.model.block("", "tcexternal", TOOL, "toolu-external", "Task", "");
   const externalReply = await post('{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"Task","arguments":{"description":"another folder","prompt":"hello","subagent_type":"deepseek","cwd":"' + elsewhere + '"},"_meta":{"claudecode/toolUseId":"toolu-external"}}}');
   ok("a Task with cwd runs there", externalReply.includes("Hello, world.") && lastSessionCwd(log) === elsewhere);
@@ -273,19 +273,19 @@ const main = async (): Promise<void> => {
 
   // An ACP main agent names no tool-use id: the Task tool makes the card itself, or runs under the
   // card the main announced. A store keeps the runs' transcripts.
-  const folder3 = mkdtempSync(join(tmpdir(), "widecode-task-acp-"));
-  const home3 = mkdtempSync(join(tmpdir(), "widecode-task-acp-home-"));
+  const folder3 = mkdtempSync(join(tmpdir(), "lightcode-task-acp-"));
+  const home3 = mkdtempSync(join(tmpdir(), "lightcode-task-acp-home-"));
   execFileSync("git", ["init", "-q"], { cwd: folder3 });
   execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-q", "--allow-empty", "-m", "start"], { cwd: folder3 });
   const setupLines = [
-    'if [ -f "$WIDECODE_FOLDER/setup" ]; then printf "%s" "$WIDECODE_FOLDER" > setup.txt; fi',
-    'if [ -f "$WIDECODE_FOLDER/fail-setup" ]; then echo "setup broke" >&2; exit 1; fi',
+    'if [ -f "$LIGHTCODE_FOLDER/setup" ]; then printf "%s" "$LIGHTCODE_FOLDER" > setup.txt; fi',
+    'if [ -f "$LIGHTCODE_FOLDER/fail-setup" ]; then echo "setup broke" >&2; exit 1; fi',
   ];
-  const w3 = await openWidecode({
+  const w3 = await openLightcode({
     folder: folder3,
     plugins: { acp: { agents: { fake: { name: "Fake", command: ["node", fake] } }, tasks: { targets: { deepseek: { agent: "fake" } }, worktreeSetup: setupLines } } },
     load: true,
-    before: async (w: Widecode) => {
+    before: async (w: Lightcode) => {
       const store3 = new Store(home3);
       store3.trust(folder3);
       await w.host.session.useStore(store3);
@@ -319,7 +319,7 @@ const main = async (): Promise<void> => {
   const worktrees = join(folder3, ".worktrees");
   const branches = (pattern: string): string => spawnSync("git", ["-C", folder3, "branch", "--list", pattern], { encoding: "utf8" }).stdout;
   eq("its worktree folder is gone", existsSync(worktrees) ? String(readdirSync(worktrees).length) : "0", "0");
-  eq("its branch is gone", branches("widecode/*").trim(), "");
+  eq("its branch is gone", branches("lightcode/*").trim(), "");
   c3.model.closeTurn(null);
 
   c3.model.openTurn("main", 0, true);
@@ -327,7 +327,7 @@ const main = async (): Promise<void> => {
   const failed = await send(url3, acp, '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"Task","arguments":{"description":"setup fails","prompt":"hello","subagent_type":"deepseek","isolation":"worktree"}}}');
   ok("a failing setup line fails the call", failed.includes("worktree setup failed") && failed.includes("setup broke"));
   eq("and leaves no worktree", existsSync(worktrees) ? String(readdirSync(worktrees).length) : "0", "0");
-  eq("nor its branch", branches("widecode/*").trim(), "");
+  eq("nor its branch", branches("lightcode/*").trim(), "");
   rmSync(join(folder3, "fail-setup"));
   c3.model.closeTurn(null);
 
@@ -350,7 +350,7 @@ const main = async (): Promise<void> => {
   // setup lines are the session folder's, runs none of them there.
   c3.model.openTurn("main", 0, true);
   writeFileSync(join(folder3, "setup"), "");
-  const repo3 = mkdtempSync(join(tmpdir(), "widecode-task-other-repo-"));
+  const repo3 = mkdtempSync(join(tmpdir(), "lightcode-task-other-repo-"));
   execFileSync("git", ["init", "-q"], { cwd: repo3 });
   execFileSync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-q", "--allow-empty", "-m", "start"], { cwd: repo3 });
   const otherWorktree = await send(url3, acp, '{"jsonrpc":"2.0","id":17,"method":"tools/call","params":{"name":"Task","arguments":{"description":"another repository","prompt":"change","subagent_type":"deepseek","cwd":"' + repo3 + '","isolation":"worktree"}}}');
@@ -361,15 +361,15 @@ const main = async (): Promise<void> => {
   rmSync(repo3, { recursive: true, force: true });
   c3.model.closeTurn(null);
 
-  // An ACP main announces widecode's Task call: the run goes under that call's card, not a new one.
+  // An ACP main announces lightcode's Task call: the run goes under that call's card, not a new one.
   w3.host.roles.chat.submit("taskcall");
-  ok("the ACP main announces a Task call", await until(() => c3.model.tool("call_widecode_task") !== null, 10000));
-  const announced = c3.model.tool("call_widecode_task");
+  ok("the ACP main announces a Task call", await until(() => c3.model.tool("call_lightcode_task") !== null, 10000));
+  const announced = c3.model.tool("call_lightcode_task");
   const announcedReply = await send(url3, acp, '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"Task","arguments":{"description":"announced run","prompt":"hello","subagent_type":"deepseek"}}}');
   ok("the announced run answers", announcedReply.includes("Hello, world."));
   ok("its steps go under the announced card", announced !== null && announced.children.some((i) => i.kind === TEXT && i.text.includes("Hello, world.")));
   ok("no synthetic card is made", agentsOf(c3.model).filter((i) => i.agentTask === "announced run").length === 1);
-  const taskFile = join(folder3, ".widecode", "tasks", c3.model.sessionId.replace(/[^A-Za-z0-9_.-]/g, "_"), "call_widecode_task.jsonl");
+  const taskFile = join(folder3, ".lightcode", "tasks", c3.model.sessionId.replace(/[^A-Za-z0-9_.-]/g, "_"), "call_lightcode_task.jsonl");
   ok("the transcript is kept under the announced id", existsSync(taskFile));
   if (announced !== null) {
     announced.children = [];
@@ -378,14 +378,14 @@ const main = async (): Promise<void> => {
   }
   c3.interrupt();
   ok("the announced turn ends", await until(() => !c3.model.running, 10000));
-  closeWidecode(w3);
+  closeLightcode(w3);
   rmSync(folder3, { recursive: true, force: true });
   rmSync(home3, { recursive: true, force: true });
 
-  // Claude's own subagent tools step aside when widecode offers Task.
-  const folder2 = mkdtempSync(join(tmpdir(), "widecode-task-claude-"));
+  // Claude's own subagent tools step aside when lightcode offers Task.
+  const folder2 = mkdtempSync(join(tmpdir(), "lightcode-task-claude-"));
   const argsFile = join(folder2, "args.txt");
-  const w2 = await openWidecode({ folder: folder2, plugins: { acp: { agents: { fake: { name: "Fake", command: ["node", fake] } }, tasks: { replaceClaudeSubagents: true, targets: { deepseek: { agent: "fake", model: "fake/large" } } } } }, load: true });
+  const w2 = await openLightcode({ folder: folder2, plugins: { acp: { agents: { fake: { name: "Fake", command: ["node", fake] } }, tasks: { replaceClaudeSubagents: true, targets: { deepseek: { agent: "fake", model: "fake/large" } } } } }, load: true });
   const c2 = w2.host.conversation;
   await until(() => w2.js.mcp.url.length > 0, 5000);
   await new Promise<void>((resolve) => setTimeout(resolve, 100));
@@ -400,10 +400,10 @@ const main = async (): Promise<void> => {
     }
   }, 10000);
   ok("Claude starts without its own subagent tools", disallowed);
-  closeWidecode(w2);
+  closeLightcode(w2);
   rmSync(folder2, { recursive: true, force: true });
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

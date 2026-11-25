@@ -3,22 +3,22 @@
 // press choose one, and the code column shows it: when and where it ran, its model and cost, its
 // first and last prompts, and the two ways to open it. Enter opens it here, in place of the chat's
 // session; t opens it in a new terminal window (tmux, guake or the terminal found; "terminal" in
-// the plugin's section or WIDECODE_TERMINAL names one, false turns it off); n starts a new
+// the plugin's section or LIGHTCODE_TERMINAL names one, false turns it off); n starts a new
 // session. Titles: the agent's own, else a short one Claude writes after a Claude Code session's
 // first turn and for untitled ones as they are listed (at most 8 a listing), /rename to set one,
-// /title to ask again; they are kept in the project's .widecode/, and one the user gave is not
+// /title to ask again; they are kept in the project's .lightcode/, and one the user gave is not
 // replaced. The list is read again when a turn ends while the tab shows, and when the agent says
 // it changed. Its section of config.json: { "titles": true, "titleModel": "haiku", "terminal": "" }.
 
-type Run = widecode.Run;
+type Run = lightcode.Run;
 
-interface Listed extends widecode.SessionSummary {
-  /** The title shown: widecode's, else Claude Code's, else the first prompt cut short. */
+interface Listed extends lightcode.SessionSummary {
+  /** The title shown: lightcode's, else Claude Code's, else the first prompt cut short. */
   title: string;
 }
 
 /** Untitled sessions a listing asks Claude to name, newest first. */
-const T = widecode.theme;
+const T = lightcode.theme;
 const TITLES_PER_LISTING = 8;
 const DIM = T.dim;
 const MINE = T.ok;
@@ -34,7 +34,7 @@ const ago = (ms: number): string => {
 
 const size = (bytes: number): string => (bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + " MB" : String(Math.max(1, Math.round(bytes / 1024))) + " KB");
 
-const untitled = (s: widecode.SessionSummary): boolean => s.storedTitle.length === 0 && s.agentTitle.length === 0;
+const untitled = (s: lightcode.SessionSummary): boolean => s.storedTitle.length === 0 && s.agentTitle.length === 0;
 
 const pad2 = (n: number): string => (n < 10 ? "0" : "") + String(n);
 
@@ -63,16 +63,16 @@ const launchIn = (term: string, run: string, dir: string): string => {
 
 /** A row of the session's details. */
 interface InfoRow {
-  row: widecode.Row;
+  row: lightcode.Row;
   /** What a press on it does: "open", "terminal" or nothing. */
   act: string;
 }
 
-widecode.plugin({
+lightcode.plugin({
   id: "sessions",
   defaults: () => ({ titles: true, titleModel: "haiku", terminal: "" }),
   activate(api) {
-    const u = widecode.util;
+    const u = lightcode.util;
     const wrap = u.wrap;
     const settings = (api.settings.section() ?? {}) as { titles?: unknown; titleModel?: unknown; terminal?: unknown };
     api.titles.configure(settings.titles !== false, typeof settings.titleModel === "string" ? settings.titleModel : "");
@@ -89,7 +89,7 @@ widecode.plugin({
     let seenRev = api.sessions.rev();
     let seenAgent = api.agent.info().id;
 
-    const titleOf = (s: widecode.SessionSummary): string => {
+    const titleOf = (s: lightcode.SessionSummary): string => {
       if (s.storedTitle.length > 0) return s.storedTitle;
       if (s.agentTitle.length > 0) return s.agentTitle;
       return u.clip(s.firstPrompt.replace(/\s+/g, " ").trim(), 50);
@@ -155,7 +155,7 @@ widecode.plugin({
       else {
         line("› Enter  open it here, in place of the chat's session", "", false, "open");
         if (terminal.length > 0) line("› t      open it in a new terminal", "", false, "terminal");
-        else line("  no terminal to open it in: name one as \"terminal\" in the plugin's section of config.json, or WIDECODE_TERMINAL", DIM, false, "");
+        else line("  no terminal to open it in: name one as \"terminal\" in the plugin's section of config.json, or LIGHTCODE_TERMINAL", DIM, false, "");
       }
       return out;
     };
@@ -181,10 +181,10 @@ widecode.plugin({
       info.show("Session · " + (s === undefined ? "none" : s.title.length > 0 ? u.clip(s.title.replace(/\s+/g, " "), 60) : "(untitled)"));
     };
 
-    /** Open `s` in a new terminal window running widecode on it. */
+    /** Open `s` in a new terminal window running lightcode on it. */
     const openTerminal = (s: Listed | undefined): void => {
       if (s === undefined) return;
-      if (terminal.length === 0) return api.tell("no terminal to open it in: set \"terminal\" in the plugin's section of config.json, or WIDECODE_TERMINAL");
+      if (terminal.length === 0) return api.tell("no terminal to open it in: set \"terminal\" in the plugin's section of config.json, or LIGHTCODE_TERMINAL");
       if (s.id === current) return api.tell("the chat has this session open");
       const dir = s.cwd.length > 0 ? s.cwd : api.fs.env("PWD");
       const argv = [api.fs.executable(), "--dir", dir];
@@ -201,7 +201,7 @@ widecode.plugin({
       });
     };
 
-    /** The terminal sessions open in: the one named in the section or WIDECODE_TERMINAL, tmux or guake when inside them, else the first found on a display. */
+    /** The terminal sessions open in: the one named in the section or LIGHTCODE_TERMINAL, tmux or guake when inside them, else the first found on a display. */
     const findTerminal = (): void => {
       const chosen = settings.terminal;
       if (chosen === false || chosen === "none") return;
@@ -209,7 +209,7 @@ widecode.plugin({
         terminal = chosen;
         return;
       }
-      const named = api.fs.env("WIDECODE_TERMINAL");
+      const named = api.fs.env("LIGHTCODE_TERMINAL");
       if (named.length > 0) {
         terminal = named;
         return;
@@ -240,7 +240,7 @@ widecode.plugin({
       width: (cols) => Math.max(24, Math.min(48, Math.floor(cols / 6))),
       count: () => (list.length === 0 ? 1 : list.length * 2),
       rows: (from, count, width) => {
-        const out: widecode.Row[] = [];
+        const out: lightcode.Row[] = [];
         if (list.length === 0) return from === 0 ? [{ runs: [{ text: " No sessions yet here.", fg: DIM }] }] : [];
         for (let i = from; i < Math.min(from + count, list.length * 2); i++) {
           const at = Math.floor(i / 2);

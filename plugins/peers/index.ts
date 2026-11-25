@@ -13,15 +13,15 @@
 // <host[:port]> <code>`, `/peers share [path]`, `/peers unshare`, `/peers host <name|path>`,
 // `/peers fetch <peer> [repo]`, `/peers clone <peer> <repo> [path]`, `/peers forget <peer>`,
 // `/peers name <name>` and `/peers stop` do the same from the composer. The daemon
-// (widecode --peers-daemon) does the serving and the fetching: every shared checkout of this
+// (lightcode --peers-daemon) does the serving and the fetching: every shared checkout of this
 // machine is fetched from each peer's copy (a remote named after the peer), so the counts are of the
 // whole machine, not of this folder alone. Nothing here touches a working tree: a fetch writes refs only.
 
-type Run = widecode.Run;
-type Row = widecode.Row;
+type Run = lightcode.Run;
+type Row = lightcode.Row;
 
-const T = widecode.theme;
-const u = widecode.util;
+const T = lightcode.theme;
+const u = lightcode.util;
 const DIM = T.dim;
 const SELECTED_BG = T.selected;
 const DEFAULT_PORT = 7337;
@@ -159,7 +159,7 @@ const hostPort = (arg: string): { address: string; port: number } => {
   return { address: arg, port: DEFAULT_PORT };
 };
 
-widecode.plugin({
+lightcode.plugin({
   id: "peers",
   defaults: () => ({ autoFetch: true, refreshMs: DEFAULT_REFRESH_MS }),
   activate(api) {
@@ -467,7 +467,7 @@ widecode.plugin({
         blank();
       } else {
         field("serving", ":" + String(me.port) + (me.addresses.length > 0 ? " on " + me.addresses.join(", ") : ""));
-        field("announced", discovery ? "yes, over mDNS as _widecode._tcp" : "no (discovery off, or no avahi or dns-sd)", discovery ? "" : DIM);
+        field("announced", discovery ? "yes, over mDNS as _lightcode._tcp" : "no (discovery off, or no avahi or dns-sd)", discovery ? "" : DIM);
         field("id", me.id);
       }
       blank();

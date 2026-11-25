@@ -7,9 +7,9 @@ import { request, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TOOL } from "../src/conversation/model.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { Store } from "../src/services/store.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
 
@@ -42,11 +42,11 @@ const startedId = (text: string): string => (/subagent started: ([^\s"]+)/.exec(
 /** An app whose main agent and subagents are the fake ACP agent; `agentArgs` reach the subagent's process, and `home` gives it a store. */
 const open = async (folder: string, log: string, agentArgs: string[], home = "") => {
   const plugins = { acp: { agents: { main: { name: "Main", command: ["node", fake, "--log", log] }, fake: { name: "Fake", command: ["node", fake, "--log", log, ...agentArgs] } }, tasks: { targets: { deepseek: { agent: "fake" } }, maxConcurrent: 2 } } };
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     plugins,
     load: true,
-    before: async (w: Widecode) => {
+    before: async (w: Lightcode) => {
       if (home.length > 0) {
         const store = new Store(home);
         store.trust(folder);
@@ -62,9 +62,9 @@ const open = async (folder: string, log: string, agentArgs: string[], home = "")
 
 const main = async (): Promise<void> => {
   // An update handler's exception fails the call, and the parent hears the failure.
-  const folderA = mkdtempSync(join(tmpdir(), "widecode-task-settle-a-"));
+  const folderA = mkdtempSync(join(tmpdir(), "lightcode-task-settle-a-"));
   const logA = join(folderA, "fake.log");
-  process.env.WIDECODE_ACP_TEST_CRASH = "update";
+  process.env.LIGHTCODE_ACP_TEST_CRASH = "update";
   const a = await open(folderA, logA, []);
   await a.w.host.roles.chat.submit("go");
   ok("the main agent runs", await until(() => !a.c.model.running && a.c.model.turns.length > 0, 10000));
@@ -79,12 +79,12 @@ const main = async (): Promise<void> => {
   ok("its card fails", await until(() => broken.task !== null && broken.task.status === "failed", 15000));
   ok("the failure names the error", broken.task !== null && broken.task.summary.includes("injected update failure"));
   ok("the parent hears that the background subagent failed", await until(() => a.c.model.turns.some((t) => t.prompt !== null && t.prompt.text.includes("background subagent " + brokenId + " failed")), 15000));
-  closeWidecode(a.w);
+  closeLightcode(a.w);
   rmSync(folderA, { recursive: true, force: true });
-  delete process.env.WIDECODE_ACP_TEST_CRASH;
+  delete process.env.LIGHTCODE_ACP_TEST_CRASH;
 
   // A finished background run whose process exits later reports exactly one result.
-  const folderB = mkdtempSync(join(tmpdir(), "widecode-task-settle-b-"));
+  const folderB = mkdtempSync(join(tmpdir(), "lightcode-task-settle-b-"));
   const logB = join(folderB, "fake.log");
   const exitLog = join(folderB, "exit.log");
   const b = await open(folderB, logB, ["--exit-log", exitLog]);
@@ -106,12 +106,12 @@ const main = async (): Promise<void> => {
   eq("only one result is reported", String(heard.length), "1");
   ok("and it is the finish", heard[0] !== undefined && heard[0].prompt !== null && heard[0].prompt.text.includes("finished"));
   eq("the card still says done", leaving.task !== null ? leaving.task.status : "none", "done");
-  closeWidecode(b.w);
+  closeLightcode(b.w);
   rmSync(folderB, { recursive: true, force: true });
 
   // A run of a session left since it started stops its process.
-  const folderC = mkdtempSync(join(tmpdir(), "widecode-task-settle-c-"));
-  const homeC = mkdtempSync(join(tmpdir(), "widecode-task-settle-c-home-"));
+  const folderC = mkdtempSync(join(tmpdir(), "lightcode-task-settle-c-"));
+  const homeC = mkdtempSync(join(tmpdir(), "lightcode-task-settle-c-home-"));
   const logC = join(folderC, "fake.log");
   const pidFile = join(folderC, "fake.pid");
   writeFileSync(pidFile, "");
@@ -128,11 +128,11 @@ const main = async (): Promise<void> => {
   ok("its process is recorded", await until(() => readFileSync(pidFile, "utf8").trim().length > 0, 10000));
   const pid = Number(readFileSync(pidFile, "utf8").trim());
   ok("the slow run's process is alive", alive(pid));
-  const taskFile = join(folderC, ".widecode", "tasks", c3.c.model.sessionId.replace(/[^A-Za-z0-9_.-]/g, "_"), "toolu-slow.jsonl");
+  const taskFile = join(folderC, ".lightcode", "tasks", c3.c.model.sessionId.replace(/[^A-Za-z0-9_.-]/g, "_"), "toolu-slow.jsonl");
   c3.c.reset();
   ok("leaving the session stops its run's process", await until(() => !alive(pid), 10000));
   ok("its kept transcript says it stopped because its session was left", existsSync(taskFile) && readFileSync(taskFile, "utf8").includes('"status":"stopped"') && readFileSync(taskFile, "utf8").includes('"summary":"stopped: its session was left"'));
-  closeWidecode(c3.w);
+  closeLightcode(c3.w);
   rmSync(folderC, { recursive: true, force: true });
   rmSync(homeC, { recursive: true, force: true });
 

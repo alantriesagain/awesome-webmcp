@@ -1,7 +1,7 @@
 # Agents and plugins: a short guide
 
-widecode can drive three agents: Claude Code, its own harness, and pi. Plugins change what
-widecode shows, and with the harness they can also change what the agent does: stop a command,
+lightcode can drive three agents: Claude Code, its own harness, and pi. Plugins change what
+lightcode shows, and with the harness they can also change what the agent does: stop a command,
 add a tool, rewrite a prompt. This guide covers how to use that and how to write your own.
 
 ## Pick an agent
@@ -9,13 +9,13 @@ add a tool, rewrite a prompt. This guide covers how to use that and how to write
 | Agent | How to choose it | Needs |
 |---|---|---|
 | Claude Code | the default | `claude` installed |
-| The harness | `widecode --agent harness`, or `"agent": "harness"` in config.json | an API key: `widecode --harness-auth deepseek` (or `anthropic`, `opencode`) |
-| pi | `widecode --agent pi`, or `"agent": "pi"` | `pi` on your PATH (`npm i -g @earendil-works/pi-coding-agent`) |
+| The harness | `lightcode --agent harness`, or `"agent": "harness"` in config.json | an API key: `lightcode --harness-auth deepseek` (or `anthropic`, `opencode`) |
+| pi | `lightcode --agent pi`, or `"agent": "pi"` | `pi` on your PATH (`npm i -g @earendil-works/pi-coding-agent`) |
 
-config.json is `~/.widecode/config.json`, and a trusted project's `.widecode/config.json` goes
+config.json is `~/.lightcode/config.json`, and a trusted project's `.lightcode/config.json` goes
 over it.
 
-With pi, pi runs its own extensions. Their questions open in widecode's request panel, and their
+With pi, pi runs its own extensions. Their questions open in lightcode's request panel, and their
 status lines and widgets show at the bottom of the screen.
 
 ## What the built-in plugins do
@@ -60,7 +60,7 @@ The harness reads the same skills and prompt templates as Claude Code and pi.
   `.claude/skills/` or `.pi/skills/`, or in your `~/.agents/skills/`, `~/.claude/skills/` or
   `~/.pi/agent/skills/`.
 - A prompt template is a Markdown file. `review.md` becomes the command `/review`. Put it in the
-  project's `.widecode/prompts/` or `.pi/prompts/`, or in your `~/.widecode/harness/prompts/` or
+  project's `.lightcode/prompts/` or `.pi/prompts/`, or in your `~/.lightcode/harness/prompts/` or
   `~/.pi/agent/prompts/`. In the text, `$1` is the first
   word after the command, `$@` all of them, and `${1:-main}` the first word or `main`.
 
@@ -72,23 +72,23 @@ argument-hint: <path>
 Review $1 for bugs and unclear names.
 ```
 
-A project's files are used only after you trust the folder (widecode asks the first time, or
+A project's files are used only after you trust the folder (lightcode asks the first time, or
 `/trust`).
 
 ## Write your own plugin
 
-A plugin is a `.js` file in `~/.widecode/plugins/` (yours, everywhere) or in a project's
-`.widecode/plugins/` (that project only). widecode loads it when you save it.
+A plugin is a `.js` file in `~/.lightcode/plugins/` (yours, everywhere) or in a project's
+`.lightcode/plugins/` (that project only). lightcode loads it when you save it.
 
 A plugin has two parts, and either can be left out:
 
-- `activate(api)` runs in widecode: keys, tabs, status bar.
+- `activate(api)` runs in lightcode: keys, tabs, status bar.
 - `agent(agent)` runs inside the harness and works on the agent's turn.
 
 This one asks before any force push:
 
 ```js
-widecode.plugin({
+lightcode.plugin({
   id: "no-force-push",
   agent(agent) {
     agent.on("tool_call", async (event, ctx) => {
@@ -105,7 +105,7 @@ widecode.plugin({
 Give the agent a tool, or yourself a command:
 
 ```js
-widecode.plugin({
+lightcode.plugin({
   id: "words",
   agent(agent) {
     agent.registerTool({

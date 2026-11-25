@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { claudeExecutable } from "../src/agent/index.ts";
 import { done, eq } from "@lightstart/test/assert.ts";
 
-const root = mkdtempSync(join(tmpdir(), "widecode-claude-exe-"));
+const root = mkdtempSync(join(tmpdir(), "lightcode-claude-exe-"));
 const binA = join(root, "a");
 const binB = join(root, "b");
 const home = join(root, "home");

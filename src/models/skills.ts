@@ -1,4 +1,4 @@
-// The skill runs widecode keeps in a project: a light model over `<folder>/.widecode/skills.jsonl`,
+// The skill runs lightcode keeps in a project: a light model over `<folder>/.lightcode/skills.jsonl`,
 // one row per run of a skill in a session there, kept once the run ended, so the Skills tab can say
 // how often each skill ran across sessions. Its id is the session's and the run's (the call that
 // loaded the skill, or the time a typed one started), so a session shown again writes over its own

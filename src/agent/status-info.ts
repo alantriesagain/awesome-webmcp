@@ -1,11 +1,11 @@
 // What the status bar shows: the agent fills it (an `info` event, conversation/events.ts) and the app
 // adds what it knows. The fields follow Claude Code's status line input
 // (https://code.claude.com/docs/en/statusline.md), so `json()` is what a Claude Code status line
-// script expects on stdin, with widecode's extras under "widecode": tool counts, calls, the running
+// script expects on stdin, with lightcode's extras under "lightcode": tool counts, calls, the running
 // tool. Claude Code's adapter (plugins/claude/index.ts) fills it from its records:
 //   context  the latest main-thread request's input (prompt + cache read + cache written) over the
 //            window the result reports (before one: the window stored for the session, else 1M
-//            when the model or the alias widecode started it with carries "[1m]", else 200k)
+//            when the model or the alias lightcode started it with carries "[1m]", else 200k)
 //   model    the init's; before one (a resumed session) the main thread's last assistant message's
 //   cache    per request (an assistant message, counted once): hits, misses (a request after the
 //            first that read nothing from the cache), warm while younger than its TTL (1h when it
@@ -24,7 +24,7 @@ export class StatusInfo {
   branch = "";
   version = "";
   modelId = "";
-  /** The model alias widecode starts the CLI with ("opus[1m]"; "" for the CLI's default). */
+  /** The model alias lightcode starts the CLI with ("opus[1m]"; "" for the CLI's default). */
   modelHint = "";
   /** The window stored for the session from an earlier process (0: none). */
   knownWindow = 0;
@@ -90,7 +90,7 @@ export class StatusInfo {
     return this.allInput > 0 ? this.cacheRead / this.allInput : 0;
   }
 
-  /** Claude Code's status line input (plus "widecode"), as JSON text. */
+  /** Claude Code's status line input (plus "lightcode"), as JSON text. */
   json(now: number): string {
     const size = this.windowSize;
     const used = size > 0 ? Math.round((this.contextUsed / size) * 100) : 0;
@@ -117,7 +117,7 @@ export class StatusInfo {
       prompt_cache: { warm: this.warm(now), caching_observed: this.cacheTtlMs > 0, ttl: this.cacheTtlMs >= 3600000 ? "1h" : "5m", expires_at: expires, requests: this.requests, misses: this.misses, hit_ratio: Math.round(this.hitRatio() * 100) / 100 },
       effort: { level: this.effort },
       rate_limits: { five_hour: { used_percentage: this.fiveHourPct, resets_at: this.fiveHourResets }, seven_day: { used_percentage: this.weekPct, resets_at: this.weekResets } },
-      widecode: { branch: this.branch, mode: this.mode, activity: this.activity, activity_ms: this.activitySince > 0 ? Math.max(0, now - this.activitySince) : -1, queued: this.queued, reads: this.reads, writes: this.writes, execs: this.execs, agents: this.agents, calls: this.calls, thinking_tokens: this.thinking },
+      lightcode: { branch: this.branch, mode: this.mode, activity: this.activity, activity_ms: this.activitySince > 0 ? Math.max(0, now - this.activitySince) : -1, queued: this.queued, reads: this.reads, writes: this.writes, execs: this.execs, agents: this.agents, calls: this.calls, thinking_tokens: this.thinking },
     };
     return JSON.stringify(v);
   }

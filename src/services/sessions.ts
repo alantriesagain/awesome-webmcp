@@ -1,11 +1,11 @@
 // The folder's session records (the conversation's SessionStore) over the sessions model, in the
-// app's `main` store (src/app.ts: the folder's `.widecode/` as JSONL files, memory with --ephemeral
+// app's `main` store (src/app.ts: the folder's `.lightcode/` as JSONL files, memory with --ephemeral
 // and in a test), which the run opened before any controller: the rows followed live, and the
 // synchronous answers the conversation and the plugin API take read from them. A save goes through the model in order,
-// its record answered from a pending map until the row lands. The records an earlier widecode kept
-// as `.widecode/sessions/<id>.json` are imported the first time their folder opens, and left there.
+// its record answered from a pending map until the row lands. The records an earlier lightcode kept
+// as `.lightcode/sessions/<id>.json` are imported the first time their folder opens, and left there.
 // The account's limits stay the store's (limits.json). The skill runs of the folder's sessions are a
-// second model beside them (`.widecode/skills.jsonl`), summed per skill for the Skills tab.
+// second model beside them (`.lightcode/skills.jsonl`), summed per skill for the Skills tab.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { LiveRows, modelQuery } from "@lightstart/light/model/binder";
@@ -60,7 +60,7 @@ export class SessionRecords extends SessionStore {
   async open(folder: string): Promise<void> {
     await this.close();
     this.folder = folder;
-    await this.importOld(join(folder, ".widecode", "sessions"), folder);
+    await this.importOld(join(folder, ".lightcode", "sessions"), folder);
     const rows = new LiveRows(SessionsRow.of, "sessions");
     rows.use(modelQuery<Record<string, unknown>>(sessions, { order: "-updatedMs" }));
     this.rows = rows;
@@ -206,7 +206,7 @@ export class SessionRecords extends SessionStore {
     this.skillRowSink.value = noSkills;
   }
 
-  /** The records an earlier widecode kept as one JSON file per session, into the model once (the files stay). */
+  /** The records an earlier lightcode kept as one JSON file per session, into the model once (the files stay). */
   private async importOld(dir: string, folder: string): Promise<void> {
     if (!existsSync(dir)) return;
     const rows: Record<string, unknown>[] = [];

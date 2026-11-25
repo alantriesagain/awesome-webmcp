@@ -1,6 +1,6 @@
 // One orchestration run: a folder with each part's repository, a fresh store (its auth.json a link to
 // the user's, the folder trusted, config.json naming the orchestrator and the Task target), the
-// guidance in `.widecode/prompt.md`, dist/widecode started in the folder through test/drive.py's App,
+// guidance in `.lightcode/prompt.md`, dist/lightcode started in the folder through test/drive.py's App,
 // the task's prompt sent, and the run followed until a turn ended, no background subagent is still
 // out and nothing changed for 30 seconds, or the task's time ran out. Then the app is closed, each
 // part's check runs in its subfolder, and the numbers are read from the orchestrator's session file,
@@ -24,8 +24,8 @@ const POLL_MS = 2000;
 /** How long a start may take before the prompt is asked for without a turn opening. */
 const START_MS = 180000;
 
-/** The binary the benchmark drives (dist/widecode, built by `pnpm light build`). */
-export const binaryPath = (): string => join(here, "..", "..", "..", "..", "dist", "widecode");
+/** The binary the benchmark drives (dist/lightcode, built by `pnpm light build`). */
+export const binaryPath = (): string => join(here, "..", "..", "..", "..", "dist", "lightcode");
 
 /** What one orchestration run starts with. */
 export class OrchestrateSpec {
@@ -234,7 +234,7 @@ export const runOne = async (task: OrchestrateTask, partRoot: string, spec: Orch
   try {
     const args = ["--agent", spec.orchestrator];
     if (spec.orchestrator === "claude" && spec.model.length > 0) args.push("--model", spec.model);
-    const started = await bridge.request({ op: "start", folder: setup.folder, log: setup.log, args, env: { WIDECODE_HOME: setup.store } });
+    const started = await bridge.request({ op: "start", folder: setup.folder, log: setup.log, args, env: { LIGHTCODE_HOME: setup.store } });
     // The app names its store in the log's first lines: a run on any other than its own would write
     // to the user's (their state, their trust), so it stops there.
     const storeSaid = /· store (\S+)/.exec(textOf(setup.log))?.[1] ?? "";
@@ -243,7 +243,7 @@ export const runOne = async (task: OrchestrateTask, partRoot: string, spec: Orch
       record.error = str(started["error"]);
     } else if (storeSaid !== setup.store) {
       record.setupFailed = true;
-      record.error = "widecode ran on the store " + (storeSaid.length > 0 ? storeSaid : "(none named)") + ", not the run's own " + setup.store + "; stopped";
+      record.error = "lightcode ran on the store " + (storeSaid.length > 0 ? storeSaid : "(none named)") + ", not the run's own " + setup.store + "; stopped";
     } else {
       const sentAt = Date.now();
       await bridge.request({ op: "send", text: task.prompt });

@@ -12,8 +12,8 @@ import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const main = async (): Promise<void> => {
   const root = process.cwd();
-  const folder = mkdtempSync(join(tmpdir(), "widecode-build-stamp-"));
-  for (const name of ["plugins", "node_modules", "PLUGINS.md", "widecode.d.ts", "package.json"]) symlinkSync(join(root, name), join(folder, name));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-build-stamp-"));
+  for (const name of ["plugins", "node_modules", "PLUGINS.md", "lightcode.d.ts", "package.json"]) symlinkSync(join(root, name), join(folder, name));
   mkdirSync(join(folder, "src", "runtime"), { recursive: true });
   execFileSync(process.execPath, [join(root, "scripts", "builtin-plugins.mjs")], { cwd: folder, env: { ...process.env, LIGHT_NATIVE_COMMAND: "test" }, stdio: "ignore" });
   const tree = join(folder, "dist", "plugins-test");

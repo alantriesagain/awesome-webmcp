@@ -1,8 +1,8 @@
 #!/bin/sh
-# A status line script in Claude Code's format, to show widecode runs them unchanged: it reads the
+# A status line script in Claude Code's format, to show lightcode runs them unchanged: it reads the
 # status JSON on stdin and prints one colored line. Use it in Claude Code
 #   "statusLine": { "type": "command", "command": "~/path/to/statusline.sh" }
-# or as a widecode segment in ~/.widecode/config.json
+# or as a lightcode segment in ~/.lightcode/config.json
 #   "statusline": { "lines": [ ..., [ { "command": "~/path/to/statusline.sh", "interval": 5 } ] ] }
 # Needs jq.
 input=$(cat)

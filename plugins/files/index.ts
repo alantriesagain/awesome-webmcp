@@ -5,9 +5,9 @@
 // opens or closes it, on a file opens it; ↑↓ move a cursor, Enter or → opens, ← closes a folder or
 // goes to the parent. The tree itself is the core's, built once per file list and status read.
 
-type Run = widecode.Run;
+type Run = lightcode.Run;
 
-const T = widecode.theme;
+const T = lightcode.theme;
 const ALL = " All ";
 const CHANGED = " Changed ";
 const ON_BG = T.selected;
@@ -24,7 +24,7 @@ const ancestors = (path: string): string[] => {
   return out;
 };
 
-const rowOf = (r: widecode.TreeRow, selected: string): widecode.Row => {
+const rowOf = (r: lightcode.TreeRow, selected: string): lightcode.Row => {
   const color = r.mark.length > 0 ? (MARK_COLORS[r.mark] ?? "") : "";
   const runs: Run[] = [
     { text: " ".repeat(1 + r.depth * 2) + (r.dir ? (r.open ? "▾ " : "▸ ") : "  "), fg: T.dim },
@@ -34,13 +34,13 @@ const rowOf = (r: widecode.TreeRow, selected: string): widecode.Row => {
   return { bg: r.path === selected ? ON_BG : "", runs };
 };
 
-widecode.plugin({
+lightcode.plugin({
   id: "files",
   activate(api) {
     const expanded = new Set<string>();
     const kept = api.settings.state() as { changedOnly?: unknown } | null;
     let changedOnly = kept !== null && kept.changedOnly === true;
-    let rows: widecode.TreeRow[] = [];
+    let rows: lightcode.TreeRow[] = [];
     let total = "";
     let changed = 0;
     /** The open file's row, highlighted, and the row the keyboard is on. */
@@ -68,7 +68,7 @@ widecode.plugin({
     const indexOf = (path: string): number => rows.findIndex((r) => r.path === path);
 
     /** Open or close a folder, open a file. */
-    const activate = (row: widecode.TreeRow | undefined): void => {
+    const activate = (row: lightcode.TreeRow | undefined): void => {
       if (row === undefined) return;
       if (!row.dir) {
         api.code.open(row.path);

@@ -3,20 +3,20 @@
 // reported), its link's badge the number running. A press or Enter shows one's steps in the code
 // column (Esc goes back to the file). The list follows the conversation, at most every 200 ms.
 
-type Run = widecode.Run;
+type Run = lightcode.Run;
 
-const T = widecode.theme;
+const T = lightcode.theme;
 const DIM = T.dim;
 const SELECTED_BG = T.selected;
 const MARKS: Record<string, string> = { running: T.warn, done: T.ok, failed: T.bad, interrupted: T.dim };
 /** The list is read again at most this often as the conversation changes. */
 const REFRESH_MS = 200;
 
-widecode.plugin({
+lightcode.plugin({
   id: "agents",
   activate(api) {
-    const u = widecode.util;
-    let agents: widecode.Agent[] = [];
+    const u = lightcode.util;
+    let agents: lightcode.Agent[] = [];
     let selected = 0;
     let pending = false;
 
@@ -55,7 +55,7 @@ widecode.plugin({
       count: () => (agents.length === 0 ? 1 : agents.length * 2),
       rows: (from, count, width) => {
         if (agents.length === 0) return from === 0 ? [{ runs: [{ text: " No subagents in this session.", fg: DIM }] }] : [];
-        const out: widecode.Row[] = [];
+        const out: lightcode.Row[] = [];
         for (let i = from; i < Math.min(from + count, agents.length * 2); i++) {
           const at = Math.floor(i / 2);
           const a = agents[at];

@@ -1,5 +1,5 @@
-// The messages written in a folder, for the composer's ↑ and ↓: widecode's own log of them,
-// `<folder>/.widecode/history.jsonl`, one {"ts", "session", "text"} object per line, appended as
+// The messages written in a folder, for the composer's ↑ and ↓: lightcode's own log of them,
+// `<folder>/.lightcode/history.jsonl`, one {"ts", "session", "text"} object per line, appended as
 // each is sent. Past MAX_BYTES the file moves aside to history.1.jsonl (an older one to .2, and so
 // on) and a new one starts, so nothing written is lost. The log is read on the first ↑, newest file
 // first, older files as the walk reaches them; a message repeated in a row is walked once. Without
@@ -39,7 +39,7 @@ const textsOf = (path: string): string[] => {
 };
 
 export class PromptHistory {
-  /** Where the log is (`<folder>/.widecode`), "" to keep it in memory only. */
+  /** Where the log is (`<folder>/.lightcode`), "" to keep it in memory only. */
   readonly dir: string;
   /** Past this size the log moves aside. */
   maxBytes = MAX_BYTES;

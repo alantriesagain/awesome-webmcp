@@ -1,5 +1,5 @@
 // ffi: @lightstart/plugins/native/ffi.json
-// The app as a test hosts it (openWidecode) names no daemon launcher, so the peers plugin, with no
+// The app as a test hosts it (openLightcode) names no daemon launcher, so the peers plugin, with no
 // daemon answering, only reports that none runs: it never starts one, not on its timer, not when the
 // tab is shown, not for /peers pair. The regression this guards: the plugin once ran the program it
 // was in with --peers-daemon, which under the test runner was the test itself.
@@ -10,25 +10,25 @@ import { join } from "node:path";
 import { JsPanel } from "../src/runtime/views.ts";
 import { TRoot, mount, unmount } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => {
     setTimeout(() => resolve(), ms);
   });
 
-const root = mkdtempSync(join(tmpdir(), "widecode-peers-launch-"));
+const root = mkdtempSync(join(tmpdir(), "lightcode-peers-launch-"));
 const store = join(root, "store");
 const repo = join(root, "repo");
 mkdirSync(store);
 mkdirSync(repo);
-process.env["WIDECODE_HOME"] = store;
+process.env["LIGHTCODE_HOME"] = store;
 spawnSync("sh", ["-c", "git init -q -b main '" + repo + "'"], { encoding: "utf8" });
 writeFileSync(join(repo, "a.txt"), "one\n");
 spawnSync("sh", ["-c", "git -C '" + repo + "' add . && git -C '" + repo + "' -c user.email=t@t -c user.name=t commit -qm first"], { encoding: "utf8" });
 
 const main = async (): Promise<void> => {
-  const app = await openWidecode({ folder: repo });
+  const app = await openLightcode({ folder: repo });
   const tree = new TRoot();
   app.shell.resize(200);
   mount(app.shell, tree);
@@ -53,7 +53,7 @@ const main = async (): Promise<void> => {
   await wait(1500);
   ok("no daemon state appeared", !existsSync(join(store, "peers", "daemon.json")));
   unmount(app.shell);
-  closeWidecode(app);
+  closeLightcode(app);
   rmSync(root, { recursive: true, force: true });
   done();
 };

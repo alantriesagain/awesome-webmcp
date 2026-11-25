@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { modelName, StatusInfo } from "../src/conversation/status-info.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { projectDir } from "./support/claude-records.ts";
 
@@ -23,10 +23,10 @@ const counts = (s: StatusInfo): string =>
   "ctx " + String(s.contextUsed) + "/" + String(s.windowSize) + " req " + String(s.requests) + " miss " + String(s.misses) + " hit " + s.hitRatio().toFixed(3) + " ttl " + String(s.cacheTtlMs / 60000) + "m R" + String(s.reads) + " W" + String(s.writes) + " X" + String(s.execs) + " A" + String(s.agents) + " calls " + String(s.calls) + " think " + String(s.thinking) + " +" + String(s.linesAdded) + " -" + String(s.linesRemoved);
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-status-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-status-"));
   const projects = join(folder, ".projects");
   const config: unknown = { claude: { projects } };
-  const w = await openWidecode({ folder, plugins: config });
+  const w = await openLightcode({ folder, plugins: config });
   const c = w.host.conversation;
 
   /** The status after a fixture's CLI lines. */
@@ -72,14 +72,14 @@ const main = async (): Promise<void> => {
   eq("and its cost from the cost-state record", t.costUsd.toFixed(5), "0.01809");
   ok("and a start time from its timestamps", t.startMs > 1700000000000);
 
-  const json = JSON.parse(editJson) as { context_window?: { used_percentage?: unknown; context_window_size?: unknown }; prompt_cache?: { ttl?: unknown; requests?: unknown }; rate_limits?: { five_hour?: { used_percentage?: unknown } }; model?: { display_name?: unknown }; widecode?: { writes?: unknown } };
-  eq("the status line JSON a Claude Code script reads", [json.context_window?.used_percentage, json.context_window?.context_window_size, json.prompt_cache?.ttl, json.prompt_cache?.requests, json.rate_limits?.five_hour?.used_percentage, json.model?.display_name, json.widecode?.writes].map((v) => String(v)).join(" "), "10 200000 1h 3 5 Haiku 4.5 2");
+  const json = JSON.parse(editJson) as { context_window?: { used_percentage?: unknown; context_window_size?: unknown }; prompt_cache?: { ttl?: unknown; requests?: unknown }; rate_limits?: { five_hour?: { used_percentage?: unknown } }; model?: { display_name?: unknown }; lightcode?: { writes?: unknown } };
+  eq("the status line JSON a Claude Code script reads", [json.context_window?.used_percentage, json.context_window?.context_window_size, json.prompt_cache?.ttl, json.prompt_cache?.requests, json.rate_limits?.five_hour?.used_percentage, json.model?.display_name, json.lightcode?.writes].map((v) => String(v)).join(" "), "10 200000 1h 3 5 Haiku 4.5 2");
   eq("model names", ["claude-opus-5-5", "claude-opus-5-5[1m]", "claude-haiku-4-5-20251001", "claude-sonnet-5", "claude-fable-5-1", "custom"].map(modelName).join(", "), "Opus 5.5, Opus 5.5 1M, Haiku 4.5, Sonnet 5, Fable 5.1, custom");
   const big = new StatusInfo();
   big.modelId = "claude-opus-5-5[1m]";
   eq("a [1m] model's window before any result", String(big.windowSize), "1000000");
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

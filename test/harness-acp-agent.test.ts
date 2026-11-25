@@ -1,6 +1,6 @@
 // The agent over a sink server and the fake model: initialize's capabilities; a session with its
 // options (the models by provider, the model's efforts, the modes), commands and usage; a prompt
-// streamed as chunks and answered with the stop reason and usage; `_meta.widecode` kept and put
+// streamed as chunks and answered with the stop reason and usage; `_meta.lightcode` kept and put
 // in the system prompt; a prompt sent mid-turn steering the turn and answered with it; a tool
 // call announced, run and ended, its result read by the next request; a cancel answering
 // `cancelled`; an option set, a mode's update, plan mode's tools; a fork carrying the messages;
@@ -37,8 +37,8 @@ const FIXTURE = [
 const main = async (): Promise<void> => {
   const folder = mkdtempSync(join(tmpdir(), "harness-agent-"));
   writeFileSync(join(folder, "a.txt"), "one\ntwo\n");
-  mkdirSync(join(folder, ".widecode", "prompts"), { recursive: true });
-  writeFileSync(join(folder, ".widecode", "prompts", "greet.md"), "---\ndescription: Greet someone\nargument-hint: <name>\n---\nGreet $1 and $@.\n");
+  mkdirSync(join(folder, ".lightcode", "prompts"), { recursive: true });
+  writeFileSync(join(folder, ".lightcode", "prompts", "greet.md"), "---\ndescription: Greet someone\nargument-hint: <name>\n---\nGreet $1 and $@.\n");
   const server = new AcpServer();
   const out: string[] = [];
   server.sink = (line: string) => out.push(line);
@@ -57,7 +57,7 @@ const main = async (): Promise<void> => {
   send("initialize", { protocolVersion: 1 });
   ok("initialize: the capabilities the client reads", taken()[0].includes('"agentCapabilities":{"loadSession":true,"mcpCapabilities":{"http":true},"promptCapabilities":{"image":true},"sessionCapabilities":{"list":{},"fork":{}}}'));
 
-  send("session/new", { cwd: folder, mcpServers: [{ type: "http", name: "widecode", url: "http://127.0.0.1:1/mcp" }], _meta: { widecode: { systemPrompt: "Be terse.", trusted: true } } });
+  send("session/new", { cwd: folder, mcpServers: [{ type: "http", name: "lightcode", url: "http://127.0.0.1:1/mcp" }], _meta: { lightcode: { systemPrompt: "Be terse.", trusted: true } } });
   const made = taken();
   const sid = /"sessionId":"([^"]+)"/.exec(made[0])?.[1] ?? "";
   ok("a session with its id", sid.startsWith("h-"));
@@ -228,7 +228,7 @@ const main = async (): Promise<void> => {
   ok("resumed, its cost is what its usage entries say, an unknown one left out", out2.some((l) => l.includes('"sessionUpdate":"usage_update"') && l.includes('"cost":{"amount":0.75,"currency":"USD"}')));
 
   // A prompt template: `/greet words` is the template's body with the words put in.
-  send("session/new", { cwd: folder, mcpServers: [], _meta: { widecode: { trusted: true } } });
+  send("session/new", { cwd: folder, mcpServers: [], _meta: { lightcode: { trusted: true } } });
   const fresh = taken();
   const tsid = /"sessionId":"([^"]+)"/.exec(fresh[0])?.[1] ?? "";
   const greeted = send("session/prompt", { sessionId: tsid, prompt: [{ type: "text", text: '/greet Alice "and Bob"' }] });

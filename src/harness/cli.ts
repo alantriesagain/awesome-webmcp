@@ -1,5 +1,5 @@
-// `widecode --harness [--log <file>] [--harness-fake <fixture>]`: the harness as a process speaking
-// ACP on stdin and stdout, over the store (`~/.widecode`) whose config.json has its section and
+// `lightcode --harness [--log <file>] [--harness-fake <fixture>]`: the harness as a process speaking
+// ACP on stdin and stdout, over the store (`~/.lightcode`) whose config.json has its section and
 // whose auth.json has the keys. Its log is a file of its own under the store's `harness/logs`;
 // stdin's end and SIGTERM end it. The side commands the ACP entry names are answered by the same
 // program without starting the loop: `--harness-tools <mode>` (the tools of a mode, in opencode's
@@ -106,7 +106,7 @@ export const harnessMain = (storeRoot: string, args: string[], build: string, bu
   if (tools !== null) {
     // In the folder the command runs in: the user's rules and the project's, and the tools its extensions register.
     const cwd = process.cwd();
-    const rules = parseRules(rulesIn(paths.configPath()).concat(rulesIn(join(cwd, ".widecode", "config.json"))));
+    const rules = parseRules(rulesIn(paths.configPath()).concat(rulesIn(join(cwd, ".lightcode", "config.json"))));
     const extensions = new ExtensionsRegistry(paths, null, builtins).forSession(cwd, folderTrusted(paths, cwd)).instance("", cwd);
     process.stdout.write(toolsListing(tools, rules, extensions.tools().map((t) => t.name)) + "\n");
     return done(0);
@@ -142,7 +142,7 @@ export const harnessMain = (storeRoot: string, args: string[], build: string, bu
       if (got.status === 200) for (const v of listOf(recordOf(parseJson(got.body))?.["data"])) ids.add(str(recordOf(v)?.["id"]));
       for (const p of r.providers) {
         const key = auth.keyFor(p);
-        process.stdout.write(p.name + " (" + p.id + "): " + (key.length > 0 ? "key set" : "no key: set " + p.keyEnv + " or run widecode --harness-auth " + p.id) + "\n");
+        process.stdout.write(p.name + " (" + p.id + "): " + (key.length > 0 ? "key set" : "no key: set " + p.keyEnv + " or run lightcode --harness-auth " + p.id) + "\n");
         for (const m of r.models) {
           if (m.provider !== p.id) continue;
           const note = p.id === "opencode" && ids.size > 0 && !ids.has(m.id) ? "  (not enabled for this key)" : "";
@@ -173,7 +173,7 @@ export const harnessMain = (storeRoot: string, args: string[], build: string, bu
     });
   }
   return new Promise<number>((settle) => {
-    nameLog("widecode-harness");
+    nameLog("lightcode-harness");
     openLogIn(paths.logsDir(), 10);
     log(build + " harness");
     process.on("uncaughtExceptionMonitor", (err: Error, origin: string) => {

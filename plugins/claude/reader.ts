@@ -82,7 +82,7 @@ export class Reader {
   private readonly emit: (e: Ev) => void;
   private readonly readFile: (path: string) => string | null;
   /** The skills an init record names, each with its file and description (the plugins the record lists locate a plugin's; the folder, a project's). */
-  private readonly skillsOf: (names: string[], plugins: unknown[], folder: string) => widecode.AgentSkill[];
+  private readonly skillsOf: (names: string[], plugins: unknown[], folder: string) => lightcode.AgentSkill[];
   private compacted = false;
   /** What each live message streams: its key prefix and its blocks' keys by index, by parent call. */
   private streams = new Map<string, { msg: string; keys: Map<number, string> }>();
@@ -100,7 +100,7 @@ export class Reader {
   private wasStamped = false;
   private ids = 0;
 
-  constructor(emit: (e: Ev) => void, readFile: (path: string) => string | null, skillsOf: (names: string[], plugins: unknown[], folder: string) => widecode.AgentSkill[]) {
+  constructor(emit: (e: Ev) => void, readFile: (path: string) => string | null, skillsOf: (names: string[], plugins: unknown[], folder: string) => lightcode.AgentSkill[]) {
     this.emit = emit;
     this.readFile = readFile;
     this.skillsOf = skillsOf;

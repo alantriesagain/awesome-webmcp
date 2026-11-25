@@ -6,8 +6,8 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Widecode } from "../src/compose.ts";
-import { openWidecode } from "./support/app.ts";
+import type { Lightcode } from "../src/compose.ts";
+import { openLightcode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
 
@@ -15,12 +15,12 @@ const fixtures = join(process.cwd(), "test", "fixtures");
 const fake = join(process.cwd(), "test", "fake-claude.mjs");
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-claude-approval-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-claude-approval-"));
   const args = join(folder, "args.txt");
   const logs: string[] = [];
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.host.conversation.executable = fake;
       w.host.conversation.extraArgs.push("--fixture", join(fixtures, "turn.ndjson"), "--record-args", args);
     },

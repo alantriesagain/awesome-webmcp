@@ -1,6 +1,6 @@
 // What every extension callback gets as `ctx`: the folder and mode, the model, the turn's abort,
 // the context's size and the system prompt, and the session the call belongs to. `hasUI` is true
-// when the client said it takes `_widecode/ui` and the call names a session; the ui calls then go
+// when the client said it takes `_lightcode/ui` and the call names a session; the ui calls then go
 // to the client, and otherwise answer pi's no-UI defaults and log.
 export class ExtContext {
   /** The id the host gave this call's context (0 before a call). */

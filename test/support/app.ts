@@ -1,11 +1,11 @@
-// widecode opened for a test, the one place a test builds the app: through the app layer, as the
+// lightcode opened for a test, the one place a test builds the app: through the app layer, as the
 // binary starts it (`openApp` over the generated manifest), with the run controller told the
 // test's run instead of reading the flags: the folder's workspace, its conversation, the composition
 // and the start with the plugins' config, without the log, the store or the config file. What a test
 // changes before the start (the agent chosen, the CLI and its arguments, a store, a plugin folder)
 // goes in `before`, which runs once the app is composed and before its plugins start. One app is
 // open at a time: opening another stops the one before. An `/open` starts the app again over the
-// other folder, the test's run with it: `currentWidecode()` is the app after it.
+// other folder, the test's run with it: `currentLightcode()` is the app after it.
 import { join } from "node:path";
 import type { StateFile } from "@lightstart/kernel/settings.ts";
 import type { Plugin } from "@lightstart/kernel/plugin.ts";
@@ -13,12 +13,12 @@ import { openApp } from "@lightstart/app/test";
 import { JsonlAdapterType } from "@lightstart/app/tui";
 import type { OpenedApp } from "@lightstart/app/test";
 import manifest from "../../.light/app.ts";
-import type { Widecode } from "../../src/compose.ts";
+import type { Lightcode } from "../../src/compose.ts";
 import run from "../../src/controllers/run.ts";
-import widecode from "../../src/controllers/widecode.ts";
+import lightcode from "../../src/controllers/lightcode.ts";
 import { Run } from "../../src/run.ts";
 
-/** What a test opens widecode with; every field but `folder` has a default. */
+/** What a test opens lightcode with; every field but `folder` has a default. */
 export interface OpenOptions {
   /** The folder the app opens. */
   folder: string;
@@ -31,7 +31,7 @@ export interface OpenOptions {
   /** Compiled plugins added after the JS ones. */
   extra?: Plugin[];
   /** Run once the app is composed, before its plugins start. */
-  before?: (w: Widecode) => void | Promise<void>;
+  before?: (w: Lightcode) => void | Promise<void>;
   /** Whether the plugins start; true by default. A test that starts them itself says false. */
   start?: boolean;
   /** Whether the folder's files and status are read before the app is answered; false by default. */
@@ -41,8 +41,8 @@ export interface OpenOptions {
 /** The app open now, stopped when the next one opens. */
 let opened: OpenedApp | null = null;
 
-/** widecode over `options.folder`, composed, started and loaded as the options say. */
-export const openWidecode = async (options: OpenOptions): Promise<Widecode> => {
+/** lightcode over `options.folder`, composed, started and loaded as the options say. */
+export const openLightcode = async (options: OpenOptions): Promise<Lightcode> => {
   if (opened !== null) {
     await opened.stop();
     opened = null;
@@ -60,15 +60,15 @@ export const openWidecode = async (options: OpenOptions): Promise<Widecode> => {
   // The built-in plugins as normal files, which the prepare step writes for a run.
   next.builtinDir = join(process.cwd(), "dist", "plugins-test");
   run.next = next;
-  // The folder is the app's --dir too, so its main store is that folder's .widecode, as JSONL files as in the app.
+  // The folder is the app's --dir too, so its main store is that folder's .lightcode, as JSONL files as in the app.
   opened = await openApp(manifest, { args: { dir: options.folder }, adapters: [new JsonlAdapterType()] });
-  return widecode.w;
+  return lightcode.w;
 };
 
 /** The app open now: after an `/open`, the one started over the other folder. */
-export const currentWidecode = (): Widecode => widecode.w;
+export const currentLightcode = (): Lightcode => lightcode.w;
 
-/** Stop what `openWidecode` started: the agent's process, the plugins and their processes, the folder's watch. */
-export const closeWidecode = (w: Widecode): void => {
-  if (w === widecode.w) widecode.close();
+/** Stop what `openLightcode` started: the agent's process, the plugins and their processes, the folder's watch. */
+export const closeLightcode = (w: Lightcode): void => {
+  if (w === lightcode.w) lightcode.close();
 };

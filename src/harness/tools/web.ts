@@ -369,7 +369,7 @@ export const fetchPage = async (url: string, ctx: ToolContext, abort: Abort): Pr
     }
   }
   if (how.length === 0) {
-    const marker = "\n--widecode--";
+    const marker = "\n--lightcode--";
     const c = await runProgram("curl", ["-sSL", "--compressed", "--max-time", "30", "-A", USER_AGENT, "-w", marker + "%{http_code} %{content_type}", url], 35000, 8 * 1024 * 1024, abort);
     if (abort.aborted) {
       p.error = "interrupted";

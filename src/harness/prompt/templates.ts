@@ -1,7 +1,7 @@
 // Prompt templates in pi's format: a Markdown file whose name without `.md` is the command and
 // whose body is the prompt, with `$1`, `$@` and `${@:N:L}` expanded from the words after the
-// command. They are found in a trusted folder's `.widecode/prompts` and `.pi/prompts` and each
-// plugin folder's `prompts` under its `.widecode/plugins`, then the harness's own `prompts` under
+// command. They are found in a trusted folder's `.lightcode/prompts` and `.pi/prompts` and each
+// plugin folder's `prompts` under its `.lightcode/plugins`, then the harness's own `prompts` under
 // the store, each plugin folder's `prompts` under the store's `plugins`, then pi's agent folder
 // (`PI_CODING_AGENT_DIR` when set, else `~/.pi/agent`); a name found twice is the first one's. The
 // frontmatter's `description` is the command's description, else the body's first non-empty line cut
@@ -74,9 +74,9 @@ const scanDir = (dir: string, source: string, out: TemplateInfo[]): void => {
 export const scanTemplates = (cwd: string, trusted: boolean, home: string, harnessRoot: string): TemplateInfo[] => {
   const out: TemplateInfo[] = [];
   if (trusted && cwd.length > 0) {
-    scanDir(join(cwd, ".widecode", "prompts"), "project", out);
+    scanDir(join(cwd, ".lightcode", "prompts"), "project", out);
     scanDir(join(cwd, ".pi", "prompts"), "project", out);
-    for (const plugin of pluginFolders(join(cwd, ".widecode", "plugins"))) scanDir(join(plugin, "prompts"), "project", out);
+    for (const plugin of pluginFolders(join(cwd, ".lightcode", "plugins"))) scanDir(join(plugin, "prompts"), "project", out);
   }
   if (harnessRoot.length > 0) {
     scanDir(join(harnessRoot, "prompts"), "harness", out);

@@ -2,7 +2,7 @@
 // by repeat, writes one record per run, keeps the transcripts beside the records, and prints the
 // tables; `--report` prints earlier records instead and runs nothing.
 //
-//   --orchestrator <name>[,<name>...]  the main agent: harness (widecode's own) or claude (Claude Code)
+//   --orchestrator <name>[,<name>...]  the main agent: harness (lightcode's own) or claude (Claude Code)
 //   --model <value>[,<value>...]       the orchestrator's model
 //   --tasks <name>[,<name>...]         some of the tasks
 //   --repeat <n>                       runs of each task, model and orchestrator (1)

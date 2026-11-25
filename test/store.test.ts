@@ -1,8 +1,8 @@
 // ffi: @lightstart/plugins/native/ffi.json
-// widecode's store and titles, in a temporary WIDECODE_HOME: the config written with the plugins'
+// lightcode's store and titles, in a temporary LIGHTCODE_HOME: the config written with the plugins'
 // defaults and the log's on first run and read back, its "log" in each of its shapes, one from
 // before plugins moved under "plugins" once, a
-// broken one falling back with a notice; a project's .widecode/ ignoring itself; the limits round
+// broken one falling back with a notice; a project's .lightcode/ ignoring itself; the limits round
 // trip and the ~/.ctui migration (its records read by the folder's records, test/session-records.test.ts
 // for the records themselves); a session's cost added up across CLI processes by Claude Code's plugin; titles from a
 // stand-in CLI (cleaned, asked once, asked again on demand, the right flags); a finished first turn
@@ -16,11 +16,11 @@ import type { SessionsRow, SkillsRow } from "../.light/models.ts";
 import { PluginDefault, Store } from "../src/services/store.ts";
 import { signal } from "@lightstart/light/native/tui";
 import { cleanTitle, shownTitle, Titler } from "../src/agent/titles.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { openFolderStore } from "./support/records.ts";
 
-const home = mkdtempSync(join(tmpdir(), "widecode-home-"));
+const home = mkdtempSync(join(tmpdir(), "lightcode-home-"));
 const stub = join(process.cwd(), "test", "fake-title.sh");
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -68,7 +68,7 @@ const main = async (): Promise<void> => {
   writeFileSync(join(home, "keys.json"), '{ "": { "f5": null } }\n');
   eq("keys.json read as text", new Store(home).readKeys(), '{ "": { "f5": null } }\n');
 
-  const before = mkdtempSync(join(tmpdir(), "widecode-before-"));
+  const before = mkdtempSync(join(tmpdir(), "lightcode-before-"));
   writeFileSync(join(before, "config.json"), '{"titles":{"auto":false},"models":["sonnet"],"statusline":{"separator":" · ","lines":[["model"]]},"plugins":{"git":false}}');
   const movedConfig = new Store(before).loadConfig(defaults);
   eq("a config from before plugins: its keys moved under plugins, once", section(movedConfig.plugins, "git") + " " + section(movedConfig.plugins, "sessions") + " " + section(movedConfig.plugins, "models") + " " + section(movedConfig.plugins, "status") + " | " + String(movedConfig.notice.includes("moved")), 'false {"titles":false,"titleModel":"haiku"} {"list":["sonnet"]} {"separator":" · ","lines":[["model"]]} | true');
@@ -79,15 +79,15 @@ const main = async (): Promise<void> => {
   const broken = new Store(home).loadConfig(defaults);
   ok("a broken config: every plugin on with its defaults, and a notice", broken.plugins === null && broken.notice.startsWith("config.json is not valid JSON"));
 
-  const project = mkdtempSync(join(tmpdir(), "widecode-project-"));
+  const project = mkdtempSync(join(tmpdir(), "lightcode-project-"));
   store.ignoreIn(project, true);
-  ok("a project's .widecode/ ignores itself in git", readFileSync(join(project, ".widecode", ".gitignore"), "utf8").endsWith("\n*\n"));
-  const earlier = mkdtempSync(join(tmpdir(), "widecode-earlier-"));
-  mkdirSync(join(earlier, ".widecode", "sessions"), { recursive: true });
-  const bare = mkdtempSync(join(tmpdir(), "widecode-bare-"));
+  ok("a project's .lightcode/ ignores itself in git", readFileSync(join(project, ".lightcode", ".gitignore"), "utf8").endsWith("\n*\n"));
+  const earlier = mkdtempSync(join(tmpdir(), "lightcode-earlier-"));
+  mkdirSync(join(earlier, ".lightcode", "sessions"), { recursive: true });
+  const bare = mkdtempSync(join(tmpdir(), "lightcode-bare-"));
   store.ignoreIn(earlier, false);
   store.ignoreIn(bare, false);
-  ok("an earlier .widecode/ gets it when its folder opens; a folder without one is left alone", existsSync(join(earlier, ".widecode", ".gitignore")) && !existsSync(join(bare, ".widecode")));
+  ok("an earlier .lightcode/ gets it when its folder opens; a folder without one is left alone", existsSync(join(earlier, ".lightcode", ".gitignore")) && !existsSync(join(bare, ".lightcode")));
   rmSync(earlier, { recursive: true, force: true });
   rmSync(bare, { recursive: true, force: true });
 
@@ -98,7 +98,7 @@ const main = async (): Promise<void> => {
   writeFileSync(join(old, "limits.json"), '{"fiveHour":{"usedPercent":12,"resetsAt":5}}');
   writeFileSync(join(old, "sessions", "old-1.json"), JSON.stringify({ id: "old-1", folder: project, title: "From ctui", titleBy: "claude" }));
   writeFileSync(join(old, "sessions", "gone.json"), JSON.stringify({ id: "gone", folder: "/no/such/folder", title: "x" }));
-  const fresh = mkdtempSync(join(tmpdir(), "widecode-fresh-"));
+  const fresh = mkdtempSync(join(tmpdir(), "lightcode-fresh-"));
   const migrated = new Store(fresh).migrateFrom(old);
   eq("the migration says what it did, and what stayed", migrated, "moved " + old + " to " + fresh + " and 1 session records into their projects; 1 record stayed in " + old);
   const after = new Store(fresh);
@@ -142,7 +142,7 @@ const main = async (): Promise<void> => {
   eq("an agent's limits are its own; another's are kept", String(oc.fiveHour.usedPercent) + "/" + String(oc.sevenDay.usedPercent) + " " + String(cc.fiveHour.usedPercent) + "/" + String(cc.fiveHour.resetsAt), "77/12 4/1791939600");
 
   eq("a title cleaned", cleanTitle('\n**Title:** "Rename the helper."\nmore'), "Rename the helper");
-  eq("titles shown in order: widecode's, Claude Code's, the first prompt", [shownTitle("Mine", "Claude's", "prompt"), shownTitle("", "Claude's", "prompt"), shownTitle("", "", "a very long first prompt that goes on and on past fifty characters")].join(" | "), "Mine | Claude's | a very long first prompt that goes on and on past…");
+  eq("titles shown in order: lightcode's, Claude Code's, the first prompt", [shownTitle("Mine", "Claude's", "prompt"), shownTitle("", "Claude's", "prompt"), shownTitle("", "", "a very long first prompt that goes on and on past fifty characters")].join(" | "), "Mine | Claude's | a very long first prompt that goes on and on past…");
 
   const argsFile = join(home, "title-args.txt");
   process.env["TITLE_ARGS"] = argsFile;
@@ -163,9 +163,9 @@ const main = async (): Promise<void> => {
   await wait(1500);
 
   // A conversation's turns: cost across processes, the first turn's title.
-  const repo = mkdtempSync(join(tmpdir(), "widecode-repo-"));
+  const repo = mkdtempSync(join(tmpdir(), "lightcode-repo-"));
   // Claude Code's plugin reads the records and keeps the session's record; the CLI ran on its own default model.
-  const app = await openWidecode({ folder: repo });
+  const app = await openLightcode({ folder: repo });
   await app.host.session.useStore(store);
   const conv = app.host.conversation;
   conv.modelName = "";
@@ -186,7 +186,7 @@ const main = async (): Promise<void> => {
   eq("cost added up across processes, thinking summed", s9 !== null ? s9.costUsd.toFixed(2) + " " + String(s9.thinkingTokens) + " " + s9.model : "none", "0.05 50 claude-haiku-4-5");
   await wait(1500);
   eq("the first turn asked for a title, once", titles.join(","), "s-9=Rename the helper");
-  closeWidecode(app);
+  closeLightcode(app);
   rmSync(repo, { recursive: true, force: true });
   rmSync(project, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });

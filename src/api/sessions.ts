@@ -1,5 +1,5 @@
 // The plugin API's `sessions`, `store` and `titles` calls, answered for the runtime (runtime.ts
-// dispatches by namespace): the folder's sessions with the agent, widecode's records of them, and
+// dispatches by namespace): the folder's sessions with the agent, lightcode's records of them, and
 // the titles Claude writes for Claude Code's.
 import { PreludePart } from "@lightstart/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
@@ -38,7 +38,7 @@ export const answerSessions = (rt: JsRuntime, name: string, a: unknown[]): HostA
   switch (name) {
     case "sessions.list": {
       // The folder's sessions with the agent, newest first, as its plugin lists them, each with the
-      // title widecode keeps for it.
+      // title lightcode keeps for it.
       const out: string[] = [];
       const records = h.session.records;
       const folder = h.workspace.folder;

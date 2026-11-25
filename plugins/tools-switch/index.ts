@@ -22,7 +22,7 @@ const activeOnBranch = (branch: unknown[]): string[] | null => {
 };
 
 /** The tools as lines, each said on or off. */
-const listed = (agent: widecode.AgentApi): string => {
+const listed = (agent: lightcode.AgentApi): string => {
   const active = agent.getActiveTools();
   const tools = agent.getAllTools();
   if (tools.length === 0) return "No tools.";
@@ -31,7 +31,7 @@ const listed = (agent: widecode.AgentApi): string => {
   return lines.join("\n");
 };
 
-widecode.plugin({
+lightcode.plugin({
   id: "tools-switch",
   agent(agent) {
     agent.on("session_start", (_event, ctx) => {

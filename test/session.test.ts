@@ -9,10 +9,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Answer, Reply } from "../src/conversation/requests.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
 const fixtures = join(process.cwd(), "test", "fixtures");
 const fake = join(process.cwd(), "test", "fake-claude.mjs");
@@ -29,10 +29,10 @@ class Outcome {
 /** A message to the fake replaying fixture `name`; a question answered when `answer`; then its input closed. */
 const run = async (name: string, strict: boolean, answer: boolean): Promise<Outcome> => {
   const out = new Outcome();
-  const folder = mkdtempSync(join(tmpdir(), "widecode-session-"));
-  const w = await openWidecode({
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-session-"));
+  const w = await openLightcode({
     folder,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       const c = w.host.conversation;
       c.executable = fake;
       c.extraArgs.push("--fixture", join(fixtures, name + ".ndjson"));
@@ -60,7 +60,7 @@ const run = async (name: string, strict: boolean, answer: boolean): Promise<Outc
   out.sessionId = c.sessionId;
   c.stop();
   out.stopped = await until(() => out.logs.some((l: string) => l.startsWith("claude exited with code")), 8000);
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   return out;
 };
@@ -79,11 +79,11 @@ const main = async (): Promise<void> => {
 
   // Plan mode first: a control request starts the CLI and goes before the message. The CLI's first
   // lines then include `"status":null`, which once stopped the stream while a decoder cast it.
-  const folder = mkdtempSync(join(tmpdir(), "widecode-session-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-session-"));
   const written: string[] = [];
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       const c = w.host.conversation;
       c.executable = fake;
       c.extraArgs.push("--fixture", join(fixtures, "plan.ndjson"));
@@ -95,7 +95,7 @@ const main = async (): Promise<void> => {
   c.send("plan it", []);
   eq("its mode change, then the message", written.map((l: string) => (l.includes('"set_permission_mode"') ? "mode" : l.startsWith('{"type":"user"') ? "message" : "other")).join(","), "mode,message");
   ok("the CLI's lines keep coming: the plan is asked for", await until(() => c.model.openRequests().some((r) => r.name === "ExitPlanMode"), 10000));
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

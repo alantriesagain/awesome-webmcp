@@ -1,5 +1,5 @@
 // ffi: @lightstart/plugins/native/ffi.json
-// The extension UI of an agent over ACP (plugins/acp/index.ts), `_widecode/ui` as widecode and the fake
+// The extension UI of an agent over ACP (plugins/acp/index.ts), `_lightcode/ui` as lightcode and the fake
 // (test/fake-acp.mjs) agree it: the capability in initialize; a select, a confirm, an input and an
 // editor in the request panel, the answers the agent hears, a dialog withdrawn by Esc and one that
 // times out; notify as a status message and a notice; setStatus as a segment keyed by its key and
@@ -12,9 +12,9 @@ import { request, type IncomingMessage } from "node:http";
 import { Answer, Reply } from "../src/conversation/requests.ts";
 import { TOOL, Turn } from "../src/conversation/model.ts";
 import { SegmentContext } from "../src/screen/contributions.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { JsBand } from "../src/runtime/views.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
@@ -33,7 +33,7 @@ const send = (url: string, token: string, body: string): Promise<string> =>
   });
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-acp-ui-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-acp-ui-"));
   const log = join(folder, "fake.log");
   const fake = join(process.cwd(), "test/fake-acp.mjs");
   const config: unknown = {
@@ -42,11 +42,11 @@ const main = async (): Promise<void> => {
       tasks: { targets: { deepseek: { agent: "fake" } }, maxConcurrent: 1 },
     },
   };
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     plugins: config,
     load: true,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.host.session.agentId.value = "fake";
     },
   });
@@ -92,7 +92,7 @@ const main = async (): Promise<void> => {
     return r;
   };
 
-  ok("initialize says widecode takes extension UI", await until(() => sent().includes('"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false,"_meta":{"widecode":{"ui":true}}}')));
+  ok("initialize says lightcode takes extension UI", await until(() => sent().includes('"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false,"_meta":{"lightcode":{"ui":true}}}')));
 
   ok("select: an option answered", (await uiTurn("select", (q: string) => answerWith(q, "Allow"))) && chat().some((l: string) => l.includes("Selected: Allow")));
   ok("confirm: answered yes", (await uiTurn("confirm", (q: string) => answerWith(q, "Yes"))) && chat().some((l: string) => l.includes("Confirmed: true")));
@@ -144,10 +144,10 @@ const main = async (): Promise<void> => {
   const reply = await send(url, token, '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"Task","arguments":{"description":"ask a dialog","prompt":"select","subagent_type":"deepseek"},"_meta":{"claudecode/toolUseId":"toolu-ui"}}}');
   ok("the background-task client answers a dialog cancelled", reply.includes("Select cancelled"));
   const initializes = (): string[] => sent().split("\n").filter((l: string) => l.includes('"method":"initialize"'));
-  ok("only the main client claims the UI capability", String(initializes().filter((l: string) => l.includes('"widecode":{"ui":true}')).length) === "1" && initializes().length >= 2);
+  ok("only the main client claims the UI capability", String(initializes().filter((l: string) => l.includes('"lightcode":{"ui":true}')).length) === "1" && initializes().length >= 2);
   ok("the run's answer was cancelled", sent().includes('"result":{"cancelled":true}'));
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

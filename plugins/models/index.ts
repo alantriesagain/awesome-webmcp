@@ -16,7 +16,7 @@
 // efforts to start from, under those chosen.
 
 /** The models F5 cycles through for Claude Code when the config lists none; the first is a new session's. */
-const T = widecode.theme;
+const T = lightcode.theme;
 const DEFAULT_MODELS = ["opus[1m]", "fable[1m]"];
 
 /** A list's non-empty names, trimmed. */
@@ -63,7 +63,7 @@ const parseEfforts = (v: unknown): Efforts => {
   return { default: typeof d === "string" ? d : "", providers: strings(o?.providers), models: strings(o?.models) };
 };
 
-widecode.plugin({
+lightcode.plugin({
   id: "models",
   defaults: () => ({ list: DEFAULT_MODELS }),
   activate(api) {
@@ -88,7 +88,7 @@ widecode.plugin({
       const now = agent.info().id;
       return now === "claude" ? models : (others[now] ?? []);
     };
-    const offered = (): widecode.AgentOption[] => agent.choices().models;
+    const offered = (): lightcode.AgentOption[] => agent.choices().models;
     const current = (): string => (offered().length > 0 ? agent.reportedModel() || agent.modelName() : agent.modelName());
     /** The provider of `model`: the part of its id before "/", else the agent. */
     const providerOf = (model: string): string => {

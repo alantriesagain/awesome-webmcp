@@ -167,7 +167,7 @@ const main = async (): Promise<void> => {
   eq("a 401's message", refused.stopReason + " " + refused.error, "error authentication_error: Invalid API key");
   delete process.env["HARNESS_OPENAI_TEST_KEY"];
   const nokey = await client.stream(new ModelRequest("local/small", [], [user]), l, new Abort());
-  eq("no key", nokey.error, "no key for Local: set HARNESS_OPENAI_TEST_KEY or run widecode --harness-auth local");
+  eq("no key", nokey.error, "no key for Local: set HARNESS_OPENAI_TEST_KEY or run lightcode --harness-auth local");
   server.child.stdin!.end();
   server.child.kill();
 

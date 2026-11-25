@@ -1,7 +1,7 @@
 // The plugin API's `agent`, `agents` and `conversation` calls, answered for the runtime
 // (runtime.ts dispatches by namespace): the conversation with the agent (what the user does, its
 // model, effort, mode and session), the agents plugins bring, the events they apply, and the
-// requests widecode's own tools put to the user.
+// requests lightcode's own tools put to the user.
 import { PreludePart } from "@lightstart/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";
 import { Option } from "../conversation/agent.ts";
@@ -48,7 +48,7 @@ export const answerAgent = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
       trail.leave(at);
       const agent = rt.chosenAgent();
       if (agent !== null) agent.sawEvents(a[1]);
-      // A turn that ended withdrew the requests of widecode's tools in it.
+      // A turn that ended withdrew the requests of lightcode's tools in it.
       c.settleAsks(false);
       if (n > 0) c.changed();
       return answer(n);
@@ -65,7 +65,7 @@ export const answerAgent = (rt: JsRuntime, name: string, a: unknown[]): HostAnsw
       return answer(n);
     }
     case "conversation.ask": {
-      // A request for the user from plugin `owner` (one of widecode's tools): the panel shows it, and the reply settles the plugin's promise.
+      // A request for the user from plugin `owner` (one of lightcode's tools): the panel shows it, and the reply settles the plugin's promise.
       const owner = str(a[0]);
       const parent = str(a[2]);
       const fn = num(a[3]);

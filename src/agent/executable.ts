@@ -1,4 +1,4 @@
-// The Claude Code CLI widecode runs itself (the session titles), found as the claude plugin finds
+// The Claude Code CLI lightcode runs itself (the session titles), found as the claude plugin finds
 // the agent's own on the plugin API.
 import { existsSync } from "node:fs";
 

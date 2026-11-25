@@ -1,5 +1,5 @@
 // ffi: @lightstart/plugins/native/ffi.json
-// widecode's plugins as config.json switches them: with languages off nothing is colored; with
+// lightcode's plugins as config.json switches them: with languages off nothing is colored; with
 // agents off there is no Agents tab; with git off there is no Git tab, no b and no compare row;
 // with changes off the band is the status table alone. A plugin from outside the built-in list adds
 // a command, a key, a status segment and a tab; one whose requirement is off is left out and
@@ -17,16 +17,16 @@ import { Command } from "@lightstart/kernel/commands.ts";
 import { Action } from "@lightstart/kernel/actions.ts";
 import { Plugin } from "@lightstart/kernel/plugin.ts";
 import { NoStateFile } from "@lightstart/kernel/settings.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { Caret, Clip, DEFAULT_STYLE, KeyEvent, Screen, TRoot, frames, layout, mount, paint, unmount } from "@lightstart/light/native/tui";
 import { Line, LineSource, Run } from "@lightstart/tui/line-view.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { GRAMMARS as LANGUAGES } from "@lightstart/highlight/grammar.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
 const W = 200;
 const H = 20;
-const repo = mkdtempSync(join(tmpdir(), "widecode-plugins-"));
+const repo = mkdtempSync(join(tmpdir(), "lightcode-plugins-"));
 const git = (args: string[]): void => {
   const all = ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "-c", "init.defaultBranch=main"];
   for (const a of args) all.push(a);
@@ -87,7 +87,7 @@ class Extra extends Plugin {
 
 const main = async (): Promise<void> => {
   const root = new TRoot();
-  const screen = (_w: Widecode): string[] => {
+  const screen = (_w: Lightcode): string[] => {
     for (let i = 0; i < 3; i++) {
       frames.flush();
       layout(root, W, H, DEFAULT_STYLE);
@@ -96,34 +96,34 @@ const main = async (): Promise<void> => {
     paint(root, s, new Clip(0, 0, W, H), DEFAULT_STYLE, new Caret(), null);
     return s.text().split("\n");
   };
-  const show = (w: Widecode): string[] => screen(w);
-  const end = (w: Widecode): void => {
+  const show = (w: Lightcode): string[] => screen(w);
+  const end = (w: Lightcode): void => {
     unmount(w.shell);
-    closeWidecode(w);
+    closeLightcode(w);
   };
   /** The side tabs: the files column's top edge, as the row reads. */
-  const tabs = (w: Widecode, shown: string[]): string => {
+  const tabs = (w: Lightcode, shown: string[]): string => {
     const x = w.shell.xOf("side");
     // Row 2: the columns start under the menu bar and its margin.
     return shown[2].slice(x, x + w.shell.widthOf("side")).replace(/[▏▕]/g, " ").trim().replace(/\s+/g, " ");
   };
-  const press = (w: Widecode, name: string, text: string): boolean => w.shell.handleKey(new KeyEvent(name, text, false, false, false));
-  const mountApp = (w: Widecode): void => {
+  const press = (w: Lightcode, name: string, text: string): boolean => w.shell.handleKey(new KeyEvent(name, text, false, false, false));
+  const mountApp = (w: Lightcode): void => {
     w.shell.resize(W);
     mount(w.shell, root);
   };
 
-  let w = await openWidecode({ folder: repo, plugins: JSON.parse('{"languages": false}') });
+  let w = await openLightcode({ folder: repo, plugins: JSON.parse('{"languages": false}') });
   ok("languages off: no language, so nothing is colored", languageForPath("a.ts") === "" && !w.host.kernel.has("languages"));
   end(w);
 
-  w = await openWidecode({ folder: repo, plugins: JSON.parse('{"agents": false}'), load: true, before: mountApp });
+  w = await openLightcode({ folder: repo, plugins: JSON.parse('{"agents": false}'), load: true, before: mountApp });
   let lines = show(w);
   eq("agents off: the side tabs stay on the top edge", tabs(w, lines), "Files 1 Sessions Git");
   ok("agents off: no Agents tab, nothing opens a subagent", !w.host.screen.panels.some((p) => p.id === "agents") && w.host.screen.panelsIn("tools").map((p) => p.id).join(" ") === "calls available queue");
   end(w);
 
-  w = await openWidecode({ folder: repo, plugins: JSON.parse('{"git": false}'), load: true, before: mountApp });
+  w = await openLightcode({ folder: repo, plugins: JSON.parse('{"git": false}'), load: true, before: mountApp });
   lines = show(w);
   eq("git off: no Git tab", w.host.screen.panelsIn("side").map((p) => p.id).join(" ") + " · " + tabs(w, lines), "files sessions peers skills · Files 1 Sessions");
   w.host.screen.showPanel("files");
@@ -132,14 +132,14 @@ const main = async (): Promise<void> => {
   ok("the tests' languages are the plugin's", LANGUAGES.every((l) => l.extensions.every((e) => languageForPath("x." + e) === l.id) && l.fences.every((f) => languageForFence(f) === l.id)));
   end(w);
 
-  w = await openWidecode({ folder: repo, plugins: JSON.parse('{"changes": false}'), load: true, before: mountApp });
+  w = await openLightcode({ folder: repo, plugins: JSON.parse('{"changes": false}'), load: true, before: mountApp });
   lines = show(w);
   ok("changes off: the band is the status table alone", !w.host.screen.band.some((b) => b.id === "changes") && !lines.some((l) => l.includes("1 file  +1 −1")));
   w.host.screen.focus("code");
   ok("and [ is no key of anyone's", !press(w, "char", "["));
   end(w);
 
-  w = await openWidecode({ folder: repo, start: false });
+  w = await openLightcode({ folder: repo, start: false });
   const extra = new Extra(w.host, ["git"]);
   w.start(JSON.parse('{"status": {"lines": [["hello", "note"]]}}'), new NoStateFile(), [extra]);
   mountApp(w);
@@ -157,28 +157,28 @@ const main = async (): Promise<void> => {
   ok("its tab shows its rows and info", lines.some((l) => l.includes(" 1 note")) && lines.some((l) => l.includes(" a note")));
   end(w);
 
-  w = await openWidecode({ folder: repo, start: false });
+  w = await openLightcode({ folder: repo, start: false });
   const orphan = new Extra(w.host, ["git"]);
   w.start(JSON.parse('{"git": false}'), new NoStateFile(), [orphan]);
   eq("one whose requirement is off is left out, and said so", String(w.host.kernel.has("extra")) + " | " + w.host.kernel.problems.join("; "), "false | extra: needs git, which is off");
   end(w);
 
   const state = new NoStateFile();
-  w = await openWidecode({ folder: repo, state, load: true, before: mountApp });
+  w = await openLightcode({ folder: repo, state, load: true, before: mountApp });
   show(w);
   w.host.screen.focus("code");
   press(w, "char", "w");
   w.host.screen.showPanel("files");
   press(w, "char", "c");
   end(w);
-  w = await openWidecode({ folder: repo, state, load: true, before: mountApp });
+  w = await openLightcode({ folder: repo, state, load: true, before: mountApp });
   // The Files tab's switch: "Changed" is the bold side.
   const info = w.host.screen.findPanel("files")?.info() ?? [];
   ok("wrap and the Files switch are kept for the next run", w.code.pane.wrap.peek() && info.length === 3 && info[2].bold);
   end(w);
 
   // The code column is a native widget its JS plugin mounts: /reload mounts it again.
-  w = await openWidecode({ folder: repo, load: true, before: mountApp });
+  w = await openLightcode({ folder: repo, load: true, before: mountApp });
   show(w);
   await w.code.load("a.ts");
   w.host.screen.showPanel("git");
@@ -197,9 +197,9 @@ const main = async (): Promise<void> => {
   ok("Ctrl+C in the Files tab quits, the switch untouched", quits === 1 && switchInfo.length === 3 && !switchInfo[2].bold);
   end(w);
 
-  const bare = await openWidecode({ folder: repo, start: false });
+  const bare = await openLightcode({ folder: repo, start: false });
   const defaults = bare.defaults();
-  closeWidecode(bare);
+  closeLightcode(bare);
   eq("every built-in plugin answers its defaults", defaults.map((d) => d.id + (d.value === true ? "" : "*")).join(" "), "acp* agents alerts* ask* box changes chat claude* claude-rules code dirty-repo-guard emacs files git git-checkpoint harness inline-bash languages menus models* peers* permission-gate* pi* protected-paths* queue sessions* skills status* todo tools tools-switch vi");
   rmSync(repo, { recursive: true, force: true });
   done();

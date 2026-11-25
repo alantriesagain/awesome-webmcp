@@ -81,7 +81,7 @@ const main = async (): Promise<void> => {
   eq("and says so", String((await rig.uiNotification("notify"))["message"]), "Restore cancelled.");
 
   // The repository has no new refs: the checkpoints are commits nothing points at.
-  eq("no ref is written", git(repo, ["for-each-ref", "--format=%(refname)", "refs/widecode/"]) + git(repo, ["stash", "list"]), "");
+  eq("no ref is written", git(repo, ["for-each-ref", "--format=%(refname)", "refs/lightcode/"]) + git(repo, ["stash", "list"]), "");
 
   // A checkpoint whose commit git pruned is reported, the files untouched.
   git(repo, ["reflog", "expire", "--expire-unreachable=now", "--all"]);

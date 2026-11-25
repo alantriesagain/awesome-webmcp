@@ -1,11 +1,11 @@
-// widecode's own data, what Claude Code does not keep. Global, in ~/.widecode (or $WIDECODE_HOME):
+// lightcode's own data, what Claude Code does not keep. Global, in ~/.lightcode (or $LIGHTCODE_HOME):
 // `config.json`, the settings: a "plugins" object with each plugin's section (false switches it
 // off), written with every plugin's defaults on first run so it can be edited; `state.json`, what
 // plugins keep between runs; and `limits.json`, each agent's last rate-limit windows, so the status
 // bar has them at start and another agent's are not shown for it. Per
-// project, in `<folder>/.widecode/sessions/<id>.json`, so it travels with the project: a session's
-// title and what widecode measured (cost across CLI processes, thinking tokens); `.widecode/` holds a
-// `.gitignore` of `*`, so git (and so the changes widecode shows) leaves it out. Files are written
+// project, in `<folder>/.lightcode/sessions/<id>.json`, so it travels with the project: a session's
+// title and what lightcode measured (cost across CLI processes, thinking tokens); `.lightcode/` holds a
+// `.gitignore` of `*`, so git (and so the changes lightcode shows) leaves it out. Files are written
 // whole and renamed into place. Natively `JSON.stringify` refuses class instances, so
 // values are written as literals typed `unknown`, and read back through all-`unknown` interfaces.
 import { Limits } from "../conversation/session-store.ts";
@@ -156,7 +156,7 @@ export class Store {
   /** The trusted folders, and the last rate-limit windows seen. */
   readonly trustStore: TrustStore;
   readonly limitsStore: LimitsStore;
-  /** Whether loadConfig wrote config.json because there was none: widecode's first run with this store. */
+  /** Whether loadConfig wrote config.json because there was none: lightcode's first run with this store. */
   firstRun = false;
 
   constructor(root: string) {
@@ -166,13 +166,13 @@ export class Store {
   }
 
   static defaultRoot(): string {
-    const env = process.env["WIDECODE_HOME"] ?? "";
-    return env.length > 0 ? env : join(homedir(), ".widecode");
+    const env = process.env["LIGHTCODE_HOME"] ?? "";
+    return env.length > 0 ? env : join(homedir(), ".lightcode");
   }
 
   /**
    * Move what an earlier version kept in `oldRoot` (~/.ctui: config, limits, and every session's
-   * record) to this store, each session's record into its project's .widecode/, then remove
+   * record) to this store, each session's record into its project's .lightcode/, then remove
    * `oldRoot` when every record moved. A record that cannot be read or written stays in `oldRoot`,
    * which stays with it. Does nothing once this store has a config. Answers what it did ("" for
    * nothing).
@@ -215,10 +215,10 @@ export class Store {
         stayed++;
         continue;
       }
-      const target = join(folder, ".widecode", "sessions", name);
+      const target = join(folder, ".lightcode", "sessions", name);
       if (existsSync(target)) continue;
       try {
-        mkdirSync(join(folder, ".widecode", "sessions"), { recursive: true });
+        mkdirSync(join(folder, ".lightcode", "sessions"), { recursive: true });
         writeFileSync(target, raw);
       } catch {
         stayed++;
@@ -367,7 +367,7 @@ export class Store {
     return c;
   }
 
-  /** Whether the user trusts `folder`: the agent works there, and its own harness (.widecode) runs. */
+  /** Whether the user trusts `folder`: the agent works there, and its own harness (.lightcode) runs. */
   trusted(folder: string): boolean {
     return this.trustStore.trusted(folder);
   }
@@ -424,20 +424,20 @@ export class Store {
 
 
 
-  /** Make `folder`'s .widecode/ ignore itself in git (`create`: make the folder when it is missing). */
+  /** Make `folder`'s .lightcode/ ignore itself in git (`create`: make the folder when it is missing). */
   ignoreIn(folder: string, create: boolean): void {
-    const dir = join(folder, ".widecode");
+    const dir = join(folder, ".lightcode");
     const ignore = join(dir, ".gitignore");
     if (existsSync(ignore) || (!create && !existsSync(dir))) return;
     try {
       mkdirSync(dir, { recursive: true });
-      writeFileSync(ignore, "# widecode's own data (session titles, costs): not part of the project.\n*\n");
+      writeFileSync(ignore, "# lightcode's own data (session titles, costs): not part of the project.\n*\n");
     } catch {
       return;
     }
   }
 
-  /** A Task run's transcript as kept under `folder`'s `.widecode/tasks/<session>/<call>.jsonl` ("" for none). */
+  /** A Task run's transcript as kept under `folder`'s `.lightcode/tasks/<session>/<call>.jsonl` ("" for none). */
   taskTranscript(folder: string, session: string, call: string): string {
     return readTextOr(this.taskPath(folder, session, call), "");
   }
@@ -446,7 +446,7 @@ export class Store {
   saveTaskTranscript(folder: string, session: string, call: string, text: string): boolean {
     const path = this.taskPath(folder, session, call);
     try {
-      mkdirSync(join(folder, ".widecode", "tasks", this.taskPart(session)), { recursive: true });
+      mkdirSync(join(folder, ".lightcode", "tasks", this.taskPart(session)), { recursive: true });
       writeAtomic(path, text);
       return true;
     } catch {
@@ -459,7 +459,7 @@ export class Store {
   }
 
   private taskPath(folder: string, session: string, call: string): string {
-    return join(folder, ".widecode", "tasks", this.taskPart(session), this.taskPart(call) + ".jsonl");
+    return join(folder, ".lightcode", "tasks", this.taskPart(session), this.taskPart(call) + ".jsonl");
   }
 
   limits(agent = "claude"): Limits {

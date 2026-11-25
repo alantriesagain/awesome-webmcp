@@ -1,22 +1,22 @@
-// pi as widecode's agent: the user's own `pi --mode rpc` (the coding agent at
+// pi as lightcode's agent: the user's own `pi --mode rpc` (the coding agent at
 // @earendil-works/pi-coding-agent, never bundled), one process per session, spoken to in JSONL on
 // its stdin and stdout. Its prompt, steering and abort, its messages read into the conversation as
 // events, its models and thinking levels as the model and effort, its commands as the session's
 // slash commands, its sessions listed from its session folder and resumed with `--session`, and its
 // extension UI requests (select, confirm, input and editor to the request panel; notify, setStatus,
-// setWidget, setTitle and set_editor_text to the screen). widecode's own MCP tools do not reach it:
+// setWidget, setTitle and set_editor_text to the screen). lightcode's own MCP tools do not reach it:
 // pi takes MCP servers only through an extension. Its section of config.json:
 // { "plugins": { "pi": { "name": "pi", "command": ["pi", "--mode", "rpc"] } } }; an entry is used
 // only when its program is on PATH. A run ends at agent_settled, as pi's protocol says.
 
-type Ev = widecode.ConversationEvent;
+type Ev = lightcode.ConversationEvent;
 
 /** Any record of the protocol, every field unknown. */
 interface Rec {
   [key: string]: unknown;
 }
 
-const { obj, str, list, parse } = widecode.util;
+const { obj, str, list, parse } = lightcode.util;
 
 /** The plugin's section: a name and the words that start pi in RPC mode. */
 interface Entry {
@@ -33,7 +33,7 @@ const entryOf = (section: unknown): Entry => {
 };
 
 /** Whether the program `command[0]` can be started: a path that exists, or a name on PATH. */
-const available = (api: widecode.Api, command: string[]): boolean => {
+const available = (api: lightcode.Api, command: string[]): boolean => {
   const program = command.length > 0 ? command[0] : "";
   if (program.length === 0) return false;
   if (program.includes("/")) return api.fs.stat(program) !== null;
@@ -50,14 +50,14 @@ const CUT_TAIL = 16000;
 const cutText = (text: string): { text: string; size: number; truncated: boolean } => {
   if (text.length <= CUT_AT) return { text, size: text.length, truncated: false };
   const cut = text.length - CUT_HEAD - CUT_TAIL;
-  return { text: text.slice(0, CUT_HEAD) + "\n[… " + String(cut) + " characters cut by widecode …]\n" + text.slice(text.length - CUT_TAIL), size: text.length, truncated: true };
+  return { text: text.slice(0, CUT_HEAD) + "\n[… " + String(cut) + " characters cut by lightcode …]\n" + text.slice(text.length - CUT_TAIL), size: text.length, truncated: true };
 };
 
 /** A tool result's fields from its text: bounded when long, with the full size and who cut it. */
-const resultOf = (text: string, customerCut: boolean): { text: string; size?: number; truncated?: "agent" | "widecode" } => {
+const resultOf = (text: string, customerCut: boolean): { text: string; size?: number; truncated?: "agent" | "lightcode" } => {
   const cut = cutText(text);
   if (customerCut) return cut.truncated ? { text: cut.text, size: cut.size, truncated: "agent" } : { text: cut.text, truncated: "agent" };
-  return cut.truncated ? { text: cut.text, size: cut.size, truncated: "widecode" } : { text: cut.text };
+  return cut.truncated ? { text: cut.text, size: cut.size, truncated: "lightcode" } : { text: cut.text };
 };
 
 /** A call's kind and its name on the call's line, for pi's built-in tools. */
@@ -114,8 +114,8 @@ const patchCounts = (patch: { lines: string[] }[]): { add: number; del: number }
 };
 
 /** A tool call's facts from its name, input, result of a completed call and its patch. */
-const factsOf = (tool: string, args: Rec | null, path: string, patch: { lines: string[] }[]): widecode.CallFacts => {
-  const facts: widecode.CallFacts = { category: CATEGORY[tool] ?? "other" };
+const factsOf = (tool: string, args: Rec | null, path: string, patch: { lines: string[] }[]): lightcode.CallFacts => {
+  const facts: lightcode.CallFacts = { category: CATEGORY[tool] ?? "other" };
   const shown = path.length > 0 ? path : str(args?.path);
   if (tool === "bash") facts.summary = str(args?.command).length > 0 ? firstLine(str(args?.command)) : "";
   else if (tool === "read") facts.summary = shown + (typeof args?.offset === "number" && args.offset > 0 ? " from line " + String(args.offset) : "");
@@ -151,13 +151,13 @@ const modelValue = (model: Rec | null): string => {
 };
 
 /** pi's session folder for `cwd`: its path without the leading slash, / and : made -, under ~/.pi/agent/sessions. */
-const sessionDir = (api: widecode.Api, cwd: string): string => {
+const sessionDir = (api: lightcode.Api, cwd: string): string => {
   const safe = cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-");
   return api.fs.home() + "/.pi/agent/sessions/--" + safe + "--";
 };
 
 /** The header of session file `path`, null when it is not pi's session. */
-const headerOf = (api: widecode.Api, path: string): Rec | null => {
+const headerOf = (api: lightcode.Api, path: string): Rec | null => {
   const head = api.fs.read(path, 0, 8192);
   const at = head.indexOf("\n");
   const line = at >= 0 ? head.slice(0, at) : head;
@@ -167,7 +167,7 @@ const headerOf = (api: widecode.Api, path: string): Rec | null => {
 };
 
 /** A session file's title: its latest session_info name, else its first user message. */
-const titleOf = (api: widecode.Api, path: string): string => {
+const titleOf = (api: lightcode.Api, path: string): string => {
   const tail = api.fs.window(path, -1, 262144, []);
   for (let i = tail.lines.length - 1; i >= 0; i--) {
     const e = obj(parse(tail.lines[i]));
@@ -193,9 +193,9 @@ const titleOf = (api: widecode.Api, path: string): string => {
 };
 
 /** Sessions of `folder`, newest first, read from pi's session files. */
-const sessionsOf = (api: widecode.Api, folder: string): widecode.AgentSession[] => {
+const sessionsOf = (api: lightcode.Api, folder: string): lightcode.AgentSession[] => {
   const dir = sessionDir(api, folder);
-  const out: widecode.AgentSession[] = [];
+  const out: lightcode.AgentSession[] = [];
   for (const f of api.fs.list(dir)) {
     if (!f.file || !f.name.endsWith(".jsonl")) continue;
     const path = dir + "/" + f.name;
@@ -211,7 +211,7 @@ const sessionsOf = (api: widecode.Api, folder: string): widecode.AgentSession[] 
 };
 
 /** The file of session `id` in `folder` ("" when there is none). */
-const sessionFileOf = (api: widecode.Api, folder: string, id: string): string => {
+const sessionFileOf = (api: lightcode.Api, folder: string, id: string): string => {
   const dir = sessionDir(api, folder);
   for (const f of api.fs.list(dir)) {
     if (!f.file || !f.name.endsWith(".jsonl")) continue;
@@ -224,8 +224,8 @@ const sessionFileOf = (api: widecode.Api, folder: string, id: string): string =>
 
 const LISTING_MS = 3000;
 
-const piAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAdapter => {
-  let proc: widecode.ProcessHandle | null = null;
+const piAgent = (api: lightcode.Api, id: string, entry: Entry): lightcode.AgentAdapter => {
+  let proc: lightcode.ProcessHandle | null = null;
   let cwd = "";
   let ready = false;
   let session = "";
@@ -247,8 +247,8 @@ const piAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAda
   const notice = (text: string, tone: "info" | "error", detail?: string): void => emit({ type: "notice", text, tone, detail: detail ?? "" });
 
   /** The models, efforts and commands as pi last listed them, and which one runs. */
-  let models: widecode.AgentOption[] = [];
-  let efforts: widecode.AgentOption[] = [];
+  let models: lightcode.AgentOption[] = [];
+  let efforts: lightcode.AgentOption[] = [];
   let commands: string[] = [];
   const modelOf = new Map<string, { provider: string; id: string }>();
   let currentModel = "";
@@ -261,7 +261,7 @@ const piAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAda
   let wantModel = "";
   let wantEffort = "";
   /** A session's listing, the folder it was for, and when it was read. */
-  let listed: widecode.AgentSession[] = [];
+  let listed: lightcode.AgentSession[] = [];
   let listedFolder = "";
   let listedAt = 0;
   /** Messages waiting for the session, the turn that runs, and whether the user cancelled it. */
@@ -275,7 +275,7 @@ const piAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAda
   let openKind = "";
   let blocks = 0;
   /** The calls seen: their tool, input and facts. */
-  const calls = new Map<string, { tool: string; args: Rec | null; facts: widecode.CallFacts; path: string }>();
+  const calls = new Map<string, { tool: string; args: Rec | null; facts: lightcode.CallFacts; path: string }>();
   /** The extension UI requests open (request id -> pi's id and method), the statuses and widgets set. */
   const requests = new Map<string, { ui: string; method: string; options: string[]; answered: boolean }>();
   const statuses = new Map<string, string>();
@@ -610,7 +610,7 @@ const piAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAda
           name,
           draw: () => {
             const t = statuses.get(key) ?? "";
-            return t.length > 0 ? [{ text: t, fg: widecode.theme.dim }] : [];
+            return t.length > 0 ? [{ text: t, fg: lightcode.theme.dim }] : [];
           },
         });
       }
@@ -628,7 +628,7 @@ const piAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAda
           under: "chat",
           lines: () => {
             const current = widgets.get(key) ?? [];
-            return current.map((l) => ({ runs: [{ text: l, fg: widecode.theme.dim }] }));
+            return current.map((l) => ({ runs: [{ text: l, fg: lightcode.theme.dim }] }));
           },
         });
       }
@@ -640,7 +640,7 @@ const piAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAda
     }
     if (method === "set_editor_text") {
       const text = str(m.text);
-      api.composer.set(text.split("\n"), Math.max(0, text.split("\n").length - 1), widecode.util.graphemes(text.split("\n")[text.split("\n").length - 1] ?? "").length);
+      api.composer.set(text.split("\n"), Math.max(0, text.split("\n").length - 1), lightcode.util.graphemes(text.split("\n")[text.split("\n").length - 1] ?? "").length);
       return;
     }
     const title = str(m.title);
@@ -680,7 +680,7 @@ const piAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAda
   };
 
   /** Answer UI request `requestId` with the user's reply, in pi's shape. */
-  const answerUi = (requestId: string, reply: widecode.AgentReply): void => {
+  const answerUi = (requestId: string, reply: lightcode.AgentReply): void => {
     const r = requests.get(requestId);
     if (r === undefined || r.answered) return;
     r.answered = true;
@@ -880,7 +880,7 @@ const piAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAda
       }
       setEffortNow(level, () => flush());
     },
-    respond(req: widecode.AgentRequest, reply: widecode.AgentReply) {
+    respond(req: lightcode.AgentRequest, reply: lightcode.AgentReply) {
       answerUi(req.id, reply);
     },
     resume(sid) {
@@ -973,12 +973,12 @@ const piAgent = (api: widecode.Api, id: string, entry: Entry): widecode.AgentAda
   };
 };
 
-widecode.plugin({
+lightcode.plugin({
   id: "pi",
   defaults: () => ({ name: DEFAULT_ENTRY.name, command: DEFAULT_ENTRY.command }),
   activate(api) {
     const entry = entryOf(api.settings.section());
-    // Only when the user has pi: widecode never brings its own copy.
+    // Only when the user has pi: lightcode never brings its own copy.
     if (!available(api, entry.command)) return;
     api.agents.register(piAgent(api, "pi", entry));
   },

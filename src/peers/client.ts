@@ -68,7 +68,7 @@ export class DaemonClient {
   /**
    * A daemon answering: the one running, or one started now (`executable --peers-daemon`) and waited
    * for. With no `executable` nothing is started. A start is tried at most LAUNCHES_MAX times in this
-   * client's life and never twice within LAUNCH_WAIT_MS, so a program that is not widecode (one that
+   * client's life and never twice within LAUNCH_WAIT_MS, so a program that is not lightcode (one that
    * ignores the flag) is run a bounded number of times, not once per refresh.
    */
   async ensure(executable: string, extra: string[]): Promise<boolean> {

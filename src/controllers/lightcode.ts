@@ -1,4 +1,4 @@
-// widecode composed over the start's folder, after the run, the log and the settings (the
+// lightcode composed over the start's folder, after the run, the log and the settings (the
 // controllers it imports). A test's run composes the folder, runs its `before` and starts the plugins
 // as it says; the real app's takes the store and config.json, the plugins' folders, the agent, the
 // keys, the columns and the watching. The host makes the root view next; mounted(renderer) runs what
@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { errorMessage, isRecord } from "@lightstart/lib/json.ts";
 import { basename, join } from "node:path";
 import { log, trail } from "@lightstart/lib/log.ts";
-import { composeWidecode, Widecode } from "../compose.ts";
+import { composeLightcode, Lightcode } from "../compose.ts";
 import { Shell } from "../views/shell.ts";
 import { NoStateFile } from "@lightstart/kernel/settings.ts";
 import { checkSource } from "../api/plugins.ts";
@@ -40,9 +40,9 @@ const MEMORY_WARN = 0.75;
 /** Bytes as megabytes with one decimal. */
 const megabytes = (bytes: number): string => (bytes / (1024 * 1024)).toFixed(1);
 
-export class WidecodeController extends Controller {
+export class LightcodeController extends Controller {
   /** Everything the app's parts hold, made by connected(). */
-  w!: Widecode;
+  w!: Lightcode;
   /** What the columns, the agent and the user's keys could not use, told after load. */
   columnsNote = "";
   agentNote = "";
@@ -55,11 +55,11 @@ export class WidecodeController extends Controller {
   private where: () => string = () => "";
   /** Whether the log said the plugins' engine passed `MEMORY_WARN` of its limit. */
   private memoryWarned = false;
-  /** Whether what this start opened was stopped already (a test's closeWidecode, then the app's stop). */
+  /** Whether what this start opened was stopped already (a test's closeLightcode, then the app's stop). */
   private closed = true;
 
   constructor() {
-    super("widecode");
+    super("lightcode");
   }
 
   /** This start's store and config.json (none for a test's run). */
@@ -119,7 +119,7 @@ export class WidecodeController extends Controller {
     log("plugins: the engine holds " + megabytes(js.memoryBytes()) + " MB of its " + String(js.memoryMb) + " MB");
   }
 
-  private takeOver(w: Widecode): void {
+  private takeOver(w: Lightcode): void {
     const carry = run.takeCarry();
     this.opened = "";
     if (carry === null) return;
@@ -138,7 +138,7 @@ export class WidecodeController extends Controller {
     this.columnsNote = "";
     this.agentNote = "";
     this.keysNote = "";
-    const w = composeWidecode(hostController.current, new Shell());
+    const w = composeLightcode(hostController.current, new Shell());
     w.js.builtinDir = current.builtinDir;
     w.host.keys.tell = (text: string) => w.host.screen.tell(text);
     this.w = w;
@@ -161,7 +161,7 @@ export class WidecodeController extends Controller {
     this.keysNote = "";
     const selftest = app.args.string("selftest") ?? "";
     const where = current.folder;
-    const w = composeWidecode(hostController.current, new Shell());
+    const w = composeLightcode(hostController.current, new Shell());
     w.js.builtinDir = current.builtinDir;
     const host = w.host;
     host.keys.tell = (text: string) => host.screen.tell(text);
@@ -215,7 +215,7 @@ export class WidecodeController extends Controller {
     for (const p of host.kernel.problems) log("plugin " + p);
     // Without the built-ins there is no chat to type in: say where they come from.
     if (!host.kernel.has("chat")) {
-      const why = "no chat plugin: the built-in plugins are not installed (light install in widecode's folder writes them into " + join(Store.defaultRoot(), "plugins") + ")";
+      const why = "no chat plugin: the built-in plugins are not installed (light install in lightcode's folder writes them into " + join(Store.defaultRoot(), "plugins") + ")";
       host.screen.tell(why);
     }
   }
@@ -356,7 +356,7 @@ export class WidecodeController extends Controller {
     // The terminal's title: the session's, or the folder's name while it has none.
     let title = "";
     const syncTitle = (): void => {
-      const t = (host.conversation.title.length > 0 ? host.conversation.title : host.folder.folderName()) + " · widecode";
+      const t = (host.conversation.title.length > 0 ? host.conversation.title : host.folder.folderName()) + " · lightcode";
       if (t === title) return;
       title = t;
       term.title(t);
@@ -417,4 +417,4 @@ export class WidecodeController extends Controller {
   }
 }
 
-export default new WidecodeController();
+export default new LightcodeController();

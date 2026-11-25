@@ -1,9 +1,9 @@
-// Host actions: commands only the host can run (installing widecode's build into ~/.local/bin,
+// Host actions: commands only the host can run (installing lightcode's build into ~/.local/bin,
 // a deploy with production credentials), which an agent asks for and the user approves each time
 // unless the action is read-only and marked so. The commands come from config.json's "box"
 // section, never from an agent's input:
 //   { "hostActions": { "install": { "run": "node_modules/.bin/light install",
-//     "description": "build widecode and install it into ~/.local/bin", "timeoutMs": 900000 } } }
+//     "description": "build lightcode and install it into ~/.local/bin", "timeoutMs": 900000 } } }
 // `run` is a shell command run in the session's folder; `description` says what it does;
 // `timeoutMs` is how long it may take (10 minutes by default). An action may take one argument,
 // named by a glob pattern:
@@ -32,7 +32,7 @@ const DEFAULT_TIMEOUT_MS = 600000;
 const MAX_SHOWN = 4000;
 /** What a shell would read as more than a plain word; an argument holding one is refused. */
 const METACHARS = /[;&|$`\\'"<>(){}[\]*?!#~\n\r]/;
-const { num, obj, quote, str } = widecode.util;
+const { num, obj, quote, str } = lightcode.util;
 
 /** The actions in config.json's "box.hostActions": keys are names, each an entry with a "run". */
 const actionsOf = (section: unknown): HostAction[] => {
@@ -95,7 +95,7 @@ const underFolder = (folder: string, arg: string): string => {
  * original changes after the question. Answers the copy's path and its text; refuses a file the
  * question could not show whole.
  */
-const snapshot = async (api: widecode.Api, path: string): Promise<{ path: string; text: string }> => {
+const snapshot = async (api: lightcode.Api, path: string): Promise<{ path: string; text: string }> => {
   const made = await api.process.run("dir=$(mktemp -d) && cp -- " + quote(path) + ' "$dir/" && printf %s "$dir"', "", 10000);
   const dir = made.out.trim();
   if (made.code !== 0 || dir.length === 0) throw new Error("could not copy " + path + " for the approval: " + made.err.trim());
@@ -113,7 +113,7 @@ const outputOf = (out: string, err: string): string => {
   return text.split("\n").slice(-60).join("\n");
 };
 
-widecode.plugin({
+lightcode.plugin({
   id: "box",
   activate(api) {
     const actions = actionsOf(api.settings.section());

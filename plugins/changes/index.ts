@@ -6,7 +6,7 @@
 // The open file is highlighted. A press opens a file, "+N more" shows the Files tab with only the
 // changes; `[` `]` in the side and code columns and Alt+↑↓ anywhere walk them.
 
-type Run = widecode.Run;
+type Run = lightcode.Run;
 
 interface Hit {
   row: number;
@@ -16,7 +16,7 @@ interface Hit {
   path: string;
 }
 
-const T = widecode.theme;
+const T = lightcode.theme;
 const ROWS = 3;
 /** The summary's width, fixed so the file columns stay put as the open file changes. */
 const SUMMARY_W = 34;
@@ -45,7 +45,7 @@ const shownNames = (paths: string[]): Map<string, string> => {
 };
 
 /** "+12 −3", "+5", "−40", "bin"; [] for none. */
-const countRuns = (f: widecode.Change): Run[] => {
+const countRuns = (f: lightcode.Change): Run[] => {
   if (f.binary) return [{ text: "bin", fg: DIM }];
   const out: Run[] = [];
   if (f.added > 0) out.push({ text: "+" + String(f.added), fg: ADDED });
@@ -56,11 +56,11 @@ const countRuns = (f: widecode.Change): Run[] => {
   return out;
 };
 
-widecode.plugin({
+lightcode.plugin({
   id: "changes",
   activate(api) {
-    const u = widecode.util;
-    let files: widecode.Change[] = [];
+    const u = lightcode.util;
+    let files: lightcode.Change[] = [];
     let repo = true;
     let branch = "";
     let editSeq = -1;
@@ -103,7 +103,7 @@ widecode.plugin({
     };
 
     /** The bar's rows at `width` cells; the file cells' places kept for presses. */
-    const lines = (width: number): widecode.Row[] => {
+    const lines = (width: number): lightcode.Row[] => {
       const now = Date.now();
       const next: Hit[] = [];
       const rows: Run[][] = summary().map((c) => u.pad([{ text: "│ ", fg: DIM }, ...u.clipRuns(c, SUMMARY_W)], 2 + SUMMARY_W));

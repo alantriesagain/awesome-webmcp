@@ -4,12 +4,12 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { done, eq } from "@lightstart/test/assert.ts";
-import { currentWidecode, openWidecode } from "./support/app.ts";
+import { currentLightcode, openLightcode } from "./support/app.ts";
 import { openFolder } from "../src/host/actions.ts";
 
-const plugin = (name: string): string => `widecode.plugin({
+const plugin = (name: string): string => `lightcode.plugin({
   id: "agent-x",
   activate(api) {
     api.agents.register({ id: "x", name: "${name}", start: () => "", send: () => "" });
@@ -17,22 +17,22 @@ const plugin = (name: string): string => `widecode.plugin({
 });`;
 
 const project = (root: string, name: string): string => {
-  const dir = join(root, ".widecode", "plugins");
+  const dir = join(root, ".lightcode", "plugins");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "agent.js"), plugin(name));
   return dir;
 };
 
 const main = async (): Promise<void> => {
-  const folderA = mkdtempSync(join(tmpdir(), "widecode-agent-folder-a-"));
-  const folderB = mkdtempSync(join(tmpdir(), "widecode-agent-folder-b-"));
+  const folderA = mkdtempSync(join(tmpdir(), "lightcode-agent-folder-a-"));
+  const folderB = mkdtempSync(join(tmpdir(), "lightcode-agent-folder-b-"));
   project(folderA, "Agent A");
   project(folderB, "Agent B");
   // The folder's own plugins, whichever folder the app opens: an /open starts it again there.
-  let w = await openWidecode({
+  let w = await openLightcode({
     folder: folderA,
     load: true,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.js.dirs = [w.host.harness.pluginsDir()];
       w.host.session.agentId.value = "x";
     },
@@ -41,7 +41,7 @@ const main = async (): Promise<void> => {
   eq("the first folder's agent", c.agent.id() + " " + c.agent.name(), "x Agent A");
 
   await openFolder(folderB);
-  w = currentWidecode();
+  w = currentLightcode();
   eq("the new folder's agent of the same id takes the chat", w.host.conversation.agent.id() + " " + w.host.conversation.agent.name(), "x Agent B");
 
   w.host.kernel.stop();

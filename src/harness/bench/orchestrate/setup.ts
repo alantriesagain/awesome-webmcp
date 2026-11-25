@@ -1,5 +1,5 @@
 // The folder and store one orchestration run gets. The folder holds each part's repository in a
-// subfolder of its own, committed once so the agent sees a project, and `.widecode/prompt.md`, the
+// subfolder of its own, committed once so the agent sees a project, and `.lightcode/prompt.md`, the
 // delegation guidance every orchestrator runs with. The store is fresh: its auth.json is a symbolic
 // link to the user's key file (never read or copied), trusted.json names the run's folder, and
 // config.json picks the orchestrator and the subagent target. Claude Code still runs on its own login.
@@ -9,10 +9,10 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { OrchestrateTask, assembleRepo } from "./tasks.ts";
 
-/** The user's store: $WIDECODE_HOME, else ~/.widecode. */
+/** The user's store: $LIGHTCODE_HOME, else ~/.lightcode. */
 export const userStoreRoot = (): string => {
-  const env = process.env["WIDECODE_HOME"] ?? "";
-  return env.length > 0 ? env : join(homedir(), ".widecode");
+  const env = process.env["LIGHTCODE_HOME"] ?? "";
+  return env.length > 0 ? env : join(homedir(), ".lightcode");
 };
 
 /** One run's folder and store, and where its app log goes. */
@@ -59,17 +59,17 @@ export const createSetup = (task: OrchestrateTask, partRoot: string, spec: Setup
   assembleRepo(task, partRoot, setup.folder);
   git(setup.folder, ["init", "-q", "-b", "main"]);
   git(setup.folder, ["add", "-A"]);
-  git(setup.folder, ["-c", "user.email=bench@widecode", "-c", "user.name=bench", "commit", "-qm", "the task"]);
-  mkdirSync(join(setup.folder, ".widecode"), { recursive: true });
-  writeFileSync(join(setup.folder, ".widecode", "prompt.md"), spec.promptText);
+  git(setup.folder, ["-c", "user.email=bench@lightcode", "-c", "user.name=bench", "commit", "-qm", "the task"]);
+  mkdirSync(join(setup.folder, ".lightcode"), { recursive: true });
+  writeFileSync(join(setup.folder, ".lightcode", "prompt.md"), spec.promptText);
   setup.store = mkdtempSync(join(tmpdir(), "orchestrate-store-"));
   const auth = join(userStoreRoot(), "auth.json");
   if (existsSync(auth)) symlinkSync(auth, join(setup.store, "auth.json"));
   writeFileSync(join(setup.store, "trusted.json"), JSON.stringify([setup.folder], null, 2) + "\n");
   writeFileSync(join(setup.store, "config.json"), configText(spec));
-  // Widecode's approval mode "full": no orchestrator stops on a permission question nobody answers.
+  // Lightcode's approval mode "full": no orchestrator stops on a permission question nobody answers.
   // Claude Code asked one on its first command writing outside the folder and waited out the run;
-  // the harness met none, so the comparison measured the question. widecode keeps the mode in state.json.
+  // the harness met none, so the comparison measured the question. lightcode keeps the mode in state.json.
   writeFileSync(join(setup.store, "state.json"), JSON.stringify({ approval: "full" }) + "\n");
   setup.log = join(setup.store, "app.log");
   return setup;

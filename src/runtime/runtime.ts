@@ -1,6 +1,6 @@
-// widecode's JS plugins: their sources (the built-in ones in the binary, then the user's in
-// ~/.widecode/plugins, then the project's in .widecode/plugins once the folder is trusted)
-// evaluated in one QuickJS context after the prelude; each `widecode.plugin(...)` becomes a kernel
+// lightcode's JS plugins: their sources (the built-in ones in the binary, then the user's in
+// ~/.lightcode/plugins, then the project's in .lightcode/plugins once the folder is trusted)
+// evaluated in one QuickJS context after the prelude; each `lightcode.plugin(...)` becomes a kernel
 // plugin (JsPlugin), a later one of an id replacing an earlier, so a user's file overrides a
 // built-in. Their calls into the core (`__host`) are answered here: commands, keys, hooks,
 // messages, settings; the tools they add are served to agents over MCP (src/agent/mcp.ts), each
@@ -177,8 +177,8 @@ export class JsRuntime extends Bridge {
   callingOwner = "";
   callingReg = 0;
   private reloadAfter = false;
-  /** widecode's MCP server: the tools plugins add, for the agents (it listens once an agent's plugin asks where). */
-  readonly mcp = new McpServer("widecode");
+  /** lightcode's MCP server: the tools plugins add, for the agents (it listens once an agent's plugin asks where). */
+  readonly mcp = new McpServer("lightcode");
   /** The core side of a plugin's calls. */
   readonly router: HostRouter;
   /** What ends a tool call whose agent cancelled it, by the MCP call's id. */
@@ -282,7 +282,7 @@ export class JsRuntime extends Bridge {
 
   /** The prelude into a fresh context; false, and a problem, when it fails. */
   private loadPrelude(engine: JsEngine): boolean {
-    const r = engine.eval(PRELUDE, "widecode:prelude");
+    const r = engine.eval(PRELUDE, "lightcode:prelude");
     if (r.status === OK) return true;
     this.fail("the plugin prelude: " + r.message());
     return false;
@@ -296,7 +296,7 @@ export class JsRuntime extends Bridge {
    */
   private evalSource(engine: JsEngine, s: PluginSource): JsResult {
     this.file = s.file;
-    engine.eval("__file(" + JSON.stringify(s.file) + ")", "widecode:file");
+    engine.eval("__file(" + JSON.stringify(s.file) + ")", "lightcode:file");
     let r: JsResult;
     if (isFolderPlugin(s.file)) {
       const files = moduleFilesOf(s.file);
@@ -311,7 +311,7 @@ export class JsRuntime extends Bridge {
 
   /** Free what registration `d` made in the context and drop its definition. */
   private retireDef(engine: JsEngine, d: JsPlugin): void {
-    engine.eval("__retire(" + String(d.reg) + ")", "widecode:retire");
+    engine.eval("__retire(" + String(d.reg) + ")", "lightcode:retire");
     this.table.removeDef(d);
   }
 
@@ -543,7 +543,7 @@ export class JsRuntime extends Bridge {
     this.agents = [];
     this.killProcesses();
     // Their tools go with them (the new load adds them again); a call waiting on one is answered, its question withdrawn.
-    this.mcp.failAll("widecode's plugins reloaded; call the tool again");
+    this.mcp.failAll("lightcode's plugins reloaded; call the tool again");
     this.mcp.tools = [];
     this.host.conversation.settleAsks(true);
     for (const p of this.table.plugins) {
@@ -573,7 +573,7 @@ export class JsRuntime extends Bridge {
     this.host.screen.tell("plugins reloaded: " + String(this.table.plugins.length) + (this.errors.length > 0 ? ", " + String(this.errors.length) + " with problems (see the log)" : ""));
   }
 
-  /** End every process a plugin started (a reload, widecode quitting). */
+  /** End every process a plugin started (a reload, lightcode quitting). */
   killProcesses(): void {
     this.processes.killAll();
   }
@@ -651,7 +651,7 @@ export class JsRuntime extends Bridge {
   /** `invoke` with a budget of `budgetMs` for this call (and the calls it makes), the usual one after. */
   override invokeLong(owner: string, id: number, args: string, budgetMs: number): JsResult {
     const engine = this.engine;
-    if (engine === null) return new JsResult(FAILED, "widecode: no plugin context");
+    if (engine === null) return new JsResult(FAILED, "lightcode: no plugin context");
     engine.setBudget(budgetMs);
     const saved = this.budgetMs;
     this.budgetMs = budgetMs;
@@ -666,7 +666,7 @@ export class JsRuntime extends Bridge {
   /** Call plugin `owner`'s function `id` with `args` (a JSON array): past its budget it is switched off, an error is reported. */
   invoke(owner: string, id: number, args: string): JsResult {
     const engine = this.engine;
-    if (engine === null) return new JsResult(FAILED, "widecode: no plugin context");
+    if (engine === null) return new JsResult(FAILED, "lightcode: no plugin context");
     const at = trail.enter("plugin", owner);
     this.depth++;
     const wasOwner = this.callingOwner;
@@ -770,11 +770,11 @@ export class JsRuntime extends Bridge {
     this.host.screen.tell(text);
   }
 
-  /** Say once per build, in the status bar and the log, that a newer widecode was installed and its plugins are not loaded. */
+  /** Say once per build, in the status bar and the log, that a newer lightcode was installed and its plugins are not loaded. */
   private tellNewer(build: string, ids: string[]): void {
     if (build.length === 0 || this.newerBuildTold === build) return;
     this.newerBuildTold = build;
-    this.fail("a newer widecode was installed: restart widecode to use it (" + ids.join(", ") + ")");
+    this.fail("a newer lightcode was installed: restart lightcode to use it (" + ids.join(", ") + ")");
   }
 
   /** What a segment draws from, as JSON: the status line input, the folder's name, the message, the spinner, the time. */
@@ -846,7 +846,7 @@ export class JsRuntime extends Bridge {
     return this.router.answer(name, argsJson);
   }
 
-  /** `widecode.plugin(...)`: the plugin joins the kernel, replacing any of its id; while a file is evaluated again on its own, it waits for that to finish. */
+  /** `lightcode.plugin(...)`: the plugin joins the kernel, replacing any of its id; while a file is evaluated again on its own, it waits for that to finish. */
   register(id: string, requires: string[], defaultValue: unknown, activateFn: number, deactivateFn: number, file: string, reg: number): HostAnswer {
     if (id.length === 0) return refuse("a plugin needs an id");
     const p = new JsPlugin(this, id, requires, defaultValue, activateFn, deactivateFn, file.length > 0 ? file : this.file, reg);

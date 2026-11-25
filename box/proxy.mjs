@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * The host-side HTTP(S) proxy for widecode's box, the one a project's box config gives an allow
+ * The host-side HTTP(S) proxy for lightcode's box, the one a project's box config gives an allow
  * list to. It listens on loopback and on <state>/proxy.sock, uses the same pid, socket and log files
  * as `box.mjs proxy`, and handles plain HTTP and CONNECT: a host is allowed when the list has `*`,
  * when it equals an entry, when it is a subdomain of a `*.domain` entry, or when `--allow-local`
- * names its port and it is 127.0.0.1 (widecode's MCP server, offered to a boxed subagent for its
+ * names its port and it is 127.0.0.1 (lightcode's MCP server, offered to a boxed subagent for its
  * host actions). The defaults are `box.mjs`'s, with the project's entries added: `--allow` replaces
  * them, `--allow-extra` adds to them.
  *
@@ -18,7 +18,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
-const STATE = process.env.WIDECODE_BOX_DIR || path.join(os.homedir(), ".cache", "widecode", "box");
+const STATE = process.env.LIGHTCODE_BOX_DIR || path.join(os.homedir(), ".cache", "lightcode", "box");
 const PROXY_PID = path.join(STATE, "proxy.pid");
 const PROXY_LOG = path.join(STATE, "proxy.log");
 const PROXY_SOCK = path.join(STATE, "proxy.sock");
@@ -77,7 +77,7 @@ const logProxy = (/** @type {string} */ line) => {
 };
 
 const proxy = async (/** @type {string[]} */ args) => {
-  let port = Number(process.env.WIDECODE_BOX_PROXY_PORT || 8888);
+  let port = Number(process.env.LIGHTCODE_BOX_PROXY_PORT || 8888);
   let allow = DEFAULT_ALLOW;
   let localPort = 0;
   for (let index = 0; index < args.length; index += 1) {

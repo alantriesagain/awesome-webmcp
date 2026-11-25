@@ -15,7 +15,7 @@ class FakeHost extends ChatHost {
 
   constructor() {
     super();
-    this.conversation = new Conversation("/tmp/widecode-chat-source");
+    this.conversation = new Conversation("/tmp/lightcode-chat-source");
   }
 
   current(): Conversation {

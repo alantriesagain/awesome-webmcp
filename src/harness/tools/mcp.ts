@@ -1,9 +1,9 @@
-// The tools of an MCP server the client named for the session (widecode's own, over HTTP with its
+// The tools of an MCP server the client named for the session (lightcode's own, over HTTP with its
 // token): `tools/list` once the session opens, each tool offered to the model as
 // `mcp__<server>__<tool>` and shown to the client as `<server>_<tool>` (the title opencode gives
 // it, which the acp plugin knows), and `tools/call` when the model calls one: the answer read to
 // the end of its event stream (a question waits on the user, with progress meanwhile), the call
-// dropped on abort. A server is assumed to need no MCP session id (widecode's does not).
+// dropped on abort. A server is assumed to need no MCP session id (lightcode's does not).
 import { listOf, recordOf, str } from "@lightstart/lib/json.ts";
 import { Abort, Stopper } from "../loop/abort.ts";
 import { SseSplitter } from "../model/sse.ts";
@@ -149,7 +149,7 @@ export class McpLink {
   /** The handshake, once: initialize, then the notification that it is done. */
   private async handshake(abort: Abort): Promise<string> {
     if (this.initialized) return "";
-    const got = await this.rpc("initialize", '{"protocolVersion":"' + PROTOCOL + '","capabilities":{},"clientInfo":{"name":"widecode-harness","version":"1"}}', abort, LIST_MS);
+    const got = await this.rpc("initialize", '{"protocolVersion":"' + PROTOCOL + '","capabilities":{},"clientInfo":{"name":"lightcode-harness","version":"1"}}', abort, LIST_MS);
     if (got.error.length > 0) return got.error;
     this.initialized = true;
     const note = new HttpStream(this.httpKind);

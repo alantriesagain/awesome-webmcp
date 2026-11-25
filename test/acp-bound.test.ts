@@ -1,15 +1,15 @@
 // ffi: @lightstart/plugins/native/ffi.json
 // The acp plugin bounds what it keeps: a long tool output reaches the conversation cut to a preview
-// with its full size and who cut it (widecode, or the agent when its raw output says so), a
+// with its full size and who cut it (lightcode, or the agent when its raw output says so), a
 // repeated raw input sends one input event, and a whole written file is cut the same way.
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { request, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Item } from "../src/conversation/model.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { Store } from "../src/services/store.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
 
@@ -33,7 +33,7 @@ const pieces = (item: Item | null): { text: string; size?: number; truncated?: s
 
 /** The events a Task run kept, by the line each was written as. */
 const transcript = (folder: string, session: string, call: string): Record<string, unknown>[] => {
-  const path = join(folder, ".widecode", "tasks", session.replace(/[^A-Za-z0-9_.-]/g, "_"), call + ".jsonl");
+  const path = join(folder, ".lightcode", "tasks", session.replace(/[^A-Za-z0-9_.-]/g, "_"), call + ".jsonl");
   return readFileSync(path, "utf8")
     .split("\n")
     .filter((l) => l.length > 0)
@@ -41,14 +41,14 @@ const transcript = (folder: string, session: string, call: string): Record<strin
 };
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-acp-bound-"));
-  const home = mkdtempSync(join(tmpdir(), "widecode-acp-bound-home-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-acp-bound-"));
+  const home = mkdtempSync(join(tmpdir(), "lightcode-acp-bound-home-"));
   const log = join(folder, "fake.log");
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     plugins: { acp: { agents: { fake: { name: "Fake", command: ["node", fake, "--log", log] } }, tasks: { targets: { deepseek: { agent: "fake" } }, maxConcurrent: 2 } } },
     load: true,
-    before: async (w: Widecode) => {
+    before: async (w: Lightcode) => {
       const store = new Store(home);
       store.trust(folder);
       await w.host.session.useStore(store);
@@ -65,9 +65,9 @@ const main = async (): Promise<void> => {
   w.host.roles.chat.submit("big");
   ok("the big turn ends", await until(() => !c.model.running && c.model.tool("call_big") !== null && c.model.tool("call_big")?.result !== null, 15000));
   const big = pieces(c.model.tool("call_big"));
-  const marker = "[… 136000 characters cut by widecode …]";
-  eq("its text is the first 48,000, the cut's line, the last 16,000", big !== null ? String(big.text.length) + " " + String(big.text.startsWith("x".repeat(48000))) + " " + String(big.text.includes(marker)) + " " + String(big.text.endsWith("x".repeat(16000))) : "none", "64041 true true true");
-  eq("its result keeps the full size and who cut it", big !== null ? String(big.size) + " " + String(big.truncated) : "none", "200000 widecode");
+  const marker = "[… 136000 characters cut by lightcode …]";
+  eq("its text is the first 48,000, the cut's line, the last 16,000", big !== null ? String(big.text.length) + " " + String(big.text.startsWith("x".repeat(48000))) + " " + String(big.text.includes(marker)) + " " + String(big.text.endsWith("x".repeat(16000))) : "none", String(48000 + 16000 + marker.length + 2) + " true true true");
+  eq("its result keeps the full size and who cut it", big !== null ? String(big.size) + " " + String(big.truncated) : "none", "200000 lightcode");
 
   // A Task run keeps the same preview, with the full size and who cut it.
   c.model.openTurn("main", 0, true);
@@ -76,7 +76,7 @@ const main = async (): Promise<void> => {
   c.model.closeTurn(null);
   const bigEvents = transcript(folder, c.model.sessionId, "toolu-bound-big");
   const bigResult = bigEvents.find((e) => e.type === "result" && String(e.id).endsWith("call:call_big")) ?? null;
-  eq("the kept result carries the full size and widecode's cut", bigResult !== null ? String(bigResult.size) + " " + String(bigResult.truncated) : "none", "200000 widecode");
+  eq("the kept result carries the full size and lightcode's cut", bigResult !== null ? String(bigResult.size) + " " + String(bigResult.truncated) : "none", "200000 lightcode");
   ok("and the preview is the same", bigResult !== null && String(bigResult.text).startsWith("x".repeat(48000)) && String(bigResult.text).includes(marker) && String(bigResult.text).endsWith("x".repeat(16000)));
 
   // An agent that says it cut its own output is marked as the one who cut it.
@@ -96,7 +96,7 @@ const main = async (): Promise<void> => {
   const inputs = repeatEvents.filter((e) => e.type === "input" && String(e.key).endsWith("call_repeat"));
   eq("one input event for the repeated raw input", String(inputs.length), "1");
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });
   done();

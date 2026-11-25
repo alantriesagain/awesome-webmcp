@@ -3,7 +3,7 @@
 import { NoStateFile } from "@lightstart/kernel/settings.ts";
 import type { StateFile } from "@lightstart/kernel/settings.ts";
 import type { Plugin } from "@lightstart/kernel/plugin.ts";
-import type { Widecode } from "./compose.ts";
+import type { Lightcode } from "./compose.ts";
 
 /** How long folder events gather before the screen refreshes. */
 export const CHANGES_MS = 150;
@@ -24,7 +24,7 @@ export class Run {
   state: StateFile = new NoStateFile();
   extra: Plugin[] = [];
   /** A test's: run once the app is composed, before its plugins start. */
-  before: ((w: Widecode) => void | Promise<void>) | null = null;
+  before: ((w: Lightcode) => void | Promise<void>) | null = null;
   /** A test's: whether the plugins start, and whether the folder is read before the start settles. */
   start = true;
   load = false;

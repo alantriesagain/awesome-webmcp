@@ -7,7 +7,7 @@ const segs = (command: string): string => segments(command).join(" ¦ ");
 const progs = (command: string): string => programsOf(command).join(", ");
 
 eq("a chain splits at && and ;", segs("cd x && git status; ls"), "cd x ¦ git status ¦ ls");
-eq("a pipe splits too", segs("ps -eo rss | grep widecode | awk '{s+=$1}'"), "ps -eo rss ¦ grep widecode ¦ awk '{s+=$1}'");
+eq("a pipe splits too", segs("ps -eo rss | grep lightcode | awk '{s+=$1}'"), "ps -eo rss ¦ grep lightcode ¦ awk '{s+=$1}'");
 eq("|| and |& split, 2>&1 and &> do not", segs("a || b |& c 2>&1 &> log"), "a ¦ b ¦ c 2>&1 &> log");
 eq("a background & splits", segs("sleep 1 & wait"), "sleep 1 ¦ wait");
 eq("operators inside quotes stay", segs("echo 'a && b' && echo \"c | d\""), "echo 'a && b' ¦ echo \"c | d\"");

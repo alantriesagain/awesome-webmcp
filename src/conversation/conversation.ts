@@ -1,9 +1,9 @@
 // The conversation, whichever agent it is with: the model the views draw (model.ts), the status the
 // band shows (status-info.ts), the session's title, the commit it started on and its record in
-// widecode's store, and the agent (conversation/agent.ts) that does what the user asks: it starts its
+// lightcode's store, and the agent (conversation/agent.ts) that does what the user asks: it starts its
 // process, writes what the user sends, reads its messages into the model, and keeps its sessions.
 // A conversation is new (the agent starts on the first message) or resumes a session, which the
-// agent shows and resumes on the next message. widecode's own tools put requests to the user here
+// agent shows and resumes on the next message. lightcode's own tools put requests to the user here
 // too (asks): their replies go to the tool, not the agent.
 import { signal } from "@lightstart/light/signals";
 import { Agent, ImageBlock } from "./agent.ts";
@@ -46,7 +46,7 @@ export class Conversation {
   store: SessionStore | null = null;
   /** What the status bar shows about this session. */
   info = new StatusInfo();
-  /** The requests widecode's own tools put to the user, by request id. */
+  /** The requests lightcode's own tools put to the user, by request id. */
   private asks = new Map<string, Ask>();
   private askSeq = 0;
 
@@ -149,7 +149,7 @@ export class Conversation {
     this.reset();
     this.resumeId = id;
     this.title = title;
-    // The model the session ran on, as widecode last started or switched it.
+    // The model the session ran on, as lightcode last started or switched it.
     const store = this.store;
     const meta = store !== null ? store.session(id, this.folder) : null;
     if (meta !== null && meta.model.length > 0) this.modelName = meta.model;
@@ -284,7 +284,7 @@ export class Conversation {
     this.changed();
   }
 
-  /** Put `request` (a request event's fields) to the user for one of widecode's own tools, under `parent` when it names a call; `ask` hears the reply. */
+  /** Put `request` (a request event's fields) to the user for one of lightcode's own tools, under `parent` when it names a call; `ask` hears the reply. */
   ask(ask: Ask, request: unknown, parent = ""): void {
     const id = "ask" + String(++this.askSeq);
     if (openRequest(this.model, id, request, parent) === null) {

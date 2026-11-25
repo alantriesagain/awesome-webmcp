@@ -10,11 +10,11 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { KeyEvent, MouseEvent, TElement, hitTest } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { Headless } from "@lightstart/test/headless.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
 const W = 250;
 const H = 16;
@@ -23,7 +23,7 @@ const wait = (ms: number): Promise<void> =>
     setTimeout(() => resolve(), ms);
   });
 
-const todo = `widecode.plugin({
+const todo = `lightcode.plugin({
   id: "todo",
   activate(api) {
     const items = ["write the plan", "port the models", "port the status"];
@@ -62,7 +62,7 @@ const todo = `widecode.plugin({
 });`;
 
 const main = async (): Promise<void> => {
-  const repo = mkdtempSync(join(tmpdir(), "widecode-jsui-"));
+  const repo = mkdtempSync(join(tmpdir(), "lightcode-jsui-"));
   const git = (args: string[]): void => {
     const all = ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "-c", "init.defaultBranch=main"];
     for (const x of args) all.push(x);
@@ -73,10 +73,10 @@ const main = async (): Promise<void> => {
   git(["add", "."]);
   git(["commit", "-qm", "init"]);
   writeFileSync(join(repo, "a.txt"), "one\ntwo\n");
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder: repo,
     plugins: JSON.parse('{"status": {"lines": [["project", "todo", "note"]]}}'),
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.js.extra = [new PluginSource("todo.js", todo)];
     },
   });
@@ -109,7 +109,7 @@ const main = async (): Promise<void> => {
   ok("the code column opened the file it asked for, and its hook heard", w.host.roles.code.path() === "a.txt");
   ok("its strip in the band", has(lines, "│ todo: 0 of 3 · width "));
   ok("a live run on the strip is drawn as the spinner's frame", lines.some((l) => /[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] │ todo: /.test(l)));
-  ok("its segment where the config names it", has(lines, "☐ 3 in widecode-jsui-"));
+  ok("its segment where the config names it", has(lines, "☐ 3 in lightcode-jsui-"));
   const panel = w.host.screen.findPanel("todo");
   if (panel !== null) panel.press(1, 2);
   lines = screen();
@@ -120,7 +120,7 @@ const main = async (): Promise<void> => {
   ok("its key in its scope", press("char", "a") && has(screen(), " · item 3"));
   ok("its hint while it shows", w.host.screen.hints().includes("a add"));
   w.host.roles.chat.submit("/state");
-  eq("the folder's state as it reads it", w.host.screen.message.peek(), 'branch main · 1 changed · [1,0,false] · column side · in widecode-jsui-');
+  eq("the folder's state as it reads it", w.host.screen.message.peek(), 'branch main · 1 changed · [1,0,false] · column side · in lightcode-jsui');
   await wait(150);
   w.host.roles.chat.submit("/ticks");
   eq("its timer ticks", w.host.screen.message.peek(), "ticked often");
@@ -130,12 +130,12 @@ const main = async (): Promise<void> => {
   eq("a press on its segment", w.host.screen.message.peek(), "segment pressed");
 
   // An edit that leaves only a command: the tab, strip and segment go with the old version.
-  w.js.extra = [new PluginSource("todo.js", `widecode.plugin({ id: "todo", activate(api) { api.commands.add({ name: "/x", run: () => {} }); } });`)];
+  w.js.extra = [new PluginSource("todo.js", `lightcode.plugin({ id: "todo", activate(api) { api.commands.add({ name: "/x", run: () => {} }); } });`)];
   w.js.reload();
   lines = screen();
   ok("reloaded without them: tab, strip and segment gone", !has(lines, "Todo") && !has(lines, "todo: ") && w.host.screen.segments.find("todo") === null && w.host.screen.shownIn("side") === "files");
   headless.unmount();
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(repo, { recursive: true, force: true });
   done();
 };

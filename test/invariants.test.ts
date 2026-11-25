@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ChatModel } from "../src/conversation/model.ts";
 import { RenderContext } from "../src/conversation/render.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { chatProblems } from "./support/chat-invariants.ts";
 import { contentText, rec, str } from "./support/claude-records.ts";
@@ -26,8 +26,8 @@ interface Frame {
 }
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-invariants-"));
-  const w = await openWidecode({ folder });
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-invariants-"));
+  const w = await openLightcode({ folder });
   const c = w.host.conversation;
   const receive = (o: unknown): void => c.receive(JSON.stringify(o));
 
@@ -85,7 +85,7 @@ const main = async (): Promise<void> => {
   ok("a result closes the turn", !m.running && m.current === null);
   eq("and all of it holds", chatProblems(m, ctx, WIDTHS).join("; "), "");
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

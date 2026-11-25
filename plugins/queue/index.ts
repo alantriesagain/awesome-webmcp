@@ -4,13 +4,13 @@
 // the composer, takes it off the queue (the composer's own text, if any, taking its place) and focuses
 // the chat; nothing sends it on its own.
 
-const T = widecode.theme;
+const T = lightcode.theme;
 const DIM = T.dim;
 
-widecode.plugin({
+lightcode.plugin({
   id: "queue",
   activate(api) {
-    const u = widecode.util;
+    const u = lightcode.util;
     const drafts: string[] = [];
 
     /** Add `text` to the queue and say how many wait. */
@@ -47,7 +47,7 @@ widecode.plugin({
       width: (cols) => Math.max(32, Math.min(44, Math.floor(cols / 7))),
       count: () => drafts.length,
       rows: (from, n, width) => {
-        const out: widecode.Row[] = [];
+        const out: lightcode.Row[] = [];
         for (const d of drafts.slice(from, from + n)) {
           out.push({ runs: [{ text: " " + u.clip(d.replace(/\s+/g, " ").trim(), Math.max(4, width - 1)), fg: "" }] });
         }

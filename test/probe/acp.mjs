@@ -4,7 +4,7 @@
  * directions to `test/fixtures/acp-<agent>.ndjson` as
  * `{"dir":"out"|"in","t":ms,"raw":"<line>"}` (the repository's path written as /tmp/PROJECT, the
  * home folder as ~), with what it observed in `acp-<agent>.notes.txt`. It talks to a model, so it
- * runs only with WIDECODE_LIVE=1, on the model named by --model, else a free one (opencode's
+ * runs only with LIGHTCODE_LIVE=1, on the model named by --model, else a free one (opencode's
  * big-pickle, or one whose id says free; the list is printed).
  *
  * Scenarios, one process: a plain turn; a bash call; an edit; a cancel during a long bash call;
@@ -12,7 +12,7 @@
  * are allowed once. Last, the agent's own session listing (`--sessions`, default
  * `opencode session list --format json`).
  *
- * Usage: WIDECODE_LIVE=1 node test/probe/acp.mjs [--agent opencode] [--command "opencode acp"]
+ * Usage: LIGHTCODE_LIVE=1 node test/probe/acp.mjs [--agent opencode] [--command "opencode acp"]
  *        [--sessions "opencode session list --format json"] [--model <provider/model>] [--models]
  * With --models it prints the agent's models and modes and stops (no prompt is sent).
  */
@@ -22,8 +22,8 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-if (process.env.WIDECODE_LIVE !== "1") {
-  console.log("skip: the ACP probe talks to a model (set WIDECODE_LIVE=1)");
+if (process.env.LIGHTCODE_LIVE !== "1") {
+  console.log("skip: the ACP probe talks to a model (set LIGHTCODE_LIVE=1)");
   process.exit(0);
 }
 const here = dirname(fileURLToPath(import.meta.url));
@@ -125,7 +125,7 @@ const handle = (/** @type {ReturnType<typeof start>} */ a) => (/** @type {any} *
   }
 };
 
-const init = { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: "widecode-probe", version: "1" } };
+const init = { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: "lightcode-probe", version: "1" } };
 const a = start();
 a.listen(handle(a));
 const hello = await a.call("initialize", init);

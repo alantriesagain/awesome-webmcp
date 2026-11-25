@@ -2,7 +2,7 @@
 // works from (Rec, rec, str, num, list, parse), a transcript's active branch, and the session
 // listing (its first prompt, its title from Claude Code's own records).
 
-export type Ev = widecode.ConversationEvent;
+export type Ev = lightcode.ConversationEvent;
 
 /** Any record or nested object, every field `unknown`. */
 export interface Rec {
@@ -10,9 +10,9 @@ export interface Rec {
 }
 
 export const rec = (v: unknown): Rec | null => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Rec) : null);
-export const { str, num, list } = widecode.util;
+export const { str, num, list } = lightcode.util;
 
-export const { parse } = widecode.util;
+export const { parse } = lightcode.util;
 
 // A transcript's active branch: from the leaf (the last message record) back through each record's
 // parent (`parentUuid`, a compact boundary's `logicalParentUuid`); records off it were rewound.
@@ -86,7 +86,7 @@ export interface Listed {
   size: number;
 }
 
-export const summarize = (api: widecode.Api, path: string, id: string, size: number, mtimeMs: number): Listed => {
+export const summarize = (api: lightcode.Api, path: string, id: string, size: number, mtimeMs: number): Listed => {
   const s: Listed = { id, title: "", firstPrompt: "", lastPrompt: "", cwd: "", model: "", mtimeMs, size };
   const head = api.fs.read(path, 0, Math.min(size, HEAD_BYTES)).split("\n");
   if (size > HEAD_BYTES) head.pop();

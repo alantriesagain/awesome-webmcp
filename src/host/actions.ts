@@ -1,5 +1,5 @@
 // What the app does beyond one controller: quit (kill the conversation, then the app's onQuit) and
-// open another folder (check it, then the widecode controller's reopen). One app is open at a time,
+// open another folder (check it, then the lightcode controller's reopen). One app is open at a time,
 // so the pending `/open` state lives here.
 import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
@@ -20,7 +20,7 @@ export function quit(): void {
 
 /**
  * Switch to another folder: the app starts again over it, with the same agent, CLI, model and
- * effort (the widecode controller's `reopen`). While the agent works, the first `/open` only warns.
+ * effort (the lightcode controller's `reopen`). While the agent works, the first `/open` only warns.
  */
 export async function openFolder(path: string): Promise<void> {
   const host = hostController.current;

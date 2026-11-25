@@ -5,7 +5,7 @@
 // leaves a commit's file or a subagent's steps for the work tree (Esc). The session's record keeps
 // the file shown, and resuming the session opens it again. Other plugins open files through api.code.
 
-widecode.plugin({
+lightcode.plugin({
   id: "code",
   activate(api) {
     const code = api.code;

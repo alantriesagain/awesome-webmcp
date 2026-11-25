@@ -1,7 +1,7 @@
 // The run's log and what watches the process, the real app's alone and once a process whatever the
 // restarts: the log opened (--log, else a file of the run's own under the store as config.json's
 // "log" says, --no-log for none), the uncaught-exception monitor with the trail of what ran last and
-// the screen, the signals and the exit, and a native crash's report. The widecode controller sets
+// the screen, the signals and the exit, and a native crash's report. The lightcode controller sets
 // what they read: the crash context, how to put the screen back, what to stop on exit.
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -33,7 +33,7 @@ export class LogController extends Controller {
   override connected(): Promise<void> | null {
     if (!run.current.real || this.opened) return null;
     this.opened = true;
-    nameLog("widecode");
+    nameLog("lightcode");
     openLog(app.args.string("log") ?? null);
     log(BUILD);
     this.watchProcess();
@@ -51,11 +51,11 @@ export class LogController extends Controller {
     }
     log("pid " + String(process.pid) + " · " + (process.argv.length > 2 ? process.argv.slice(2).join(" ") : "no flags") + " · store " + (store !== null ? store.root : "none"));
     // A native crash reports itself to this log and puts the terminal back; before the TUI saves raw mode.
-    installCrash(logPath(), "widecode");
+    installCrash(logPath(), "lightcode");
     trail.onChange = (text: string) => noteCrash(text);
   }
 
-  /** The /log command, per start (the kernel is new each start); the widecode controller calls it after the shell's own. */
+  /** The /log command, per start (the kernel is new each start); the lightcode controller calls it after the shell's own. */
   registerCommands(kernel: Kernel): void {
     kernel.commands.add(
       new Command("/log", "", "where this run's log goes (config.json's \"log\" turns it off or moves it)", "shell", (_arg: string) => {
@@ -80,7 +80,7 @@ export class LogController extends Controller {
       const leave = this.leaveScreen;
       if (leave !== null) leave();
       const p = logPath();
-      process.stderr.write("widecode stopped on an error" + (p.length > 0 ? "; its log: " + p : "") + "\n");
+      process.stderr.write("lightcode stopped on an error" + (p.length > 0 ? "; its log: " + p : "") + "\n");
     });
     process.on("exit", (code: number) => log("exit, code " + String(code)));
     // The terminal closed: an exit, so its listeners stop the agent's CLI (the default would skip them).

@@ -2,7 +2,7 @@
 // other: on the first run with a store, a welcome in the chat (/welcome shows it again), then which
 // agent to talk to and which model; in any folder not yet trusted, whether to trust it, with what it
 // carries that the agent reads and runs (its instruction files, its settings and hooks, its MCP
-// servers, its own widecode harness) and what trusting means, as Claude Code asks for a folder;
+// servers, its own lightcode harness) and what trusting means, as Claude Code asks for a folder;
 // last, on the first run, which keys to use. The questions go through the conversation's own asks,
 // so they show and answer as an agent's would, and the composer's text goes to them until they are
 // answered. Nothing here reaches light.
@@ -30,7 +30,7 @@ export class HarnessFile {
   }
 }
 
-/** What a folder carries that the agent reads or widecode runs: the agent's files present, and the harness's parts. */
+/** What a folder carries that the agent reads or lightcode runs: the agent's files present, and the harness's parts. */
 export class FolderCarries {
   /** The agent's own files, by path from the folder: CLAUDE.md, .claude/settings.json, .mcp.json, ... */
   agentFiles: string[] = [];
@@ -100,11 +100,11 @@ export const welcomeText = (kernel: Kernel): string => {
   const label = (id: string): string => k.label(id);
   const agent = sessionController.current.conversation.agent.name();
   return (
-    "Welcome to widecode. The chat with " + agent + " is on the left; the tools column shows its calls, the files column this folder and its sessions, the code column the file it edits with the changes. " +
+    "Welcome to lightcode. The chat with " + agent + " is on the left; the tools column shows its calls, the files column this folder and its sessions, the code column the file it edits with the changes. " +
     label("app.focus.chat") + " " + label("app.focus.tools") + " " + label("app.focus.side") + " " + label("app.focus.code") + " go to a column, " + label("app.column.previous") + "/" + label("app.column.next") + " move between them. " +
     "Type a message and Enter sends it; Shift+Enter adds a line; @ completes a file's path, and an image's path attaches it. " + label("app.interrupt") + " interrupts a turn; " + label("app.quit") + " clears the message, and quits when it is empty. " +
     "/help lists every key and command, /model and /effort choose, /plan toggles plan mode, /keymap changes the keys. " +
-    "A folder is used once you trust it (/trust), and its .widecode/ is its harness, plugins and a prompt of its own: /harness shows it, /harness init starts one. /welcome shows this again."
+    "A folder is used once you trust it (/trust), and its .lightcode/ is its harness, plugins and a prompt of its own: /harness shows it, /harness init starts one. /welcome shows this again."
   );
 };
 
@@ -120,7 +120,7 @@ export const registerWelcome = (kernel: Kernel): void => {
   kernel.commands.add(new Command("/welcome", "", "the welcome: the columns, the keys and commands to start with", "shell", (_arg: string) => welcome(kernel)));
 };
 
-/** What `folder` carries that the agent reads or widecode runs; `checkPlugin(file)` says what a harness plugin file registers or why it does not load. */
+/** What `folder` carries that the agent reads or lightcode runs; `checkPlugin(file)` says what a harness plugin file registers or why it does not load. */
 export const folderCarries = (checkPlugin: (file: string) => HarnessFile): FolderCarries => {
   const out = new FolderCarries();
   const folder = folderController.current.workspace.folder;
@@ -153,9 +153,9 @@ const carriesText = (c: FolderCarries): string => {
   if (c.agentFiles.length > 0) parts.push("the agent reads " + c.agentFiles.join(", "));
   const harness: string[] = [];
   for (const f of c.harnessFiles) harness.push(f.file + " (" + (f.error.length > 0 ? "does not load: " + f.error : f.ids.length > 0 ? f.ids.join(", ") : "no plugin") + ")");
-  if (c.promptLength > 0) harness.push(".widecode/prompt.md (" + String(c.promptLength) + " characters)");
-  if (c.configKeys.length > 0) harness.push(".widecode/config.json (" + c.configKeys.join(", ") + ")");
-  if (harness.length > 0) parts.push("widecode runs its harness: " + harness.join(", "));
+  if (c.promptLength > 0) harness.push(".lightcode/prompt.md (" + String(c.promptLength) + " characters)");
+  if (c.configKeys.length > 0) harness.push(".lightcode/config.json (" + c.configKeys.join(", ") + ")");
+  if (harness.length > 0) parts.push("lightcode runs its harness: " + harness.join(", "));
   return parts.join("; ");
 };
 
@@ -167,7 +167,7 @@ export const askTrust = (carries: FolderCarries, onTrust: () => void, onLookOnly
   const agent = sessionController.current.conversation.agent.name();
   const what = carriesText(carries);
   const question =
-    "Do you trust this folder, " + folderController.current.workspace.folder + "? Trusted, " + agent + " works here with your permission rules and nothing else asked, reads the folder's instruction files, settings and hooks, and runs its MCP servers; the folder's own widecode harness (.widecode) runs inside widecode, with your files and processes" +
+    "Do you trust this folder, " + folderController.current.workspace.folder + "? Trusted, " + agent + " works here with your permission rules and nothing else asked, reads the folder's instruction files, settings and hooks, and runs its MCP servers; the folder's own lightcode harness (.lightcode) runs inside lightcode, with your files and processes" +
     (what.length > 0 ? ". It carries: " + what : "") +
     ". A repository you cloned may carry files you did not write. Your answer holds on every launch here.";
   askOne(
@@ -177,7 +177,7 @@ export const askTrust = (carries: FolderCarries, onTrust: () => void, onLookOnly
     [
       { label: "Trust this folder", description: agent + " works here, now and on every launch" },
       { label: "Look only", description: "the files and the code, no agent until /trust" },
-      { label: "Exit", description: "leave widecode" },
+      { label: "Exit", description: "leave lightcode" },
     ],
     (label: string) => {
       if (label === "Trust this folder") onTrust();

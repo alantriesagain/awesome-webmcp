@@ -45,7 +45,7 @@ const main = async (): Promise<void> => {
     await rig.prompt(sid, "harmless");
     const harmless = rig.taken();
     ok("a harmless command runs", toolTextOf(harmless).includes("hello"));
-    ok("and asks nothing", !harmless.some((line) => line.includes("_widecode/ui")));
+    ok("and asks nothing", !harmless.some((line) => line.includes("_lightcode/ui")));
     rig.close();
   }
 
@@ -58,7 +58,7 @@ const main = async (): Promise<void> => {
     const turn = rig.taken();
     const text = toolTextOf(turn);
     ok("with no UI a dangerous command is blocked, the reason naming the pattern", text.includes("blocked by") && text.includes("rm -rf"));
-    ok("and no dialog was sent", !turn.some((line) => line.includes("_widecode/ui")));
+    ok("and no dialog was sent", !turn.some((line) => line.includes("_lightcode/ui")));
     rig.close();
   }
 
@@ -71,7 +71,7 @@ const main = async (): Promise<void> => {
     rig.taken();
     await rig.prompt(sid, "danger");
     const free = rig.taken();
-    ok("a default pattern passes when the settings replace them", toolTextOf(free).includes("rm -rf x") && !free.some((line) => line.includes("_widecode/ui")));
+    ok("a default pattern passes when the settings replace them", toolTextOf(free).includes("rm -rf x") && !free.some((line) => line.includes("_lightcode/ui")));
     const asked = rig.prompt(sid, "settings");
     const dialog = await rig.uiRequest("confirm");
     eq("a settings pattern is asked", String(dialog.params["message"]), "echo KILLME");
@@ -89,7 +89,7 @@ const main = async (): Promise<void> => {
     rig.taken();
     await rig.prompt(sid, "danger");
     const turn = rig.taken();
-    ok("a plugin switched off lets the command through", toolTextOf(turn).includes("rm -rf x") && !turn.some((line) => line.includes("_widecode/ui")));
+    ok("a plugin switched off lets the command through", toolTextOf(turn).includes("rm -rf x") && !turn.some((line) => line.includes("_lightcode/ui")));
     rig.close();
   }
 

@@ -1,6 +1,6 @@
-# widecode
+# lightcode
 
-widecode, a native app on [`light`](https://github.com/alantriesagain/light) compiled by scriptc
+lightcode, a native app on [`light`](https://github.com/alantriesagain/light) compiled by scriptc
 into a static binary with **no JavaScript engine** (no Node, Bun or Deno at
 runtime). The repository root is the app, in a pnpm workspace that links light: `light` is the
 checkout beside this one (`../light` on `main`, consumed as `@lightstart/light`), and light's
@@ -8,7 +8,7 @@ packages for native apps (`@lightstart/<name>`, light's `packages/README.md`) ar
 `light` (`@lightstart/native`) builds, runs and gates it. `AGENTS.md` has the rules for
 working here, light's `packages/native/README.md` the commands.
 
-widecode is a Claude Code frontend for wide terminals (chat, tools, files and code side by side over
+lightcode is a Claude Code frontend for wide terminals (chat, tools, files and code side by side over
 one folder, a native core and JavaScript plugins in an embedded QuickJS). Claude is reached through the user's installed Claude Code
 CLI as a sidecar over `stream-json`, or any agent speaking ACP.
 
@@ -31,7 +31,7 @@ pnpm install                    # links light, its packages and these; typescrip
 pnpm typecheck                  # tsc (light typecheck)
 pnpm test                       # every test under node AND as a native binary; outputs must match (light test)
 pnpm coverage                   # scriptc coverage gate: the entry and every test compile statically, failing on blockers (light coverage)
-pnpm light build         # dist/widecode (symbols kept; --strip to drop them)
+pnpm light build         # dist/lightcode (symbols kept; --strip to drop them)
 pnpm light test -- chat.test.ts   # one test
 ```
 
@@ -42,20 +42,20 @@ by path, Claude's tool calls and subagents in a column of their own, and the cod
 the file Claude edits with its changes against HEAD). The first run welcomes you and asks which
 agent to talk to, which model, and which keys to use (default, emacs, vi). A folder is used once you
 trust it: the first launch there asks, with what the folder carries, as Claude Code does. A folder's
-`.widecode/` is its harness: plugins, a prompt appended to the agent's, a config over the user's,
+`.lightcode/` is its harness: plugins, a prompt appended to the agent's, a config over the user's,
 run once the folder is trusted; `/harness init` writes its skeleton and a skill, and the agent
-reshapes widecode from inside through widecode's own tools (`PLUGINS.md`, "The
+reshapes lightcode from inside through lightcode's own tools (`PLUGINS.md`, "The
 harness"):
 
 ```
-pnpm light install                      # builds it, installs it as `widecode` in ~/.local/bin and its plugins in ~/.widecode/plugins; then `widecode` in any folder
-pnpm widecode                                  # builds dist/widecode, then runs it in the current folder
-pnpm widecode -- --no-build --resume ID        # resume a session of the folder
-pnpm widecode -- --agent opencode              # talk to opencode over ACP instead of Claude Code
+pnpm light install                      # builds it, installs it as `lightcode` in ~/.local/bin and its plugins in ~/.lightcode/plugins; then `lightcode` in any folder
+pnpm lightcode                                  # builds dist/lightcode, then runs it in the current folder
+pnpm lightcode -- --no-build --resume ID        # resume a session of the folder
+pnpm lightcode -- --agent opencode              # talk to opencode over ACP instead of Claude Code
 pnpm light selftest shell               # in a pty on a temp repo: tree, diff, a write followed within 1 s
 pnpm light selftest fake                # a turn against a fake CLI replaying recorded traffic
-pnpm light selftest fake-acp            # a permission and a question over widecode's MCP server, answered from the panel, against a fake ACP agent
-pnpm light selftest harness             # widecode's own agent on its fake model: a command and a reply, then AskUser answered from the panel
+pnpm light selftest fake-acp            # a permission and a question over lightcode's MCP server, answered from the panel, against a fake ACP agent
+pnpm light selftest harness             # lightcode's own agent on its fake model: a command and a reply, then AskUser answered from the panel
 NATIVE_LIVE=1 pnpm light selftest live-turn   # also live-interrupt, live-ask, live-plan, live-agent, live-edit, live-quit
 NATIVE_LIVE=1 pnpm light selftest live-acp    # opencode over ACP runs a command and replies (its free model); also live-acp-ask, live-acp-plan
 ```
@@ -96,7 +96,7 @@ The tools column, right of the chat, has four tabs. Tools: every call, under the
 each with where it stands (a spinner while it runs, then ● done, failed or stopped), what it was
 given, and how long it took (its clock moving while it runs); ↑↓ and Enter or a press show a call
 whole in the code column: its command or input, and its output or change (Esc returns to the file).
-Available: the tools the agent has, its own first, then each MCP server's (widecode's own among
+Available: the tools the agent has, its own first, then each MCP server's (lightcode's own among
 them) with where the server stands, each with its calls this session; Claude Code says them when
 it starts, an ACP agent through its entry's tools command (opencode's `opencode debug agent
 <mode>`, read again when the mode changes, whose permission rules say what the mode denies, limits
@@ -120,7 +120,7 @@ disk at launch, Claude Code's own once it starts; an ACP agent's from its entry'
 opencode's `opencode debug skill`), by where each comes
 from (the project's `.claude/skills`, the user's, a plugin's, the agent's own), with what each SKILL.md
 says it is for, how many times it ran this session and how many in the project across sessions and
-agents (each run that ended is kept in `.widecode/skills.jsonl`); above them the session's skill
+agents (each run that ended is kept in `.lightcode/skills.jsonl`); above them the session's skill
 runs, newest first, each with where it stands, the calls the turn made after the skill and for how
 long, live while one runs. A press on a skill also says how many of the project's runs were typed
 and how many the agent chose, and when it last ran. ↑↓ and Enter or a press show the skill's SKILL.md in the code column, rendered as
@@ -128,14 +128,14 @@ markdown, and put what
 calls the skill in the composer (`/name ` for Claude Code, a sentence to finish for an agent whose
 skills are asked for in words), the focus staying there for the arguments; `v` goes to the file;
 Enter on a run shows the call that loaded the skill. Each skill Claude Code calls by
-a slash is a command of widecode too, so typing `/` in the composer completes it with its
+a slash is a command of lightcode too, so typing `/` in the composer completes it with its
 description. `/skills` shows the tab. The code
 column shows the file with its changes in place (a new file as plain code), colored (JavaScript, TypeScript, JSON, CSS, HTML,
 Markdown with its fenced code), `n`/`p` between changes, `f` to stop or resume following Claude's
 edits, and `w` or the box at its foot to wrap long lines (at a space, under their own indentation).
 
 In the composer, ↑ on its first line walks back through the messages written in this folder (kept
-in `.widecode/history.jsonl`, rotated aside past 4 MB, nothing dropped) and ↓ comes forward to the
+in `.lightcode/history.jsonl`, rotated aside past 4 MB, nothing dropped) and ↓ comes forward to the
 message being written; Ctrl+K cuts to the line's end and copies what it cut. A drag in the chat,
 the code column or a tab selects, and its release copies the selection (the code column copies the
 file's own text, without line numbers). Copying asks the terminal through OSC 52, or runs xclip,
@@ -160,15 +160,15 @@ where its view is among its changes, then every changed file newest first with i
 removed, how long ago it changed, ● when Claude edited it; a press opens one, and `[` `]` (files
 and code columns) or Alt+↑↓ (anywhere) walk them.
 
-widecode is a native core and JavaScript plugins, one per feature (the chat and code columns'
+lightcode is a native core and JavaScript plugins, one per feature (the chat and code columns'
 wiring, the Tools, Agents, Files, Sessions and Git tabs, the changes and status bars, the models,
 the languages),
 running in an embedded QuickJS. Each can be switched off in config.json or replaced: a `.js` file in
-`~/.widecode/plugins/` with a built-in's id overrides it, a new one adds a feature, and a project's
-own `.widecode/plugins/` run once the folder is trusted. Saving a plugin reloads the plugins, as
+`~/.lightcode/plugins/` with a built-in's id overrides it, a new one adds a feature, and a project's
+own `.lightcode/plugins/` run once the folder is trusted. Saving a plugin reloads the plugins, as
 `/reload` does. The plugins share one engine of 256 MB (config.json's `"pluginMemoryMb"`, at least 16);
 when it fills, they are started again in a fresh one, at most once in ten minutes, and the log's
-`alive` line says how much it holds. `PLUGINS.md` has the API and how to write one, and `widecode.d.ts`
+`alive` line says how much it holds. `PLUGINS.md` has the API and how to write one, and `lightcode.d.ts`
 types it.
 
 The conversation talks to an agent a plugin brings, Claude Code's by default (`plugins/claude/index.ts`,
@@ -177,10 +177,10 @@ Client Protocol, opencode among its defaults (`opencode acp`); another one is an
 section with the command that starts it (`"gemini": {"command": ["gemini", "--experimental-acp"]}`).
 Their turns, calls with their diffs, plans, permissions (answered in the request panel), modes and
 sessions show as Claude Code's do; titles Claude writes are for Claude Code's sessions only. An ACP
-agent's session starts with widecode, so its models and efforts can be chosen before the first
+agent's session starts with lightcode, so its models and efforts can be chosen before the first
 message; a session made and never written to is deleted (the entry's `forget` command) when it is
 left. An ACP
-agent that takes MCP servers over HTTP gets widecode's own tools (`plugins/ask/index.ts`): `AskUser`
+agent that takes MCP servers over HTTP gets lightcode's own tools (`plugins/ask/index.ts`): `AskUser`
 puts its questions in the request panel and `PresentPlan` its plan, which approved in plan mode
 switches the agent out of it and asks it to carry the plan out. Claude Code keeps its own tools for
 these.
@@ -189,11 +189,11 @@ The `pi` plugin brings pi (`@earendil-works/pi-coding-agent`) over its RPC mode 
 when pi is on PATH: its models and thinking levels as the model and effort, its prompts, steering
 and abort, its edits with their diffs, its extensions' dialogs in the request panel and their
 notifications, statuses, widgets and editor text on the screen, and its sessions from
-`~/.pi/agent/sessions`, resumed with `--session`. widecode's own MCP tools do not reach pi: pi takes
+`~/.pi/agent/sessions`, resumed with `--session`. lightcode's own MCP tools do not reach pi: pi takes
 MCP servers only through an extension.
 
 Claude's subagents can run on an ACP target instead: the acp section's `tasks.targets` gives a
-`Task` tool (Claude sees `mcp__widecode__Task`) whose `subagent_type` picks an entry, a model and
+`Task` tool (Claude sees `mcp__lightcode__Task`) whose `subagent_type` picks an entry, a model and
 what it is for, streams the run under the call and answers with its last words. With
 `run_in_background` it starts and answers at once; `TaskStop` and `SendMessage` manage it by the id
 it returns, and its end comes back as a message to the main agent. A main agent that gives no
@@ -202,14 +202,14 @@ works in (absolute, or relative to the session's), the session's folder when lef
 target works only in the session's folder, a folder in `tasks.box.projects` or one inside them.
 `isolation: "worktree"` runs it in a git worktree of that folder under `.worktrees/<id>` and
 answers with its path (`worktreeSetup` runs only for a worktree of the session's folder); the run's steps are
-kept under `.widecode/tasks/<session>/<call>.jsonl` and read back when a resumed session opens the
+kept under `.lightcode/tasks/<session>/<call>.jsonl` and read back when a resumed session opens the
 call. `replaceClaudeSubagents` adds `--disallowedTools Task,Agent,TaskStop,SendMessage` to Claude's
 start, so its own subagent tools step aside; `plugins.claude.keepSubagents` keeps them.
 
-widecode keeps a project's sessions in the project, in `.widecode/sessions/<id>.json` (each
+lightcode keeps a project's sessions in the project, in `.lightcode/sessions/<id>.json` (each
 session's title, model, cost across CLI processes, thinking tokens, the commit it started on), so
-the Sessions tab lists every session of the folder; `.widecode/` holds a `.gitignore` of `*`, so git
-leaves it out. Settings live in `~/.widecode` (or `$WIDECODE_HOME`): `config.json`, a `"plugins"`
+the Sessions tab lists every session of the folder; `.lightcode/` holds a `.gitignore` of `*`, so git
+leaves it out. Settings live in `~/.lightcode` (or `$LIGHTCODE_HOME`): `config.json`, a `"plugins"`
 object with a section per plugin (`false` switches it off; written with every plugin's defaults on
 first run) and `"keymap"`, `keys.json` (the user's key bindings over the keymap: by scope, a key to
 the action it runs, or null for none; `/help` names the actions and their keys), `state.json` (what
@@ -242,18 +242,18 @@ Enter switches. A command's name completes the same way after "/", and `/effort`
 `PROTOCOL.md`; the manual checklist, driven in a pseudo-terminal, is in
 `test/checklist/`.
 
-## The harness: widecode's own agent
+## The harness: lightcode's own agent
 
-`widecode --agent harness` (or `"agent": "harness"` in config.json) talks to widecode's own coding
-agent, in the spirit of pi: the same binary started as `widecode --harness`, speaking ACP on stdio
+`lightcode --agent harness` (or `"agent": "harness"` in config.json) talks to lightcode's own coding
+agent, in the spirit of pi: the same binary started as `lightcode --harness`, speaking ACP on stdio
 to the acp plugin, calling model APIs directly and running its own tools. It needs an API key, not
-a subscription: `widecode --harness-auth deepseek` (or `anthropic`) reads one from stdin into
-`~/.widecode/auth.json`, readable by the user alone, and `DEEPSEEK_API_KEY` or `ANTHROPIC_API_KEY`
-in the environment take precedence. `widecode --harness-models` lists the models and which
+a subscription: `lightcode --harness-auth deepseek` (or `anthropic`) reads one from stdin into
+`~/.lightcode/auth.json`, readable by the user alone, and `DEEPSEEK_API_KEY` or `ANTHROPIC_API_KEY`
+in the environment take precedence. `lightcode --harness-models` lists the models and which
 providers have a key. Anthropic's models, DeepSeek's (through its Anthropic-format endpoint) and
 OpenCode Zen's (Claude and Qwen on its Anthropic-format endpoint; DeepSeek, GLM, MiniMax and Kimi
-on its OpenAI-compatible one; `widecode --harness-auth opencode`, or `OPENCODE_API_KEY`) are built
-in. Zen serves a key the models its account has enabled; `widecode --harness-models` marks the
+on its OpenAI-compatible one; `lightcode --harness-auth opencode`, or `OPENCODE_API_KEY`) are built
+in. Zen serves a key the models its account has enabled; `lightcode --harness-models` marks the
 others.
 Another provider is an entry of `harness.providers`, speaking the Anthropic Messages API, or with
 `"api": "openai"` an OpenAI-compatible chat completions API (OpenRouter, Groq, a local server):
@@ -263,22 +263,22 @@ Another provider is an entry of `harness.providers`, speaking the Anthropic Mess
 
 Its tools are named as Claude Code names them: Read, Write, Edit, Bash, Grep, Glob, LS, Skill,
 WebFetch, WebSearch and Task (a subagent: the task run as a session of its own on the same model,
-its report the call's result), and widecode's own over its MCP server (AskUser and PresentPlan in the
+its report the call's result), and lightcode's own over its MCP server (AskUser and PresentPlan in the
 request panel, the harness folder's tools). It asks no permission: every call runs, as in pi,
 but those `permissions.deny` in config.json refuses (the user's and a trusted project's, in Claude
 Code's syntax: `Bash(git push *)`, `Read(./.env)`, `Edit(/etc/**)`, `WebFetch(domain:example.com)`,
-a tool's name, `mcp__widecode__reload`). Plan
+a tool's name, `mcp__lightcode__reload`). Plan
 mode (/plan, Shift+Tab) offers the read-only tools alone. Run risky work in a container or a
 worktree. Its system prompt holds the project's prompt.md, the instructions in AGENTS.md and
 CLAUDE.md from the repository's root down (a trusted folder's) and the skills found in the
 folder's `.agents/skills` and `.claude/skills`, the user's `~/.agents/skills` and
-`~/.claude/skills`, and `~/.widecode/harness/skills`.
+`~/.claude/skills`, and `~/.lightcode/harness/skills`.
 
 A model that reads images (Anthropic's, Zen's Claude; a configured one with `"vision": true`) gets
 the images attached to a message and those Read gives for an image file; another is told they were
 left out.
 
-Sessions are JSONL files under `~/.widecode/harness/sessions/`, listed in the Sessions tab, shown
+Sessions are JSONL files under `~/.lightcode/harness/sessions/`, listed in the Sessions tab, shown
 again when opened, named by the provider's cheapest model after the first turn (`/title` asks again
 or takes the words after it). Past the context threshold (the window less a reserve, or
 `harness.compactAt`, 200,000 tokens by default) the earlier messages are summarized; `/compact
@@ -300,17 +300,17 @@ avoids that:
 }
 ```
 
-A widecode plugin may carry an agent part for the harness's loop: handlers for its events, tools,
+A lightcode plugin may carry an agent part for the harness's loop: handlers for its events, tools,
 commands and settings. The built-in `permission-gate`, `protected-paths`, `inline-bash`,
 `claude-rules`, `dirty-repo-guard`, `git-checkpoint`, `todo` and `tools-switch` use it, so a plugin
-file changes what the harness does as it changes what widecode shows. `AGENT-PLUGINS.md`
+file changes what the harness does as it changes what lightcode shows. `AGENT-PLUGINS.md`
 is a short guide to using it; PLUGINS.md's "The agent part" has the API.
 
 The package is `src/harness` (its README has the files).
 
 ## Peers: the machines on your network
 
-widecode shares a machine's repositories with the machines paired with it over the LAN, in place and read-only, and the other side fetches. Each machine runs one daemon (`widecode --peers-daemon`, started by the app when the bridge is in use or asked for) that serves git's smart HTTP protocol out of the shared checkouts, announces itself over mDNS (avahi on Linux, dns-sd on macOS) and keeps a registry under `~/.widecode/peers/`: its keypair, the peers it paired with and their tokens, what it shares. Nothing is written into a repository, and a working tree is never touched: a fetch writes refs.
+lightcode shares a machine's repositories with the machines paired with it over the LAN, in place and read-only, and the other side fetches. Each machine runs one daemon (`lightcode --peers-daemon`, started by the app when the bridge is in use or asked for) that serves git's smart HTTP protocol out of the shared checkouts, announces itself over mDNS (avahi on Linux, dns-sd on macOS) and keeps a registry under `~/.lightcode/peers/`: its keypair, the peers it paired with and their tokens, what it shares. Nothing is written into a repository, and a working tree is never touched: a fetch writes refs.
 
 Pairing is a six-digit code: `/peers pair` shows one here for two minutes; `/peers join <host:port> <code>` (or a nearby machine's name) on the other machine exchanges keys and mutual tokens. `/peers share` shares this folder's repository (at its root, every local branch and tag; the registry keeps a branch filter and an allow list per repository), and `/peers share <path>` another checkout of this machine. `/peers host <name>` makes a bare repository under the store that paired peers may push into (`/peers host /path/to/repo.git` hosts one that exists), fetched and pushed at `/h/<name>`; a live checkout is fetched at `/r/<rootCommit>`.
 
@@ -323,8 +323,8 @@ The Peers tab (beside Git) lists this machine with its shares (◆ marks this fo
 | Directory | What it is |
 |---|---|
 | `light/packages/native/*`, `light/packages/tui/*` | light's packages: `@lightstart/native` (`light`, the tooling: `prepare`, `build`, `run`, `selftest`, `test`, `coverage`, `typecheck`, `check`, `probes`, `install`, `desktop`), and `lib`, `highlight`, `plugins`, `workspace`, `test`, `kernel`, `ui`, `markdown`: what the core's modules share; the tokenizers; the embedded JavaScript; a folder's files and git; the tests' helpers; the plugin kernel; the palette and the windowed list; Markdown as lines (light's `packages/README.md`) |
-| `src/` | the app on `@lightstart/app` (`app.ts` its flags, `modes/`, `controllers/`, `host/`, `compose.ts`, `views/`, `services/`, `runtime/` the plugin runtime, `api/` the plugin API's answers) and its parts, each with its README: `agent` (the MCP server and the session titles), `conversation` (the conversation with an agent), `harness` (widecode's own agent, `widecode --harness`), `peers` (the LAN git bridge), `screen` (the screen plugins contribute to), `code` (the code column), `chat` (the chat views) |
-| `plugins/`, `widecode.d.ts`, `test/`, `box/` | the built-in plugins and their API (`PLUGINS.md`): `plugins/<id>/index.ts` (the built-in plugins: chat, code, tools, agents, files, sessions, git, changes, status, models, languages, and the agents' claude, acp and pi), `widecode.d.ts` (the plugin API's types), `test/` (the tests, fixtures, fakes and goldens; the harness's are `harness-*.test.ts`), `box/` (the sandbox subagents run in) |
+| `src/` | the app on `@lightstart/app` (`app.ts` its flags, `modes/`, `controllers/`, `host/`, `compose.ts`, `views/`, `services/`, `runtime/` the plugin runtime, `api/` the plugin API's answers) and its parts, each with its README: `agent` (the MCP server and the session titles), `conversation` (the conversation with an agent), `harness` (lightcode's own agent, `lightcode --harness`), `peers` (the LAN git bridge), `screen` (the screen plugins contribute to), `code` (the code column), `chat` (the chat views) |
+| `plugins/`, `lightcode.d.ts`, `test/`, `box/` | the built-in plugins and their API (`PLUGINS.md`): `plugins/<id>/index.ts` (the built-in plugins: chat, code, tools, agents, files, sessions, git, changes, status, models, languages, and the agents' claude, acp and pi), `lightcode.d.ts` (the plugin API's types), `test/` (the tests, fixtures, fakes and goldens; the harness's are `harness-*.test.ts`), `box/` (the sandbox subagents run in) |
 
 A component:
 

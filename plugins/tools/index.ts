@@ -2,14 +2,14 @@
 // answers, each with where it stands and its clock, drawn by the core's tools widget. A press or
 // Enter shows a call whole in the code column; the chat's "· N tools" lines show their calls here.
 // Beside it the Available tab: the tools the agent has, its own first, then each MCP server's
-// (widecode's own tools among them) with where the server stands, as the agent's plugin says; a
+// (lightcode's own tools among them) with where the server stands, as the agent's plugin says; a
 // tool the mode denies, limits or asks for says so, and one called says how many times; a press on
 // a tool says all of it in the status bar. While a subagent tab is shown, it names that subagent
 // and its task and says it does not report its tools.
 
-type Run = widecode.Run;
+type Run = lightcode.Run;
 
-const T = widecode.theme;
+const T = lightcode.theme;
 const DIM = T.dim;
 const STATUS: Record<string, string> = { pending: T.warn, failed: T.bad, "needs-auth": T.warn };
 /** The list is read again at most this often as the conversation changes. */
@@ -29,12 +29,12 @@ interface Line {
 /** What the mode lets a tool do, as its row says it. */
 const accessNote = (t: { access: string; scope: string }): string => (t.access === "denied" ? "denied" : t.access === "asks" ? "asks" : t.access === "limited" ? "only " + t.scope : "");
 
-widecode.plugin({
+lightcode.plugin({
   id: "tools",
   activate(api) {
     api.widgets.tools({ title: "Tools", order: 0 });
 
-    const u = widecode.util;
+    const u = lightcode.util;
     let lines: Line[] = [];
     let count = 0;
     let used = 0;
@@ -99,7 +99,7 @@ widecode.plugin({
       width: (cols) => Math.max(32, Math.min(44, Math.floor(cols / 7))),
       count: () => lines.length,
       rows: (from, n, width) => {
-        const out: widecode.Row[] = [];
+        const out: lightcode.Row[] = [];
         for (const l of lines.slice(from, from + n)) {
           // Its calls at the row's end, then the name, then the note in what is left.
           const calls = l.calls > 0 ? "×" + String(l.calls) : "";

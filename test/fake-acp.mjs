@@ -24,13 +24,13 @@
  * - `plan`: a todo list of three entries, as a `todowrite` call's input (a plan update with
  *   `--legacy`);
  * - `task`: a subagent's call (`subagent_type`, `description`, `prompt` in its input);
- * - `taskcall`: a call of widecode's Task tool announced as opencode announces it (`widecode_Task`,
+ * - `taskcall`: a call of lightcode's Task tool announced as opencode announces it (`lightcode_Task`,
  *   its `description`, `prompt` and `subagent_type` in the input), left in flight until the turn is
  *   cancelled;
  * - `logs`: 201 lines on stderr, then "Logged.";
  * - `skill`: a `skill` tool call loading the skill "alpha" (its `name` in the input), then a command
  *   and a message, as a skill's run goes on;
- * - `unknown`: a request of a method widecode does not offer, then a message with the error it
+ * - `unknown`: a request of a method lightcode does not offer, then a message with the error it
  *   answered (or none);
  * - `slow`: a chunk, then nothing until session/cancel ends the turn as cancelled;
  * - `broken`: a line that is not JSON, as a damaged hand-off could send one;
@@ -40,10 +40,10 @@
  *   turn, as opencode takes one (the reply adds "Also: <its text>"), and every prompt of the turn is
  *   answered when it ends;
  * - `change`: writes `changed.txt` in the folder it runs in, then "Changed.";
- * - `question` and `present`: a call of widecode's tool for questions or plans (the first listed
+ * - `question` and `present`: a call of lightcode's tool for questions or plans (the first listed
  *   whose name has "ask" or "plan") over the MCP server session/new or session/load named
  *   (initialize, the initialized notification, tools/list, then tools/call with a progress token,
- *   its event stream read to the end), titled as opencode titles it (`widecode_<tool>`); the call's
+ *   its event stream read to the end), titled as opencode titles it (`lightcode_<tool>`); the call's
  *   update carries the tool's answer, and a message says the tools listed, whether progress came
  *   and the answer (session/cancel aborts the call and ends the turn as cancelled);
  * - `fail`: the prompt answers an error;
@@ -76,10 +76,10 @@
  *
  * With `--replay <fixture>` it plays a recording of a real agent instead (test/probe/acp.mjs
  * writes them): each process plays the part of the recording its run made (the Nth process from
- * the Nth `initialize`, counted in the --log), a message from widecode takes the next recorded one
+ * the Nth `initialize`, counted in the --log), a message from lightcode takes the next recorded one
  * of its method within the turn (one it does not find is answered with an error), and the agent's
- * recorded lines up to the next of widecode's are written, a response with the id widecode used and
- * /tmp/PROJECT as the folder widecode named.
+ * recorded lines up to the next of lightcode's are written, a response with the id lightcode used and
+ * /tmp/PROJECT as the folder lightcode named.
  */
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 
@@ -183,7 +183,7 @@ const answers = new Map();
 
 const write = (m) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", ...m }) + "\n");
 const update = (sessionId, u) => write({ method: "session/update", params: { sessionId, update: u } });
-const ui = (sessionId, fields) => write({ method: "_widecode/ui", params: { sessionId, ...fields } });
+const ui = (sessionId, fields) => write({ method: "_lightcode/ui", params: { sessionId, ...fields } });
 const text = (t) => ({ type: "text", text: t });
 const ask = (method, params, then) => {
   const id = nextId++;
@@ -204,11 +204,11 @@ const mcp = async (server, body, signal) => {
   return { status: res.status, messages };
 };
 
-/** Call widecode's tool whose name matches `pattern` with `args` over the session's server, as opencode does. */
+/** Call lightcode's tool whose name matches `pattern` with `args` over the session's server, as opencode does. */
 const callTool = async (id, sessionId, pattern, args) => {
-  const server = (servers.get(sessionId) ?? []).find((s) => s.name === "widecode");
+  const server = (servers.get(sessionId) ?? []).find((s) => s.name === "lightcode");
   if (server === undefined) {
-    update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("No widecode server.") });
+    update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("No lightcode server.") });
     return write({ id, result: { stopReason: "end_turn" } });
   }
   const abort = new AbortController();
@@ -220,8 +220,8 @@ const callTool = async (id, sessionId, pattern, args) => {
     const names = listed.messages[0].result.tools.map((t) => t.name);
     const tool = names.find((n) => pattern.test(n)) ?? "none";
     const callId = "call_" + tool;
-    update(sessionId, { sessionUpdate: "tool_call", toolCallId: callId, title: "widecode_" + tool, kind: "other", status: "pending", rawInput: {} });
-    update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: callId, status: "in_progress", title: "widecode_" + tool, kind: "other", rawInput: args });
+    update(sessionId, { sessionUpdate: "tool_call", toolCallId: callId, title: "lightcode_" + tool, kind: "other", status: "pending", rawInput: {} });
+    update(sessionId, { sessionUpdate: "tool_call_update", toolCallId: callId, status: "in_progress", title: "lightcode_" + tool, kind: "other", rawInput: args });
     const called = await mcp(server, { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: tool, arguments: args, _meta: { progressToken: 7 } } }, abort.signal);
     const progress = called.messages.some((m) => m.method === "notifications/progress" && m.params.progressToken === 7);
     const last = called.messages[called.messages.length - 1];
@@ -337,7 +337,7 @@ const prompt = (id, sessionId, params) => {
     end("end_turn");
   } else if (first === "taskcall") {
     const input = { description: "announced run", prompt: "hello", subagent_type: "explore" };
-    update(sessionId, { sessionUpdate: "tool_call", toolCallId: "call_widecode_task", title: "widecode_Task", kind: "other", status: "in_progress", rawInput: input });
+    update(sessionId, { sessionUpdate: "tool_call", toolCallId: "call_lightcode_task", title: "lightcode_Task", kind: "other", status: "in_progress", rawInput: input });
     // The turn stays open, as opencode's does while the call runs.
     slow = { id, session: sessionId };
   } else if (first === "logs") {
@@ -386,33 +386,33 @@ const prompt = (id, sessionId, params) => {
       end("end_turn");
     });
   } else if (first === "select") {
-    ask("_widecode/ui", { sessionId, method: "select", title: "Pick one", options: ["Allow", "Block"] }, (result) => {
+    ask("_lightcode/ui", { sessionId, method: "select", title: "Pick one", options: ["Allow", "Block"] }, (result) => {
       update(sessionId, { sessionUpdate: "agent_message_chunk", content: text(result.cancelled ? "Select cancelled" : "Selected: " + result.value) });
       end(result.cancelled ? "cancelled" : "end_turn");
     });
   } else if (first === "confirm") {
-    ask("_widecode/ui", { sessionId, method: "confirm", title: "Clear it?", message: "All messages will be lost." }, (result) => {
+    ask("_lightcode/ui", { sessionId, method: "confirm", title: "Clear it?", message: "All messages will be lost." }, (result) => {
       update(sessionId, { sessionUpdate: "agent_message_chunk", content: text(result.cancelled ? "Confirm cancelled" : "Confirmed: " + String(result.confirmed)) });
       end(result.cancelled ? "cancelled" : "end_turn");
     });
   } else if (first === "input") {
-    ask("_widecode/ui", { sessionId, method: "input", title: "Enter a value", placeholder: "type something" }, (result) => {
+    ask("_lightcode/ui", { sessionId, method: "input", title: "Enter a value", placeholder: "type something" }, (result) => {
       update(sessionId, { sessionUpdate: "agent_message_chunk", content: text(result.cancelled ? "Input cancelled" : "Input: " + result.value) });
       end(result.cancelled ? "cancelled" : "end_turn");
     });
   } else if (first === "editor") {
-    ask("_widecode/ui", { sessionId, method: "editor", title: "Edit some text", prefill: "Line 1\nLine 2" }, (result) => {
+    ask("_lightcode/ui", { sessionId, method: "editor", title: "Edit some text", prefill: "Line 1\nLine 2" }, (result) => {
       update(sessionId, { sessionUpdate: "agent_message_chunk", content: text(result.cancelled ? "Editor cancelled" : "Editor: " + result.value) });
       end(result.cancelled ? "cancelled" : "end_turn");
     });
   } else if (first === "timeout") {
-    ask("_widecode/ui", { sessionId, method: "input", title: "Enter a value", placeholder: "quickly", timeout: 100 }, (result) => {
+    ask("_lightcode/ui", { sessionId, method: "input", title: "Enter a value", placeholder: "quickly", timeout: 100 }, (result) => {
       update(sessionId, { sessionUpdate: "agent_message_chunk", content: text(result.cancelled ? "Input timed out" : "Input: " + result.value) });
       end(result.cancelled ? "cancelled" : "end_turn");
     });
   } else if (first === "plugin") {
     // A message to the plugin's app part, as the harness sends one: only plugin "demo" hears it.
-    write({ method: "_widecode/plugin", params: { sessionId, plugin: "demo", type: "ping", data: { name: "hello" } } });
+    write({ method: "_lightcode/plugin", params: { sessionId, plugin: "demo", type: "ping", data: { name: "hello" } } });
     update(sessionId, { sessionUpdate: "agent_message_chunk", content: text("Plugin message sent.") });
     end("end_turn");
   } else if (first === "notify") {
@@ -557,12 +557,12 @@ const handle = (m) => {
 };
 
 const replayAt = process.argv.indexOf("--replay");
-/** The recording, its position (the last of widecode's messages taken), the ids widecode used for the recorded ones, the folder. */
+/** The recording, its position (the last of lightcode's messages taken), the ids lightcode used for the recorded ones, the folder. */
 const records = replayAt >= 0 ? readFileSync(process.argv[replayAt + 1], "utf8").trim().split("\n").map((l) => JSON.parse(l)).map((r) => ({ dir: r.dir, raw: r.raw, m: JSON.parse(r.raw) })) : [];
 let at = -1;
 const ids = new Map();
 let folder = "/tmp/PROJECT";
-/** Where a search for widecode's next message stops: the next turn, load or process. */
+/** Where a search for lightcode's next message stops: the next turn, load or process. */
 const BOUNDARIES = ["session/prompt", "session/load", "initialize"];
 
 const replay = (m) => {
@@ -590,7 +590,7 @@ const replay = (m) => {
     const r = records[i];
     const raw = r.raw.split("/tmp/PROJECT").join(folder);
     if (r.m.method === undefined && r.m.id !== undefined) {
-      // A response: to the request widecode made in its place, else to one it did not make.
+      // A response: to the request lightcode made in its place, else to one it did not make.
       if (!ids.has(r.m.id)) continue;
       process.stdout.write(JSON.stringify({ ...JSON.parse(raw), id: ids.get(r.m.id) }) + "\n");
     } else process.stdout.write(raw + "\n");

@@ -7,14 +7,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openLog } from "@lightstart/lib/log.ts";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
-import { openWidecode } from "./support/app.ts";
+import { openLightcode } from "./support/app.ts";
 import { afterChange } from "../src/host/after-change.ts";
 
-const folder = mkdtempSync(join(tmpdir(), "widecode-guard-"));
+const folder = mkdtempSync(join(tmpdir(), "lightcode-guard-"));
 
-const reenter = `widecode.plugin({
+const reenter = `lightcode.plugin({
   id: "reenter",
   activate(api) {
     let n = 0;
@@ -31,14 +31,14 @@ const reenter = `widecode.plugin({
   },
 });`;
 
-const failing = `widecode.plugin({
+const failing = `lightcode.plugin({
   id: "failing",
   activate(api) {
     api.commands.add({ name: "/fail", help: "fail", run: () => { throw new Error("nope"); } });
   },
 });`;
 
-const hungry = `widecode.plugin({
+const hungry = `lightcode.plugin({
   id: "hungry",
   activate(api) {
     api.commands.add({ name: "/hungry", help: "fill the engine", run: () => { throw new Error("InternalError: out of memory"); } });
@@ -49,9 +49,9 @@ const main = async (): Promise<void> => {
   const logFile = join(folder, "guard.log");
   mkdirSync(folder, { recursive: true });
   openLog(logFile);
-  let w: Widecode = await openWidecode({
+  let w: Lightcode = await openLightcode({
     folder,
-    before: (app: Widecode) => {
+    before: (app: Lightcode) => {
       app.js.extra = [new PluginSource("reenter.js", reenter)];
     },
   });
@@ -65,9 +65,9 @@ const main = async (): Promise<void> => {
   w.js.stopWatching();
   w.host.workspace.close();
 
-  w = await openWidecode({
+  w = await openLightcode({
     folder,
-    before: (app: Widecode) => {
+    before: (app: Lightcode) => {
       app.js.extra = [new PluginSource("failing.js", failing)];
     },
   });
@@ -77,9 +77,9 @@ const main = async (): Promise<void> => {
   w.js.stopWatching();
   w.host.workspace.close();
 
-  w = await openWidecode({
+  w = await openLightcode({
     folder,
-    before: (app: Widecode) => {
+    before: (app: Lightcode) => {
       app.js.extra = [new PluginSource("hungry.js", hungry)];
     },
   });
@@ -91,7 +91,7 @@ const main = async (): Promise<void> => {
   w.js.stopWatching();
   w.host.workspace.close();
 
-  w = await openWidecode({ folder });
+  w = await openLightcode({ folder });
   const fired: string[] = [];
   const noted: string[] = [];
   afterChange(w.host.screen.message, () => fired.push(w.host.screen.message.peek()));

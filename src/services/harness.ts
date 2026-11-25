@@ -1,6 +1,6 @@
-// The project's harness: `<folder>/.widecode/`, trusted as one with /trust. Its parts: `plugins/*.js`
+// The project's harness: `<folder>/.lightcode/`, trusted as one with /trust. Its parts: `plugins/*.js`
 // (the runtime loads and reloads them), `prompt.md` (appended to the agent's system prompt, after a
-// fixed paragraph that tells the agent it runs inside widecode and what it can reach) and
+// fixed paragraph that tells the agent it runs inside lightcode and what it can reach) and
 // `config.json` (plugin sections, column widths and tool permissions, over the user's). The folder
 // is watched: a change says which part moved, and the app applies it. Nothing here reaches light.
 import { existsSync, mkdirSync, readdirSync, readFileSync, watch, writeFileSync } from "node:fs";
@@ -13,16 +13,16 @@ const WATCH_MS = 300;
 
 const PROMPT_SKELETON = `# Prompt
 
-What is written here is appended to the agent's system prompt in this folder, after widecode's own
+What is written here is appended to the agent's system prompt in this folder, after lightcode's own
 paragraph. Say what the folder is for and how the agent works in it, then delete these lines.
 `;
 
 const EXAMPLE_PLUGIN = `// An example plugin of this folder's harness: a tab in the files column and a command. Saved, the
 // file reloads on its own; deleted, the tab and the command go. The api tool has the whole API.
-widecode.plugin({
+lightcode.plugin({
   id: "example",
   activate(api) {
-    const lines = ["This tab comes from .widecode/plugins/example.js.", "Edit the file and save: the tab follows.", "Delete the file: the tab goes."];
+    const lines = ["This tab comes from .lightcode/plugins/example.js.", "Edit the file and save: the tab follows.", "Delete the file: the tab goes."];
     api.ui.panel({
       id: "example",
       title: "Example",
@@ -43,42 +43,42 @@ const CONFIG_SKELETON = `{
 `;
 
 const SKILL = `---
-name: widecode
-description: Extend widecode, the terminal frontend you run in, from this folder's .widecode/ (plugins, prompt, config). Use it when asked to change widecode's screen, commands, tabs, status bar or tools, or to specialize it for this folder.
+name: lightcode
+description: Extend lightcode, the terminal frontend you run in, from this folder's .lightcode/ (plugins, prompt, config). Use it when asked to change lightcode's screen, commands, tabs, status bar or tools, or to specialize it for this folder.
 ---
 
-# widecode's harness
+# lightcode's harness
 
-You run inside widecode. This folder's \`.widecode/\` shapes it, once the user has trusted the folder
-with \`/trust\` (ask them to when \`mcp__widecode__state\` says it is not):
+You run inside lightcode. This folder's \`.lightcode/\` shapes it, once the user has trusted the folder
+with \`/trust\` (ask them to when \`mcp__lightcode__state\` says it is not):
 
-- \`plugins/*.js\`: JavaScript plugins. A file calls \`widecode.plugin({ id, activate(api) })\`; \`api\`
+- \`plugins/*.js\`: JavaScript plugins. A file calls \`lightcode.plugin({ id, activate(api) })\`; \`api\`
   adds commands, keys, tabs (\`api.ui.panel\`), status segments, strips under a column, tools for
   yourself (\`api.tools.add\`), timers, processes, and reads the folder's state and files. A saved file
   reloads alone and the conversation goes on. A file named for a built-in plugin's id (\`status\`,
   \`git\`, ...) replaces it.
 - \`prompt.md\`: appended to your system prompt in this folder. A change reaches you from your next turn.
 - \`config.json\`: \`plugins\` (a section per plugin id; \`false\` switches one off), \`columns\`
-  (widths, \`"chat": "40%"\`) and \`permissions\`, read over the user's \`~/.widecode/config.json\`.
+  (widths, \`"chat": "40%"\`) and \`permissions\`, read over the user's \`~/.lightcode/config.json\`.
 
 ## Permissions
 
 \`permissions\` holds tool rules in Claude Code's own syntax, \`{ "allow": [], "ask": [], "deny": [] }\`:
-\`Bash(git push *)\`, \`Read(./.env)\`, \`WebFetch(domain:example.com)\`, \`mcp__widecode__reload\`. widecode
+\`Bash(git push *)\`, \`Read(./.env)\`, \`WebFetch(domain:example.com)\`, \`mcp__lightcode__reload\`. lightcode
 hands them to Claude Code, which enforces them: a deny rule blocks the call in every mode, an ask
-rule puts the call to the user in widecode's request panel (Allow once, Allow for this session,
+rule puts the call to the user in lightcode's request panel (Allow once, Allow for this session,
 Deny). The user's rules come first; this folder's file adds ask and deny rules and cannot add allow
 rules or remove the user's. A change reaches Claude Code at the end of the turn.
 
 ## The loop
 
-1. \`mcp__widecode__api\` with \`part\` (a namespace such as \`ui\`, \`commands\`, \`tools\`, \`state\`, or
+1. \`mcp__lightcode__api\` with \`part\` (a namespace such as \`ui\`, \`commands\`, \`tools\`, \`state\`, or
    \`guide\`) or \`find\` for the calls you need. Read it rather than guess the API.
-2. \`mcp__widecode__check\` with the source before writing it: its errors and warnings.
-3. Write the file under \`.widecode/plugins/\`. It reloads on its own; \`mcp__widecode__reload\` with the
+2. \`mcp__lightcode__check\` with the source before writing it: its errors and warnings.
+3. Write the file under \`.lightcode/plugins/\`. It reloads on its own; \`mcp__lightcode__reload\` with the
    file makes sure and answers what it defined.
-4. \`mcp__widecode__log\` for errors, \`mcp__widecode__screen\` for what the user sees (every column but
-   the chat unless named), \`mcp__widecode__state\` for the plugins' states, the tabs and the columns.
+4. \`mcp__lightcode__log\` for errors, \`mcp__lightcode__screen\` for what the user sees (every column but
+   the chat unless named), \`mcp__lightcode__state\` for the plugins' states, the tabs and the columns.
 
 ## What a plugin can and cannot do
 
@@ -90,11 +90,11 @@ plugin has 250 ms; a write to \`globalThis\` outlives a reload of the file.
 
 ## The tools
 
-\`mcp__widecode__screen\`, \`state\`, \`log\`, \`api\`, \`check\`, \`reload\` and \`config\` (the configuration in
+\`mcp__lightcode__screen\`, \`state\`, \`log\`, \`api\`, \`check\`, \`reload\` and \`config\` (the configuration in
 use and where each part came from).
 `;
 
-/** What `.widecode/config.json` says: the "plugins" and "columns" values as written, the "permissions" rules, and why it was not used ("" for used). */
+/** What `.lightcode/config.json` says: the "plugins" and "columns" values as written, the "permissions" rules, and why it was not used ("" for used). */
 export class HarnessConfig {
   plugins: unknown = null;
   columns: unknown = null;
@@ -108,15 +108,15 @@ export class HarnessConfig {
  * has (as Claude Code names them), and that the folder waits for /trust when it does.
  */
 export const fixedPrompt = (tools: string[], trusted: boolean): string =>
-  "You are running inside widecode, an agent orchestrator in the terminal, as the lead agent of this session: the user talks with you, and widecode draws your conversation, your edits and your subagents' work in columns beside it." +
-  (tools.includes("Task") ? " widecode's Task tool starts subagents, on other models and in sandboxes the project configures; you split the work, write their briefs and review what they return." : "") +
-  " This folder's `.widecode/` is widecode's harness: `plugins/*.js` (JavaScript plugins, reloaded on save; a file calls `widecode.plugin({ id, activate(api) })`), `prompt.md` (appended to this prompt) and `config.json` (plugin sections, column widths, tool permissions). The user's own `prompt.md` in widecode's store (`~/.widecode/prompt.md`) comes before this folder's." +
-  (tools.length > 0 ? " The MCP server `widecode` offers: " + tools.map((t) => "mcp__widecode__" + t).join(", ") + ". Read mcp__widecode__api before writing a plugin." : "") +
+  "You are running inside lightcode, an agent orchestrator in the terminal, as the lead agent of this session: the user talks with you, and lightcode draws your conversation, your edits and your subagents' work in columns beside it." +
+  (tools.includes("Task") ? " lightcode's Task tool starts subagents, on other models and in sandboxes the project configures; you split the work, write their briefs and review what they return." : "") +
+  " This folder's `.lightcode/` is lightcode's harness: `plugins/*.js` (JavaScript plugins, reloaded on save; a file calls `lightcode.plugin({ id, activate(api) })`), `prompt.md` (appended to this prompt) and `config.json` (plugin sections, column widths, tool permissions). The user's own `prompt.md` in lightcode's store (`~/.lightcode/prompt.md`) comes before this folder's." +
+  (tools.length > 0 ? " The MCP server `lightcode` offers: " + tools.map((t) => "mcp__lightcode__" + t).join(", ") + ". Read mcp__lightcode__api before writing a plugin." : "") +
   (trusted ? "" : " The folder is not trusted yet: its plugins, prompt and config are not in use until the user trusts it (/trust).");
 
 export class Harness {
   readonly folder: string;
-  /** The user-wide prompt, `prompt.md` in widecode's store ("" without a store). */
+  /** The user-wide prompt, `prompt.md` in lightcode's store ("" without a store). */
   userPromptPath = "";
   /** Whether the user trusts the folder (/trust): its parts are in use. */
   trusted = false;
@@ -131,7 +131,7 @@ export class Harness {
   }
 
   dir(): string {
-    return join(this.folder, ".widecode");
+    return join(this.folder, ".lightcode");
   }
 
   pluginsDir(): string {
@@ -161,7 +161,7 @@ export class Harness {
     return { plugins, prompt: existsSync(this.promptPath()), config: existsSync(this.configPath()) };
   }
 
-  /** Write the harness's skeleton where a file is missing (prompt.md, plugins/example.js, config.json, and Claude Code's skill for widecode under .claude/skills); answers the paths written. */
+  /** Write the harness's skeleton where a file is missing (prompt.md, plugins/example.js, config.json, and Claude Code's skill for lightcode under .claude/skills); answers the paths written. */
   init(): string[] {
     const written: string[] = [];
     const put = (path: string, text: string): void => {
@@ -173,7 +173,7 @@ export class Harness {
     put(this.promptPath(), PROMPT_SKELETON);
     put(join(this.pluginsDir(), "example.js"), EXAMPLE_PLUGIN);
     put(this.configPath(), CONFIG_SKELETON);
-    put(join(this.folder, ".claude", "skills", "widecode", "SKILL.md"), SKILL);
+    put(join(this.folder, ".claude", "skills", "lightcode", "SKILL.md"), SKILL);
     return written;
   }
 
@@ -216,7 +216,7 @@ export class Harness {
     return this.trusted ? this.rawPrompt() : "";
   }
 
-  /** The user's `prompt.md` in widecode's store as text, "" when there is no store or no file. */
+  /** The user's `prompt.md` in lightcode's store as text, "" when there is no store or no file. */
   userPrompt(): string {
     if (this.userPromptPath.length === 0) return "";
     try {
@@ -234,12 +234,12 @@ export class Harness {
     try {
       value = JSON.parse(readFileSync(this.configPath(), "utf8"));
     } catch (err) {
-      c.notice = ".widecode/config.json is not valid JSON (" + (errorMessage(err, "error")) + "); not used";
+      c.notice = ".lightcode/config.json is not valid JSON (" + (errorMessage(err, "error")) + "); not used";
       return c;
     }
     const root = recordOf(value);
     if (root === null) {
-      c.notice = ".widecode/config.json is not an object; not used";
+      c.notice = ".lightcode/config.json is not an object; not used";
       return c;
     }
     if (root.plugins !== undefined) c.plugins = root.plugins;
@@ -259,7 +259,7 @@ export class Harness {
     return stampOf(this.promptPath()) + "|" + stampOf(this.configPath()) + "|" + (existsSync(this.pluginsDir()) ? "p" : "-") + "|" + (existsSync(this.dir()) ? "d" : "-") + "|" + stampOf(this.userPromptPath);
   }
 
-  /** Watch the folder for its parts changing (the project folder itself until `.widecode/` appears) and the user prompt's folder; `onChange` hears which part. */
+  /** Watch the folder for its parts changing (the project folder itself until `.lightcode/` appears) and the user prompt's folder; `onChange` hears which part. */
   watch(): void {
     this.stopWatching();
     this.stamps = this.stamp();

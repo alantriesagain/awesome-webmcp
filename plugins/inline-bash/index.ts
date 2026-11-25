@@ -7,7 +7,7 @@ const PATTERN = /!\{([^}]*)\}/g;
 /** `text` without one newline at its end. */
 const withoutLastNewline = (text: string): string => (text.endsWith("\n") ? text.slice(0, -1) : text);
 
-widecode.plugin({
+lightcode.plugin({
   id: "inline-bash",
   agent(agent) {
     agent.on("input", async (event) => {

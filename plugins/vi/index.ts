@@ -7,7 +7,7 @@
 // it works (the shell's Esc, which the layer passes on). The composer's border says the mode. In
 // the code column: j k scroll, gg and G go to the top and the end.
 
-const u = widecode.util;
+const u = lightcode.util;
 
 /** A grapheme's class, as vi counts words: 0 blank, 1 a word character, 2 anything else (punctuation). */
 const kind = (g: string): number => {
@@ -41,7 +41,7 @@ interface Register {
 const INSERT = "-- INSERT --";
 const NORMAL = "-- NORMAL --";
 
-widecode.plugin({
+lightcode.plugin({
   id: "vi",
   activate(api) {
     let mode = "insert";
@@ -262,7 +262,7 @@ widecode.plugin({
     };
 
     /** A key in normal mode. */
-    const normalKey = (key: widecode.Key): boolean => {
+    const normalKey = (key: lightcode.Key): boolean => {
       const k = key.name === "char" && !key.ctrl && !key.alt ? key.text : key.ctrl && key.name === "char" ? "ctrl+" + key.text : key.name;
       // Keys of the shell and the chat come before this; a key with a modifier the mode does not use is left alone.
       if (key.alt || (key.ctrl && k !== "ctrl+r")) return false;

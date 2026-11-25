@@ -11,21 +11,21 @@ import { join } from "node:path";
 import { Answer, Reply } from "../src/conversation/requests.ts";
 import { Item, NOTICE, TEXT, THINKING, TOOL, Turn } from "../src/conversation/model.ts";
 import { SegmentContext } from "../src/screen/contributions.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { JsBand } from "../src/runtime/views.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
 const kinds = (items: Item[]): string => items.map((i: Item) => (i.kind === THINKING ? "thinking" : i.kind === TEXT ? "text" : i.kind === TOOL ? "tool" : i.kind === NOTICE ? "notice:" + i.text : "other")).join(",");
 
 const main = async (): Promise<void> => {
-  const home = mkdtempSync(join(tmpdir(), "widecode-pi-home-"));
+  const home = mkdtempSync(join(tmpdir(), "lightcode-pi-home-"));
   const oldHome = process.env.HOME;
   process.env.HOME = home;
-  const folder = mkdtempSync(join(tmpdir(), "widecode-pi-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-pi-"));
   writeFileSync(join(folder, "a.txt"), "one\n");
   // A session pi made earlier, with no name: its title is its first user message.
   const safe = folder.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-");
@@ -38,10 +38,10 @@ const main = async (): Promise<void> => {
   const log = join(folder, "fake.log");
   const fake = join(process.cwd(), "test/fake-pi.mjs");
   const config: unknown = { pi: { name: "pi", command: ["node", fake, "--log", log] } };
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     plugins: config,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.host.session.agentId.value = "pi";
     },
   });
@@ -107,7 +107,7 @@ const main = async (): Promise<void> => {
 
   eq("the agent from the section", c.agent.id() + " " + c.agent.name(), "pi pi");
   ok("named on the screen", w.chat.pane.input.placeholder.startsWith("Write to pi."));
-  ok("its session starts with widecode: its model, efforts and commands before any message", (await until(() => c.info.modelId === "fake/small" && c.started && c.agent.choices().efforts.map((e) => e.value).join(",") === "low,high,default" && c.model.slashCommands.join(",") === "init,review,skill:alpha")) && sent().includes('"type":"get_state"') && !sent().includes('"type":"prompt"'));
+  ok("its session starts with lightcode: its model, efforts and commands before any message", (await until(() => c.info.modelId === "fake/small" && c.started && c.agent.choices().efforts.map((e) => e.value).join(",") === "low,high,default" && c.model.slashCommands.join(",") === "init,review,skill:alpha")) && sent().includes('"type":"get_state"') && !sent().includes('"type":"prompt"'));
   ok("a session file of its own", c.sessionId.startsWith("pi-"));
   w.host.screen.showPanel("sessions");
   ok("its sessions in the Sessions tab, from pi's folder", await until(() => sessionRows().some((l: string) => l.includes("Earlier question"))));
@@ -187,12 +187,12 @@ const main = async (): Promise<void> => {
   ok("resumed with --session", sent().includes('"--session"'));
   ok("a message goes to it", (await turn("hi")) && chat().some((l: string) => l.includes("You said: hi")));
 
-  closeWidecode(w);
+  closeLightcode(w);
 
   const absent: unknown = { pi: { command: ["no-such-pi-binary", "--mode", "rpc"] } };
-  const w2 = await openWidecode({ folder, plugins: absent, load: true });
+  const w2 = await openLightcode({ folder, plugins: absent, load: true });
   ok("absent when no pi is on PATH", w2.host.session.useAgent("pi").startsWith("no agent named pi"));
-  closeWidecode(w2);
+  closeLightcode(w2);
 
   rmSync(folder, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });

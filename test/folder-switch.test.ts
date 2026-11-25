@@ -5,12 +5,12 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Widecode } from "../src/compose.ts";
-import { currentWidecode, openWidecode } from "./support/app.ts";
+import type { Lightcode } from "../src/compose.ts";
+import { currentLightcode, openLightcode } from "./support/app.ts";
 import { openFolder } from "../src/host/actions.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
-const plugin = (id: string): string => `widecode.plugin({
+const plugin = (id: string): string => `lightcode.plugin({
   id: "${id}",
   defaults: () => ({ greeting: "${id}" }),
   activate(api) {
@@ -22,7 +22,7 @@ const plugin = (id: string): string => `widecode.plugin({
 
 /** A folder with one project plugin and its config. */
 const project = (root: string, id: string): string => {
-  const dir = join(root, ".widecode");
+  const dir = join(root, ".lightcode");
   mkdirSync(join(dir, "plugins"), { recursive: true });
   writeFileSync(join(dir, "plugins", id + ".js"), plugin(id));
   writeFileSync(join(dir, "config.json"), '{"plugins":{' + JSON.stringify(id) + ':{"greeting":' + JSON.stringify("hello " + id) + "}}}");
@@ -30,15 +30,15 @@ const project = (root: string, id: string): string => {
 };
 
 const main = async (): Promise<void> => {
-  const folderA = mkdtempSync(join(tmpdir(), "widecode-switch-a-"));
-  const folderB = mkdtempSync(join(tmpdir(), "widecode-switch-b-"));
+  const folderA = mkdtempSync(join(tmpdir(), "lightcode-switch-a-"));
+  const folderB = mkdtempSync(join(tmpdir(), "lightcode-switch-b-"));
   const dirA = project(folderA, "pa");
   const dirB = project(folderB, "pb");
   // The folder's own plugins, whichever folder the app opens: an /open starts it again there.
-  let w = await openWidecode({
+  let w = await openLightcode({
     folder: folderA,
     load: true,
-    before: async (w: Widecode) => {
+    before: async (w: Lightcode) => {
       await w.host.session.useStore(null);
       w.js.dirs = [w.host.harness.pluginsDir()];
     },
@@ -51,14 +51,14 @@ const main = async (): Promise<void> => {
   eq("the first folder's plugin and its section", tell("/which") + " " + tell("/greet"), "pa hello pa");
 
   await openFolder(folderB);
-  w = currentWidecode();
+  w = currentLightcode();
   ok("the previous folder's plugin went", !w.host.kernel.has("pa"));
   ok("the new folder's plugin came", w.host.kernel.has("pb"));
   ok("its folders are the watched ones", w.js.dirs.includes(dirB) && !w.js.dirs.includes(dirA));
   eq("the new folder's command and config", tell("/which") + " " + tell("/greet"), "pb hello pb");
 
   await openFolder(folderA);
-  w = currentWidecode();
+  w = currentLightcode();
   ok("back: the first folder's plugin again", w.host.kernel.has("pa") && !w.host.kernel.has("pb"));
   eq("and its section", tell("/which") + " " + tell("/greet"), "pa hello pa");
 

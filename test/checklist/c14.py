@@ -1,15 +1,15 @@
-# Titles and the status bar, live: a real turn in a temp repository with its own WIDECODE_HOME, whose
+# Titles and the status bar, live: a real turn in a temp repository with its own LIGHTCODE_HOME, whose
 # config adds a fourth status line running scripts/statusline.sh (a Claude Code status
 # line script). Checks the title Claude writes replaces the prompt, the bar's context, limits and
 # cache, and the script's line. Cleans up the session folder the turn creates.
 import json, shutil
 from common import *
-home = tempfile.mkdtemp(prefix="widecode-home-")
+home = tempfile.mkdtemp(prefix="lightcode-home-")
 script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts", "statusline.sh")
 lines = [["project", "branch", "model", "effort", "mode", "title", "spacer", "note"], ["context", "limit5h", "limitWeek", "cache"], ["activity", "tools", "calls", "thinking", "cost", "duration"], [{"command": os.path.abspath(script)}]]
 os.makedirs(home, exist_ok=True)
 open(os.path.join(home, "config.json"), "w").write(json.dumps({"titles": {"auto": True, "model": "haiku"}, "statusline": {"separator": " │ ", "lines": lines}}))
-os.environ["WIDECODE_HOME"] = home
+os.environ["LIGHTCODE_HOME"] = home
 d = repo()
 app = App(d, OUT + "c14.log", ["--model", "haiku", "--effort", "low"], cols=200, rows=40)
 mark = len(app.text_log())
@@ -24,7 +24,7 @@ s = app.screen()
 bar = s.split("\n")[-4:]
 print("----- the status bar"); print("\n".join(bar))
 sessions = os.listdir(os.path.join(home, "sessions"))
-print("~/.widecode session files:", sessions)
+print("~/.lightcode session files:", sessions)
 rec = json.load(open(os.path.join(home, "sessions", sessions[0]))) if sessions else {}
 print("stored:", {k: rec.get(k) for k in ["title", "titleBy", "costUsd", "model"]})
 app.close()

@@ -5,11 +5,11 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
-import { openWidecode } from "./support/app.ts";
+import { openLightcode } from "./support/app.ts";
 
-const plugin = `widecode.plugin({
+const plugin = `lightcode.plugin({
   id: "temp-agent",
   activate(api) {
     api.agents.register({
@@ -23,15 +23,15 @@ const plugin = `widecode.plugin({
 });`;
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-agent-removal-"));
-  const dir = join(folder, ".widecode", "plugins");
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-agent-removal-"));
+  const dir = join(folder, ".lightcode", "plugins");
   mkdirSync(dir, { recursive: true });
   const file = join(dir, "tmp.js");
   writeFileSync(file, plugin);
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     load: true,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.js.dirs = [dir];
       w.host.session.agentId.value = "tmp";
     },

@@ -102,7 +102,7 @@ export class HostRouter {
       parsed = JSON.parse(argsJson);
     } catch {
       log("plugins: " + name + ": arguments that are not JSON, " + argsExcerpt(argsJson));
-      return refuse("widecode: arguments that are not JSON");
+      return refuse("lightcode: arguments that are not JSON");
     }
     const a: unknown[] = Array.isArray(parsed) ? (parsed as unknown[]) : [];
     // The api appends its registration; a direct __host call has none.
@@ -112,8 +112,8 @@ export class HostRouter {
       token = last;
       a.pop();
     }
-    if (this.rt.callingReg > 0 && name !== "plugin" && token !== "@r" + String(this.rt.callingReg)) return refuse("widecode: this call did not come through the plugin's api");
-    if (this.rt.callingReg > 0 && OWNER_FIRST.includes(name) && str(a[0]) !== this.rt.callingOwner) return refuse("widecode: " + name + " names another plugin");
+    if (this.rt.callingReg > 0 && name !== "plugin" && token !== "@r" + String(this.rt.callingReg)) return refuse("lightcode: this call did not come through the plugin's api");
+    if (this.rt.callingReg > 0 && OWNER_FIRST.includes(name) && str(a[0]) !== this.rt.callingOwner) return refuse("lightcode: " + name + " names another plugin");
     const h = this.rt.host;
     switch (name) {
       case "plugin":
@@ -184,6 +184,6 @@ export class HostRouter {
       const answered = group.answer(this.rt, name, a);
       if (answered !== null) return answered;
     }
-    return refuse("widecode has no call named " + name);
+    return refuse("lightcode has no call named " + name);
   }
 }

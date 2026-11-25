@@ -90,7 +90,7 @@ const pathsIn = (command: string): string[] => {
   return out;
 };
 
-widecode.plugin({
+lightcode.plugin({
   id: "protected-paths",
   defaults: () => ({ paths: DEFAULT_PATHS.slice() }),
   agent(agent) {

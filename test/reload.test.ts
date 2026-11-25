@@ -7,31 +7,31 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
-import { openWidecode } from "./support/app.ts";
+import { openLightcode } from "./support/app.ts";
 
 const fixtures = join(process.cwd(), "test", "fixtures");
 const fake = join(process.cwd(), "test", "fake-claude.mjs");
 
-const plugin = (version: string, tool: string): string => `widecode.plugin({ id: "hello", activate(api) {
+const plugin = (version: string, tool: string): string => `lightcode.plugin({ id: "hello", activate(api) {
   api.commands.add({ name: "/v", run: () => api.tell("${version}") });
   api.tools.add({ name: "${tool}", description: "echoes", input: { type: "object", properties: { text: { type: "string" } } }, call: (args) => args.text });
 } });`;
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-reload-"));
-  const dir = join(folder, ".widecode", "plugins");
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-reload-"));
+  const dir = join(folder, ".lightcode", "plugins");
   mkdirSync(dir, { recursive: true });
   const file = join(dir, "a.js");
   writeFileSync(file, plugin("v1", "echo1"));
   const args = join(folder, "args.txt");
   const logs: string[] = [];
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     load: true,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       const c = w.host.conversation;
       c.executable = fake;
       c.extraArgs.push("--fixture", join(fixtures, "turn.ndjson"), "--record-args", args);
@@ -62,7 +62,7 @@ const main = async (): Promise<void> => {
   ok("the agent still went on", c.started && !logs.some((l) => l.includes("claude exited")));
 
   const notes = join(dir, "notes");
-  const folderPlugin = (version: string): string => `widecode.plugin({ id: "notes", activate(api) { api.commands.add({ name: "/n", run: () => api.tell("${version}") }); } });`;
+  const folderPlugin = (version: string): string => `lightcode.plugin({ id: "notes", activate(api) { api.commands.add({ name: "/n", run: () => api.tell("${version}") }); } });`;
   mkdirSync(notes);
   writeFileSync(join(notes, "README.md"), "Notes.");
   writeFileSync(join(notes, "index.js"), folderPlugin("n1"));

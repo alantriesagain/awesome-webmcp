@@ -1,15 +1,15 @@
-// The harness plugin: widecode's tools for the agent to probe and reshape widecode itself, served
-// over MCP like the ask plugin's (Claude Code sees them as mcp__widecode__<name>, opencode as
-// widecode_<name>). screen reads the screen as drawn (every column but the chat unless named: the
+// The harness plugin: lightcode's tools for the agent to probe and reshape lightcode itself, served
+// over MCP like the ask plugin's (Claude Code sees them as mcp__lightcode__<name>, opencode as
+// lightcode_<name>). screen reads the screen as drawn (every column but the chat unless named: the
 // chat holds the agent's own text), state what runs (the columns, the tabs, every plugin with its
 // state, the harness folder), log the last notes, api the plugin guide and the API's types, check a
 // plugin source before it is saved, reload a plugin file (or every plugin) and say what it defined,
 // config the configuration in use and where each part came from. The agent writes the files itself
-// (.widecode/plugins, prompt.md, config.json); these tools are how it sees the effect. For the user,
+// (.lightcode/plugins, prompt.md, config.json); these tools are how it sees the effect. For the user,
 // /harness says what the folder's harness holds and /harness init writes its skeleton with Claude
-// Code's skill for widecode.
+// Code's skill for lightcode.
 
-const { str, num, strs } = widecode.util;
+const { str, num, strs } = lightcode.util;
 
 const SCREEN = {
   type: "object",
@@ -21,7 +21,7 @@ const LOG = { type: "object", properties: { n: { type: "integer", description: "
 const RELOAD = {
   type: "object",
   properties: {
-    file: { type: "string", description: "The plugin file to evaluate again, relative to the project folder (.widecode/plugins/name.js) or absolute. Left out: every plugin reloads, and the call answers that they did." },
+    file: { type: "string", description: "The plugin file to evaluate again, relative to the project folder (.lightcode/plugins/name.js) or absolute. Left out: every plugin reloads, and the call answers that they did." },
   },
 };
 const API = {
@@ -83,10 +83,10 @@ const namesIn = (text: string, re: RegExp): string[] => {
 };
 
 /** The folder's harness in a paragraph: trust, each plugin file with its state, the prompt, the config, the tools, the last errors. */
-const report = (api: widecode.Api): string => {
+const report = (api: lightcode.Api): string => {
   const h = api.harness.info();
   const relative = (path: string): string => (path.startsWith(h.folder + "/") ? path.slice(h.folder.length + 1) : path);
-  if (!h.present) return "This folder has no harness: /harness init writes .widecode/ (prompt.md, plugins/example.js, config.json) and Claude Code's skill for widecode.";
+  if (!h.present) return "This folder has no harness: /harness init writes .lightcode/ (prompt.md, plugins/example.js, config.json) and Claude Code's skill for lightcode.";
   const listed = api.plugins.list();
   const plugins = h.plugins.map((file) => {
     const states = listed.plugins.filter((p) => p.file === file).map((p) => p.id + " " + p.state + (p.problem.length > 0 ? ": " + p.problem : ""));
@@ -101,7 +101,7 @@ const report = (api: widecode.Api): string => {
   );
 };
 
-widecode.plugin({
+lightcode.plugin({
   id: "harness",
   activate(api) {
     const settled = (ms: number): Promise<void> =>
@@ -111,7 +111,7 @@ widecode.plugin({
     api.commands.add({
       name: "/harness",
       usage: "[init]",
-      help: "this folder's harness (.widecode: plugins, prompt, config, the agent's tools); init writes its skeleton and Claude Code's skill",
+      help: "this folder's harness (.lightcode: plugins, prompt, config, the agent's tools); init writes its skeleton and Claude Code's skill",
       complete: (typed) => ["init"].filter((v) => v.startsWith(typed.trim())),
       run: (arg) => {
         if (arg.trim() !== "init") {
@@ -131,7 +131,7 @@ widecode.plugin({
     });
     api.tools.add({
       name: "screen",
-      description: "widecode's screen as drawn, as text: every column but the chat unless columns names them (the chat holds your own conversation; name it to read it, or pass [] for the whole screen). Read it after a change to see what the user sees.",
+      description: "lightcode's screen as drawn, as text: every column but the chat unless columns names them (the chat holds your own conversation; name it to read it, or pass [] for the whole screen). Read it after a change to see what the user sees.",
       input: SCREEN,
       call: (args) => {
         const columns = args.columns === undefined ? api.state.columns().map((c) => c.id).filter((id) => id !== "chat") : strs(args.columns);
@@ -140,7 +140,7 @@ widecode.plugin({
     });
     api.tools.add({
       name: "state",
-      description: "What widecode runs now: the folder, the active column, the columns and the side tabs, every plugin with its state (running, failed, off, replaced, stopped) and the last plugin errors, the keymap, the tools you have, and the harness folder (.widecode: trusted or not, its plugin files, prompt and config).",
+      description: "What lightcode runs now: the folder, the active column, the columns and the side tabs, every plugin with its state (running, failed, off, replaced, stopped) and the last plugin errors, the keymap, the tools you have, and the harness folder (.lightcode: trusted or not, its plugin files, prompt and config).",
       input: NONE,
       call: () => {
         const active = api.state.active();
@@ -161,7 +161,7 @@ widecode.plugin({
     });
     api.tools.add({
       name: "log",
-      description: "The last lines of widecode's log: what plugins noted, the status bar's messages, plugin errors with their file and line. Read it after saving a plugin to see whether it loaded.",
+      description: "The last lines of lightcode's log: what plugins noted, the status bar's messages, plugin errors with their file and line. Read it after saving a plugin to see whether it loaded.",
       input: LOG,
       call: (args) => api.state.log(num(args.n, 50)).join("\n"),
     });
@@ -182,14 +182,14 @@ widecode.plugin({
     });
     api.tools.add({
       name: "api",
-      description: "The plugin API as this widecode carries it: the guide (PLUGINS.md) and the types (widecode.d.ts). part names what to read: guide, types, a namespace (tools, ui, state, agent, ...) or an interface (Tool, Plugin, Command, ...); find looks text up in both. Read the part you need before writing a plugin.",
+      description: "The plugin API as this lightcode carries it: the guide (PLUGINS.md) and the types (lightcode.d.ts). part names what to read: guide, types, a namespace (tools, ui, state, agent, ...) or an interface (Tool, Plugin, Command, ...); find looks text up in both. Read the part you need before writing a plugin.",
       input: API,
       call: (args) => {
         const docs = api.plugins.api();
         const part = str(args.part);
         const find = str(args.find);
         if (find.length > 0) {
-          const hits = linesWith(docs.guide, find, "PLUGINS.md", 40).concat(linesWith(docs.types, find, "widecode.d.ts", 40));
+          const hits = linesWith(docs.guide, find, "PLUGINS.md", 40).concat(linesWith(docs.types, find, "lightcode.d.ts", 40));
           return hits.length > 0 ? hits.join("\n") : "nothing in the guide or the types holds " + JSON.stringify(find);
         }
         const namespaces = namesIn(partOf(docs.types, "Api"), /\n    ([a-zA-Z]+): \{/g);
@@ -200,7 +200,7 @@ widecode.plugin({
           const opening = docs.guide.split(/\n(?=## )/)[0];
           return opening.trimEnd() + "\n\nThe guide's sections, each a part to ask for: " + sections.map((x) => x.heading).join(", ") + ".";
         }
-        if (part === "types") return "widecode.d.ts by part. The namespaces of Api: " + namespaces.join(", ") + ". The interfaces: " + interfaces.join(", ") + ". find looks text up across it.";
+        if (part === "types") return "lightcode.d.ts by part. The namespaces of Api: " + namespaces.join(", ") + ". The interfaces: " + interfaces.join(", ") + ". find looks text up across it.";
         const section = sections.find((x) => x.heading.toLowerCase() === part.toLowerCase());
         if (section !== undefined) return section.text;
         if (part.length > 0) {
@@ -219,7 +219,7 @@ widecode.plugin({
     });
     api.tools.add({
       name: "config",
-      description: "The configuration in use and where each part came from: the user's config.json (~/.widecode), the project's (.widecode/config.json, when the folder is trusted), and the result of the project's over the user's, for the plugins' sections and the columns' widths; the project's permissions; a notice when the project's file could not be used.",
+      description: "The configuration in use and where each part came from: the user's config.json (~/.lightcode), the project's (.lightcode/config.json, when the folder is trusted), and the result of the project's over the user's, for the plugins' sections and the columns' widths; the project's permissions; a notice when the project's file could not be used.",
       input: NONE,
       call: () => api.harness.info().config,
     });

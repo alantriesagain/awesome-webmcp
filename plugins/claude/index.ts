@@ -1,4 +1,4 @@
-// Claude Code as widecode's agent: its CLI (`claude -p` over stream-json) started on the first
+// Claude Code as lightcode's agent: its CLI (`claude -p` over stream-json) started on the first
 // message, what it writes read into the conversation as events, what the user does written to it.
 // Its records (live, and a session's transcript under ~/.claude/projects read on resume) are read
 // here: a message's content blocks keyed by message and index (or a call's id), stream events
@@ -12,7 +12,7 @@
 // bundled skill has no file), each called by typing its name with a slash; before it starts, the
 // project's (once the folder is trusted), the user's and the synced ones are read from disk as a
 // partial list; a Skill call is a skill call for the Skills tab. `/subagents` picks the session's
-// subagents: Claude Code's own, widecode's Task over the acp plugin's targets, or both, and keeps
+// subagents: Claude Code's own, lightcode's Task over the acp plugin's targets, or both, and keeps
 // the choice in state.json. Its section of config.json: { "id":
 // "claude", "projects": "", "configDir": "" } (the id it is chosen by; where Claude Code keeps
 // sessions, "" for $CLAUDE_CONFIG_DIR/projects, else ~/.claude/projects; where it keeps its config,
@@ -65,12 +65,12 @@ const statFields = (stat: string): string[] => stat.slice(stat.lastIndexOf(")") 
 /** Records never shown nor linked: left out of history windows. */
 const SKIP_RECORDS = ['{"type":"file-history-snapshot"', '{"type":"file-history-delta"', '{"type":"queue-operation"', '{"type":"atis-latch"', '{"type":"last-prompt"', '{"type":"mode"'];
 
-// The agent: the CLI's process, the session's history, the bookkeeping kept in widecode's store.
+// The agent: the CLI's process, the session's history, the bookkeeping kept in lightcode's store.
 
-const claudeAgent = (api: widecode.Api, id: string, projects: string, config: string, keepSubagents: boolean): widecode.AgentAdapter => {
-  let proc: widecode.ProcessHandle | null = null;
+const claudeAgent = (api: lightcode.Api, id: string, projects: string, config: string, keepSubagents: boolean): lightcode.AgentAdapter => {
+  let proc: lightcode.ProcessHandle | null = null;
   let processes = 0;
-  /** widecode's MCP server as this plugin's agent sees it, and whether the CLI restarts at the turn's end to pick up a change to the harness. */
+  /** lightcode's MCP server as this plugin's agent sees it, and whether the CLI restarts at the turn's end to pick up a change to the harness. */
   let server: { url: string; headers: { name: string; value: string }[]; tools: { name: string; category: string }[]; file: string } | null = null;
   let restartWanted = false;
   /** The permission prompts open in the request panel, by the CLI's request id, with the folder each may add ("" for none, else as shown); the calls the user allowed for the session (tool and argument), or every call (`allowAll`); the folders added to the session's, given again to each start. */
@@ -156,7 +156,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     return "";
   };
   /** Skills read already, by name (a skill's file does not move while Claude runs here), and the folder they were read for. */
-  const skillCache = new Map<string, widecode.AgentSkill>();
+  const skillCache = new Map<string, lightcode.AgentSkill>();
   let skillFolder = "";
   /** Where skill `name` lives and whose it is: a plugin's (`plugin:skill`, under the plugin's path the init record gives, else among the synced skills), else the project's (under `folder`), the user's, a synced one's; "" for a bundled skill. */
   const skillFile = (name: string, plugins: unknown[], folder: string): { path: string; source: string } => {
@@ -188,10 +188,10 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     const path = synced(name);
     return { path, source: path.length > 0 ? "user" : "built-in" };
   };
-  const skillsOf = (names: string[], plugins: unknown[], folder: string): widecode.AgentSkill[] => {
+  const skillsOf = (names: string[], plugins: unknown[], folder: string): lightcode.AgentSkill[] => {
     if (folder !== skillFolder) skillCache.clear();
     skillFolder = folder;
-    const out: widecode.AgentSkill[] = [];
+    const out: lightcode.AgentSkill[] = [];
     for (const name of names) {
       let s = skillCache.get(name);
       if (s === undefined) {
@@ -204,7 +204,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     return out;
   };
   /** The skills on disk, before Claude says: the trusted project's, the user's and the synced ones (named as Claude names them), each with its description; Claude's bundled skills and a plugin's come with its init record. */
-  const scanSkills = (): widecode.AgentSkill[] => {
+  const scanSkills = (): lightcode.AgentSkill[] => {
     const at = api.state.active().folder;
     const names: string[] = [];
     const withSkill = (dir: string): string[] => api.fs.list(dir).filter((e) => !e.file && api.fs.stat(dir + "/" + e.name + "/SKILL.md") !== null).map((e) => e.name);
@@ -232,7 +232,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
   };
   const projectDir = (f: string): string => projectsRoot() + "/" + f.replace(/[^A-Za-z0-9]/g, "-");
   const fileOf = (sid: string): string => (safeId(sid) ? projectDir(folder || api.state.active().folder) + "/" + sid + ".jsonl" : "");
-  /** The pid of a live Claude running `sid` that widecode did not start, from the records Claude Code keeps beside its projects folder (sessions/<pid>.json); 0 when none. */
+  /** The pid of a live Claude running `sid` that lightcode did not start, from the records Claude Code keeps beside its projects folder (sessions/<pid>.json); 0 when none. */
   const runningElsewhere = (sid: string): number => {
     const dir = projectsRoot().replace(/\/[^/]*$/, "") + "/sessions";
     const self = api.fs.read("/proc/self/stat", 0, 1024);
@@ -262,7 +262,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     const text = JSON.stringify(f);
     if (text === sentStatus) return;
     sentStatus = text;
-    emit({ type: "info", fields: f as Partial<widecode.StatusFields> });
+    emit({ type: "info", fields: f as Partial<lightcode.StatusFields> });
   };
 
   /** One record into the reader and the status; `when` the time it was written (0: now). */
@@ -481,7 +481,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     return api.fs.stat(local) !== null ? local : "claude";
   };
 
-  /** The acp plugin's tasks from the effective config, and whether widecode's Task is offered to this plugin's agent. */
+  /** The acp plugin's tasks from the effective config, and whether lightcode's Task is offered to this plugin's agent. */
   const subagentTasks = (): SubagentTasks => {
     const plugins = rec(api.harness.info().config.effective.plugins);
     const acp = plugins !== null ? rec(plugins.acp) : null;
@@ -507,7 +507,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     return out;
   };
 
-  /** The subagents chosen (state.json), else the config's default, clamped to Claude Code's own when widecode's Task is not offered. */
+  /** The subagents chosen (state.json), else the config's default, clamped to Claude Code's own when lightcode's Task is not offered. */
   const chosenSubagents = (): SubagentChoice => {
     const t = subagentTasks();
     const kept = rec(api.settings.state());
@@ -515,8 +515,8 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     const mode = saved !== null ? str(saved.mode) : "";
     const model = saved !== null ? str(saved.model) : "";
     if (!t.offered) return { mode: "claude", model };
-    if (mode === "claude" || mode === "widecode" || mode === "both") return { mode, model };
-    return { mode: t.replace && !keepSubagents ? "widecode" : "both", model: "" };
+    if (mode === "claude" || mode === "lightcode" || mode === "both") return { mode, model };
+    return { mode: t.replace && !keepSubagents ? "lightcode" : "both", model: "" };
   };
 
   /** Keep the choice in state.json beside what the plugin kept before. */
@@ -532,7 +532,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
   const describeSubagents = (choice: SubagentChoice, t: SubagentTasks): string => {
     const names = t.targets.map((x) => x.name).join(", ");
     if (choice.mode === "claude") return "Claude's own" + (choice.model.length > 0 ? " on " + choice.model : "");
-    if (choice.mode === "widecode") return names + " via Task";
+    if (choice.mode === "lightcode") return names + " via Task";
     return "Claude's own and " + names;
   };
 
@@ -544,7 +544,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
       if (!out.includes(value)) out.push(value);
     }
     if (t.offered) {
-      out.push("widecode");
+      out.push("lightcode");
       out.push("both");
     }
     return out;
@@ -553,7 +553,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
   /** The choice a value names, null for none. Claude Code takes any model alias or id, as /model does. */
   const subagentChoiceOf = (typed: string, t: SubagentTasks): SubagentChoice | null => {
     if (typed === "claude") return { mode: "claude", model: "" };
-    if (typed === "widecode" || typed === "both") return t.offered ? { mode: typed, model: "" } : null;
+    if (typed === "lightcode" || typed === "both") return t.offered ? { mode: typed, model: "" } : null;
     if (!typed.startsWith("claude ")) return null;
     const model = typed.slice("claude ".length).trim();
     return model.length > 0 && !/\s/.test(model) ? { mode: "claude", model } : null;
@@ -561,15 +561,15 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
 
   api.commands.add({
     name: "/subagents",
-    usage: "[claude [model] | widecode | both]",
-    help: "the session's subagents: Claude Code's own, widecode's Task, or both",
+    usage: "[claude [model] | lightcode | both]",
+    help: "the session's subagents: Claude Code's own, lightcode's Task, or both",
     complete: (typed) => {
       const t = subagentTasks();
       const now = chosenSubagents();
       const current = now.mode === "claude" ? (now.model.length > 0 ? "claude " + now.model : "claude") : now.mode;
       return subagentChoices(t)
         .filter((value) => value.startsWith(typed.trim()))
-        .map((value) => ({ value, label: value, detail: value === current ? "now" : value === "claude" ? "Claude Code's own, inheriting its model" : value.startsWith("claude ") ? "Claude Code's own, on " + value.slice("claude ".length) : value === "widecode" ? "widecode's Task on the targets" : "Claude Code's own and widecode's Task" }));
+        .map((value) => ({ value, label: value, detail: value === current ? "now" : value === "claude" ? "Claude Code's own, inheriting its model" : value.startsWith("claude ") ? "Claude Code's own, on " + value.slice("claude ".length) : value === "lightcode" ? "lightcode's Task on the targets" : "Claude Code's own and lightcode's Task" }));
     },
     run: (arg) => {
       const t = subagentTasks();
@@ -601,7 +601,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     },
   });
 
-  const start = (o: widecode.AgentStart): string => {
+  const start = (o: lightcode.AgentStart): string => {
     if (proc !== null) return "";
     folder = o.cwd;
     reader.folder = folder;
@@ -615,13 +615,13 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
     command.push("--permission-mode", permissionModeOf(approval));
     if (o.effort.length > 0) command.push("--effort", o.effort);
     const s = server;
-    if (s !== null) command.push("--mcp-config", s.file.length > 0 ? s.file : JSON.stringify({ mcpServers: { widecode: { type: "http", url: s.url, headers: Object.fromEntries(s.headers.map((h) => [h.name, h.value])) } } }));
-    // The acp plugin offers widecode's Task: /subagents says which subagents run, Claude Code's own,
-    // widecode's Task, or both, and the other's tools step aside.
+    if (s !== null) command.push("--mcp-config", s.file.length > 0 ? s.file : JSON.stringify({ mcpServers: { lightcode: { type: "http", url: s.url, headers: Object.fromEntries(s.headers.map((h) => [h.name, h.value])) } } }));
+    // The acp plugin offers lightcode's Task: /subagents says which subagents run, Claude Code's own,
+    // lightcode's Task, or both, and the other's tools step aside.
     const subagents = chosenSubagents();
     const offered = subagentTasks().offered;
-    if (offered && subagents.mode === "widecode") command.push("--disallowedTools", "Task,Agent,TaskStop,SendMessage");
-    else if (offered && subagents.mode === "claude") command.push("--disallowedTools", "mcp__widecode__Task,mcp__widecode__TaskStop,mcp__widecode__SendMessage");
+    if (offered && subagents.mode === "lightcode") command.push("--disallowedTools", "Task,Agent,TaskStop,SendMessage");
+    else if (offered && subagents.mode === "claude") command.push("--disallowedTools", "mcp__lightcode__Task,mcp__lightcode__TaskStop,mcp__lightcode__SendMessage");
     // Recorded once per session by default, the prompt would stay as the first launch had it: off, a changed prompt.md reaches a resumed session.
     if (o.systemPrompt.length > 0) command.push("--append-system-prompt", o.systemPrompt, "--system-prompt-snapshot", "off");
     // Claude Code enforces them: a deny rule blocks in every mode, an ask rule prompts (here, over stdio) in every mode.
@@ -750,7 +750,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
       if (gen !== retryGen) return;
       retryLast();
     });
-    const left = widecode.util.elapsed(Math.max(0, when - now));
+    const left = lightcode.util.elapsed(Math.max(0, when - now));
     api.tell("retrying in " + left);
     emit({ type: "notice", text: (known ? "Retry scheduled when the limit resets · in " : "Retry scheduled in five minutes · in ") + left, tone: "info" });
     flush();
@@ -918,7 +918,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
           if (v !== null) events.push(v);
         }
         if (events.length > 0) {
-          api.conversation.subagent(callId, events as widecode.ConversationEvent[], true);
+          api.conversation.subagent(callId, events as lightcode.ConversationEvent[], true);
           return true;
         }
       }
@@ -972,7 +972,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
       proc = null;
     },
     sessions(f) {
-      const out: widecode.AgentSession[] = [];
+      const out: lightcode.AgentSession[] = [];
       const dir = projectDir(f);
       for (const e of api.fs.list(dir)) {
         if (!e.file || !e.name.endsWith(".jsonl") || e.name.startsWith("agent-") || e.size === 0) continue;
@@ -992,7 +992,7 @@ const claudeAgent = (api: widecode.Api, id: string, projects: string, config: st
   };
 };
 
-widecode.plugin({
+lightcode.plugin({
   id: "claude",
   defaults: () => ({ id: "claude", projects: "", configDir: "" }),
   activate(api) {

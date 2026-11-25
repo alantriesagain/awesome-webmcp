@@ -1,5 +1,5 @@
 // The tasks section: the subagent targets, the bounds on them and the box a boxed target needs, the
-// box runner, and the ACP main's in-flight calls of widecode's Task tool.
+// box runner, and the ACP main's in-flight calls of lightcode's Task tool.
 
 import { obj, str, list } from "./json.ts";
 import { quote } from "./shell.ts";
@@ -72,16 +72,16 @@ export const tasksOf = (section: unknown): TasksConfig => {
  * Calls are serialized, so two runs at once never start a second box.
  */
 export class BoxRunner {
-  private readonly api: widecode.Api;
+  private readonly api: lightcode.Api;
   readonly config: BoxConfig;
-  private proxy: widecode.ProcessHandle | null = null;
+  private proxy: lightcode.ProcessHandle | null = null;
   /** The local MCP port the running proxy lets in (0 for none): a boxed subagent's HostAction calls go through it. */
   private localMcp = 0;
   private chain: Promise<void> = Promise.resolve();
   private vmRuns = 0;
   private idleGen = 0;
 
-  constructor(api: widecode.Api, config: BoxConfig) {
+  constructor(api: lightcode.Api, config: BoxConfig) {
     this.api = api;
     this.config = config;
   }
@@ -182,7 +182,7 @@ export class BoxRunner {
   }
 }
 
-/** A call of widecode's Task tool that the ACP main announced and has not completed: which call, and what it asked. */
+/** A call of lightcode's Task tool that the ACP main announced and has not completed: which call, and what it asked. */
 class PendingTask {
   readonly id: string;
   prompt: string;
@@ -197,7 +197,7 @@ class PendingTask {
 }
 
 /**
- * The ACP main's calls of widecode's Task tool that are in flight: it announces each with a
+ * The ACP main's calls of lightcode's Task tool that are in flight: it announces each with a
  * toolCallId of its own and the call's input, so the Task tool runs under that card instead of
  * making one. A call is dropped once it completes or fails.
  */

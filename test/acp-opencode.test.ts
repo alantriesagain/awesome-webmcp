@@ -11,8 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Item, NOTICE, TEXT, THINKING, TOOL, Turn } from "../src/conversation/model.ts";
 import { RenderContext } from "../src/conversation/render.ts";
-import type { Widecode } from "../src/compose.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import type { Lightcode } from "../src/compose.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
@@ -21,17 +21,17 @@ import { chatProblems } from "./support/chat-invariants.ts";
 const kinds = (items: Item[]): string => items.map((i: Item) => (i.kind === THINKING ? "thinking" : i.kind === TEXT ? "text" : i.kind === TOOL ? "tool:" + i.name : i.kind === NOTICE ? "notice:" + i.text : "other")).join(",");
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-acp-opencode-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-acp-opencode-"));
   writeFileSync(join(folder, "notes.txt"), "alpha\nBETA\ngamma\n");
   const log = join(folder, "replay.log");
   const fake = join(process.cwd(), "test/fake-acp.mjs");
   const fixture = join(process.cwd(), "test/fixtures/acp-opencode.ndjson");
   const config: unknown = { acp: { agents: { opencode: { name: "opencode", command: ["node", fake, "--replay", fixture, "--log", log] } } } };
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     plugins: config,
     load: true,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       // The model the recording chose, so the plugin chooses it too.
       w.host.conversation.modelName = "opencode/big-pickle";
       w.host.session.agentId.value = "opencode";
@@ -98,7 +98,7 @@ const main = async (): Promise<void> => {
   ctx.folder = folder;
   eq("the conversation's invariants", chatProblems(c.model, ctx, [40, 80, 120]).join("; "), "");
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

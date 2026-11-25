@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TOOL } from "../src/conversation/model.ts";
 import { SegmentContext } from "../src/screen/contributions.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { palette } from "@lightstart/tui/palette.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
@@ -98,7 +98,7 @@ const lastSessionToken = (file: string): string => {
     for (const v of m.params.mcpServers) {
       if (typeof v !== "object" || v === null) continue;
       const s = v as { name?: unknown; headers?: unknown };
-      if (s.name !== "widecode" || !Array.isArray(s.headers)) continue;
+      if (s.name !== "lightcode" || !Array.isArray(s.headers)) continue;
       for (const h of s.headers) {
         if (typeof h !== "object" || h === null) continue;
         const header = h as { name?: unknown; value?: unknown };
@@ -121,14 +121,14 @@ const reads = (state: string): { running: boolean; projects: string[]; proxy: bo
 };
 
 const open = async (folder: string, config: unknown) => {
-  const w = await openWidecode({ folder, plugins: config, load: true });
+  const w = await openLightcode({ folder, plugins: config, load: true });
   return { c: w.host.conversation, w };
 };
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-task-box-"));
-  const other = mkdtempSync(join(tmpdir(), "widecode-task-box-other-"));
-  const boxDir = mkdtempSync(join(tmpdir(), "widecode-task-box-state-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-task-box-"));
+  const other = mkdtempSync(join(tmpdir(), "lightcode-task-box-other-"));
+  const boxDir = mkdtempSync(join(tmpdir(), "lightcode-task-box-state-"));
   const boxLog = join(boxDir, "calls.jsonl");
   const acpLog = join(boxDir, "acp.jsonl");
   process.env.FAKE_BOX_DIR = boxDir;
@@ -175,9 +175,9 @@ const main = async (): Promise<void> => {
   const hostMcpPort = portOf(url);
   ok("the proxy lets in the run's MCP port", proxy[0].args.includes("--allow-local") && proxy[0].args.includes(String(hostMcpPort)));
   const vmServers = lastSessionServers(acpLog);
-  const vmUrl = vmServers.find((s) => s.name === "widecode")?.url ?? "";
+  const vmUrl = vmServers.find((s) => s.name === "lightcode")?.url ?? "";
   const vmRemote = portOf(vmUrl);
-  ok("the subagent gets widecode's server at a forwarded port", vmRemote > 0 && vmRemote !== hostMcpPort && vmUrl.endsWith("/mcp"));
+  ok("the subagent gets lightcode's server at a forwarded port", vmRemote > 0 && vmRemote !== hostMcpPort && vmUrl.endsWith("/mcp"));
   ok("the ssh call forwards that port to the host's MCP port", ssh[0].args.includes("--forward") && ssh[0].args.includes(String(vmRemote) + ":" + String(hostMcpPort)));
   ok("and the box with the session folder and projects", up.length === 1 && up[0].args.includes(folder) && up[0].args.includes(other) && up[0].args.includes("2048"));
   eq("the box state says it runs with them", reads(join(boxDir, "fake-box.json")).projects.join(","), folder + "," + other);
@@ -192,7 +192,7 @@ const main = async (): Promise<void> => {
   eq("and no box again", String(afterSecond.filter((x) => x.cmd === "up").length), "1");
   c.model.closeTurn(null);
 
-  const outside = mkdtempSync(join(tmpdir(), "widecode-task-box-outside-"));
+  const outside = mkdtempSync(join(tmpdir(), "lightcode-task-box-outside-"));
   c.model.openTurn("main", 0, true);
   c.model.block("", "b4", TOOL, "toolu-b4", "Task", "");
   const refusedWhere = await task("6", "deepseek", "hello", ',"cwd":"' + outside + '"');
@@ -232,14 +232,14 @@ const main = async (): Promise<void> => {
   ok("another project list fails with the box's message", mismatch.includes("the project list changed, so run down, then up again"));
   c.model.closeTurn(null);
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   rmSync(other, { recursive: true, force: true });
   rmSync(boxDir, { recursive: true, force: true });
   delete process.env.FAKE_BOX_DIR;
   delete process.env.FAKE_BOX_LOG;
 
-  const allBoxedFolder = mkdtempSync(join(tmpdir(), "widecode-task-boxed-"));
+  const allBoxedFolder = mkdtempSync(join(tmpdir(), "lightcode-task-boxed-"));
   const allBoxed = await open(allBoxedFolder, {
     acp: {
       agents: { fake: { name: "Fake", command: ["node", fake] } },
@@ -249,20 +249,20 @@ const main = async (): Promise<void> => {
   const boxedSeg = allBoxed.w.host.screen.segments.find("box");
   const boxed = boxedSeg !== null ? boxedSeg.draw(new SegmentContext()) : [];
   eq("every target boxed on the default kind says boxed: bwrap", boxed.map((r) => r.text).join(""), "boxed: bwrap");
-  closeWidecode(allBoxed.w);
+  closeLightcode(allBoxed.w);
   rmSync(allBoxedFolder, { recursive: true, force: true });
 
-  const noTargetsFolder = mkdtempSync(join(tmpdir(), "widecode-task-no-targets-"));
+  const noTargetsFolder = mkdtempSync(join(tmpdir(), "lightcode-task-no-targets-"));
   const none = await open(noTargetsFolder, { acp: { tasks: { targets: {} } } });
   const noneSeg = none.w.host.screen.segments.find("box");
   const empty = noneSeg !== null ? noneSeg.draw(new SegmentContext()) : [];
   eq("no targets draw nothing", String(empty.length), "0");
-  closeWidecode(none.w);
+  closeLightcode(none.w);
   rmSync(noTargetsFolder, { recursive: true, force: true });
 
-  const bwrapFolder = mkdtempSync(join(tmpdir(), "widecode-task-bwrap-"));
-  const bwrapOther = mkdtempSync(join(tmpdir(), "widecode-task-bwrap-other-"));
-  const bwrapDir = mkdtempSync(join(tmpdir(), "widecode-task-bwrap-state-"));
+  const bwrapFolder = mkdtempSync(join(tmpdir(), "lightcode-task-bwrap-"));
+  const bwrapOther = mkdtempSync(join(tmpdir(), "lightcode-task-bwrap-other-"));
+  const bwrapDir = mkdtempSync(join(tmpdir(), "lightcode-task-bwrap-state-"));
   const bwrapLog = join(bwrapDir, "calls.jsonl");
   const bwrapAcpLog = join(bwrapDir, "acp.jsonl");
   process.env.FAKE_BOX_DIR = bwrapDir;
@@ -302,8 +302,8 @@ const main = async (): Promise<void> => {
   ok("and runs the entry's command", bwrapJail.length === 1 && bwrapJail[0].args.includes(fake));
   const bwrapMcpPort = portOf(bwrapUrl);
   const bwrapServers = lastSessionServers(bwrapAcpLog);
-  const bwrapMcpUrl = bwrapServers.find((s) => s.name === "widecode")?.url ?? "";
-  ok("the subagent gets widecode's server on the run's own MCP port", bwrapMcpUrl === "http://127.0.0.1:" + String(bwrapMcpPort) + "/mcp");
+  const bwrapMcpUrl = bwrapServers.find((s) => s.name === "lightcode")?.url ?? "";
+  ok("the subagent gets lightcode's server on the run's own MCP port", bwrapMcpUrl === "http://127.0.0.1:" + String(bwrapMcpPort) + "/mcp");
   ok("the jail runs a forwarder in front of the agent", bwrapJail.length === 1 && bwrapJail[0].args.includes("-e") && bwrapJail[0].args.some((a) => a.endsWith("/proxy.sock")) && bwrapJail[0].args.includes(String(bwrapMcpPort)));
   const bwrapScoped = await send(bwrapUrl, lastSessionToken(bwrapAcpLog), '{"jsonrpc":"2.0","id":1,"method":"tools/list"}');
   ok("the boxed subagent's token lists HostAction alone", bwrapScoped.includes('\"name\":\"HostAction\"') && !bwrapScoped.includes('\"name\":\"Task\"') && !bwrapScoped.includes('\"name\":\"AskUser\"'));
@@ -311,15 +311,15 @@ const main = async (): Promise<void> => {
   ok("and the proxy lets that port in", bwrapProxy.length === 1 && bwrapProxy[0].args.includes("--allow-local") && bwrapProxy[0].args.includes(String(bwrapMcpPort)));
   eq("bwrap starts the proxy", String(bwrapCalls.filter((x) => x.cmd === "proxy").length), "1");
   eq("bwrap never starts a VM", String(bwrapCalls.filter((x) => x.cmd === "up").length), "0");
-  closeWidecode(bwrapApp.w);
+  closeLightcode(bwrapApp.w);
   rmSync(bwrapFolder, { recursive: true, force: true });
   rmSync(bwrapOther, { recursive: true, force: true });
   rmSync(bwrapDir, { recursive: true, force: true });
   delete process.env.FAKE_BOX_DIR;
   delete process.env.FAKE_BOX_LOG;
 
-  const mixedFolder = mkdtempSync(join(tmpdir(), "widecode-task-mixed-"));
-  const mixedDir = mkdtempSync(join(tmpdir(), "widecode-task-mixed-state-"));
+  const mixedFolder = mkdtempSync(join(tmpdir(), "lightcode-task-mixed-"));
+  const mixedDir = mkdtempSync(join(tmpdir(), "lightcode-task-mixed-state-"));
   const mixedLog = join(mixedDir, "calls.jsonl");
   process.env.FAKE_BOX_DIR = mixedDir;
   process.env.FAKE_BOX_LOG = mixedLog;
@@ -348,14 +348,14 @@ const main = async (): Promise<void> => {
   eq("a per-target vm overrides the bwrap default with an ssh call", String(mixedCalls.filter((x) => x.cmd === "ssh").length), "1");
   eq("and starts the box", String(mixedCalls.filter((x) => x.cmd === "up").length), "1");
   eq("and does not use the jail", String(mixedCalls.filter((x) => x.cmd === "jail").length), "0");
-  closeWidecode(mixedApp.w);
+  closeLightcode(mixedApp.w);
   rmSync(mixedFolder, { recursive: true, force: true });
   rmSync(mixedDir, { recursive: true, force: true });
   delete process.env.FAKE_BOX_DIR;
   delete process.env.FAKE_BOX_LOG;
 
-  const idleFolder = mkdtempSync(join(tmpdir(), "widecode-task-idle-"));
-  const idleDir = mkdtempSync(join(tmpdir(), "widecode-task-idle-state-"));
+  const idleFolder = mkdtempSync(join(tmpdir(), "lightcode-task-idle-"));
+  const idleDir = mkdtempSync(join(tmpdir(), "lightcode-task-idle-state-"));
   const idleLog = join(idleDir, "calls.jsonl");
   process.env.FAKE_BOX_DIR = idleDir;
   process.env.FAKE_BOX_LOG = idleLog;
@@ -388,7 +388,7 @@ const main = async (): Promise<void> => {
   eq("the idle box is stopped once after the last run", String(downs.length), "1");
   ok("through down --if-idle", downs.length === 1 && downs[0].args.includes("--if-idle"));
   eq("the VM had started", String(calls(idleLog).filter((x) => x.cmd === "up").length), "1");
-  closeWidecode(idleApp.w);
+  closeLightcode(idleApp.w);
   rmSync(idleFolder, { recursive: true, force: true });
   rmSync(idleDir, { recursive: true, force: true });
   delete process.env.FAKE_BOX_DIR;
@@ -396,7 +396,7 @@ const main = async (): Promise<void> => {
 
   // The credential file's shape checks, against fake files under /tmp: a wrong value is refused
   // with the key and what is wrong, never the value.
-  const credsDir = mkdtempSync(join(tmpdir(), "widecode-box-creds-"));
+  const credsDir = mkdtempSync(join(tmpdir(), "lightcode-box-creds-"));
   const credsFile = join(credsDir, "credentials.env");
   const boxState = join(credsDir, "state");
   mkdirSync(boxState);
@@ -405,7 +405,7 @@ const main = async (): Promise<void> => {
     chmodSync(credsFile, 0o600);
     const r = spawnSync("node", [boxScript, "creds"], {
       encoding: "utf8",
-      env: { ...process.env, WIDECODE_BOX_CREDENTIALS: credsFile, WIDECODE_BOX_DIR: boxState },
+      env: { ...process.env, LIGHTCODE_BOX_CREDENTIALS: credsFile, LIGHTCODE_BOX_DIR: boxState },
     });
     return { ok: r.status === 0, text: (r.stdout || "") + (r.stderr || "") };
   };

@@ -29,7 +29,7 @@
     "test/**/*.ts",
     "test/**/*.js",
     "scripts/**/*.js",
-    "widecode.d.ts"
+    "lightcode.d.ts"
   ],
   "exclude": [
     "node_modules",

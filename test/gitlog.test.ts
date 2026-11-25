@@ -17,7 +17,7 @@ import { JsPanel } from "../src/runtime/views.ts";
 import { Commit, parseBranches, parseLog, readBranches, readCommitAt, readCommitFiles, readDefaultBranch, readLog, readMergeBase } from "@lightstart/workspace/git-log.ts";
 import { parseNameStatus } from "@lightstart/workspace/git-parse.ts";
 import { KeyEvent, TRoot, mount, unmount } from "@lightstart/light/native/tui";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const wait = (ms: number): Promise<void> =>
@@ -32,7 +32,7 @@ const parsedLog = parseLog(["a1" + NUL + "a" + NUL + "p1 p2" + NUL + "1700000000
 eq("log: parents, a root commit, a tab in a subject", parsedLog.map((c) => c.short + ":" + String(c.parents.length) + ":" + c.subject).join(" | "), "a:2:Merge x | b:0:init: a\tb");
 eq("name-status", Array.from(parseNameStatus("M" + NUL + "a.txt" + NUL + "D" + NUL + "old name.txt" + NUL).entries()).map((e) => e[1] + " " + e[0]).join(", "), "M a.txt, D old name.txt");
 
-const repo = mkdtempSync(join(tmpdir(), "widecode-gitlog-"));
+const repo = mkdtempSync(join(tmpdir(), "lightcode-gitlog-"));
 let clock = 1700000000;
 /** A git command at the next minute (author and committer dates), in the repository. */
 const git = (args: string): string => {
@@ -99,7 +99,7 @@ const main = async (): Promise<void> => {
   eq("deleted by the commit: all removed", show(gone) + " " + String(gone.exists), "-k false");
 
   // The app: the bases, this session's commits, a commit made while the tab is open, Esc.
-  const app = await openWidecode({ folder: repo });
+  const app = await openLightcode({ folder: repo });
   const conversation = app.host.conversation;
   const root = new TRoot();
   app.shell.resize(200);
@@ -191,7 +191,7 @@ const main = async (): Promise<void> => {
   eq("and all of them on demand", branchRows(), "11b fewer branches");
   unmount(app.shell);
   // The plugins stopped and their processes ended before the repository goes: a git call started after would find no folder.
-  closeWidecode(app);
+  closeLightcode(app);
   rmSync(repo, { recursive: true, force: true });
   done();
 };

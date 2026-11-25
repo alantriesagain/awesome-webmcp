@@ -1,5 +1,5 @@
 // The skills a session offers: the trusted folder's (`.agents/skills`, `.claude/skills`,
-// `.pi/skills`, each plugin folder's `skills` under `.widecode/plugins`), the user's
+// `.pi/skills`, each plugin folder's `skills` under `.lightcode/plugins`), the user's
 // (`~/.agents/skills`, `~/.claude/skills`, its synced folders, named with their prefix, pi's agent
 // folder, each plugin folder's `skills` under the store's `plugins`), the harness's; a name found
 // twice is the first one's; a plugin folder without `index.js` is not a plugin; the frontmatter's
@@ -31,9 +31,9 @@ const plugin = (dir: string): void => {
 skill(join(folder, ".claude", "skills"), "release", "---\nname: release\ndescription: |\n  Cut a release:\n  tag, notes, publish.\n---\n# Release\n\nRun the steps.\n");
 skill(join(folder, ".agents", "skills"), "deploy", "---\ndescription: \"Deploy the site\"\ndisable-model-invocation: true\n---\nDeploy it.\n");
 skill(join(folder, ".pi", "skills"), "ship", "---\ndescription: Ship it\n---\nShip it.\n");
-plugin(join(folder, ".widecode", "plugins", "beta"));
-skill(join(folder, ".widecode", "plugins", "beta", "skills"), "project-skill", "---\ndescription: From the project plugin\n---\nProject skill.\n");
-skill(join(folder, ".widecode", "plugins", "nope", "skills"), "ignored-skill", "---\ndescription: Not a plugin\n---\nIgnored.\n");
+plugin(join(folder, ".lightcode", "plugins", "beta"));
+skill(join(folder, ".lightcode", "plugins", "beta", "skills"), "project-skill", "---\ndescription: From the project plugin\n---\nProject skill.\n");
+skill(join(folder, ".lightcode", "plugins", "nope", "skills"), "ignored-skill", "---\ndescription: Not a plugin\n---\nIgnored.\n");
 plugin(join(root, "store", "plugins", "zeta"));
 plugin(join(root, "store", "plugins", "alpha"));
 skill(join(root, "store", "plugins", "zeta", "skills"), "zskill", "---\ndescription: Zeta's skill\n---\nZeta.\n");

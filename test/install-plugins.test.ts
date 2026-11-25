@@ -14,21 +14,21 @@ class Case {
   readonly dir: string;
 
   constructor() {
-    this.dir = mkdtempSync(join(tmpdir(), "widecode-install-"));
+    this.dir = mkdtempSync(join(tmpdir(), "lightcode-install-"));
   }
 
   /** dist/plugins/built, stamped `stamp`. */
   source(stamp: string): void {
     const built = join(this.dir, "dist", "plugins", "built");
     mkdirSync(built, { recursive: true });
-    writeFileSync(join(built, "index.js"), "widecode.plugin({ id: \"built\" });\n");
-    writeFileSync(join(built, ".widecode-build"), stamp + "\n");
+    writeFileSync(join(built, "index.js"), "lightcode.plugin({ id: \"built\" });\n");
+    writeFileSync(join(built, ".lightcode-build"), stamp + "\n");
   }
 
   /** An executable that prints `building` the way the binary does. */
   binary(building: string): string {
-    const path = join(this.dir, "widecode");
-    writeFileSync(path, "#!/bin/sh\necho \"widecode " + building + " built 2026-01-01\"\n");
+    const path = join(this.dir, "lightcode");
+    writeFileSync(path, "#!/bin/sh\necho \"lightcode " + building + " built 2026-01-01\"\n");
     chmodSync(path, 0o755);
     return path;
   }
@@ -37,7 +37,7 @@ class Case {
     const home = join(this.dir, "home");
     const r = spawnSync(process.execPath, [script], {
       cwd: this.dir,
-      env: { ...process.env, WIDECODE_HOME: home, LIGHT_INSTALLED: installed },
+      env: { ...process.env, LIGHTCODE_HOME: home, LIGHT_INSTALLED: installed },
       encoding: "utf8",
     });
     return { status: r.status ?? -1, stderr: r.stderr, target: join(home, "plugins") };
@@ -54,7 +54,7 @@ const main = async (): Promise<void> => {
   const installed = same.run(same.binary("abc123"));
   eq("a tree of the installed build installs", String(installed.status), "0");
   ok("its plugin is copied", existsSync(join(installed.target, "built", "index.js")));
-  ok("with its own stamp", readFileSync(join(installed.target, "built", ".widecode-build"), "utf8").trim() === "abc123");
+  ok("with its own stamp", readFileSync(join(installed.target, "built", ".lightcode-build"), "utf8").trim() === "abc123");
   same.close();
 
   const testTree = new Case();

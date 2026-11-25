@@ -1,11 +1,11 @@
-// The API widecode gives its JS plugins (the `widecode` global, defined by src/runtime/prelude.ts). A
-// plugin is a .js file in ~/.widecode/plugins (or a trusted project's .widecode/plugins) that calls
-// `widecode.plugin(...)`; for editor checking, start it with
-//   /// <reference path="/path/to/widecode.d.ts" />
+// The API lightcode gives its JS plugins (the `lightcode` global, defined by src/runtime/prelude.ts). A
+// plugin is a .js file in ~/.lightcode/plugins (or a trusted project's .lightcode/plugins) that calls
+// `lightcode.plugin(...)`; for editor checking, start it with
+//   /// <reference path="/path/to/lightcode.d.ts" />
 //   // @ts-check
 // Values cross into the core as JSON, so what a plugin passes and keeps is plain data.
 
-declare namespace widecode {
+declare namespace lightcode {
   /** A key as the core saw it: `spec` is modifiers then the key ("f5", "alt+down", "char:]"). */
   interface Key {
     spec: string;
@@ -113,7 +113,7 @@ declare namespace widecode {
     press?(row: number, x: number): void;
   }
 
-  /** Claude Code's status line input, with widecode's extras under `widecode`. */
+  /** Claude Code's status line input, with lightcode's extras under `lightcode`. */
   interface StatusInfo {
     cwd: string;
     session_id: string;
@@ -136,7 +136,7 @@ declare namespace widecode {
     prompt_cache: { warm: boolean; caching_observed: boolean; ttl: string; expires_at: number; requests: number; misses: number; hit_ratio: number };
     effort: { level: string };
     rate_limits: { five_hour: { used_percentage: number; resets_at: number }; seven_day: { used_percentage: number; resets_at: number } };
-    widecode: { branch: string; mode: string; activity: string; activity_ms: number; queued: number; reads: number; writes: number; execs: number; agents: number; calls: number; thinking_tokens: number };
+    lightcode: { branch: string; mode: string; activity: string; activity_ms: number; queued: number; reads: number; writes: number; execs: number; agents: number; calls: number; thinking_tokens: number };
   }
 
   /** What a status segment draws from. */
@@ -253,8 +253,8 @@ declare namespace widecode {
   }
 
   /**
-   * One of widecode's own tools: its name (an agent prefixes it with the server's: opencode's
-   * `widecode_AskUser`), what it does, its input's JSON schema, and what kind of call it is, as the
+   * One of lightcode's own tools: its name (an agent prefixes it with the server's: opencode's
+   * `lightcode_AskUser`), what it does, its input's JSON schema, and what kind of call it is, as the
    * views draw it ("question" and "plan" show as their request, not as a call).
    */
   interface ToolCallContext {
@@ -417,7 +417,7 @@ declare namespace widecode {
     | { type: "input"; parent?: string; key: string; input: unknown; name?: string }
     | ({ type: "facts"; id: string } & CallFacts)
     | { type: "finish"; parent?: string; key: string }
-    | { type: "result"; id: string; text?: string; images?: number; error?: boolean; size?: number; truncated?: "agent" | "widecode"; patch?: { oldStart: number; newStart: number; lines: string[] }[] }
+    | { type: "result"; id: string; text?: string; images?: number; error?: boolean; size?: number; truncated?: "agent" | "lightcode"; patch?: { oldStart: number; newStart: number; lines: string[] }[] }
     | { type: "edited"; path: string }
     | { type: "prompt"; parent?: string; text: string; images?: number; imagePaths?: string[]; notice?: boolean }
     | { type: "notice"; text: string; tone?: "info" | "error" | "command" | "log"; detail?: string; parent?: string; once?: boolean; ifOpen?: boolean }
@@ -455,12 +455,12 @@ declare namespace widecode {
     /** When it was last written (epoch ms), and its size in bytes (0 when the agent does not say). */
     mtimeMs: number;
     size: number;
-    /** The title widecode keeps for it ("" for none), and who gave it: "claude" or "user". */
+    /** The title lightcode keeps for it ("" for none), and who gave it: "claude" or "user". */
     storedTitle: string;
     titleBy: string;
   }
 
-  /** What widecode keeps for a session in the project's .widecode/. */
+  /** What lightcode keeps for a session in the project's .lightcode/. */
   interface SessionRecord {
     title: string;
     /** "claude" or "user". */
@@ -590,7 +590,7 @@ declare namespace widecode {
     };
     /** The chat's composer, for a keymap plugin that edits it (a vi mode). */
     composer: {
-      /** Its lines and caret (`col` counts graphemes, `widecode.util.graphemes`), whether it is empty, and whether the suggestion strip shows or the request panel is open (their keys come first then). */
+      /** Its lines and caret (`col` counts graphemes, `lightcode.util.graphemes`), whether it is empty, and whether the suggestion strip shows or the request panel is open (their keys come first then). */
       get(): { lines: string[]; row: number; col: number; empty: boolean; strip: boolean; panel: boolean };
       /** Its lines and caret (clamped); completion follows as after a key. */
       set(lines: string[], row: number, col: number): void;
@@ -641,7 +641,7 @@ declare namespace widecode {
       /** The user's home folder, and an environment variable ("" when unset). */
       home(): string;
       env(name: string): string;
-      /** The path of the running widecode (what a new terminal runs to open a session). */
+      /** The path of the running lightcode (what a new terminal runs to open a session). */
       executable(): string;
       /** A folder's entries, by name, with their size and when they changed; [] when it cannot be read. */
       list(dir: string): { name: string; file: boolean; size: number; mtimeMs: number }[];
@@ -669,7 +669,7 @@ declare namespace widecode {
        */
       subagent(callId: string, events: ConversationEvent | ConversationEvent[], historical?: boolean): number;
       /**
-       * Put a request to the user for one of widecode's own tools (a request event's fields, without
+       * Put a request to the user for one of lightcode's own tools (a request event's fields, without
        * its type and id), under `parent` when it names a call: the panel shows it, and the reply comes
        * here, not to the agent. Its state is "cancelled" when the request went away first (its turn
        * ended, the chat was cleared).
@@ -679,7 +679,7 @@ declare namespace widecode {
       fromAgentPart(plugin: string, type: string, data?: unknown): number;
     };
     /**
-     * widecode's own tools, which agents call over MCP (widecode's server listens on 127.0.0.1; each
+     * lightcode's own tools, which agents call over MCP (lightcode's server listens on 127.0.0.1; each
      * agent's plugin has a token of its own). An agent's plugin offers the server to its agent, which
      * sees the tools not excepted for that plugin; a tool an agent has its own for is excepted (Claude
      * Code keeps AskUserQuestion and ExitPlanMode).
@@ -736,13 +736,13 @@ declare namespace widecode {
       reload(file: string): string;
       /** Evaluate `code` (named `file` in its messages) in a context of its own, nothing registered: what it would define, its errors and warnings. */
       check(code: string, file: string): PluginCheck;
-      /** The plugin guide (PLUGINS.md) and the API's types (widecode.d.ts), as the binary carries them. */
+      /** The plugin guide (PLUGINS.md) and the API's types (lightcode.d.ts), as the binary carries them. */
       api(): { guide: string; types: string };
     };
-    /** The project's harness folder, `.widecode/` (PLUGINS.md, "The harness"). */
+    /** The project's harness folder, `.lightcode/` (PLUGINS.md, "The harness"). */
     harness: {
       info(): HarnessInfo;
-      /** Write the folder's harness skeleton where a file is missing (prompt.md, plugins/example.js, config.json, Claude Code's skill for widecode): the paths written. */
+      /** Write the folder's harness skeleton where a file is missing (prompt.md, plugins/example.js, config.json, Claude Code's skill for lightcode): the paths written. */
       init(): string[];
     };
     actions: {
@@ -865,7 +865,7 @@ declare namespace widecode {
     /** The LAN git bridge (the peers plugin): this machine's daemon, started when needed; the daemon keeps every shared checkout fetched from each peer. */
     peers: {
       /**
-       * A daemon answering: the one running, or one the real app starts now (`widecode --peers-daemon`)
+       * A daemon answering: the one running, or one the real app starts now (`lightcode --peers-daemon`)
        * when the bridge is in use here (a peer paired, a repository shared) or `start` asks for it; false
        * when none answers. A test or another program hosting the app never starts one.
        */
@@ -885,7 +885,7 @@ declare namespace widecode {
       /** Moves when the agent said its list changed. */
       rev(): number;
     };
-    /** widecode's own records (none with --ephemeral). */
+    /** lightcode's own records (none with --ephemeral). */
     store: {
       session(id: string): SessionRecord | null;
       /** Keep `fields` for session `id`; false when there is no store. */
@@ -991,7 +991,7 @@ declare namespace widecode {
     settings: {
       /** The plugin's section of config.json, null when it has none. */
       section(): unknown;
-      /** What the plugin kept last run (~/.widecode/state.json), null for nothing. */
+      /** What the plugin kept last run (~/.lightcode/state.json), null for nothing. */
       state(): unknown;
       setState(value: unknown): void;
     };
@@ -1021,7 +1021,7 @@ declare namespace widecode {
     trusted: boolean;
     plugins: string[];
     prompt: { path: string; length: number };
-    /** The user-wide prompt, `prompt.md` in widecode's store (an empty path without a store). */
+    /** The user-wide prompt, `prompt.md` in lightcode's store (an empty path without a store). */
     userPrompt: { path: string; length: number };
     config: {
       path: string;
@@ -1316,7 +1316,7 @@ declare namespace widecode {
     truncated: boolean;
   }
 
-  /** The messages between a plugin's agent part and its app part, over ACP's `_widecode/plugin`. */
+  /** The messages between a plugin's agent part and its app part, over ACP's `_lightcode/plugin`. */
   interface AgentAppLink {
     /** Send `type` and `data` to the plugin's app part (nothing when the client did not say it takes them). */
     send(type: string, data?: unknown): void;
@@ -1394,7 +1394,7 @@ declare namespace widecode {
     requires?: string[];
     /** Its section for a new config.json (true when it has no settings). */
     defaults?(): unknown;
-    /** The app's part: what it adds to widecode. */
+    /** The app's part: what it adds to lightcode. */
     activate?(api: Api): void;
     /** The harness daemon runs this when the harness is the agent; the app runs `activate`. */
     agent?(agent: AgentApi): void;

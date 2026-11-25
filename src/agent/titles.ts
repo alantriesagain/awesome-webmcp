@@ -1,5 +1,5 @@
 // Session titles written by Claude: sessions started through `claude -p` never get Claude Code's
-// own `ai-title`, so widecode asks for one in a separate, small call (`-p`, a cheap model, no tools,
+// own `ai-title`, so lightcode asks for one in a separate, small call (`-p`, a cheap model, no tools,
 // nothing saved) from the session's first prompt and the start of the first reply. Requests queue
 // and run two at a time; each session is asked once (`/title` asks again). A failure leaves the
 // session untitled.

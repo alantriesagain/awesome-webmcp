@@ -6,13 +6,13 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-emacs-"));
-  const w = await openWidecode({ folder, load: true });
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-emacs-"));
+  const w = await openLightcode({ folder, load: true });
   const input = w.chat.pane.input;
   const press = (name: string, text = "", ctrl = false, alt = false): boolean => w.shell.handleKey(new KeyEvent(name, text, ctrl, alt, false));
   const state = (): string => JSON.stringify(input.lines) + " @" + String(input.row) + ":" + String(input.col);
@@ -51,7 +51,7 @@ const main = async (): Promise<void> => {
   w.host.roles.chat.submit("/keymap emacs");
   ok("and back on", press("char", "b", true) && state() === '["ab"] @0:1');
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

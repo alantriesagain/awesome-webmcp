@@ -1,6 +1,6 @@
 // The hooks plugins listen to: the one list of them, built once per start over the controllers whose
 // state they announce (the session, the folder, the keymaps, the approval mode and the screen), and
-// the lookups by name. The app's Host forwards its own `hooks`/`hook`/`replay` here, so widecode.d.ts,
+// the lookups by name. The app's Host forwards its own `hooks`/`hook`/`replay` here, so lightcode.d.ts,
 // PLUGINS.md and the plugins hear the same list.
 import { type Emitter, computed } from "@lightstart/light/signals";
 import type { FolderController } from "@lightstart/workspace/folder.ts";

@@ -1,4 +1,4 @@
-// Finding the other machines on the network: the daemon announces itself as `_widecode._tcp` with its
+// Finding the other machines on the network: the daemon announces itself as `_lightcode._tcp` with its
 // id and name in the TXT record, and browses for the others, through the tools each platform has
 // (avahi on Linux, dns-sd on macOS); a typed address works without any of this. The parsers are
 // pure and tested on recorded output; the processes are kept small and short-lived.
@@ -6,7 +6,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { SpawnOptions, spawnCapped } from "@lightstart/lib/process.ts";
 import { isPrivateAddress } from "./git-http.ts";
 
-export const SERVICE_TYPE = "_widecode._tcp";
+export const SERVICE_TYPE = "_lightcode._tcp";
 
 /** A machine seen announcing itself. */
 export class Seen {
@@ -42,7 +42,7 @@ export const parseTxt = (text: string): Record<string, string> => {
 };
 
 /** The instance name this machine announces under: unique on the network, the id's first eight hex digits. */
-export const instanceName = (id: string): string => "widecode-" + id.slice(0, 8);
+export const instanceName = (id: string): string => "lightcode-" + id.slice(0, 8);
 
 /** An interface that is no way to reach another machine: the loopback, a libvirt or docker bridge, a veth or tunnel. */
 const virtualInterface = (iface: string): boolean => iface === "lo" || /^(virbr|docker|br-|veth|tun|tap|utun|awdl|llw)/.test(iface);
@@ -59,7 +59,7 @@ const addressScore = (address: string, iface: string): number => {
 const better = (a: string, b: string): boolean => addressScore(a, "") > addressScore(b, "");
 
 /**
- * `avahi-browse -rptk _widecode._tcp` (Linux): one `=` line per interface and protocol, fields
+ * `avahi-browse -rptk _lightcode._tcp` (Linux): one `=` line per interface and protocol, fields
  * split by `;`: `=;iface;proto;name;type;domain;host;address;port;txt`. One Seen per id, at its
  * best address.
  */
@@ -99,8 +99,8 @@ export class ZoneEntry {
 }
 
 /**
- * `dns-sd -Z _widecode._tcp .` (macOS), a zone-file listing: `<instance>._widecode._tcp  SRV 0 0
- * <port> <host>.` and `<instance>._widecode._tcp  TXT "k=v" …` lines. The host still needs resolving.
+ * `dns-sd -Z _lightcode._tcp .` (macOS), a zone-file listing: `<instance>._lightcode._tcp  SRV 0 0
+ * <port> <host>.` and `<instance>._lightcode._tcp  TXT "k=v" …` lines. The host still needs resolving.
  */
 export const parseDnsSdZone = (text: string): ZoneEntry[] => {
   const entries = new Map<string, ZoneEntry>();

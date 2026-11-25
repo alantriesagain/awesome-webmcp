@@ -55,8 +55,8 @@ export const listedOf = (v: unknown): { names: string[]; rules: Rule[] } | null 
  * from: the folder's are the project's, one under the home folder the user's, a built-in one the
  * agent's. None is called from the composer: the agent loads one when asked for it in words.
  */
-export const skillsOf = (v: unknown, cwd: string, home: string): widecode.AgentSkill[] => {
-  const out: widecode.AgentSkill[] = [];
+export const skillsOf = (v: unknown, cwd: string, home: string): lightcode.AgentSkill[] => {
+  const out: lightcode.AgentSkill[] = [];
   for (const x of list(v)) {
     const s = obj(x);
     if (s === null || str(s.name).length === 0) continue;

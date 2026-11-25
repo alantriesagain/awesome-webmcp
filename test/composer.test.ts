@@ -5,7 +5,7 @@
 // Ctrl+D deletes forward, at a line's end joining the next. Ctrl+C clears the message and quits only
 // when it is empty; Ctrl+←/→ move by a word while there is text and switch columns when there is
 // none; Ctrl+Backspace deletes the word before.
-// ↑ and ↓ walk the messages written in the folder (kept in its .widecode/history.jsonl), the draft
+// ↑ and ↓ walk the messages written in the folder (kept in its .lightcode/history.jsonl), the draft
 // coming back after the newest; on a message of several lines they move between its lines first;
 // typing over a recalled message makes it the draft; the @ strip's ↑↓ come first while it shows. A
 // command typed lists the commands its name starts, Enter takes one; then its argument's values
@@ -16,21 +16,21 @@ import { join } from "node:path";
 import { attachImages } from "../src/conversation/attach.ts";
 import { osc52 } from "@lightstart/tui/clipboard.ts";
 import { Store } from "../src/services/store.ts";
-import type { Widecode } from "../src/compose.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import type { Lightcode } from "../src/compose.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { DEFAULT_STYLE, frames, KeyEvent, layout, mount, setValue, TRoot, unmount } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 /** A key as the terminal delivers it: the shell's actions, the composer's editing among them. */
-const key = (w: Widecode, name: string, text: string, ctrl: boolean, alt = false): void => {
+const key = (w: Lightcode, name: string, text: string, ctrl: boolean, alt = false): void => {
   w.shell.handleKey(new KeyEvent(name, text, ctrl, alt, false));
 };
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-composer-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-composer-"));
   writeFileSync(join(folder, "alpha.txt"), "a\n");
-  const home = mkdtempSync(join(tmpdir(), "widecode-composer-home-"));
-  const w = await openWidecode({ folder });
+  const home = mkdtempSync(join(tmpdir(), "lightcode-composer-home-"));
+  const w = await openLightcode({ folder });
   await w.host.session.useStore(new Store(home));
   const root = new TRoot();
   w.shell.resize(160);
@@ -84,8 +84,8 @@ const main = async (): Promise<void> => {
     frames.flush();
   };
   for (const text of ["/effort low", "/effort max", "/help"]) send(text);
-  const log = join(folder, ".widecode", "history.jsonl");
-  eq("kept in the folder's .widecode/history.jsonl, ignored by git", String(existsSync(log) ? readFileSync(log, "utf8").trim().split("\n").length : 0) + " " + String(existsSync(join(folder, ".widecode", ".gitignore"))), "3 true");
+  const log = join(folder, ".lightcode", "history.jsonl");
+  eq("kept in the folder's .lightcode/history.jsonl, ignored by git", String(existsSync(log) ? readFileSync(log, "utf8").trim().split("\n").length : 0) + " " + String(existsSync(join(folder, ".lightcode", ".gitignore"))), "3 true");
   setValue(input, "my draft");
   const walk: string[] = [];
   for (const k of ["up", "up", "up", "up", "down", "down", "down"]) {
@@ -182,7 +182,7 @@ const main = async (): Promise<void> => {
   eq("and goes back to its path on send", w.chat.pane.composer.expand(input.value()), code);
 
   unmount(w.shell);
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });
   done();

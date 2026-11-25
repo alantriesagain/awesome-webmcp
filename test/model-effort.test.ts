@@ -1,20 +1,20 @@
 // ffi: @lightstart/plugins/native/ffi.json
 // The model and effort chosen are kept (plugins/models/index.ts), and an ACP agent's session starts with
-// widecode (plugins/acp/index.ts), through the fake ACP agent and a store: the session made at the start,
+// lightcode (plugins/acp/index.ts), through the fake ACP agent and a store: the session made at the start,
 // its model and efforts known before any message; /effort kept for the model, its provider and
 // overall; /model kept as the agent's default; a model switched to gets the effort kept for it, else
 // its provider's, else the last chosen, with config.json's efforts under those chosen; the next
-// widecode starts on the model chosen last, with that effort; --model and --effort hold for their
-// launch; a session made and never written to is deleted when it is left (/new, the next widecode,
-// one whose widecode is gone), one written to is kept.
+// lightcode starts on the model chosen last, with that effort; --model and --effort hold for their
+// launch; a session made and never written to is deleted when it is left (/new, the next lightcode,
+// one whose lightcode is gone), one written to is kept.
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Store } from "../src/services/store.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -32,8 +32,8 @@ const field = (v: unknown, path: string[]): string => {
 };
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-model-effort-"));
-  const home = mkdtempSync(join(tmpdir(), "widecode-home-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-model-effort-"));
+  const home = mkdtempSync(join(tmpdir(), "lightcode-home-"));
   const log = join(folder, "fake.log");
   const forgotten = join(folder, "forgotten.txt");
   const fake = join(process.cwd(), "test/fake-acp.mjs");
@@ -56,10 +56,10 @@ const main = async (): Promise<void> => {
   const sessionsMade = (): number => sent().split('"method":"session/new"').length - 1;
 
   let store = new Store(home);
-  let w: Widecode = await openWidecode({
+  let w: Lightcode = await openLightcode({
     folder,
     start: false,
-    before: (app: Widecode) => {
+    before: (app: Lightcode) => {
       app.host.session.agentId.value = "fake";
     },
   });
@@ -79,13 +79,13 @@ const main = async (): Promise<void> => {
     return until(() => c.model.turns.length > before && idle());
   };
   const quit = (): void => {
-    closeWidecode(w);
+    closeLightcode(w);
   };
 
   w.start(config(null), store.stateFile(), []);
   c.prepare();
   await w.host.session.load(w.host.folder, w.host.hooks);
-  ok("the session starts with widecode: its model and efforts known before any message", (await until(() => c.info.modelId === "fake/small")) && c.started && c.agent.choices().efforts.map((e) => e.value).join(",") === "low,high,default" && sessionsMade() === 1 && !sent().includes('"method":"session/prompt"'));
+  ok("the session starts with lightcode: its model and efforts known before any message", (await until(() => c.info.modelId === "fake/small")) && c.started && c.agent.choices().efforts.map((e) => e.value).join(",") === "low,high,default" && sessionsMade() === 1 && !sent().includes('"method":"session/prompt"'));
   w.host.roles.chat.submit("/effort max");
   eq("/effort before any message knows the levels", said(), "effort is one of low, high, default (now default)");
   w.host.roles.chat.submit("/effort high");
@@ -112,33 +112,33 @@ const main = async (): Promise<void> => {
   ok("/new keeps a session written to", (await until(() => sessionsMade() === 3)) && deleted() === "fake-1");
   ok("the new one on the model chosen", await until(() => c.info.modelId === "fake/large" && fresh() === "fake-3"));
   quit();
-  eq("quit with one not written to: left for the next widecode", fresh(), "fake-3");
+  eq("quit with one not written to: left for the next lightcode", fresh(), "fake-3");
 
-  // The next widecode: the model chosen last, the effort kept for it, the session left deleted.
+  // The next lightcode: the model chosen last, the effort kept for it, the session left deleted.
   store = new Store(home);
-  w = await openWidecode({
+  w = await openLightcode({
     folder,
     start: false,
-    before: (app: Widecode) => {
+    before: (app: Lightcode) => {
       app.host.session.agentId.value = "fake";
     },
   });
   c = w.host.conversation;
   w.start(config(null), store.stateFile(), []);
-  eq("the next widecode starts on the model chosen last", c.modelName, "fake/large");
+  eq("the next lightcode starts on the model chosen last", c.modelName, "fake/large");
   const made = sessionsMade();
   c.prepare();
   ok("its session on that model, with the effort kept for it, before any message", (await until(() => c.info.modelId === "fake/large" && c.info.effort === "low")) && sessionsMade() === made + 1 && sent().split('"method":"session/prompt"').length === 2);
-  ok("the session the widecode before left is deleted", await until(() => deleted() === "fake-1,fake-3"));
+  ok("the session the lightcode before left is deleted", await until(() => deleted() === "fake-1,fake-3"));
   eq("this one noted in its place", fresh(), "fake-4");
   quit();
 
   // --model and --effort hold for their launch.
   store = new Store(home);
-  w = await openWidecode({
+  w = await openLightcode({
     folder,
     start: false,
-    before: (app: Widecode) => {
+    before: (app: Lightcode) => {
       app.host.session.agentId.value = "fake";
       app.host.conversation.modelName = "fake/small";
       app.host.conversation.effort = "default";
@@ -154,14 +154,14 @@ const main = async (): Promise<void> => {
   eq("--effort holds over the effort kept for the model: nothing goes", options().slice(before.length).trim() + " " + c.info.effort, " default");
   quit();
 
-  // config.json's efforts, under those chosen; a session left by a widecode that is gone.
-  const home2 = mkdtempSync(join(tmpdir(), "widecode-home2-"));
+  // config.json's efforts, under those chosen; a session left by a lightcode that is gone.
+  const home2 = mkdtempSync(join(tmpdir(), "lightcode-home2-"));
   store = new Store(home2);
   store.stateFile().write(JSON.stringify({ acp: { fresh: [{ agent: "fake", id: "stale-1", pid: 999999, folder }] } }));
-  w = await openWidecode({
+  w = await openLightcode({
     folder,
     start: false,
-    before: (app: Widecode) => {
+    before: (app: Lightcode) => {
       app.host.session.agentId.value = "fake";
     },
   });
@@ -169,7 +169,7 @@ const main = async (): Promise<void> => {
   w.start(config({ default: "low", providers: { fake: "high" }, models: { "fake/large": "low" } }), store.stateFile(), []);
   c.prepare();
   ok("config.json's effort for the provider, on the agent's own model", await until(() => c.info.modelId === "fake/small" && c.info.effort === "high"));
-  ok("a session left by a widecode gone is deleted at the start", await until(() => deleted().endsWith("stale-1")));
+  ok("a session left by a lightcode gone is deleted at the start", await until(() => deleted().endsWith("stale-1")));
   w.host.roles.chat.submit("/model large");
   ok("config.json's effort for the model comes before its provider's", await until(() => c.info.modelId === "fake/large" && c.info.effort === "low"));
   w.host.roles.chat.submit("/effort low");

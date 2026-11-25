@@ -6,7 +6,7 @@
 // over a 120 MB file walked back to the start at line boundaries (a 3 MB line grows its window; a
 // line still being written is left out; bookkeeping records are dropped). A session resumed shows
 // the subagent its Agent call ran, from the subagent's meta file, and says when another Claude runs
-// it: a live process in Claude Code's records (sessions/<pid>.json) that widecode did not start.
+// it: a live process in Claude Code's records (sessions/<pid>.json) that lightcode did not start.
 import { spawn } from "node:child_process";
 import { appendFileSync, closeSync, ftruncateSync, mkdirSync, mkdtempSync, openSync, rmSync, utimesSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,7 +15,7 @@ import { NOTICE, TOOL } from "../src/conversation/model.ts";
 import { readAt, readWindow } from "@lightstart/workspace/window.ts";
 import { budget, done, eq, eqn, ok } from "@lightstart/test/assert.ts";
 import { projectDir } from "./support/claude-records.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
 /** A session as the plugin lists it. */
 interface Listed {
@@ -119,7 +119,7 @@ writeFileSync(join(dir, "agent-a1fc8f3.jsonl"), user("p0", "Subagent prompt", ""
 // The plugin's agent, reading this projects folder.
 const home = mkdtempSync(join(tmpdir(), "code-sessions-folder-"));
 const config: unknown = { claude: { projects: root } };
-const w = await openWidecode({ folder: home, plugins: config });
+const w = await openLightcode({ folder: home, plugins: config });
 const c = w.host.conversation;
 const claude = w.js.agents.find((a) => a.agentId === "claude");
 const listOf = (f: string): Listed[] => (claude !== undefined ? (JSON.parse(claude.sessions(f)) as Listed[]) : []);
@@ -241,7 +241,7 @@ const warned = (): string => {
   return c.model.turns.flatMap((t) => t.after.children.concat(t.body.children)).filter((i) => i.kind === NOTICE).map((i) => i.text).join("|");
 };
 record(1, startOf(1));
-eq("a live Claude that widecode did not start: named by its pid", warned(), "Another Claude (pid 1) is running this session.");
+eq("a live Claude that lightcode did not start: named by its pid", warned(), "Another Claude (pid 1) is running this session.");
 record(1, String(Number(startOf(1)) + 1));
 eq("a record whose pid now belongs to a later process: no warning", warned(), "");
 rmSync(join(sessions, "1.json"));
@@ -250,10 +250,10 @@ eq("a record whose process ended: no warning", warned(), "");
 const own = spawn("sleep", ["30"]);
 const ownPid = own.pid ?? 0;
 record(ownPid, startOf(ownPid));
-eq("widecode's own Claude, still stopping: no warning", warned(), "");
+eq("lightcode's own Claude, still stopping: no warning", warned(), "");
 own.kill();
 
-closeWidecode(w);
+closeLightcode(w);
 rmSync(base, { recursive: true, force: true });
 rmSync(home, { recursive: true, force: true });
 done();

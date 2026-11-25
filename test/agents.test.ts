@@ -12,7 +12,7 @@ import { itemLines, RenderContext } from "../src/conversation/render.ts";
 import { JsPanel } from "../src/runtime/views.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 interface Frame {
@@ -26,9 +26,9 @@ const wait = (ms: number): Promise<void> =>
   });
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-agents-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-agents-"));
   writeFileSync(join(folder, "a.txt"), "a\n");
-  const w = await openWidecode({ folder, load: true });
+  const w = await openLightcode({ folder, load: true });
   const c = w.host.conversation;
   await w.code.load("a.txt");
   for (const line of readFileSync(join(process.cwd(), "test", "fixtures", "subagent.ndjson"), "utf8").split("\n")) {
@@ -87,7 +87,7 @@ const main = async (): Promise<void> => {
   const nested = itemLines(call, new RenderContext(), [], 80).map((l) => l.runs.map((r: Run) => r.text).join(""));
   ok("the chat still draws its steps nested under the call", nested.some((l) => l.startsWith("│ ● Read ")));
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

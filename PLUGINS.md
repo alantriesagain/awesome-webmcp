@@ -1,34 +1,34 @@
-# widecode's plugins
+# lightcode's plugins
 
-widecode is a native core and JavaScript plugins. The core is compiled by scriptc: the terminal and
+lightcode is a native core and JavaScript plugins. The core is compiled by scriptc: the terminal and
 the layout, the views (tabs, the status band, rows), the chat, code and tools widgets, the services
 (files, git, the watcher, the Claude session, the store, titles, processes) and the tokenizers.
 Every feature is a plugin running in an embedded QuickJS: the chat and code columns' wiring, the
 Tools, Agents, Skills, Files, Sessions and Git tabs, the changes and status bars, the models, the languages,
 and the agents: Claude Code, and the ones that speak ACP (opencode, the DeepSeek Harness). Plugins can be switched off in
-`config.json`, replaced by a file of the same id, and edited while widecode runs.
+`config.json`, replaced by a file of the same id, and edited while lightcode runs.
 
 ```
 
-  plugins/        the built-in plugins, a folder each: <id>/index.ts (TypeScript checked against widecode.d.ts)
-  widecode.d.ts   the plugin API, for type checking and editors
+  plugins/        the built-in plugins, a folder each: <id>/index.ts (TypeScript checked against lightcode.d.ts)
+  lightcode.d.ts   the plugin API, for type checking and editors
   scripts/        builtin-plugins.mjs: the plugins as files in dist/plugins and the docs into the binary (a prepare step);
-                  install-plugins.mjs: the plugins into ~/.widecode/plugins (light install's step)
+                  install-plugins.mjs: the plugins into ~/.lightcode/plugins (light install's step)
   src/
     app.ts        the app on @lightstart/app: its flags; `light app` writes the entry, .light/main.ts
     modes/        the runs that are not the interface: --version, --harness, --peers-daemon
-    controllers/  widecode.ts, the controller that starts the app and finishes it once it is mounted
+    controllers/  lightcode.ts, the controller that starts the app and finishes it once it is mounted
     compose.ts    the app composed: the host, the widgets, the runtime, the built-in plugins
     host/         Host (the facade plugins and views are given: the kernel, the screen, the folder,
                   the session, the hooks, the roles) and SessionController; HostChat, the host as
                   the chat views see it
     views/        app-root.ts (the root view), the shell (the columns, the band, the keys), the tab columns, the role players
                   (the chat, code and tools widgets), the onboarding
-    runtime/      the plugin runtime: JsRuntime over @lightstart/plugins' engine, the prelude (widecode's
+    runtime/      the plugin runtime: JsRuntime over @lightstart/plugins' engine, the prelude (lightcode's
                   namespaces around the builder), the JS-drawn views, the agents plugins bring
     api/          the core's answers to the plugins' calls, a file per namespace
-    services/     the store (~/.widecode), the harness folder (.widecode/), the session titles
-    theme.ts      widecode's look: the palette's fields under the core's names, the plugins' theme
+    services/     the store (~/.lightcode), the harness folder (.lightcode/), the session titles
+    theme.ts      lightcode's look: the palette's fields under the core's names, the plugins' theme
 packages/         what the core builds on: @lightstart/kernel, @lightstart/plugins (the QuickJS shim, its build
                   and FFI manifest, its node stand-in for tests), src/conversation, src/screen,
                   src/chat, src/code, @lightstart/workspace, @lightstart/highlight, @lightstart/tui, src/agent, @lightstart/lib
@@ -36,16 +36,16 @@ packages/         what the core builds on: @lightstart/kernel, @lightstart/plugi
 
 ## Where plugins come from
 
-1. The built-in plugins, `plugins/<id>/` in widecode's repository, normal files once built: the
+1. The built-in plugins, `plugins/<id>/` in lightcode's repository, normal files once built: the
    prepare step strips their types (`scripts/builtin-plugins.mjs`, node's `stripTypeScriptTypes`)
-   into `dist/plugins/<id>/`, and `light install` writes them into `~/.widecode/plugins/`, each
-   folder with `.widecode-installed` (what was written): an install replaces a folder it wrote
+   into `dist/plugins/<id>/`, and `light install` writes them into `~/.lightcode/plugins/`, each
+   folder with `.lightcode-installed` (what was written): an install replaces a folder it wrote
    that is unchanged, and leaves one you edited, or one of yours with a built-in's id, as it is. A
-   development build (`dist/widecode`) reads the ones beside it instead, and an installed copy
+   development build (`dist/lightcode`) reads the ones beside it instead, and an installed copy
    gives way to them.
-2. The user's, in `~/.widecode/plugins/` (or `$WIDECODE_HOME/plugins`), the installed built-ins among them.
-3. The project's, in `<folder>/.widecode/plugins/`, once the folder is trusted (the question on
-   the first launch there, or `/trust`). A cloned repository could carry one, so until then widecode
+2. The user's, in `~/.lightcode/plugins/` (or `$LIGHTCODE_HOME/plugins`), the installed built-ins among them.
+3. The project's, in `<folder>/.lightcode/plugins/`, once the folder is trusted (the question on
+   the first launch there, or `/trust`). A cloned repository could carry one, so until then lightcode
    only says what the files register. The folder is the project's harness ("The harness", below).
 
 A plugin is a file, `plugins/<name>.js` (a script), or a folder, `plugins/<name>/` with its
@@ -67,14 +67,14 @@ the next message.
 For editor checking, start a plugin with
 
 ```js
-/// <reference path="/path/to/writting-harness/widecode.d.ts" />
+/// <reference path="/path/to/writting-harness/lightcode.d.ts" />
 // @ts-check
 ```
 
 ## The life of a plugin
 
 ```js
-widecode.plugin({
+lightcode.plugin({
   id: "notes",
   requires: ["code"],
   defaults: () => ({ greeting: "hello" }),
@@ -94,8 +94,8 @@ stops.
 
 A plugin has an app part, `activate(api)`, an agent part, `agent(agent)`, or both. `activate` runs
 in the app and registers what the user sees and does (The life of a plugin). `agent` runs in the
-harness's loop, in the daemon `widecode --harness`: the harness loads the same files (the built-ins,
-the store's `plugins/` and a trusted folder's `.widecode/plugins/`) and runs `agent` in its own
+harness's loop, in the daemon `lightcode --harness`: the harness loads the same files (the built-ins,
+the store's `plugins/` and a trusted folder's `.lightcode/plugins/`) and runs `agent` in its own
 QuickJS engine, once per live session, so a plugin's module state is that session's. A plugin's agent
 part runs only when the harness is the agent; the app ignores it, and the two parts share no memory.
 They reach each other only by messages: `agent.app.send` and `agent.app.on` in the harness,
@@ -113,7 +113,7 @@ part has the app's 250 ms budget: one that throws is logged and the turn goes on
 budget is switched off for the daemon's life.
 
 The API follows pi's extension API (badlogic/pi-mono): pi's event names, what a handler may answer
-and the tool shape, under widecode's names. pi's own extensions do not load here, since they import
+and the tool shape, under lightcode's names. pi's own extensions do not load here, since they import
 Node and npm modules; pi itself runs as an agent through `plugins/pi/index.ts` (Agents, above).
 
 ### The agent object
@@ -138,7 +138,7 @@ Node and npm modules; pi itself runs as an agent through `plugins/pi/index.ts` (
 
 ### The events
 
-pi's turn is one request and the tool calls it made; widecode's `turn_start` and `turn_end` are
+pi's turn is one request and the tool calls it made; lightcode's `turn_start` and `turn_end` are
 that request, and `agent_start` and `agent_end` its prompt's run.
 
 | Event | When | Payload | An answer may |
@@ -168,13 +168,13 @@ Every handler gets the event and a `ctx`: `cwd` and `mode`; `model` (`{ provider
 `getContextUsage()` (`tokens`, `contextWindow`, `percent`); `getSystemPrompt()`; `sessionManager`
 (below); `hasUI`; and `ui`.
 
-`ctx.ui` reaches the client over `_widecode/ui` (Agents, above): `select`, `input`, `editor` and
+`ctx.ui` reaches the client over `_lightcode/ui` (Agents, above): `select`, `input`, `editor` and
 `confirm` open a question in the request panel and answer its value, `undefined` or `false` when it
 is cancelled or its `timeout` passes; `notify` is a status message for info and a notice for a
 warning or an error; `setStatus` a segment named `acp:<key>`, `setWidget` a band strip named
 `acp:<key>`, `setTitle` the session's title, and `setEditorText` (and `pasteToEditor`) the composer's
 text. `hasUI` is false when the client did not say it takes the extension (`initialize`'s
-`_meta.widecode.ui`): then a dialog answers its default (`false` for a confirm, `undefined`
+`_meta.lightcode.ui`): then a dialog answers its default (`false` for a confirm, `undefined`
 otherwise), and the other calls are written to the log. `getEditorText` answers `""`, since the
 client's composer is not read.
 
@@ -215,7 +215,7 @@ model or mode change, a title, a compaction, a plugin's custom entry). A plugin 
 from `getBranch()` when a session starts; `todo` and `git-checkpoint` do.
 
 ```js
-widecode.plugin({
+lightcode.plugin({
   id: "gate",
   agent(agent) {
     agent.on("tool_call", async (event, ctx) => {
@@ -238,7 +238,7 @@ settings), `protected-paths` (a rule on Write and Edit), `inline-bash` (`input`)
 
 ## The API
 
-`widecode.d.ts` types all of it; this is the map.
+`lightcode.d.ts` types all of it; this is the map.
 
 | Part | What it gives |
 |---|---|
@@ -255,22 +255,22 @@ settings), `protected-paths` (a rule on Write and Edit), `inline-bash` (`input`)
 | `agent` | the conversation with the agent: `info` (which agent), `send`, `interrupt`, `reset`, `resume`, the model, effort, mode and approval mode, its id and title, its first exchange, the agent's edits, its subagents (`agents()`), the tools it has (`tools()`), the skills it has and the session's skill runs (`skills()`) |
 | `agentPart` | the messages between this plugin's app part and its agent part in the harness: `send(type, data)` (false when the agent has no such channel), `on(type, listener)` (answers a stop function) |
 | `state.keymap`, `keys.keymap` | the keymap in use (`"default"`, or a plugin's id); a keymap a plugin brings, for /keymap and config.json's `"keymap"` (hook `keymapChanged`) |
-| `agents`, `conversation` | `register({ id, name, start, send, … })` an agent the conversation can talk to; `apply(events)` its messages, as the conversation's changes (see Agents below); `ask(request)` a question or plan for the user from one of widecode's tools, a promise of the reply |
-| `tools` | `add({ name, description, input, call(args) })` one of widecode's own tools, which agents call over MCP; `server()` where widecode's MCP server listens, for an agent's plugin to offer it, and `serverFor(names)` the same limited to the tools named (see widecode's own tools below) |
-| `plugins` | the plugins as the runtime holds them, for the harness plugin: `list()` (every registration with its file and state, running, failed, off, replaced or stopped, and the last errors), `reload(file)` (a plugin folder's file evaluated again once the call returns; "" for every plugin), `check(code, file)` (a source evaluated in a context of its own, nothing registered: its plugins, errors and warnings), `api()` (PLUGINS.md and widecode.d.ts as the binary carries them) |
-| `harness` | `info()`: the project's `.widecode/` as it stands (present, trusted, its plugin files, its prompt, its config beside the user's and the result of one over the other, the tools the agent sees) |
-| `sessions`, `store`, `titles` | the folder's sessions with the agent (their titles, first and last prompts, folder, model, time and size) and `rev()`, which moves when the agent's list changed; widecode's record of a session; the skill runs the folder keeps (`saveSkillRun`, `skillUsage`: each skill's runs across sessions, typed, failed, the last); short titles Claude writes for Claude Code's sessions |
+| `agents`, `conversation` | `register({ id, name, start, send, … })` an agent the conversation can talk to; `apply(events)` its messages, as the conversation's changes (see Agents below); `ask(request)` a question or plan for the user from one of lightcode's tools, a promise of the reply |
+| `tools` | `add({ name, description, input, call(args) })` one of lightcode's own tools, which agents call over MCP; `server()` where lightcode's MCP server listens, for an agent's plugin to offer it, and `serverFor(names)` the same limited to the tools named (see lightcode's own tools below) |
+| `plugins` | the plugins as the runtime holds them, for the harness plugin: `list()` (every registration with its file and state, running, failed, off, replaced or stopped, and the last errors), `reload(file)` (a plugin folder's file evaluated again once the call returns; "" for every plugin), `check(code, file)` (a source evaluated in a context of its own, nothing registered: its plugins, errors and warnings), `api()` (PLUGINS.md and lightcode.d.ts as the binary carries them) |
+| `harness` | `info()`: the project's `.lightcode/` as it stands (present, trusted, its plugin files, its prompt, its config beside the user's and the result of one over the other, the tools the agent sees) |
+| `sessions`, `store`, `titles` | the folder's sessions with the agent (their titles, first and last prompts, folder, model, time and size) and `rev()`, which moves when the agent's list changed; lightcode's record of a session; the skill runs the folder keeps (`saveSkillRun`, `skillUsage`: each skill's runs across sessions, typed, failed, the last); short titles Claude writes for Claude Code's sessions |
 | `git` | reads, as promises: `branches`, `log`, `commitFiles`, `defaultBranch`, `mergeBase`, `head`, `commitAt`, `aheadBehind(a, b)`, `rootCommit`, `remoteBranches(remote)` |
 | `peers` | the LAN git bridge: `ensure(start)` (this machine's daemon, started by the real app when the bridge is in use or `start` asks), `request(method, path, body)` on its control API, `share()` this folder's repository, `clone(peerId, key, name, path?)` a peer's offer cloned beside this folder and shared, `remotes()` (the peers with a remote here; the daemon writes one, named after the peer, into every shared checkout it fetches) |
 | `files` | `tree(expanded, changedOnly)`: the visible rows of the folder's tree |
 | `languages` | `add({ id, extensions, fences, tokenizer })` with one of the core's tokenizers |
 | `process` | `run(command, input, timeoutMs)`: a promise of `{ code, out, err, timedOut }`; `spawn(command, { cwd }, { lines, exit, error })`: a process that keeps running, its output in batches of lines, `write(line)`, `stop(graceMs)`, `kill()` |
-| `fs` | files read, never written, answered at once: `home`, `env`, `executable` (the running widecode's path), `list(dir)`, `stat`, `read(path, start, length)`, `text(path)`, `window(path, before, maxBytes, skip)` (the lines before a byte offset, as a transcript is read backwards) |
+| `fs` | files read, never written, answered at once: `home`, `env`, `executable` (the running lightcode's path), `list(dir)`, `stat`, `read(path, start, length)`, `text(path)`, `window(path, before, maxBytes, skip)` (the lines before a byte offset, as a transcript is read backwards) |
 | `clipboard` | `copy(text)`: OSC 52, or xclip/xsel/wl-copy where the terminal does not take it (config.json's `"clipboard"`) |
 | `every`, `after` | a timer while the plugin runs; once, later |
-| `settings` | `section()` (its part of config.json), `state()` and `setState(value)` (kept in `~/.widecode/state.json`) |
-| `widecode.util` | `width`, `clip`, `clipRuns`, `pad`, `runsWidth` in terminal cells as the screen counts them; `age`, `elapsed`, `tokens` |
-| `widecode.theme` | the colors the core draws with, by what they mean (`dim`, `ok`, `bad`, `warn`, `think`, `link`, `code`, `prompt`, `selected`, `shown`, `fresh`, `band`, `marks` by git mark), and `spinner(now)`: a plugin drawn with them changes with the core's look (src/theme.ts) |
+| `settings` | `section()` (its part of config.json), `state()` and `setState(value)` (kept in `~/.lightcode/state.json`) |
+| `lightcode.util` | `width`, `clip`, `clipRuns`, `pad`, `runsWidth` in terminal cells as the screen counts them; `age`, `elapsed`, `tokens` |
+| `lightcode.theme` | the colors the core draws with, by what they mean (`dim`, `ok`, `bad`, `warn`, `think`, `link`, `code`, `prompt`, `selected`, `shown`, `fresh`, `band`, `marks` by git mark), and `spinner(now)`: a plugin drawn with them changes with the core's look (src/theme.ts) |
 
 A row the core draws is a string or `{ bg, runs: [{ text, fg, bg, bold, dim, italic, underline }] }`;
 colors are `#rrggbb`, `0` to `255` or a name. A tab draws only the rows its window shows
@@ -322,7 +322,7 @@ A keymap binds keys to actions by name, per scope: `api.keys.layer("mine", { "":
 "app.focus.code", f5: null }, code: { "char:k": ["test.two", "test.hello"] } })`. A layer's
 entries come before the actions' default keys while it is on (from the start; `off()` and `on()`
 switch it, so a mode is a layer); a later layer comes before an earlier one, and the user's
-`~/.widecode/keys.json` before all. An entry names one action or several (the first that takes the
+`~/.lightcode/keys.json` before all. An entry names one action or several (the first that takes the
 key wins), or `null` to bind the key to nothing. A layer with a `*` entry for a scope is a whole
 keymap for it: it decides every key of the scope it does not name (a vi mode's normal mode is
 `{ input: { "*": "vi.normal" } }`, the composer's own keys behind it). A later action of an id
@@ -335,7 +335,7 @@ one (`n/p changes`, `↑↓ Enter opens`); a help written key first, as `keys.ad
 or one with no key at all (`Enter sends`) shows as written; an action whose keys a keymap unbound
 shows nothing. The status bar leaves the composer's editing out; `/help` lists it.
 
-The user's `~/.widecode/keys.json` is the keymap's top layer, the same table (`{ "": { "f6":
+The user's `~/.lightcode/keys.json` is the keymap's top layer, the same table (`{ "": { "f6":
 "app.focus.code", "f5": null }, "code": { "char:n": null } }`), read at start and on `/reload`; a
 malformed file is said and left out. A keymap a plugin brings (emacs, vi) registers with
 `api.keys.keymap({ id, name })` and turns its layers on when `api.state.keymap()` names it, at
@@ -370,7 +370,7 @@ history, `withdraw` for the messages queued that the user takes back (↑ in an 
 `withdrawn` event gives back those not yet taken up) and `sideQuestion(question)` for /btw (`aside`
 events show it and its answer, kept out of the conversation). `choices` says what it offers from the start (`anyModel` for an agent that takes any model
 name, as Claude Code takes its aliases). The plugin starts its agent's CLI with `api.process.spawn`
-(without Claude Code's `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT`, as every agent widecode starts),
+(without Claude Code's `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT`, as every agent lightcode starts),
 writes to it, and reads the agent's files with `api.fs` (a transcript's window, a sessions folder).
 
 What the agent says reaches the conversation as events, a batch per `api.conversation.apply`
@@ -387,7 +387,7 @@ process's state (`process`: `running`, `ended`). A call's facts are what the vie
 (`category`: read, edit, run, search, fetch, agent, todo, skill, other), its line (`summary`; a skill
 call's is the skill's name, which the Skills tab follows), the files it
 touches (`paths`), a command whole, a todo list, the tool it is of when its name is another
-(`tool`, so the Available tab counts it). `widecode.d.ts` lists every event and its fields.
+(`tool`, so the Available tab counts it). `lightcode.d.ts` lists every event and its fields.
 A batch happens when it is applied, unless an `at` event says when. Events from an agent the
 conversation no longer talks to are dropped.
 
@@ -411,10 +411,10 @@ entry, with the command that starts it in ACP mode:
 ```
 
 Three agents ship by default: `opencode`, `dsh` (`dsh --profile acp`, the DeepSeek Harness,
-installed with `npm install -g @deepseek-ai/dsh`) and `harness`, widecode's own agent, served by
-the running binary (`{widecode}` in an entry's commands is its path): `widecode --harness` speaks
+installed with `npm install -g @deepseek-ai/dsh`) and `harness`, lightcode's own agent, served by
+the running binary (`{lightcode}` in an entry's commands is its path): `lightcode --harness` speaks
 ACP on stdio, and its side commands answer the entry's `tools`, `skills`, `sessions` and `forget`.
-An entry with `own: true` gets the project's prompt text and trust in `_meta.widecode` with each
+An entry with `own: true` gets the project's prompt text and trust in `_meta.lightcode` with each
 session and prompt. An entry with the id of a default replaces it.
 
 The session's approval mode (`api.agent.approval()`, `api.agent.setApproval(mode)`, `/mode`, and
@@ -422,7 +422,7 @@ Shift+Tab in the chat) decides what asks for permission. `ask` puts every permis
 the request panel. `auto` lets a read, edit, search or think whose paths are all inside the
 session's folder through, and asks about everything else. `plan` rejects permission requests and
 switches the agent to its plan mode when it has one. `full` allows every request at once. The mode
-covers ACP agents, widecode's Task subagents and Claude Code, whose own modes it maps to (`ask`
+covers ACP agents, lightcode's Task subagents and Claude Code, whose own modes it maps to (`ask`
 `default`, `auto` `acceptEdits`, `plan` `plan`, `full` `bypassPermissions`).
 
 A session is listed from the agent's `session/list` while it runs and offers it, else from the
@@ -442,9 +442,9 @@ plan mode when the agent has one), which the entry's `forget` command deletes af
 default is `["opencode", "session", "delete", "{session}"]`). An agent that speaks something else
 is a plugin of its own over the same `api.agents.register`.
 
-An agent's extensions reach the screen through `_widecode/ui`, an ACP extension method in the
+An agent's extensions reach the screen through `_lightcode/ui`, an ACP extension method in the
 shape of pi's RPC extension UI; the harness sends it for its extensions' `ctx.ui`. The plugin says
-it takes them in `initialize` (`clientCapabilities._meta.widecode.ui: true`). A dialog is a request
+it takes them in `initialize` (`clientCapabilities._meta.lightcode.ui: true`). A dialog is a request
 with `{ sessionId, method, title }` and `options` (select), `message` (confirm), `placeholder`
 (input) or `prefill` (editor), and an optional `timeout` in milliseconds: it opens a question in
 the request panel and is answered `{ value }`, `{ confirmed }` for a confirm, or `{ cancelled: true }`
@@ -478,11 +478,11 @@ in the request panel (a cancelled answer or an aborted turn answers `cancelled: 
 withdraws it); `notify` a status message or a notice; `setStatus` a segment keyed by `statusKey`
 (no text clears it); `setWidget` a band strip keyed by `widgetKey`; `setTitle` the session's title;
 and `set_editor_text` the composer's text. An `extension_error` is logged and shown as a notice.
-pi takes MCP servers only through an extension, so widecode's own tools (`plugins/ask/index.ts`) do not
+pi takes MCP servers only through an extension, so lightcode's own tools (`plugins/ask/index.ts`) do not
 reach it.
 
 The section's `tasks` makes Claude Code's subagents run on an ACP agent and model. It adds a
-`Task` tool (Claude sees `mcp__widecode__Task`) whose `subagent_type` is one of the configured
+`Task` tool (Claude sees `mcp__lightcode__Task`) whose `subagent_type` is one of the configured
 targets:
 
 ```json
@@ -511,7 +511,7 @@ or `["*"]` allows every host, so a boxed subagent can research the web; its proj
 with whatever it reads. A bwrap run goes through the box script
 (`<script> jail --proxy-port <proxyPort> --project <folder> --project <project>... -- <entry
 command>`) and needs no VM. A VM run goes through `<script> ssh --forward-proxy <proxyPort> -- <entry
-command>`, and before the first such run widecode starts the box with the session's folder and
+command>`, and before the first such run lightcode starts the box with the session's folder and
 `projects`; a box running with another project list fails the run with the box's message. The VM
 stops `box.idleMinutes` (10 by default) after its last run ends, through `<script> down --if-idle`.
 The `box` status segment says `boxed: bwrap`, `boxed: vm` or `boxed: mixed` when the targets differ,
@@ -522,35 +522,35 @@ its permission asks in the request panel under the call, marks the call in the A
 answers the main agent with its last words. `run_in_background` starts the run and answers at once;
 its call id is the `task_id` for `TaskStop` and `SendMessage`, and its end comes back as a message
 to the main agent. `replaceClaudeSubagents` (when `plugins.claude.keepSubagents` is not true) makes
-the session run on widecode's Task, starting Claude with
+the session run on lightcode's Task, starting Claude with
 `--disallowedTools Task,Agent,TaskStop,SendMessage` so its own subagent tools step aside.
 `/subagents` picks what the session's subagents run on and keeps the choice in state.json:
-`claude` is Claude Code's own, with widecode's Task hidden from Claude
-(`--disallowedTools mcp__widecode__Task,...`), and `claude <model>` also sets
-`CLAUDE_CODE_SUBAGENT_MODEL` with `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` in the settings it starts with (any model alias or id), so the model holds over an agent's own and over a model the Agent call names; `widecode` is
-widecode's Task, with Claude's own subagent tools disallowed; `both` disallows neither. With no
+`claude` is Claude Code's own, with lightcode's Task hidden from Claude
+(`--disallowedTools mcp__lightcode__Task,...`), and `claude <model>` also sets
+`CLAUDE_CODE_SUBAGENT_MODEL` with `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` in the settings it starts with (any model alias or id), so the model holds over an agent's own and over a model the Agent call names; `lightcode` is
+lightcode's Task, with Claude's own subagent tools disallowed; `both` disallows neither. With no
 choice made, the config decides as above. `/subagents` with no argument says the choice in
 use, and typing it lists the choices, the current one marked "now". A change applies at the turn's
-end when one is open, else from the next message. The modes `widecode` and `both` need a `tasks`
+end when one is open, else from the next message. The modes `lightcode` and `both` need a `tasks`
 section with targets; without one only Claude Code's own subagents are offered. When the main agent
-is another agent, `/subagents` says its subagents run through widecode's Task on the targets and
+is another agent, `/subagents` says its subagents run through lightcode's Task on the targets and
 changes nothing. A main agent that names no tool-use id (an
 ACP agent) announces the Task call itself, and the run goes under that call's card; when no
-announced call matches, the tool makes a card itself. A subagent is given widecode's MCP server
+announced call matches, the tool makes a card itself. A subagent is given lightcode's MCP server
 with only `HostAction` on it, never Task, so it can ask for a host action but cannot call Task
 again. A bwrap run reaches it through a forwarder in the jail that tunnels to the host's MCP port
 over the box's proxy socket; a VM run through a `--forward` of that port. With
 `isolation: "worktree"` the run starts
-in a git worktree under `.worktrees/<id>` and answers with its path and branch; widecode adds
+in a git worktree under `.worktrees/<id>` and answers with its path and branch; lightcode adds
 `.worktrees/` to the repository's `.git/info/exclude` when it makes the first one.
 `worktreeSetup` is a list of shell lines run in the new worktree before the subagent starts, each
-with `WIDECODE_FOLDER` (the folder the worktree was made from) and `WIDECODE_WORKTREE` (its path)
+with `LIGHTCODE_FOLDER` (the folder the worktree was made from) and `LIGHTCODE_WORKTREE` (its path)
 set; `worktreeSetupTimeoutMs` bounds each line (300000 by default). A line that fails removes the
-worktree and its branch and fails the call. When the run is over, widecode removes the worktree and
+worktree and its branch and fails the call. When the run is over, lightcode removes the worktree and
 its branch if its `git status --porcelain` and `git rev-list <head>..HEAD` match what the worktree
 had after setup, so setup's own changes do not keep it; otherwise it stays to inspect or remove.
 Each run's events are kept under
-`.widecode/tasks/<session>/<call>.jsonl`; opening the call in a resumed session reads them back.
+`.lightcode/tasks/<session>/<call>.jsonl`; opening the call in a resumed session reads them back.
 Remote isolation is not offered.
 
 An image is attached by an `@path` typed in the message, or by pasting a path a file manager copied
@@ -568,13 +568,13 @@ bundle pins the text-only `deepseek-v4-flash`, so an image is refused until the 
 a later model switch, a text-only model refuses a prompt that carries an image, and a first cold
 start can advertise false while the model catalog settles.
 
-## widecode's own tools
+## lightcode's own tools
 
-A tool widecode offers agents is a plugin's: `api.tools.add({ name, description, input, category,
+A tool lightcode offers agents is a plugin's: `api.tools.add({ name, description, input, category,
 call, except })`, `input` its arguments' JSON schema, `category` the kind of call it is as the views draw it
 (`question` and `plan` show as their request), `call(args)` answering text (another value goes as
 JSON) now or as a promise, an error thrown being the call's error, `except` the agent plugins whose
-agents do not see it. widecode serves them over MCP, the Model
+agents do not see it. lightcode serves them over MCP, the Model
 Context Protocol: `src/agent`'s `McpServer` listens on 127.0.0.1, at a port the system picks, once an
 agent's plugin asks where (`api.tools.server()`: the URL, the `Authorization` header with that
 plugin's own token, the tools its agent sees with their categories, and a config file naming the
@@ -584,14 +584,14 @@ boxed subagent gets `HostAction` alone). It answers `initialize`, `ping`, `tools
 token's agent sees; a call waiting on the user
 sends a progress notification every 10 s, which keeps the agent's client from timing out. An agent
 names a tool after the server, so that it cannot be taken for one of its own: opencode's
-`widecode_AskUser`, Claude Code's `mcp__widecode__screen`.
+`lightcode_AskUser`, Claude Code's `mcp__lightcode__screen`.
 
 A tool that asks the user calls `api.conversation.ask({ category, questions | plan })`: the
 request panel shows it as it shows an agent's, and the promise settles with the reply (`state`
 `answered`, `approved`, `declined`, or `cancelled` when the turn ended first).
 
 Which agent sees a tool is decided where the tool is, by one rule: an agent keeps its own tool for a
-need, and gets widecode's where it has none. The ask plugin's two carry `except: ["claude"]`, since
+need, and gets lightcode's where it has none. The ask plugin's two carry `except: ["claude"]`, since
 Claude Code has AskUserQuestion and ExitPlanMode; every other tool reaches every agent.
 `plugins/claude/index.ts` passes the server's config file with `--mcp-config` when its agent sees a tool,
 and a tool added or dropped while the CLI runs (a plugin saved, a reload) is picked up at the end of
@@ -607,7 +607,7 @@ approved while the agent is in plan mode, the agent is switched to its first oth
 message asks it to carry the plan out once its turn ends, since an ACP agent's mode holds from its
 next prompt). Its section names them: `{ "names": { "question": "AskUser", "plan": "PresentPlan" } }`.
 
-Claude Code's prompts reach widecode over stdio as `can_use_tool` requests, in every mode. The mode
+Claude Code's prompts reach lightcode over stdio as `can_use_tool` requests, in every mode. The mode
 answers first, as for an ACP agent: `full` allows, `plan` denies with "plan mode: nothing changes", and
 `auto` allows a read, edit or search whose paths are inside the session's folder; anything else goes to
 the request panel with its usual options (once, for the session, a folder, all, deny). Each answer the
@@ -618,7 +618,7 @@ configures, the request panel shows the command and the agent's reason under the
 approves each run unless the action is read-only and marked so. Only the user's or a trusted
 project's `config.json` defines them, so an agent cannot add one, and the agent's reason is shown,
 never run. Its section is
-`{ "hostActions": { "install": { "run": "node_modules/.bin/light install", "description": "build widecode and install it into ~/.local/bin", "timeoutMs": 900000 } } }`,
+`{ "hostActions": { "install": { "run": "node_modules/.bin/light install", "description": "build lightcode and install it into ~/.local/bin", "timeoutMs": 900000 } } }`,
 with `timeoutMs` ten minutes by default. The command runs in the session's folder, and its exit code
 and last 60 lines of output go back to the agent. `Run it` and `Don't run` are the choices; without
 approval the call answers that the user did not approve it. `/box` lists the actions configured.
@@ -635,30 +635,30 @@ rather than a file name, and the plan that runs is that one. A boxed subagent ge
 
 ## The harness
 
-A project's `.widecode/` is its harness: what shapes widecode and the agent for that folder, kept
+A project's `.lightcode/` is its harness: what shapes lightcode and the agent for that folder, kept
 with the code, trusted as one with `/trust` (`src/services/harness.ts`). Its parts:
 
 - `plugins/*.js`: the project's plugins, loaded after the user's and reloaded on save as above.
-- `prompt.md`: appended to the agent's system prompt. The user's own `~/.widecode/prompt.md` comes
+- `prompt.md`: appended to the agent's system prompt. The user's own `~/.lightcode/prompt.md` comes
   first, whether or not the folder is trusted. Before it the core always puts one fixed
-  paragraph: that the agent runs inside widecode, what `.widecode/` holds, the tools the server
-  `widecode` offers it (by their names for that agent, `mcp__widecode__<name>` for Claude Code) and,
+  paragraph: that the agent runs inside lightcode, what `.lightcode/` holds, the tools the server
+  `lightcode` offers it (by their names for that agent, `mcp__lightcode__<name>` for Claude Code) and,
   while the folder is not trusted, that its parts wait for `/trust`. An agent plugin gets the text
   as `AgentStart.systemPrompt`; `plugins/claude/index.ts` passes it with `--append-system-prompt` and
   `--system-prompt-snapshot off` (Claude Code records the prompt once per session and a resumed
   session would keep the first; off, the prompt the CLI starts with is the one in use).
-- `config.json`: the same shape as the user's `~/.widecode/config.json` (`plugins`, `columns`,
+- `config.json`: the same shape as the user's `~/.lightcode/config.json` (`plugins`, `columns`,
   `permissions`), read over it: a `plugins` section named in both is the project's whole, a plugin
   switched off in either stays off, a column's width named in both is the project's; the
   `permissions` lists join as said below.
 
-A folder is trusted as one, the agent and the harness together (`~/.widecode/trusted.json`). In a
+A folder is trusted as one, the agent and the harness together (`~/.lightcode/trusted.json`). In a
 folder not yet trusted the agent stays out (a message, a mode change or a resumed session is
 refused, saying so) and none of the three parts is in use: the plugins stay out, the config is the
-user's, the agent would get the fixed paragraph alone. On the first launch there widecode asks in
+user's, the agent would get the fixed paragraph alone. On the first launch there lightcode asks in
 the request panel (`src/views/onboarding.ts`), as Claude Code asks for a folder: what the folder
 carries that the agent reads (CLAUDE.md, `.claude/` settings, hooks, skills, `.mcp.json`) and that
-widecode runs (each harness plugin file with the ids it registers or why it does not load, checked
+lightcode runs (each harness plugin file with the ids it registers or why it does not load, checked
 in a context of its own with nothing run; the prompt's length; the config's keys), and what trusting
 means. Trust this folder runs it now and on every launch, Look only keeps the agent out until
 `/trust` (the files and the code still show; asked again next launch), Exit leaves. `/trust` puts
@@ -668,7 +668,7 @@ first run with a store shows the welcome (`/welcome` again) and asks, before the
 agent to talk to (`/agent` later, kept in config.json) and which model a session starts on, and
 after it which keymap to use.
 
-The folder is watched (the project folder itself until `.widecode/` appears), and each part applies
+The folder is watched (the project folder itself until `.lightcode/` appears), and each part applies
 on its own: a plugin file reloads alone; `config.json` saved re-reads the config, starts again the
 plugins whose section or on/off changed and re-sizes the columns, nothing else; `prompt.md` saved
 fires the `harnessChanged` hook, which the Claude plugin takes as a tool change: the CLI stops at the
@@ -676,28 +676,28 @@ turn's end, if no message was written during the turn, and the next message star
 same session with the new prompt. So an agent asked to change the harness writes the files with its
 own tools and sees each take effect while its turn runs, the prompt from its next turn.
 
-The harness plugin (`plugins/harness/index.ts`) gives the agent seven tools over widecode's MCP server,
-`mcp__widecode__<name>` for Claude Code, `widecode_<name>` for opencode: `screen` (the screen as
+The harness plugin (`plugins/harness/index.ts`) gives the agent seven tools over lightcode's MCP server,
+`mcp__lightcode__<name>` for Claude Code, `lightcode_<name>` for opencode: `screen` (the screen as
 drawn, every column but the chat unless named, since the chat holds the agent's own text), `state`
 (the columns, the tabs, every plugin with its state, the last plugin errors, the harness folder),
 `log` (the last lines of the log), `api` (the plugin guide and the API's types as the binary carries
 them, whole, one part by name, or looked up), `check` (a plugin source evaluated in a context of its
 own with nothing registered: its plugins, errors and warnings), `reload` (a plugin file evaluated
 again, answering what it defined and the errors it raised) and `config` (the configuration in use
-and where each part came from). The fixed paragraph names them. An agent asked to change widecode
+and where each part came from). The fixed paragraph names them. An agent asked to change lightcode
 reads `api`, checks and writes the file, and reads `log` and `screen` to see the effect; the core
 calls behind the tools are `plugins`, `harness` and `state` in the API table, and
-`scripts/builtin-plugins.mjs` embeds PLUGINS.md and `widecode.d.ts` into `src/runtime/docs.ts` for `api`,
+`scripts/builtin-plugins.mjs` embeds PLUGINS.md and `lightcode.d.ts` into `src/runtime/docs.ts` for `api`,
 since the installed binary ships without the repository.
 
 ### Tool permissions
 
 `permissions` in either config.json holds tool rules in Claude Code's own syntax, `{ "allow": [],
 "ask": [], "deny": [] }`: `Bash(git push *)`, `Read(./.env)`, `WebFetch(domain:example.com)`,
-`mcp__widecode__reload` (the rules' grammar is Claude Code's "Configure permissions" page). The
+`mcp__lightcode__reload` (the rules' grammar is Claude Code's "Configure permissions" page). The
 Claude plugin passes the lists to the CLI with `--settings`, and the CLI enforces them: a deny rule
 blocks the call in every mode, bypass included; an ask rule prompts in every mode, and the prompt
-reaches widecode over stdio as a `can_use_tool` request; an allow rule has no effect under bypass. The
+reaches lightcode over stdio as a `can_use_tool` request; an allow rule has no effect under bypass. The
 user's rules come first: the project's `ask` and `deny` lists join the user's, the project's `allow`
 is left out (a project adds restrictions and cannot lift the user's), and the user's own
 `~/.claude/settings.json` applies as the CLI reads it. A change to either file reaches the CLI at the
@@ -706,7 +706,7 @@ turn's end, through the same stop and `--resume` as a prompt change.
 A `can_use_tool` for a tool that is not a question or a plan is a permission the request panel puts
 to the user: the tool and its argument (a command, a path, a pattern, a URL), with Allow once (the
 call runs), Allow for this session (the same tool with the same argument runs again without asking
-while widecode runs), Allow all for this session (this call and every later prompt are allowed
+while lightcode runs), Allow all for this session (this call and every later prompt are allowed
 without the panel until /new or another session is opened, plan mode included; the prompts open
 beside it are allowed with it and show as answered; a question and a plan to approve are still
 asked) and Deny (the CLI is told the user denied the tool). Esc or the turn ending denies. Under
@@ -718,7 +718,7 @@ repository or a read of a file there; the CLI names the path as `blocked_path`, 
 the reason) adds two answers before Allow all, for the git repository holding the path (else the path's
 own folder, never the home folder or the root). Allow <folder> for this session runs the call and
 adds the folder to the session's (`updatedPermissions` `addDirectories`), so reading there stops
-asking; widecode passes it again with `--add-dir` to each start while it runs. Allow <folder> from
+asking; lightcode passes it again with `--add-dir` to each start while it runs. Allow <folder> from
 now on does the same and has the CLI keep the folder in the project's
 `.claude/settings.local.json` (`permissions.additionalDirectories`), which later sessions read.
 
@@ -726,8 +726,8 @@ now on does the same and has the CLI keep the folder in the project's
 its plugins' states, the prompt's length, the config's keys, the tools the agent sees, the last
 plugin errors. `/harness init` writes the skeleton where a file is missing: `prompt.md` (two lines
 to replace), `plugins/example.js` (a tab and a command), `config.json` (empty `plugins` and
-`columns`), and `.claude/skills/widecode/SKILL.md`, the skill Claude Code loads in the folder when
-asked to change widecode: the loop (`api`, `check`, write, `reload`, `log` and `screen`), what a
+`columns`), and `.claude/skills/lightcode/SKILL.md`, the skill Claude Code loads in the folder when
+asked to change lightcode: the loop (`api`, `check`, write, `reload`, `log` and `screen`), what a
 plugin can and cannot do, the tools, the permissions' shape. Written in an untrusted folder, the
 files wait for `/trust`.
 
@@ -740,7 +740,7 @@ files wait for `/trust`.
   fresh context, clears it).
 - A call into a plugin has 250 ms; an agent's history read (`resume`, `loadEarlier`,
   `loadSubagent`) has 2 s. Past it the plugin is switched off with everything it added, and
-  widecode says so; the time the core spends answering does not count, and a command one plugin
+  lightcode says so; the time the core spends answering does not count, and a command one plugin
   runs for another has a budget of its own.
 - An error in a plugin's function is reported (the log, the status bar) and the plugin goes on.
 - The plugins share 256 MB, and a plugin can recurse about 230 calls deep before a RangeError.
@@ -791,11 +791,11 @@ phase, the agent's events) and the screen as it was.
 | `changes` | the changes strip of the band, under the code column; `[ ]`, Alt+↑↓ | | |
 | `status` | the session table under the chat and the calls' under the tools column, their segments and command cells | `separator`, `lines`, `toolsLines` | |
 | `models` | F5, `/model`, `/effort`, the `model` segment | `list` (Claude Code's), `agents` (another agent's, by id), `effort` (`default`, by `providers`, by `models`) | the model chosen, by agent; the effort chosen, by model, provider and overall |
-| `claude` | Claude Code as the agent: its CLI over stream-json, its records read into the conversation, its transcripts resumed and listed, its status line data, its skills (from disk before it starts); `/subagents` (Claude Code's own, widecode's Task, or both) | `id`, `projects`, `configDir`, `keepSubagents` | the subagents in use: the mode and its model |
-| `acp` | the agents spoken to over ACP, opencode and the DeepSeek Harness by default: their session, started with widecode, their turns, calls, diffs, todo lists, subagents, permissions, model, effort and mode (config options), and sessions; widecode's MCP server offered to them; `Task`, `TaskStop` and `SendMessage`, subagents over configured ACP targets, in the foreground or background | `agents`, `tasks` | sessions made and not written to, deleted when left |
-| `ask` | widecode's tools for an agent without its own: `AskUser` (questions in the request panel), `PresentPlan` (a plan to approve, leaving plan mode) | `names` | |
+| `claude` | Claude Code as the agent: its CLI over stream-json, its records read into the conversation, its transcripts resumed and listed, its status line data, its skills (from disk before it starts); `/subagents` (Claude Code's own, lightcode's Task, or both) | `id`, `projects`, `configDir`, `keepSubagents` | the subagents in use: the mode and its model |
+| `acp` | the agents spoken to over ACP, opencode and the DeepSeek Harness by default: their session, started with lightcode, their turns, calls, diffs, todo lists, subagents, permissions, model, effort and mode (config options), and sessions; lightcode's MCP server offered to them; `Task`, `TaskStop` and `SendMessage`, subagents over configured ACP targets, in the foreground or background | `agents`, `tasks` | sessions made and not written to, deleted when left |
+| `ask` | lightcode's tools for an agent without its own: `AskUser` (questions in the request panel), `PresentPlan` (a plan to approve, leaving plan mode) | `names` | |
 | `box` | host actions: `HostAction` asks the user to run a command only the host can run (an install, a deploy), and runs it in the session's folder when approved, or without asking when `approve` is `never`; an action with an argument has it matched, quoted and shown; `/box` lists the configured actions | `hostActions` (`run`, `description`, `timeoutMs`, `arg` as a glob, `approve`, `show` for each) | |
-| `harness` | widecode's tools for the agent to probe and reshape widecode itself, over the MCP server: `screen`, `state`, `log`, `api`, `check`, `reload`, `config` (The harness, above) | | |
+| `harness` | lightcode's tools for the agent to probe and reshape lightcode itself, over the MCP server: `screen`, `state`, `log`, `api`, `check`, `reload`, `config` (The harness, above) | | |
 | `languages` | JavaScript, TypeScript, JSON, CSS, HTML, Markdown | | |
 | `emacs` | the emacs keymap, in use unless config.json or /keymap says otherwise: Ctrl+F/B, Ctrl+P/N, Alt+D, Alt+< and Alt+>; the composer has readline's other keys already | | |
 | `vi` | the vi keymap (`/keymap vi`): insert and normal modes in the composer (Esc between them, the border saying which), motions, operators with counts, a register, undo; j k gg G in the code column | | |
@@ -803,10 +803,10 @@ phase, the agent's events) and the screen as it was.
 
 ## A worked example
 
-`~/.widecode/plugins/notes.js`: a command, a key in the code column, a status segment and a tab.
+`~/.lightcode/plugins/notes.js`: a command, a key in the code column, a status segment and a tab.
 
 ```js
-widecode.plugin({
+lightcode.plugin({
   id: "notes",
   requires: ["code"],
   activate(api) {
@@ -844,9 +844,9 @@ line of the status section.
 ## Writing a built-in plugin
 
 A built-in plugin is `plugins/<id>/index.ts`, ending with `export {};`, typed against
-`widecode.d.ts` (`light check`). What it needs from the core is a call in the prelude
+`lightcode.d.ts` (`light check`). What it needs from the core is a call in the prelude
 (`src/runtime/prelude.ts`), its answer in its namespace's `src/api/<file>.ts` and its type in
-`widecode.d.ts` (`test/api.test.ts` checks the three agree). Its tests
-drive it through the app (`createWidecode`) and carry `// ffi: @lightstart/plugins/native/ffi.json` on
+`lightcode.d.ts` (`test/api.test.ts` checks the three agree). Its tests
+drive it through the app (`createLightcode`) and carry `// ffi: @lightstart/plugins/native/ffi.json` on
 their first line, so they run natively with QuickJS and under node with the stand-in. A plugin's
 agent part is tested through the harness (`src/harness/test/extensions.test.ts`).

@@ -4,7 +4,7 @@
 // assembled repository and passes with the part's solution; the measures read a fake harness
 // session, a fake Claude transcript and a fake opencode export and session list; the done signal
 // reads a sample log; a record round-trips; the report draws its tables. The pty run itself needs
-// dist/widecode and a real orchestrator, so it is not run here.
+// dist/lightcode and a real orchestrator, so it is not run here.
 import { existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -51,7 +51,7 @@ const main = (): void => {
   setupSpec.promptText = "the guidance";
   const setup = createSetup(easy, partRoot, setupSpec);
   eq("a run's folder holds each part", readdirSync(setup.folder).filter((n) => !n.startsWith(".")).sort().join("+"), "add-flag+edit-json");
-  eq("its guidance is the file it was given", readFileSync(join(setup.folder, ".widecode", "prompt.md"), "utf8"), "the guidance");
+  eq("its guidance is the file it was given", readFileSync(join(setup.folder, ".lightcode", "prompt.md"), "utf8"), "the guidance");
   eq("its store starts in the full approval mode, so no orchestrator waits on a question", readFileSync(join(setup.store, "state.json"), "utf8").trim(), '{"approval":"full"}');
   const config = recordOf(JSON.parse(readFileSync(join(setup.store, "config.json"), "utf8")));
   const plugins = config !== null ? recordOf(config["plugins"]) : null;

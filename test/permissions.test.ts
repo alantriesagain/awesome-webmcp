@@ -12,11 +12,11 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mergePermissions } from "../src/services/harness.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
 const fixtures = join(process.cwd(), "test", "fixtures");
 const fake = join(process.cwd(), "test", "fake-claude.mjs");
@@ -28,12 +28,12 @@ const main = async (): Promise<void> => {
   eq("a side alone, strings alone", alone.rulesJson() + " " + String(alone.any()) + " " + alone.notice, '{"allow":[],"ask":[],"deny":["Bash(rm -rf *)"]} true ');
   eq("nothing set", mergePermissions(null, null).rulesJson() + " " + String(mergePermissions({ ask: "Bash" }, 7).any()), '{"allow":[],"ask":[],"deny":[]} false');
 
-  const folder = mkdtempSync(join(tmpdir(), "widecode-permissions-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-permissions-"));
   const written: string[] = [];
   const logs: string[] = [];
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.host.conversation.executable = fake;
       w.host.conversation.extraArgs.push("--fixture", join(fixtures, "permission.ndjson"), "--strict");
       w.host.conversation.onWrite = (line: string) => written.push(line);
@@ -63,10 +63,10 @@ const main = async (): Promise<void> => {
   c.stop();
   ok("the fake saw every response as recorded, byte for byte, and exited 0", await until(() => logs.includes("claude exited with code 0"), 8000));
 
-  const repo = mkdtempSync(join(tmpdir(), "widecode-outside-"));
+  const repo = mkdtempSync(join(tmpdir(), "lightcode-outside-"));
   mkdirSync(join(repo, ".git"));
   mkdirSync(join(repo, "src", "deep"), { recursive: true });
-  const kept = mkdtempSync(join(tmpdir(), "widecode-kept-"));
+  const kept = mkdtempSync(join(tmpdir(), "lightcode-kept-"));
   mkdirSync(join(kept, ".git"));
   const deep = join(repo, "src", "deep");
   const listInput = { command: "cd " + deep + " && ls", description: "List" };
@@ -151,7 +151,7 @@ const main = async (): Promise<void> => {
   ok("denied, the turn ends and the fake exits 0", await until(() => responded("req-10", '"behavior":"deny"') && !c.model.running, 10000) && (c.stop(), await until(() => logs.includes("claude exited with code 0"), 8000)));
   rmSync(repo, { recursive: true, force: true });
   rmSync(kept, { recursive: true, force: true });
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

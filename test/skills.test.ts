@@ -8,14 +8,14 @@
 // view) and puts its command in the composer, `v` goes to the file. An ACP agent's skills come from its entry's skills command
 // (test/fake-acp.mjs --skills, as opencode's `debug skill`), called in words, so no command of
 // theirs is registered (Claude Code's are dropped); its skill tool's call is a run. A run that
-// ended is kept in the folder's records (`.widecode/skills.jsonl`): a row says this session's runs
+// ended is kept in the folder's records (`.lightcode/skills.jsonl`): a row says this session's runs
 // and the project's across sessions and agents, a press says how many were typed and chosen. One
 // with no skills command lists none. Switched off, there is no tab.
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Widecode } from "../src/compose.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import type { Lightcode } from "../src/compose.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { Store } from "../src/services/store.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent, setValue } from "@lightstart/light/native/tui";
@@ -23,7 +23,7 @@ import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until, wait } from "@lightstart/test/headless.ts";
 
 /** The Skills tab's rows at 60 cells, its info line first, joined with | ("none" when there is no tab); spaces between words folded to two, a clock to T. */
-const tab = (w: Widecode): string => {
+const tab = (w: Lightcode): string => {
   const p = w.host.screen.findPanel("skills");
   if (p === null) return "none";
   const s = p.view.source;
@@ -34,15 +34,15 @@ const tab = (w: Widecode): string => {
 };
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-skills-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-skills-"));
   mkdirSync(join(folder, ".claude", "skills", "alpha"), { recursive: true });
   writeFileSync(join(folder, ".claude", "skills", "alpha", "SKILL.md"), "---\nname: alpha\ndescription: The first skill.\n---\n\n# Alpha\n\nDo the alpha thing.\n");
-  const plugin = mkdtempSync(join(tmpdir(), "widecode-skills-plugin-"));
+  const plugin = mkdtempSync(join(tmpdir(), "lightcode-skills-plugin-"));
   mkdirSync(join(plugin, "skills", "gamma"), { recursive: true });
   writeFileSync(join(plugin, "skills", "gamma", "SKILL.md"), "---\nname: gamma\ndescription: |\n  Multi line.\n  Said twice.\n---\n# Gamma\n");
   const fake = join(process.cwd(), "test/fake-acp.mjs");
   // Claude Code's config folder, empty: no user skills of this machine's in the list.
-  const configDir = mkdtempSync(join(tmpdir(), "widecode-skills-config-"));
+  const configDir = mkdtempSync(join(tmpdir(), "lightcode-skills-config-"));
   const config: unknown = {
     claude: { configDir },
     acp: {
@@ -52,10 +52,10 @@ const main = async (): Promise<void> => {
       },
     },
   };
-  const w = await openWidecode({ folder, plugins: config });
+  const w = await openLightcode({ folder, plugins: config });
   const c = w.host.conversation;
   // A store: the folder's records keep the skill runs.
-  const home = mkdtempSync(join(tmpdir(), "widecode-skills-home-"));
+  const home = mkdtempSync(join(tmpdir(), "lightcode-skills-home-"));
   await w.host.session.useStore(new Store(home));
   // Trusted, as the app marks a folder it works in: the project's skills count.
   w.host.session.setTrusted(true);
@@ -113,7 +113,7 @@ const main = async (): Promise<void> => {
   const keptRuns = (): string => {
     let text = "";
     try {
-      text = readFileSync(join(folder, ".widecode", "skills.jsonl"), "utf8");
+      text = readFileSync(join(folder, ".lightcode", "skills.jsonl"), "utf8");
     } catch {
       return "";
     }
@@ -170,12 +170,12 @@ const main = async (): Promise<void> => {
   c.reset();
   w.host.roles.chat.submit("hello");
   ok("it lists none", await until(() => tab(w) === " 0 skills| Old  lists no skills"));
-  closeWidecode(w);
+  closeLightcode(w);
 
   const off: unknown = { skills: false };
-  const w2 = await openWidecode({ folder, plugins: off, load: true });
+  const w2 = await openLightcode({ folder, plugins: off, load: true });
   eq("switched off: no tab", tab(w2), "none");
-  closeWidecode(w2);
+  closeLightcode(w2);
 
   rmSync(folder, { recursive: true, force: true });
   rmSync(plugin, { recursive: true, force: true });

@@ -1,13 +1,13 @@
-// widecode's own tools for an agent that lacks them (api.tools, served over MCP): AskUser puts
+// lightcode's own tools for an agent that lacks them (api.tools, served over MCP): AskUser puts
 // questions with choices to the user in the request panel, PresentPlan puts a plan there to
 // approve. Approved in plan mode, the agent leaves it and a message asks it to carry the plan out
 // once its turn ends (an ACP agent's mode holds for its next prompt). An agent with tools of its
 // own for these (Claude Code's AskUserQuestion and ExitPlanMode) keeps them: its plugin does not
-// offer widecode's. Its section names them: { "names": { "question": "AskUser", "plan": "PresentPlan" } }.
+// offer lightcode's. Its section names them: { "names": { "question": "AskUser", "plan": "PresentPlan" } }.
 
 const NAMES = { question: "AskUser", plan: "PresentPlan" };
 
-const { list, obj, str } = widecode.util;
+const { list, obj, str } = lightcode.util;
 
 const QUESTIONS = {
   type: "object",
@@ -47,14 +47,14 @@ const PLAN = {
 };
 
 /** What the user answered, for the agent. */
-const answered = (reply: widecode.AgentReply): string => {
+const answered = (reply: lightcode.AgentReply): string => {
   if (reply.state === "cancelled") return "The question was withdrawn before the user answered.";
   if (reply.state !== "answered") return reply.message.length > 0 ? reply.message : "The user did not answer.";
   const lines = reply.answers.map((a) => JSON.stringify(a.question) + ": " + (a.text.length > 0 ? a.text : a.labels.join(", ")));
   return "The user answered:\n" + lines.join("\n");
 };
 
-widecode.plugin({
+lightcode.plugin({
   id: "ask",
   defaults: () => ({ names: NAMES }),
   activate(api) {

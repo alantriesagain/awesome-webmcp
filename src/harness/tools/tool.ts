@@ -127,7 +127,7 @@ export class Tool {
   /** The ACP kind of its calls: read, edit, execute, search, fetch, other. */
   readonly kind: string;
   readonly mutating: boolean;
-  /** What its calls show as to the client: the name, but for an MCP tool (`widecode_AskUser`). */
+  /** What its calls show as to the client: the name, but for an MCP tool (`lightcode_AskUser`). */
   title: string;
   /** What runs it when an extension registered it (null for a built-in or MCP tool). */
   extra: ExtraTool | null = null;

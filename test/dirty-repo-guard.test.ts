@@ -65,9 +65,9 @@ const main = async (): Promise<void> => {
   rig.taken();
 
   // A side question's fork changes no file: it forks without asking, the tree still dirty.
-  const sideFork = rig.send("session/fork", { sessionId: sid, cwd: repo, mcpServers: [], _meta: { widecode: { side: true } } });
+  const sideFork = rig.send("session/fork", { sessionId: sid, cwd: repo, mcpServers: [], _meta: { lightcode: { side: true } } });
   const sideAnswer = await answerOf(rig, sideFork);
-  ok("a side question's fork forks without asking", sideAnswer.includes('"sessionId"') && !sideAnswer.includes('"error"') && !rig.out.some((line) => line.includes('"_widecode/ui"')));
+  ok("a side question's fork forks without asking", sideAnswer.includes('"sessionId"') && !sideAnswer.includes('"error"') && !rig.out.some((line) => line.includes('"_lightcode/ui"')));
   rig.taken();
 
   // A folder that is not a repository forks.

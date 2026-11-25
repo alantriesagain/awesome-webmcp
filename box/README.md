@@ -1,4 +1,4 @@
-# widecode's box (spike)
+# lightcode's box (spike)
 
 The box has two backends: a Debian 13 VM and a bubblewrap jail on the host. The jail is the lighter
 one, with no VM memory cost. Both are built and driven by node
@@ -12,10 +12,10 @@ console log.
 There is one VM. It shares every project `up` lists, each at its own host path, so every agent in
 every project uses the same guest. A lock file and the QEMU pid file keep a second VM from starting.
 
-State lives in `~/.cache/widecode/box/` (override with `WIDECODE_BOX_DIR`). The cached image at
+State lives in `~/.cache/lightcode/box/` (override with `LIGHTCODE_BOX_DIR`). The cached image at
 `~/.cache/bootstrapp/vps-test/debian-13-genericcloud-amd64.qcow2` is used as the backing file when it
 exists; otherwise the image is downloaded into the box's own state directory. The box has its own
-SSH key under `~/.cache/widecode/box/id_ed25519` and its own `known_hosts`.
+SSH key under `~/.cache/lightcode/box/id_ed25519` and its own `known_hosts`.
 
 ## Commands
 
@@ -45,7 +45,7 @@ root to the 40 GB disk on boot; `df -h /` in the guest reported 40 GB.
 
 `up` creates a fresh `box.qcow2` overlay on `base.qcow2` and boots it with
 `-netdev user,id=n0,restrict=on,hostfwd=tcp:127.0.0.1:2223-:22`, 4096 MB and 4 CPUs by default
-(`--memory`, `--cpus`, or `WIDECODE_BOX_MEMORY` / `WIDECODE_BOX_CPUS`) and KVM. `--port` adds a
+(`--memory`, `--cpus`, or `LIGHTCODE_BOX_MEMORY` / `LIGHTCODE_BOX_CPUS`) and KVM. `--port` adds a
 `hostfwd` on `127.0.0.1` for each pair, guest port equal to host port when only one is given; it is
 repeatable. bootstrapp's dev ports are the usual set, for example:
 
@@ -63,7 +63,7 @@ memory-backend-memfd,id=mem,size=<memory>M,share=on -numa node,memdev=mem`) and 
 when it runs unprivileged, so files the guest creates keep the host user's ownership. `down` stops
 every virtiofsd it recorded in `virtiofsd.json`. When virtiofsd is missing, `up` falls back to 9p
 (`-virtfs local,path=<project>,mount_tag=<tag>,security_model=none`) and says so. `up` also says
-which one it used; `WIDECODE_BOX_SHARES=9p` (or `virtiofs`) forces one for a comparison.
+which one it used; `LIGHTCODE_BOX_SHARES=9p` (or `virtiofs`) forces one for a comparison.
 
 The virtiofsd sandbox is `namespace` when `newuidmap` is on the host, else `none`. This host has no
 `newuidmap` (the `uidmap` package), so the namespace sandbox failed with
@@ -72,28 +72,28 @@ The virtiofsd sandbox is `namespace` when `newuidmap` is on the host, else `none
 sandbox.
 
 A per-boot cloud-init seed, rather than a unit baked into the image, mounts each share and
-bind-mounts `.widecode/`, `.claude/` and `.git` read-only over it when they exist, because the
+bind-mounts `.lightcode/`, `.claude/` and `.git` read-only over it when they exist, because the
 project paths change per boot. The seed runs once, at boot, so a task's worktree made later is not
 covered in the VM; the jail covers it (below). The seed also mounts the host's `<state>/guest-cache` over
 `/home/agent/.cache` and gives it to `agent`, so the guest's scriptc cache lasts across `down` and
-`up`. `up` waits for SSH and for the `/run/widecode-box-ready` marker the seed writes, and saves the
+`up`. `up` waits for SSH and for the `/run/lightcode-box-ready` marker the seed writes, and saves the
 project list, the share kind, memory, CPUs and ports in `box.json`. A second `up` with the same list
 returns at once; with a different list it refuses and says to run `down`, then `up`.
 
 ### scriptc and the build cache
 
 The guest uses the scriptc installed in the shared checkout's `node_modules`, which
-`light` resolves from the workspace root. The widecode checkout is shared at its own host
-path, so `/home/alanleal/Projects/widecode/node_modules/.bin/scriptc` exists in the guest. Its
+`light` resolves from the workspace root. The lightcode checkout is shared at its own host
+path, so `/home/alanleal/Projects/lightcode/node_modules/.bin/scriptc` exists in the guest. Its
 cache lives under the guest's `/home/agent/.cache`, which is the host folder
 `<state>/guest-cache`. A host-shared cache would let the box plant a build the host then runs, so
 the folder is the box's alone: only the guest has it, and the host's own scriptc cache lives
-elsewhere and never reads it. The shared projects are `/home/alanleal/Projects/{widecode,light}`,
-so `widecode/light` (a symlink to `../light`) resolves inside the guest when light is shared at its
+elsewhere and never reads it. The shared projects are `/home/alanleal/Projects/{lightcode,light}`,
+so `lightcode/light` (a symlink to `../light`) resolves inside the guest when light is shared at its
 own path.
 
 `proxy` is a host-side HTTP proxy on `127.0.0.1` (default port 8888, override with `--port` or
-`WIDECODE_BOX_PROXY_PORT`) and on `<state>/proxy.sock`. Both listeners use the same allow list and
+`LIGHTCODE_BOX_PROXY_PORT`) and on `<state>/proxy.sock`. Both listeners use the same allow list and
 write the same log lines. It handles plain HTTP and `CONNECT`, allows a host that equals an entry in
 `--allow` (comma-separated, default: `api.anthropic.com`, `claude.ai`, `platform.claude.com`,
 `claude.com`, `statsig.anthropic.com`, `opencode.ai`, `*.opencode.ai`, `registry.npmjs.org`,
@@ -102,12 +102,12 @@ answers 403 to everything else. It logs every allowed and refused request to `pr
 directory, writes its pid to `proxy.pid`, and runs until `down` or a signal stops it. It removes a
 stale socket before listening, sets the new one to mode 600, and removes it when it stops.
 
-`box/proxy.mjs` is the same proxy with the project-facing options widecode uses: `--allow-extra`
+`box/proxy.mjs` is the same proxy with the project-facing options lightcode uses: `--allow-extra`
 adds domains to the defaults, `--allow` replaces them, `*` allows every host, and `--allow-local
-<port>` lets `127.0.0.1:<port>` through, the port widecode serves `HostAction` on for a boxed
+<port>` lets `127.0.0.1:<port>` through, the port lightcode serves `HostAction` on for a boxed
 subagent. It keeps `proxy.pid`, `proxy.sock` and `proxy.log` in the same state directory, so
 `status`, `down` and `box.mjs proxy` see it as the box's proxy. `up` and the jail command's proxy
-are started by widecode with this one.
+are started by lightcode with this one.
 
 A project's box config may give `"allow": [domains]`, added to the default list, or `"allow":
 ["*"]` for any host, so its boxed subagents can research the web. A boxed subagent with web access
@@ -123,14 +123,14 @@ cannot change the file between the approval and the run.
 
 `ssh` runs as `agent` with the box key, `BatchMode=yes` and the box's own `known_hosts`. It puts
 `~/.local/bin` and `~/.opencode/bin` first on the remote `PATH`, so `claude` and `opencode` resolve
-without a login shell, and sources `/home/agent/.config/widecode-box/env` when it exists, so the
+without a login shell, and sources `/home/agent/.config/lightcode-box/env` when it exists, so the
 Claude token is set for every session. `--forward-proxy <port>` adds `-R <port>:127.0.0.1:<port>` and exports
 `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY=localhost,127.0.0.1` in the remote command; `--forward
 <remotePort>:<hostPort>` adds `-R <remotePort>:127.0.0.1:<hostPort>` and may be repeated. Forwards use
 `ExitOnForwardFailure=yes`. While an `ssh` runs it keeps `<state>/sessions/<pid>` and removes the file
 when it ends. `down --if-idle` stops the box only when no live session remains, after removing files
 whose pid is gone; otherwise it prints `the box is in use by <n> session(s)` and leaves the box
-running, so several widecode windows can share one VM. Plain `down` always stops it. `down` stops the
+running, so several lightcode windows can share one VM. Plain `down` always stops it. `down` stops the
 proxy, asks for an ACPI powerdown through the QEMU monitor and terminates the process after 45 seconds
 if the guest does not leave. `reset` drops `box.qcow2`; `base.qcow2` is kept.
 
@@ -159,7 +159,7 @@ jail binds read-write with the project.
 Each tool found on the host `PATH` among `node`, `pnpm`, `opencode` and `claude` is read-only at
 its host path, after resolving symlinks: the whole nvm version folder for node under nvm, and
 `~/.opencode/bin` for opencode. `box.mjs` itself is read-only too. Each `--project` is read-write
-at its own path, with `.widecode/`, `.claude/` and `.git` read-only over it when they exist. The
+at its own path, with `.lightcode/`, `.claude/` and `.git` read-only over it when they exist. The
 cwd must be inside a project.
 
 `.git` is read-only whole because the host's git runs what it says: `config` (`core.fsmonitor`,
@@ -168,7 +168,7 @@ Inside the jail `git status`, `diff`, `log` and `grep` work; `add`, `commit` and
 they write the index. Each protected path is a mount point, so it cannot be renamed away and replaced
 by a folder the jail made. A task's worktree under `<project>/.worktrees/<name>` has a `.git` file
 naming its git dir: `.worktrees` and each worktree with a `.git` are bound onto themselves, which
-keeps them from being renamed, and the worktree's `.widecode/`, `.claude/` and `.git` are read-only
+keeps them from being renamed, and the worktree's `.lightcode/`, `.claude/` and `.git` are read-only
 as the project's are. A live check renamed `.git`, `.worktrees` and a worktree, wrote `.git/config`,
 `.git/commondir` and a worktree's `.git`, and removed `.git/HEAD`: each failed with `Read-only file
 system` or `Device or resource busy`.
@@ -180,21 +180,21 @@ The proxy socket is bound at its state path. The environment is cleared and gets
 
 Inside, bwrap runs `node box.mjs jail-inner --proxy-port <port> --socket <path> -- <cmd...>`. That
 part listens on `127.0.0.1:<port>`, pipes each connection to the proxy socket, reads
-`~/.config/widecode-box/env` from the jail home and adds `CLAUDE_CODE_OAUTH_TOKEN` to the child's
+`~/.config/lightcode-box/env` from the jail home and adds `CLAUDE_CODE_OAUTH_TOKEN` to the child's
 environment when it is set, then starts the command. A boxed subagent that has `HostAction` runs a
 forwarder as its command: the forwarder listens on the host MCP port inside the jail and tunnels
 each connection through the proxy socket (a `CONNECT` to that port, which `--allow-local` permits)
-to widecode's MCP server on the host.
+to lightcode's MCP server on the host.
 
-Before starting bwrap, `jail` writes the jail home's `.config/widecode-box/env` (mode 600) and
+Before starting bwrap, `jail` writes the jail home's `.config/lightcode-box/env` (mode 600) and
 merges the `opencode-go` entry into `.local/share/opencode/auth.json` (mode 600), from
-`~/.widecode/box/credentials.env`, using the same reader, checks and merge as `up`. An empty value
+`~/.lightcode/box/credentials.env`, using the same reader, checks and merge as `up`. An empty value
 removes the file or entry. Values never go on a command line and are never printed.
 
 ## Credentials
 
-The box's credentials are a file on the host, `~/.widecode/box/credentials.env` (override with
-`WIDECODE_BOX_CREDENTIALS`). It has one `KEY=value` per line, `#` comments and blank lines. The keys
+The box's credentials are a file on the host, `~/.lightcode/box/credentials.env` (override with
+`LIGHTCODE_BOX_CREDENTIALS`). It has one `KEY=value` per line, `#` comments and blank lines. The keys
 are `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) and `OPENCODE_API_KEY` (a key for the
 `opencode-go` provider). An empty value means that agent gets no credential. The file must be mode
 600, its folder mode 700, and both owned by the user; `up` and `creds` refuse anything else with a
@@ -203,7 +203,7 @@ an install script to the guest over SSH stdin.
 
 What `up` installs after SSH answers:
 
-- Claude: `/home/agent/.config/widecode-box/env` (folder mode 700, file mode 600) with
+- Claude: `/home/agent/.config/lightcode-box/env` (folder mode 700, file mode 600) with
   `export CLAUDE_CODE_OAUTH_TOKEN=...`. Every `box.mjs ssh` session sources that file before the
   remote command, beside the proxy variables. An empty value removes the file.
 - opencode: an entry in `/home/agent/.local/share/opencode/auth.json` (mode 600):
@@ -223,7 +223,7 @@ with `sk-ant-oat01-` and hold only `[A-Za-z0-9_-]`, and `OPENCODE_API_KEY` must 
 and no `#`. A value that does not is refused with its key and what is wrong, never the value.
 
 `status --json` prints one line with whether the box runs, its projects and whether its proxy runs,
-so widecode can decide what to start before a task runs in it.
+so lightcode can decide what to start before a task runs in it.
 
 The hosts each agent needs are already in the proxy's default allow list, so this spike added none.
 The proxy log from a model call showed Claude reaching only `api.anthropic.com`. opencode reached
@@ -232,7 +232,7 @@ The proxy log from a model call showed Claude reaching only `api.anthropic.com`.
 
 ## What the checks found
 
-Tested on a scratch git repository at `/tmp/wc-box-scratch` with `file.txt`, `.widecode/config.json`,
+Tested on a scratch git repository at `/tmp/wc-box-scratch` with `file.txt`, `.lightcode/config.json`,
 `.claude/settings.json` and `.git/hooks`.
 
 1. `provision` completed and reported:
@@ -248,7 +248,7 @@ Tested on a scratch git repository at `/tmp/wc-box-scratch` with `file.txt`, `.w
    8.7 seconds.
 3. Inside, as `agent`, the project is at `/tmp/wc-box-scratch`, the same path as the host. Writing
    `guest.txt` there appeared on the host as `alanleal:alanleal` with the expected contents. Writes
-   to `.widecode/x`, `.claude/x` and `.git/hooks/x` all failed with `Read-only file system`. The
+   to `.lightcode/x`, `.claude/x` and `.git/hooks/x` all failed with `Read-only file system`. The
    mounts were `project` on the project `(rw)` and `(ro)` over the three protected paths.
    `sudo -n true` failed with `sudo: a password is required`.
 4. With the network restricted, `curl -sS -m 5 https://example.com` failed with
@@ -258,12 +258,12 @@ Tested on a scratch git repository at `/tmp/wc-box-scratch` with `file.txt`, `.w
 
 ### One VM, the proxy, and the agents
 
-Tested with two scratch git repositories, `/tmp/a` and `/tmp/b`, each with `file.txt`, `.widecode/`,
+Tested with two scratch git repositories, `/tmp/a` and `/tmp/b`, each with `file.txt`, `.lightcode/`,
 `.claude/` and `.git/hooks/`. `base.qcow2` was reused; nothing was re-provisioned.
 
 1. `up /tmp/a /tmp/b` booted with SSH in 8 seconds and finished in 8.8 seconds. Inside, the mounts
    were `project0` on `/tmp/a` and `project1` on `/tmp/b`, both `(rw)`, with `(ro)` bind mounts of
-   `.widecode`, `.claude` and `.git/hooks` under each. Writes to all six protected paths failed with
+   `.lightcode`, `.claude` and `.git/hooks` under each. Writes to all six protected paths failed with
    `Read-only file system`; `guest.txt` written in `/tmp/a` appeared on the host as
    `alanleal:alanleal`. `mount` showed the two tags separately.
 2. A second `up /tmp/a /tmp/b` returned in 0.05 seconds with
@@ -301,7 +301,7 @@ Tested with a throwaway credentials file under `/tmp` holding fake values, never
    `has mode 644; run chmod 600 ...`, and a file in a folder with mode 755 with
    `has mode 755; run chmod 700 ...`. In a 700 folder with mode 600 it was accepted.
 2. `up /tmp/wc-box-creds` installed the credentials after SSH answered. Inside,
-   `/home/agent/.config/widecode-box` was mode 700 and its `env` file mode 600;
+   `/home/agent/.config/lightcode-box` was mode 700 and its `env` file mode 600;
    `test -n "$CLAUDE_CODE_OAUTH_TOKEN"` in a `box.mjs ssh` session printed `set`. The opencode
    `auth.json` was mode 600 and held an `opencode-go` entry with `type` and `key` keys (reported as
    present, value not shown). `creds` printed `set` for both in the file and
@@ -323,11 +323,11 @@ Tested with a throwaway credentials file under `/tmp` holding fake values, never
 tests below started from a cold image and a cold build cache.
 
 1. `up /tmp/wc-box-scratch` used virtiofs (sandbox `none`), with `project0 on /tmp/wc-box-scratch
-   type virtiofs (rw,relatime)` and `(ro,relatime)` bind mounts of `.widecode`, `.claude` and
+   type virtiofs (rw,relatime)` and `(ro,relatime)` bind mounts of `.lightcode`, `.claude` and
    `.git/hooks`. `guest.txt` written in the guest appeared on the host as `1000:1000` (the user),
    and writes to the three protected paths failed with `Read-only file system`. Boot to SSH was 9
    seconds; the whole `up` took 9.5 seconds.
-2. The same `/home/alanleal/Projects/widecode` share, timed in the guest (two runs, second shown):
+2. The same `/home/alanleal/Projects/lightcode` share, timed in the guest (two runs, second shown):
 
    | probe | virtiofs | 9p |
    |---|---|---|
@@ -336,12 +336,12 @@ tests below started from a cold image and a cold build cache.
 
    Both found the same 2760 files. The first virtiofs run was 0.08 s and 0.10 s; the gap is larger
    on many small file operations, which is what a build does.
-3. `up --memory 6144 --cpus 4 --port 3500 /home/alanleal/Projects/widecode
+3. `up --memory 6144 --cpus 4 --port 3500 /home/alanleal/Projects/lightcode
    /home/alanleal/Projects/light /home/alanleal/Projects/scriptc` used three virtiofs shares (the
-   `light` symlink inside widecode resolved through the separately shared light path) and was up in
+   `light` symlink inside lightcode resolved through the separately shared light path) and was up in
    9.9 seconds. A `python3 -m http.server 3500` in the guest answered `HTTP/1.0 200 OK` from
    `curl http://127.0.0.1:3500/` on the host. The throwaway server was stopped afterwards.
-4. The host's `git -C /home/alanleal/Projects/widecode status --short` was `M
+4. The host's `git -C /home/alanleal/Projects/lightcode status --short` was `M
    box/box.mjs` before and after; the guest's build left only gitignored outputs.
    `scriptc-dev --version` in the guest printed `0.4.5` from the shared checkout.
 5. `light test -- api.test.ts` is node-only by its first line (`// node-only: the
@@ -350,7 +350,7 @@ tests below started from a cold image and a cold build cache.
    ffi test that runs under node and natively) took 65 s cold and 21 s warm; both runs passed with
    equal output, and the guest cache grew to 254 MB. Root stayed at 40 GB with 35 GB free.
 6. `down` powered the guest down in 5 seconds. No `qemu-system-x86_64`, `virtiofsd` or proxy of the
-   test was left, and the widecode checkout's `git status --short` matched the recorded one.
+   test was left, and the lightcode checkout's `git status --short` matched the recorded one.
 
 ## What did not work, and why
 

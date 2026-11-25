@@ -10,12 +10,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
-const keymap = `widecode.plugin({
+const keymap = `lightcode.plugin({
   id: "keymap-test",
   activate(api) {
     const seen = [];
@@ -31,11 +31,11 @@ const keymap = `widecode.plugin({
 });`;
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-keymap-"));
-  const w = await openWidecode({
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-keymap-"));
+  const w = await openLightcode({
     folder,
     load: true,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.js.extra = [new PluginSource("keymap.js", keymap)];
     },
   });
@@ -72,20 +72,20 @@ const main = async (): Promise<void> => {
   ok("/help lists the keys and help", help.includes("h/k hello") && help.includes("i/k two") && help.includes("Keymap: emacs"));
 
   // Switched off: its actions and layer are gone.
-  closeWidecode(w);
+  closeLightcode(w);
   const off: unknown = { "keymap-test": false };
-  const w2 = await openWidecode({
+  const w2 = await openLightcode({
     folder,
     plugins: off,
     load: true,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.js.extra = [new PluginSource("keymap.js", keymap)];
     },
   });
   const press2 = (name: string, text: string): boolean => w2.shell.handleKey(new KeyEvent(name, text, false, false, false));
   w2.host.screen.focus("code");
   ok("switched off: no action, no layer", !press2("char", "h") && press2("f6", "") && w2.host.screen.active.peek() === "tools" && w2.host.kernel.keys.all().every((l) => l.owner !== "keymap-test"));
-  closeWidecode(w2);
+  closeLightcode(w2);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

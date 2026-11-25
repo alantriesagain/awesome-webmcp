@@ -1,6 +1,6 @@
 // ffi: @lightstart/plugins/native/ffi.json
 // An agent over ACP (plugins/acp/index.ts), here the fake (test/fake-acp.mjs) from the
-// plugin's section, speaking as opencode 1.19 does: its session, started with widecode, its model,
+// plugin's section, speaking as opencode 1.19 does: its session, started with lightcode, its model,
 // effort, mode and commands (config options); a reply and its thinking, two messages as two blocks; a run call with its
 // output; an edit with its diff, followed by the code column; a permission allowed and one
 // declined; a todo list and a subagent from their calls' input; a message sent meanwhile waiting
@@ -15,17 +15,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Item, NOTICE, TEXT, THINKING, TOOL, Turn } from "../src/conversation/model.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent, setValue } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
 const kinds = (items: Item[]): string => items.map((i: Item) => (i.kind === THINKING ? "thinking" : i.kind === TEXT ? "text" : i.kind === TOOL ? "tool" : i.kind === NOTICE ? "notice:" + i.text : "other")).join(",");
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-acp-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-acp-"));
   writeFileSync(join(folder, "a.txt"), "one\n");
   const log = join(folder, "fake.log");
   const oldLog = join(folder, "old.log");
@@ -39,16 +39,16 @@ const main = async (): Promise<void> => {
       },
     },
   };
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     plugins: config,
     load: true,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.host.session.agentId.value = "fake";
     },
   });
   const c = w.host.conversation;
-  // As widecode starts: an ACP agent's session starts with it.
+  // As lightcode starts: an ACP agent's session starts with it.
   c.prepare();
   const idle = (): boolean => !c.model.running && c.model.pending.length === 0;
   const last = (): Turn => c.model.turns[c.model.turns.length - 1];
@@ -86,7 +86,7 @@ const main = async (): Promise<void> => {
   };
   eq("the agent from the section, and opencode beside it", c.agent.id() + " " + c.agent.name() + " " + String(w.host.session.agents.some((a) => a.id() === "opencode")), "fake Fake true");
   ok("named on the screen", w.chat.pane.input.placeholder.startsWith("Write to Fake."));
-  ok("its session starts with widecode: the model it runs on and its efforts known before any message", (await until(() => c.info.modelId === "fake/small")) && c.started && c.agent.choices().efforts.map((e) => e.value).join(",") === "low,high,default" && sent().includes('"method":"session/new"') && !sent().includes('"method":"session/prompt"'));
+  ok("its session starts with lightcode: the model it runs on and its efforts known before any message", (await until(() => c.info.modelId === "fake/small")) && c.started && c.agent.choices().efforts.map((e) => e.value).join(",") === "low,high,default" && sent().includes('"method":"session/new"') && !sent().includes('"method":"session/prompt"'));
   w.host.screen.showPanel("sessions");
   ok("its sessions in the Sessions tab, from its command before it runs", await until(() => sessionRows().includes("An earlier session")));
 
@@ -233,13 +233,13 @@ const main = async (): Promise<void> => {
   w.host.roles.chat.submit("/title");
   eq("its titles are its own", said(), "Old titles its own sessions");
 
-  closeWidecode(w);
+  closeLightcode(w);
 
   // Switched off: its agents are not there to choose.
   const off: unknown = { acp: false };
-  const w2 = await openWidecode({ folder, plugins: off, load: true });
+  const w2 = await openLightcode({ folder, plugins: off, load: true });
   ok("switched off: none of its agents", w2.host.session.useAgent("fake").startsWith("no agent named fake") && w2.host.session.useAgent("opencode").startsWith("no agent named opencode"));
-  closeWidecode(w2);
+  closeLightcode(w2);
 
   rmSync(folder, { recursive: true, force: true });
   done();

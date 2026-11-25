@@ -6,7 +6,7 @@
 //
 //   --agent <name>[,<name>...]           the agents (harness by default: this checkout's daemon under node;
 //                                        opencode and dsh over ACP, pi over its RPC mode)
-//   --binary                             the harness from the installed `widecode` instead
+//   --binary                             the harness from the installed `lightcode` instead
 //   --command "<words>"                  any other ACP agent, started in the task's folder
 //   --model <value>[,<value>...]         the models to compare, as the agent's model option names them
 //   --effort <value>                     the effort, as its effort option names it
@@ -14,7 +14,7 @@
 //   --web, --no-web                      only the tasks that need the web, or only those that do not
 //   --repeat <n>                         runs of each task, model and agent (1)
 //   --retries <n>                        runs again after a setup failure, keeping the last record (1)
-//   --user-store                         run the harness over the user's ~/.widecode and opencode over the
+//   --user-store                         run the harness over the user's ~/.lightcode and opencode over the
 //                                        user's config, as they do for the app, rather than fresh temp folders
 //   --fake <fixture>                     the harness on its fake model (the runner's own test)
 //   --prices <file.json>                 model prices, per million tokens (`{ "<model>": [input, output, cacheRead] }`);
@@ -72,8 +72,8 @@ const specFor = (agent: string): RunSpec => {
     spec.command = value("--command", "").split(/\s+/).filter((w) => w.length > 0);
     spec.agent = value("--agent", spec.command[0] ?? "agent");
   } else if (agent === "harness") {
-    spec.command = args.includes("--binary") ? ["widecode", "--harness"] : ["node", main, "--harness"];
-    spec.forget = args.includes("--binary") ? ["widecode", "--harness-forget", "{session}"] : ["node", main, "--harness-forget", "{session}"];
+    spec.command = args.includes("--binary") ? ["lightcode", "--harness"] : ["node", main, "--harness"];
+    spec.forget = args.includes("--binary") ? ["lightcode", "--harness-forget", "{session}"] : ["node", main, "--harness-forget", "{session}"];
     if (fake.length > 0) {
       const home = join(here, "results", "fake-home");
       mkdirSync(home, { recursive: true });
@@ -108,8 +108,8 @@ const only = value("--tasks", "").split(",").filter((t) => t.length > 0);
 const repeat = Math.max(1, Number(value("--repeat", "1")) || 1);
 const retries = Math.max(0, Math.trunc(Number(value("--retries", "1"))) || 0);
 const budget = Number(value("--budget", "-1"));
-const home = process.env["WIDECODE_HOME"] ?? "";
-const store = home.length > 0 ? home : join(process.env["HOME"] ?? "", ".widecode");
+const home = process.env["LIGHTCODE_HOME"] ?? "";
+const store = home.length > 0 ? home : join(process.env["HOME"] ?? "", ".lightcode");
 const pricesFile = value("--prices", "");
 const prices = pricesFile.length > 0 ? pricesFromFile(pricesFile) : pricesFromConfig(join(store, "config.json"));
 let tasks: BenchTask[] = loadTasks(join(here, "tasks"), only);

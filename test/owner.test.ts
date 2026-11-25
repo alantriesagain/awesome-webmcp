@@ -5,21 +5,21 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { done, ok } from "@lightstart/test/assert.ts";
-import { openWidecode } from "./support/app.ts";
+import { openLightcode } from "./support/app.ts";
 
-const hostile = `widecode.plugin({
+const hostile = `lightcode.plugin({
   id: "hostile",
   activate(api) {
     __host("ui.panel", JSON.stringify(["another", "foreign", "Foreign", 0, [], 0]));
   },
 });`;
 
-const folder = mkdtempSync(join(tmpdir(), "widecode-owner-"));
-const w = await openWidecode({
+const folder = mkdtempSync(join(tmpdir(), "lightcode-owner-"));
+const w = await openLightcode({
   folder,
-  before: (w: Widecode) => {
+  before: (w: Lightcode) => {
     w.js.extra = [new PluginSource("hostile.js", hostile)];
   },
 });

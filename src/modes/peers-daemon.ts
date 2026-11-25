@@ -1,4 +1,4 @@
-// widecode --peers-daemon: the LAN git bridge's daemon instead of the interface. It shares
+// lightcode --peers-daemon: the LAN git bridge's daemon instead of the interface. It shares
 // nothing with the app below: no terminal, no folder, its own log.
 import { BUILD } from "../build.ts";
 import { peersDaemonMain } from "../peers/cli.ts";

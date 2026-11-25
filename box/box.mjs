@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * widecode's box: a QEMU VM and a lighter bubblewrap jail on the host.
+ * lightcode's box: a QEMU VM and a lighter bubblewrap jail on the host.
  *
  * Plain QEMU as the user, no root, as bootstrapp's packages/vps/testvm/vm.mjs
  * does: a Debian 13 cloud image as the read-only backing file, a qcow2 overlay
@@ -21,7 +21,7 @@
  * toolchain (build-essential, clang), node 24 (the official tarball), pnpm,
  * Claude Code and opencode from their own installers. `up` boots a fresh overlay on base with
  * restrict=on.
- * A per-boot cloud-init seed mounts the shares and bind-mounts .widecode,
+ * A per-boot cloud-init seed mounts the shares and bind-mounts .lightcode,
  * .claude and .git read-only, because the project paths change per boot.
  * A host folder, <state>/guest-cache, is shared the same way and mounted over
  * /home/agent/.cache, so the guest's scriptc cache survives down and up.
@@ -58,7 +58,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const STATE = process.env.WIDECODE_BOX_DIR || path.join(os.homedir(), ".cache", "widecode", "box");
+const STATE = process.env.LIGHTCODE_BOX_DIR || path.join(os.homedir(), ".cache", "lightcode", "box");
 const CACHED_IMAGE = path.join(os.homedir(), ".cache", "bootstrapp", "vps-test", "debian-13-genericcloud-amd64.qcow2");
 const IMAGE = "debian-13-genericcloud-amd64.qcow2";
 const IMAGE_URL = `https://cloud.debian.org/images/cloud/trixie/latest/${IMAGE}`;
@@ -74,7 +74,7 @@ const RECORD = path.join(STATE, "box.json");
 const LOCK = path.join(STATE, "box.lock");
 
 /** The paths the box may not write, each read-only over its project: what the host runs without asking. */
-const PROTECTED = [".widecode", ".claude", ".git"];
+const PROTECTED = [".lightcode", ".claude", ".git"];
 
 const PROXY_PID = path.join(STATE, "proxy.pid");
 const PROXY_LOG = path.join(STATE, "proxy.log");
@@ -90,20 +90,20 @@ const HOST_HOME = os.homedir();
 const BWRAP = "/usr/bin/bwrap";
 const TOOL_NAMES = ["node", "pnpm", "opencode", "claude"];
 
-const ENV_DIR = "/home/agent/.config/widecode-box";
+const ENV_DIR = "/home/agent/.config/lightcode-box";
 const ENV_FILE = `${ENV_DIR}/env`;
 const OPENCODE_AUTH = "/home/agent/.local/share/opencode/auth.json";
 const CREDENTIAL_KEYS = ["CLAUDE_CODE_OAUTH_TOKEN", "OPENCODE_API_KEY"];
 
 const credentialsPath = () =>
-  process.env.WIDECODE_BOX_CREDENTIALS || path.join(os.homedir(), ".widecode", "box", "credentials.env");
+  process.env.LIGHTCODE_BOX_CREDENTIALS || path.join(os.homedir(), ".lightcode", "box", "credentials.env");
 
 const HOST = "127.0.0.1";
-const PORT = Number(process.env.WIDECODE_BOX_PORT || 2223);
-const DEFAULT_MEMORY = Number(process.env.WIDECODE_BOX_MEMORY || 4096);
-const DEFAULT_CPUS = Number(process.env.WIDECODE_BOX_CPUS || 4);
+const PORT = Number(process.env.LIGHTCODE_BOX_PORT || 2223);
+const DEFAULT_MEMORY = Number(process.env.LIGHTCODE_BOX_MEMORY || 4096);
+const DEFAULT_CPUS = Number(process.env.LIGHTCODE_BOX_CPUS || 4);
 const DISK_SIZE = "40G";
-const READY = "/run/widecode-box-ready";
+const READY = "/run/lightcode-box-ready";
 
 const DEFAULT_ALLOW = [
   "api.anthropic.com",
@@ -254,7 +254,7 @@ const releaseLock = () => {
 const ensureKey = () => {
   if (existsSync(KEY)) return;
   say("• generating a keypair for the box only");
-  must("ssh-keygen", ["-t", "ed25519", "-N", "", "-C", "widecode-box", "-f", KEY]);
+  must("ssh-keygen", ["-t", "ed25519", "-N", "", "-C", "lightcode-box", "-f", KEY]);
 };
 
 const ensureSource = () => {
@@ -270,7 +270,7 @@ const buildSeed = (/** @type {string} */ file, /** @type {string} */ userData) =
   writeFileSync(path.join(STATE, "user-data"), userData);
   writeFileSync(
     path.join(STATE, "meta-data"),
-    `instance-id: ${userData.match(/^instance-id: (.+)$/m)?.[1] ?? "widecode-box"}\nlocal-hostname: widecode-box\n`,
+    `instance-id: ${userData.match(/^instance-id: (.+)$/m)?.[1] ?? "lightcode-box"}\nlocal-hostname: lightcode-box\n`,
   );
   rmSync(file, { force: true });
   must("genisoimage", [
@@ -576,7 +576,7 @@ const mergeOpenCodeAuth = (text, key) => {
 
 /** Write the guest's credential files directly under `root`, for the jail's home. */
 const installLocalCredentials = (/** @type {string} */ root, /** @type {{ values: Record<string, string> }} */ creds) => {
-  const envDir = path.join(root, ".config", "widecode-box");
+  const envDir = path.join(root, ".config", "lightcode-box");
   const envFile = path.join(envDir, "env");
   const env = credentialEnvText(creds);
   if (env) {
@@ -628,7 +628,7 @@ chmod 600 ${OPENCODE_AUTH}
 };
 
 const provisionUserData = (/** @type {string} */ pub) => `#cloud-config
-hostname: widecode-box
+hostname: lightcode-box
 disable_root: true
 ssh_pwauth: false
 ssh_deletekeys: false
@@ -653,7 +653,7 @@ packages:
   - cloud-guest-utils
 
 write_files:
-  - path: /usr/local/bin/widecode-box-agents
+  - path: /usr/local/bin/lightcode-box-agents
     permissions: '0755'
     content: |
       #!/bin/bash
@@ -676,11 +676,11 @@ write_files:
 
       runuser -l agent -c 'curl -fsSL https://claude.ai/install.sh | bash'
       runuser -l agent -c 'curl -fsSL https://opencode.ai/install | bash'
-      echo 'export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"' > /etc/profile.d/widecode-box-path.sh
+      echo 'export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"' > /etc/profile.d/lightcode-box-path.sh
 
 runcmd:
-  - [ /usr/local/bin/widecode-box-agents ]
-instance-id: widecode-box-provision
+  - [ /usr/local/bin/lightcode-box-agents ]
+instance-id: lightcode-box-provision
 `;
 
 const upUserData = (/** @type {string[]} */ projects, /** @type {"virtiofs" | "9p"} */ shares) => {
@@ -709,19 +709,19 @@ chown -R agent:agent /home/agent/.cache
 touch ${READY}
 `;
   return `#cloud-config
-hostname: widecode-box
+hostname: lightcode-box
 disable_root: true
 ssh_pwauth: false
 ssh_deletekeys: false
 
 write_files:
-  - path: /usr/local/bin/widecode-box-setup
+  - path: /usr/local/bin/lightcode-box-setup
     permissions: '0755'
     content: |
 ${yamlBlock(script)}
 runcmd:
-  - [ /usr/local/bin/widecode-box-setup ]
-instance-id: widecode-box-up-${Date.now()}
+  - [ /usr/local/bin/lightcode-box-setup ]
+instance-id: lightcode-box-up-${Date.now()}
 `;
 };
 
@@ -834,8 +834,8 @@ const up = async (/** @type {string[]} */ args) => {
   }
   if (new Set(projects).size !== projects.length) throw new Error("a folder is listed twice");
   const creds = loadCredentials();
-  const forcedShares = process.env.WIDECODE_BOX_SHARES === "9p" ? "9p" : process.env.WIDECODE_BOX_SHARES === "virtiofs" ? "virtiofs" : null;
-  if (forcedShares === "virtiofs" && !VIRTIOFSD) throw new Error("WIDECODE_BOX_SHARES=virtiofs but virtiofsd is missing");
+  const forcedShares = process.env.LIGHTCODE_BOX_SHARES === "9p" ? "9p" : process.env.LIGHTCODE_BOX_SHARES === "virtiofs" ? "virtiofs" : null;
+  if (forcedShares === "virtiofs" && !VIRTIOFSD) throw new Error("LIGHTCODE_BOX_SHARES=virtiofs but virtiofsd is missing");
   const shares = forcedShares ?? (VIRTIOFSD ? "virtiofs" : "9p");
   acquireLock();
   try {
@@ -873,7 +873,7 @@ const up = async (/** @type {string[]} */ args) => {
     say(`• guest cache: ${GUEST_CACHE}`);
     for (const port of ports) say(`• port: ${HOST}:${port.host} -> guest ${port.guest}`);
     if (shares === "virtiofs") say(`• virtiofsd: ${VIRTIOFSD} (unprivileged, sandbox ${VIRTIOFSD_SANDBOX})`);
-    else if (forcedShares === "9p") say("• 9p forced by WIDECODE_BOX_SHARES=9p");
+    else if (forcedShares === "9p") say("• 9p forced by LIGHTCODE_BOX_SHARES=9p");
     else say("• virtiofsd not found; using 9p (slower)");
     const started = Date.now();
     let sockets = [];
@@ -1024,7 +1024,7 @@ const logProxy = (/** @type {string} */ line) => {
 };
 
 const proxy = async (/** @type {string[]} */ args) => {
-  let port = Number(process.env.WIDECODE_BOX_PROXY_PORT || 8888);
+  let port = Number(process.env.LIGHTCODE_BOX_PROXY_PORT || 8888);
   let allow = DEFAULT_ALLOW;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -1385,7 +1385,7 @@ const parseJailInnerArgs = (/** @type {string[]} */ args) => {
 };
 
 const claudeToken = () => {
-  const file = path.join(process.env.HOME || "", ".config", "widecode-box", "env");
+  const file = path.join(process.env.HOME || "", ".config", "lightcode-box", "env");
   if (!existsSync(file)) return "";
   const match = /^export\s+CLAUDE_CODE_OAUTH_TOKEN=(.*)$/m.exec(readFileSync(file, "utf8"));
   return match ? unquote(match[1].trim()) : "";

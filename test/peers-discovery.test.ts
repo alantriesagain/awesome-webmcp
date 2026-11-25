@@ -10,31 +10,31 @@ import { Advertiser, DaemonOptions, Seen, instanceName, parseAvahi, parseDnsSdZo
 import { done, eq, eqn, ok } from "@lightstart/test/assert.ts";
 
 const AVAHI = [
-  "+;virbr0;IPv4;widecode-linux-test;_widecode._tcp;local",
-  "+;wlo1;IPv6;widecode-linux-test;_widecode._tcp;local",
-  '=;virbr0;IPv4;widecode-linux-test;_widecode._tcp;local;alanleal-730QDA.local;192.168.122.1;7337;"name=linux" "id=abc123"',
-  '=;wlo1;IPv6;widecode-linux-test;_widecode._tcp;local;alanleal-730QDA.local;2804:7f1:eb43:935d:52c3:c986:abc4:eeda;7337;"name=linux" "id=abc123"',
-  '=;wlo1;IPv4;widecode-linux-test;_widecode._tcp;local;alanleal-730QDA.local;192.168.15.57;7337;"name=linux" "id=abc123"',
-  '=;lo;IPv4;widecode-linux-test;_widecode._tcp;local;alanleal-730QDA.local;127.0.0.1;7337;"name=linux" "id=abc123"',
-  '=;wlo1;IPv6;widecode-mac-test;_widecode._tcp;local;Alans-MacBook-Pro.local;192.168.15.51;7338;"name=mac" "id=def456"',
-  '=;wlo1;IPv4;widecode-mac-test;_widecode._tcp;local;Alans-MacBook-Pro.local;192.168.15.51;7338;"name=mac" "id=def456"',
+  "+;virbr0;IPv4;lightcode-linux-test;_lightcode._tcp;local",
+  "+;wlo1;IPv6;lightcode-linux-test;_lightcode._tcp;local",
+  '=;virbr0;IPv4;lightcode-linux-test;_lightcode._tcp;local;alanleal-730QDA.local;192.168.122.1;7337;"name=linux" "id=abc123"',
+  '=;wlo1;IPv6;lightcode-linux-test;_lightcode._tcp;local;alanleal-730QDA.local;2804:7f1:eb43:935d:52c3:c986:abc4:eeda;7337;"name=linux" "id=abc123"',
+  '=;wlo1;IPv4;lightcode-linux-test;_lightcode._tcp;local;alanleal-730QDA.local;192.168.15.57;7337;"name=linux" "id=abc123"',
+  '=;lo;IPv4;lightcode-linux-test;_lightcode._tcp;local;alanleal-730QDA.local;127.0.0.1;7337;"name=linux" "id=abc123"',
+  '=;wlo1;IPv6;lightcode-mac-test;_lightcode._tcp;local;Alans-MacBook-Pro.local;192.168.15.51;7338;"name=mac" "id=def456"',
+  '=;wlo1;IPv4;lightcode-mac-test;_lightcode._tcp;local;Alans-MacBook-Pro.local;192.168.15.51;7338;"name=mac" "id=def456"',
   "",
 ].join("\n");
 
 const ZONE = [
-  "Browsing for _widecode._tcp",
+  "Browsing for _lightcode._tcp",
   "DATE: ---Sat 24 Oct 2026---",
   "17:50:03.767  ...STARTING...",
   "",
   "; To direct clients to browse a different domain, substitute that domain in place of '@'",
   "lb._dns-sd._udp                                 PTR     @",
   "",
-  "_widecode._tcp                                  PTR     widecode-linux-test._widecode._tcp",
-  "widecode-linux-test._widecode._tcp              SRV     0 0 7337 alanleal-730QDA.local. ; Replace with unicast FQDN of target host",
-  'widecode-linux-test._widecode._tcp              TXT     "id=abc123" "name=linux"',
-  "_widecode._tcp                                  PTR     widecode-def456._widecode._tcp",
-  "widecode-def456._widecode._tcp                  SRV     0 0 7338 Alans-MacBook-Pro.local. ; Replace with unicast FQDN of target host",
-  'widecode-def456._widecode._tcp                  TXT     "id=def456" "name=mac"',
+  "_lightcode._tcp                                  PTR     lightcode-linux-test._lightcode._tcp",
+  "lightcode-linux-test._lightcode._tcp              SRV     0 0 7337 alanleal-730QDA.local. ; Replace with unicast FQDN of target host",
+  'lightcode-linux-test._lightcode._tcp              TXT     "id=abc123" "name=linux"',
+  "_lightcode._tcp                                  PTR     lightcode-def456._lightcode._tcp",
+  "lightcode-def456._lightcode._tcp                  SRV     0 0 7338 Alans-MacBook-Pro.local. ; Replace with unicast FQDN of target host",
+  'lightcode-def456._lightcode._tcp                  TXT     "id=def456" "name=mac"',
   "",
 ].join("\n");
 
@@ -49,24 +49,24 @@ const DSCACHE = ["name: alanleal-730qda.local", "ipv6_address: 2804:7f1:eb43:935
   const mac = seen.find((s: Seen) => s.id === "def456")!;
   eq("the Linux box at its private IPv4, not the bridge, the loopback or the IPv6", linux.address + ":" + String(linux.port) + " " + linux.name + " " + linux.host, "192.168.15.57:7337 linux alanleal-730QDA.local");
   eq("the Mac as the Linux box sees it", mac.address + ":" + String(mac.port) + " " + mac.name, "192.168.15.51:7338 mac");
-  eqn("lines that are no record are skipped", parseAvahi("+;wlo1;IPv4;x;_widecode._tcp;local\nnonsense\n").length, 0);
+  eqn("lines that are no record are skipped", parseAvahi("+;wlo1;IPv4;x;_lightcode._tcp;local\nnonsense\n").length, 0);
 }
 
 {
   const zone = parseDnsSdZone(ZONE);
   eqn("two instances", zone.length, 2);
-  eq("SRV gives the host and port, TXT the id and name", zone.map((e) => e.instance + "=" + e.host + ":" + String(e.port) + "/" + e.txt["id"] + "/" + e.txt["name"]).join(" "), "widecode-linux-test=alanleal-730QDA.local:7337/abc123/linux widecode-def456=Alans-MacBook-Pro.local:7338/def456/mac");
+  eq("SRV gives the host and port, TXT the id and name", zone.map((e) => e.instance + "=" + e.host + ":" + String(e.port) + "/" + e.txt["id"] + "/" + e.txt["name"]).join(" "), "lightcode-linux-test=alanleal-730QDA.local:7337/abc123/linux lightcode-def456=Alans-MacBook-Pro.local:7338/def456/mac");
   eq("dscacheutil's IPv4", parseDscacheutil(DSCACHE).join(","), "192.168.15.57");
   eqn("no address when it says none", parseDscacheutil("name: x.local\n").length, 0);
 }
 
 {
-  eq("the instance name is the id's first eight digits", instanceName("def4567890abcdef"), "widecode-def45678");
-  eq("announce on Linux", Advertiser.command("linux", "abc123", "linux", 7337).join(" "), "avahi-publish-service widecode-abc123 _widecode._tcp 7337 id=abc123 name=linux");
-  eq("announce on macOS", Advertiser.command("darwin", "def456", "mac", 7338).join(" "), "dns-sd -R widecode-def456 _widecode._tcp . 7338 id=def456 name=mac");
+  eq("the instance name is the id's first eight digits", instanceName("def4567890abcdef"), "lightcode-def45678");
+  eq("announce on Linux", Advertiser.command("linux", "abc123", "linux", 7337).join(" "), "avahi-publish-service lightcode-abc123 _lightcode._tcp 7337 id=abc123 name=linux");
+  eq("announce on macOS", Advertiser.command("darwin", "def456", "mac", 7338).join(" "), "dns-sd -R lightcode-def456 _lightcode._tcp . 7338 id=def456 name=mac");
 }
 
-const root = mkdtempSync(join(tmpdir(), "widecode-peers-disc-"));
+const root = mkdtempSync(join(tmpdir(), "lightcode-peers-disc-"));
 const main = async (): Promise<void> => {
   mkdirSync(join(root, "a"));
   const o = new DaemonOptions();

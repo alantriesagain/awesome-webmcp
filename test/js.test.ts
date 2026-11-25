@@ -1,9 +1,9 @@
 // ffi: @lightstart/plugins/native/ffi.json
-// widecode's JS plugins in the embedded engine (natively QuickJS; under node, node:vm through
+// lightcode's JS plugins in the embedded engine (natively QuickJS; under node, node:vm through
 // wcjs-node.mjs, the same calls): a plugin's command, key, hook, message, settings and kept state;
 // the drawing helpers; one replacing a built-in of its id, and a later one replacing an earlier; a
 // requirement not met reported; an error in a plugin's function reported without stopping
-// widecode; a plugin running past its time budget switched off with what it added, the plugin that
+// lightcode; a plugin running past its time budget switched off with what it added, the plugin that
 // ran its command left running; a call from another async function (natively, another fiber's
 // stack), a hook the core fires inside an async function, and a recursion too deep, ending in an
 // error the plugin could catch; an edit taking effect on reload, asked for from inside a plugin's
@@ -15,12 +15,12 @@ import { stringWidth } from "@lightstart/light/native/tui/width.ts";
 import { PluginSource, sourcesIn } from "@lightstart/plugins/sources.ts";
 import { NoStateFile } from "@lightstart/kernel/settings.ts";
 import { Store } from "../src/services/store.ts";
-import type { Widecode } from "../src/compose.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import type { Lightcode } from "../src/compose.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
-const greeter = `widecode.plugin({
+const greeter = `lightcode.plugin({
   id: "greeter",
   defaults: () => ({ greeting: "hello" }),
   activate(api) {
@@ -35,19 +35,19 @@ const greeter = `widecode.plugin({
 });`;
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-js-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-js-"));
   // One state for every app below: what a plugin keeps outlives the app that kept it.
   const state = new NoStateFile();
-  const make = (sources: PluginSource[], config: string): Promise<Widecode> =>
-    openWidecode({
+  const make = (sources: PluginSource[], config: string): Promise<Lightcode> =>
+    openLightcode({
       folder,
       plugins: JSON.parse(config),
       state,
-      before: (w: Widecode) => {
+      before: (w: Lightcode) => {
         w.js.extra = sources;
       },
     });
-  const press = (w: Widecode, name: string, text: string): boolean => w.shell.handleKey(new KeyEvent(name, text, false, false, false));
+  const press = (w: Lightcode, name: string, text: string): boolean => w.shell.handleKey(new KeyEvent(name, text, false, false, false));
 
   let w = await make([new PluginSource("greeter.js", greeter)], '{"greeter": {"greeting": "olá"}}');
   ok("a JS plugin starts beside the compiled ones", w.host.kernel.has("greeter") && w.host.kernel.has("code") && w.js.errors.length === 0);
@@ -62,20 +62,20 @@ const main = async (): Promise<void> => {
   const kept = w.host.kernel.settings.state("greeter") as { changes?: unknown } | null;
   ok("its hook, and the state it keeps", kept !== null && typeof kept.changes === "number" && kept.changes >= 2);
   w.host.roles.chat.submit("/boom");
-  ok("an error in its function is reported, widecode goes on", w.js.errors.some((e) => e.startsWith("greeter: Error: boom")) && w.host.kernel.has("greeter"));
+  ok("an error in its function is reported, lightcode goes on", w.js.errors.some((e) => e.startsWith("greeter: Error: boom")) && w.host.kernel.has("greeter"));
   eq("its default section for a new config.json", JSON.stringify(w.defaults().filter((d) => d.id === "greeter").map((d) => d.value)), '[{"greeting":"hello"}]');
   w.host.kernel.stop();
 
-  const models = `widecode.plugin({ id: "models", activate(api) { api.commands.add({ name: "/model", help: "from JS", run: () => api.tell("the JS models") }); } });`;
+  const models = `lightcode.plugin({ id: "models", activate(api) { api.commands.add({ name: "/model", help: "from JS", run: () => api.tell("the JS models") }); } });`;
   w = await make([new PluginSource("models.js", models)], "{}");
   w.host.roles.chat.submit("/model");
   eq("a plugin with a built-in's id replaces it", w.host.screen.message.peek() + " | " + String(w.host.kernel.started.filter((p) => p.id === "models").length), "the JS models | 1");
   w.host.kernel.stop();
 
-  const first = `widecode.plugin({ id: "twice", activate(api) { api.commands.add({ name: "/which", run: () => api.tell("first") }); } });`;
-  const second = `widecode.plugin({ id: "twice", activate(api) { api.commands.add({ name: "/which", run: () => api.tell("second") }); } });`;
-  const needy = `widecode.plugin({ id: "needy", requires: ["nothing-here"], activate(api) {} });`;
-  const broken = `widecode.plugin({ id: "broken" activate() {} });`;
+  const first = `lightcode.plugin({ id: "twice", activate(api) { api.commands.add({ name: "/which", run: () => api.tell("first") }); } });`;
+  const second = `lightcode.plugin({ id: "twice", activate(api) { api.commands.add({ name: "/which", run: () => api.tell("second") }); } });`;
+  const needy = `lightcode.plugin({ id: "needy", requires: ["nothing-here"], activate(api) {} });`;
+  const broken = `lightcode.plugin({ id: "broken" activate() {} });`;
   w = await make([new PluginSource("first.js", first), new PluginSource("second.js", second), new PluginSource("needy.js", needy), new PluginSource("broken.js", broken)], "{}");
   w.host.roles.chat.submit("/which");
   eq("a later plugin of an id replaces an earlier", w.host.screen.message.peek(), "second");
@@ -83,8 +83,8 @@ const main = async (): Promise<void> => {
   ok("a file that does not parse is reported, the others load", w.js.errors.some((e) => e.startsWith("broken.js: SyntaxError")) && w.host.kernel.has("twice"));
   w.host.kernel.stop();
 
-  const utils = `widecode.plugin({ id: "utils", activate(api) {
-    const u = widecode.util;
+  const utils = `lightcode.plugin({ id: "utils", activate(api) {
+    const u = lightcode.util;
     api.commands.add({ name: "/util", run: () => api.tell([u.width("日本a"), u.clip("abcdef", 4), u.clip("👨‍👩‍👧👨‍👩‍👧x", 3), u.runsWidth(u.pad([{ text: "ab" }], 5)), [12000, 200000, 8400000, 25 * 86400000].map(u.age).join(" "), u.elapsed(65000), u.tokens(1234567)].join(" ")) });
     api.commands.add({ name: "/widths", run: (list) => api.tell(JSON.stringify(JSON.parse(list).map(u.width))) });
   } });`;
@@ -96,12 +96,12 @@ const main = async (): Promise<void> => {
   eq("widths as the screen counts them", w.host.screen.message.peek(), JSON.stringify(samples.map(stringWidth)));
   w.host.kernel.stop();
 
-  const runaway = `widecode.plugin({ id: "runaway", activate(api) {
+  const runaway = `lightcode.plugin({ id: "runaway", activate(api) {
     api.commands.add({ name: "/spin", help: "loop", run: () => { for (;;) {} } });
     api.keys.add("char:s", "code", "s spin", () => { for (;;) {} });
   } });`;
   // A plugin that runs another command from inside its own.
-  const caller = `widecode.plugin({ id: "caller", activate(api) {
+  const caller = `lightcode.plugin({ id: "caller", activate(api) {
     api.commands.add({ name: "/call", usage: "<command>", run: (command) => { api.commands.run(command); api.tell("caller goes on"); } });
   } });`;
   w = await make([new PluginSource("runaway.js", runaway), new PluginSource("caller.js", caller)], "{}");
@@ -112,7 +112,7 @@ const main = async (): Promise<void> => {
   ok("its key went with it", !press(w, "char", "s"));
   w.host.kernel.stop();
 
-  const deep = `widecode.plugin({ id: "deep", activate(api) {
+  const deep = `lightcode.plugin({ id: "deep", activate(api) {
     const down = (n) => (n <= 0 ? 0 : 1 + down(n - 1));
     api.commands.add({ name: "/deep", usage: "<n>", help: "recurse", run: (n) => api.tell("deep " + down(Number(n))) });
   } });`;
@@ -130,7 +130,7 @@ const main = async (): Promise<void> => {
   w.host.kernel.stop();
 
   // A hook the core fires inside an async function runs on that function's own stack, while the plugin that set it off waits on its own.
-  const hooked = `widecode.plugin({ id: "hooked", activate(api) {
+  const hooked = `lightcode.plugin({ id: "hooked", activate(api) {
     const down = (n) => (n <= 0 ? 0 : 1 + down(n - 1));
     let heard = 0;
     api.on("baseChanged", () => { heard = down(100); });
@@ -145,20 +145,20 @@ const main = async (): Promise<void> => {
 
   const dir = join(folder, "plugins");
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "b.js"), `widecode.plugin({ id: "editable", activate(api) { api.commands.add({ name: "/v", run: () => api.tell("v1") }); api.commands.add({ name: "/old", run: () => api.tell("old") }); } });`);
+  writeFileSync(join(dir, "b.js"), `lightcode.plugin({ id: "editable", activate(api) { api.commands.add({ name: "/v", run: () => api.tell("v1") }); api.commands.add({ name: "/old", run: () => api.tell("old") }); } });`);
   writeFileSync(join(dir, "a.txt"), "not a plugin");
   eq("a folder's plugin files, by name", sourcesIn(dir).map((s) => s.file.slice(dir.length + 1)).join(" "), "b.js");
-  w = await openWidecode({
+  w = await openLightcode({
     folder,
     state,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.js.dirs = [dir];
       w.js.extra = [new PluginSource("caller.js", caller)];
     },
   });
   w.host.roles.chat.submit("/v");
   eq("loaded from the folder", w.host.screen.message.peek(), "v1");
-  writeFileSync(join(dir, "b.js"), `widecode.plugin({ id: "editable", activate(api) { api.commands.add({ name: "/v", run: () => api.tell("v2") }); } });`);
+  writeFileSync(join(dir, "b.js"), `lightcode.plugin({ id: "editable", activate(api) { api.commands.add({ name: "/v", run: () => api.tell("v2") }); } });`);
   // Asked for from inside a plugin's call: the context it runs in is let go after the call.
   w.host.roles.chat.submit("/call /reload");
   w.host.roles.chat.submit("/v");
@@ -167,20 +167,20 @@ const main = async (): Promise<void> => {
 
   // A saved file reloads alone: its plugins replaced, the others untouched.
   const callerBefore = w.host.kernel.started.find((p) => p.id === "caller");
-  writeFileSync(join(dir, "b.js"), `widecode.plugin({ id: "editable", activate(api) { api.commands.add({ name: "/v", run: () => api.tell("v3") }); api.every(5, () => { globalThis.__ticks = (globalThis.__ticks ?? 0) + 1; }); } });
-widecode.plugin({ id: "second", activate(api) { api.commands.add({ name: "/s", run: () => api.tell("s") }); } });`);
+  writeFileSync(join(dir, "b.js"), `lightcode.plugin({ id: "editable", activate(api) { api.commands.add({ name: "/v", run: () => api.tell("v3") }); api.every(5, () => { globalThis.__ticks = (globalThis.__ticks ?? 0) + 1; }); } });
+lightcode.plugin({ id: "second", activate(api) { api.commands.add({ name: "/s", run: () => api.tell("s") }); } });`);
   w.js.syncFolder(dir);
   w.host.roles.chat.submit("/v");
   const v3 = w.host.screen.message.peek();
   w.host.roles.chat.submit("/s");
   eq("a file saved reloads its own plugins, two of them here", v3 + " " + w.host.screen.message.peek(), "v3 s");
   ok("the other plugins are untouched, not restarted", w.host.kernel.started.find((p) => p.id === "caller") === callerBefore && w.host.kernel.has("caller"));
-  writeFileSync(join(dir, "b.js"), `widecode.plugin({ id: "editable" activate() {} });`);
+  writeFileSync(join(dir, "b.js"), `lightcode.plugin({ id: "editable" activate() {} });`);
   w.js.syncFolder(dir);
   w.host.roles.chat.submit("/v");
   ok("a file that fails to evaluate keeps its previous plugins running, and says why", w.host.screen.message.peek() === "v3" && w.host.kernel.has("second") && w.js.errors.some((e) => e.includes("b.js: SyntaxError")));
   await new Promise<void>((resolve) => setTimeout(resolve, 40));
-  writeFileSync(join(dir, "b.js"), `widecode.plugin({ id: "editable", activate(api) { api.commands.add({ name: "/ticks", run: () => api.tell(String(globalThis.__ticks ?? 0)) }); } });`);
+  writeFileSync(join(dir, "b.js"), `lightcode.plugin({ id: "editable", activate(api) { api.commands.add({ name: "/ticks", run: () => api.tell(String(globalThis.__ticks ?? 0)) }); } });`);
   w.js.syncFolder(dir);
   ok("a plugin the file no longer defines is gone", !w.host.kernel.has("second") && w.host.kernel.commands.find("/s") === null);
   w.host.roles.chat.submit("/ticks");
@@ -197,12 +197,12 @@ widecode.plugin({ id: "second", activate(api) { api.commands.add({ name: "/s", r
   ok("the file removed, the built-in comes back", w.host.kernel.has("models") && (w.js.plugins.find((p) => p.id === "models")?.file ?? "").endsWith("/dist/plugins-test/models/index.js") && w.host.kernel.commands.find("/model") !== null);
   w.host.kernel.stop();
 
-  const home = mkdtempSync(join(tmpdir(), "widecode-js-home-"));
+  const home = mkdtempSync(join(tmpdir(), "lightcode-js-home-"));
   const store = new Store(home);
   ok("a project's plugins are not trusted at first", !store.trusted(folder));
   store.trust(folder);
   ok("then trusted, and kept", new Store(home).trusted(folder) && !new Store(home).trusted("/elsewhere"));
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });
   done();

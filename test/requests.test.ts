@@ -5,14 +5,15 @@
 // composer as a user would, and the line the plugin writes to the CLI compared byte for byte with
 // what the probe sent (and Claude accepted): a single choice by number, a multi-select with Space
 // plus an answer in the user's own words, and a plan approval that returns to bypass mode.
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { TOOL } from "../src/conversation/model.ts";
 import { Choice, Question } from "../src/conversation/requests.ts";
 import { Caret, Clip, DEFAULT_STYLE, KeyEvent, Screen, TRoot, frames, layout, mount, paint, unmount } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
 const fixtures = join(process.cwd(), "test", "fixtures");
 const W = 160;
@@ -62,6 +63,8 @@ const recorded = (name: string): string => {
 };
 
 const main = async (): Promise<void> => {
+  // A folder of its own: its .lightcode/ gets this test's session records, never the repository's.
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-requests-"));
   const root = new TRoot();
   const screen = (): string => {
     for (let i = 0; i < 3; i++) {
@@ -72,11 +75,11 @@ const main = async (): Promise<void> => {
     paint(root, s, new Clip(0, 0, W, H), DEFAULT_STYLE, new Caret(), null);
     return s.text();
   };
-  const run = async (name: string, drive: (app: Widecode) => void): Promise<string> => {
+  const run = async (name: string, drive: (app: Lightcode) => void): Promise<string> => {
     const written: string[] = [];
-    const app = await openWidecode({
-      folder: process.cwd(),
-      before: (w: Widecode) => {
+    const app = await openLightcode({
+      folder,
+      before: (w: Lightcode) => {
         const c = w.host.conversation;
         c.executable = fake;
         c.extraArgs.push("--fixture", join(fixtures, name + ".ndjson"));
@@ -94,11 +97,11 @@ const main = async (): Promise<void> => {
     conversation.changed();
     drive(app);
     unmount(app.shell);
-    closeWidecode(app);
+    closeLightcode(app);
     return written.length > 0 ? written[written.length - 1] : "";
   };
 
-  const single = await run("ask", (app: Widecode) => {
+  const single = await run("ask", (app: Lightcode) => {
     const text = screen();
     ok("the question shows in the panel with its options", text.includes("Claude asks · Color") && text.includes("Which color do you prefer?") && text.includes("2. Blue"));
     app.shell.handleKey(key("char", "2"));
@@ -106,7 +109,7 @@ const main = async (): Promise<void> => {
   });
   eq("a single choice by number: the exact response", single, recorded("ask"));
 
-  const multi = await run("ask-multi", (app: Widecode) => {
+  const multi = await run("ask-multi", (app: Lightcode) => {
     ok("two questions, the first a multi-select", screen().includes("Claude asks (1/2) · Fruits") && screen().includes("[ ] Apple"));
     ok("the strip names every question of the set", screen().includes("Fruits  Color"));
     app.shell.handleKey(key("char", " "));
@@ -133,20 +136,20 @@ const main = async (): Promise<void> => {
   });
   eq("a multi-select and an answer in the user's words: the exact response", multi, recorded("ask-multi"));
 
-  const plan = await run("plan", (app: Widecode) => {
+  const plan = await run("plan", (app: Lightcode) => {
     ok("the plan panel asks to start", screen().includes("Plan ready") && screen().includes("1. Yes, start"));
     app.shell.handleKey(key("enter", ""));
   });
   eq("a plan approval returns to bypass mode: the exact response", plan, recorded("plan"));
 
-  const rejected = await run("plan", (app: Widecode) => {
+  const rejected = await run("plan", (app: Lightcode) => {
     app.shell.handleKey(key("down", ""));
     app.chat.typed("Use a heredoc instead.");
   });
   ok("keep planning sends the feedback as a denial", rejected.includes('"behavior":"deny","message":"Use a heredoc instead."'));
 
   // An interrupt while a question waits: the turn's result withdraws it and the panel closes.
-  await run("ask", (app: Widecode) => {
+  await run("ask", (app: Lightcode) => {
     ok("the panel is open", screen().includes("Claude asks · Color"));
     app.host.conversation.receive('{"type":"result","subtype":"error_during_execution","is_error":true,"terminal_reason":"aborted_streaming","session_id":"s"}');
     app.host.conversation.changed();
@@ -155,9 +158,9 @@ const main = async (): Promise<void> => {
   });
   // A line the user typed or queued before a request opened is a message, never its answer.
   const root3 = new TRoot();
-  const app3 = await openWidecode({
-    folder: process.cwd(),
-    before: (w: Widecode) => {
+  const app3 = await openLightcode({
+    folder,
+    before: (w: Lightcode) => {
       w.shell.resize(W);
       mount(w.shell, root3);
     },
@@ -177,13 +180,13 @@ const main = async (): Promise<void> => {
   app3.chat.typed("A");
   eq("text typed while the panel is shown answers it", String(sent3.length) + " " + String(c3.model.openRequests().length), "2 0");
   unmount(app3.shell);
-  closeWidecode(app3);
+  closeLightcode(app3);
 
   // A permission's panel offers its options alone; free words are refused, the request still open.
   const root4 = new TRoot();
-  const app4 = await openWidecode({
-    folder: process.cwd(),
-    before: (w: Widecode) => {
+  const app4 = await openLightcode({
+    folder,
+    before: (w: Lightcode) => {
       w.shell.resize(W);
       mount(w.shell, root4);
     },
@@ -212,14 +215,14 @@ const main = async (): Promise<void> => {
   app4.chat.typed("let it run");
   ok("free words are refused with a line, the permission still open", requested.state === "open" && app4.chat.pane.panel.active && paint4().includes("Choose one of the options"));
   unmount(app4.shell);
-  closeWidecode(app4);
+  closeLightcode(app4);
 
   // A background subagent's question opens its panel though its card is in an earlier turn; a
   // second request says how many more wait in the title.
   const root5 = new TRoot();
-  const app5 = await openWidecode({
-    folder: process.cwd(),
-    before: (w: Widecode) => {
+  const app5 = await openLightcode({
+    folder,
+    before: (w: Lightcode) => {
       w.shell.resize(W);
       mount(w.shell, root5);
     },
@@ -263,15 +266,15 @@ const main = async (): Promise<void> => {
   c5.changed();
   ok("another request waits, the title says so", paint5().includes("1 more waiting"));
   unmount(app5.shell);
-  closeWidecode(app5);
+  closeLightcode(app5);
 
   // A long question in a short terminal stays one row, so the options under it remain visible.
   const root6 = new TRoot();
   const w6 = 160;
   const h6 = 18;
-  const app6 = await openWidecode({
-    folder: process.cwd(),
-    before: (w: Widecode) => {
+  const app6 = await openLightcode({
+    folder,
+    before: (w: Lightcode) => {
       w.shell.resize(w6);
       mount(w.shell, root6);
     },
@@ -301,8 +304,9 @@ const main = async (): Promise<void> => {
   ok("the long question does not push the rows past the screen", !longText.includes(longQuestion.question));
 
   unmount(app6.shell);
-  closeWidecode(app6);
+  closeLightcode(app6);
 
+  rmSync(folder, { recursive: true, force: true });
   done();
 };
 

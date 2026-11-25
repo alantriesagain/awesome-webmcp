@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { contentText, projectDir, rec, str } from "./support/claude-records.ts";
 import { callMs, callState, findCall } from "../src/conversation/calls.ts";
 import { span } from "@lightstart/tui/duration.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
@@ -24,12 +24,12 @@ interface Frame {
 const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-tools-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-tools-"));
   writeFileSync(join(folder, "a.txt"), "a\n");
   // Claude Code's sessions for the folder, under a projects folder of the test's own.
   const projects = join(folder, ".projects");
   const config: unknown = { claude: { projects } };
-  const w = await openWidecode({ folder, plugins: config, load: true });
+  const w = await openLightcode({ folder, plugins: config, load: true });
   const c = w.host.conversation;
   await w.code.load("a.txt");
   const panel = w.tools.panel;
@@ -121,7 +121,7 @@ const main = async (): Promise<void> => {
   eq("no result when its turn ended: stopped", cut !== null ? callState(cut) : "", "stopped");
   eq("past a minute, minutes and seconds", span(125000), "2m 05s");
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

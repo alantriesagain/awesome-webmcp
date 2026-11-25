@@ -15,9 +15,9 @@
 // by a slash is a command here too, so the strip above the composer completes it with its
 // description as "/" is typed; /skills shows the tab.
 
-type Run = widecode.Run;
+type Run = lightcode.Run;
 
-const T = widecode.theme;
+const T = lightcode.theme;
 const DIM = T.dim;
 const SELECTED_BG = T.selected;
 const MARKS: Record<string, string> = { running: T.warn, done: T.ok, failed: T.bad, stopped: T.dim };
@@ -43,10 +43,10 @@ interface Line {
 
 const sourceRank = (source: string): number => SOURCE_RANK[source] ?? 2;
 
-widecode.plugin({
+lightcode.plugin({
   id: "skills",
   activate(api) {
-    const u = widecode.util;
+    const u = lightcode.util;
     let lines: Line[] = [];
     let skills: Skill[] = [];
     let runs: SkillRun[] = [];
@@ -228,7 +228,7 @@ widecode.plugin({
       width: (cols) => Math.max(32, Math.min(48, Math.floor(cols / 6))),
       count: () => lines.length,
       rows: (from, n, width) => {
-        const out: widecode.Row[] = [];
+        const out: lightcode.Row[] = [];
         const now = Date.now();
         for (let i = from; i < Math.min(from + n, lines.length); i++) {
           const l = lines[i];

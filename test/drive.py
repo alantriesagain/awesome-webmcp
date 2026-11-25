@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Drive dist/widecode in a pseudo-terminal as a user would: keys, text, mouse presses, and the screen
+"""Drive dist/lightcode in a pseudo-terminal as a user would: keys, text, mouse presses, and the screen
 read back (F12 makes the app write its screen's text to its --log file). The checklist
 (checklist.py) is built on it; it needs `claude` on PATH for anything that talks to Claude."""
 import os
@@ -13,7 +13,7 @@ import threading
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-BINARY = os.path.join(HERE, "..", "dist", "widecode")
+BINARY = os.path.join(HERE, "..", "dist", "lightcode")
 
 KEYS = {
     "enter": "\r", "esc": "\x1b", "tab": "\t", "shift-tab": "\x1b[Z", "space": " ", "backspace": "\x7f",

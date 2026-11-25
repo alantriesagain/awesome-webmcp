@@ -18,7 +18,7 @@ Open issues found along the way, each with what is known.
   (`CSI ?1004h`, then `ESC [ I` and `ESC [ O`). With it, the alerts plugin can alert only when the
   window is in the background.
 - Reloading every plugin from the harness's `reload` tool fails the call that asked for it:
-  `JsRuntime`'s full reload runs `mcp.failAll("widecode's plugins reloaded; call the tool again")`
+  `JsRuntime`'s full reload runs `mcp.failAll("lightcode's plugins reloaded; call the tool again")`
   (`src/runtime/runtime.ts`), and the reload is one of the calls in flight. The
   agent sees its own reload interrupted. The calling `reload` should be answered once the plugins
   are back.

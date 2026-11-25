@@ -12,12 +12,12 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { JsPanel } from "../src/runtime/views.ts";
 import { DaemonOptions, startDaemon } from "../src/peers/index.ts";
 import { KeyEvent, TRoot, mount, unmount } from "@lightstart/light/native/tui";
 import { SpawnOptions, spawnCapped } from "@lightstart/lib/process.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 const wait = (ms: number): Promise<void> =>
@@ -25,7 +25,7 @@ const wait = (ms: number): Promise<void> =>
     setTimeout(() => resolve(), ms);
   });
 
-const root = mkdtempSync(join(tmpdir(), "widecode-peers-app-"));
+const root = mkdtempSync(join(tmpdir(), "lightcode-peers-app-"));
 const storeA = join(root, "store-a");
 const storeB = join(root, "store-b");
 const repo = join(root, "repo");
@@ -33,7 +33,7 @@ const repoB = join(root, "repo-b");
 mkdirSync(storeA);
 mkdirSync(storeB);
 mkdirSync(repo);
-process.env["WIDECODE_HOME"] = storeA;
+process.env["LIGHTCODE_HOME"] = storeA;
 
 /** A git command, synchronous: the daemons it talks to are not asked here (clones and commits only). */
 const git = (args: string): string => {
@@ -71,10 +71,10 @@ const main = async (): Promise<void> => {
   ok("the other machine shares its clone", typeof sharedB !== "string");
 
   const tree = new TRoot();
-  const app = await openWidecode({
+  const app = await openLightcode({
     folder: repo,
     load: true,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.shell.resize(200);
       mount(w.shell, tree);
     },
@@ -192,7 +192,7 @@ const main = async (): Promise<void> => {
   ok("and its token no longer opens this machine's door", after.code !== 0);
 
   unmount(app.shell);
-  closeWidecode(app);
+  closeLightcode(app);
   a.stop();
   b.stop();
   rmSync(root, { recursive: true, force: true });

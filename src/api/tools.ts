@@ -1,5 +1,5 @@
 // The plugin API's `tools` calls, answered for the runtime (runtime.ts dispatches by namespace):
-// widecode's own tools, which plugins add and agents call over widecode's MCP server
+// lightcode's own tools, which plugins add and agents call over lightcode's MCP server
 // (src/agent/mcp.ts), and where that server listens, for an agent's plugin to offer it.
 import { PreludePart } from "@lightstart/plugins/prelude.ts";
 import type { JsRuntime } from "../runtime/runtime.ts";

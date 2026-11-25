@@ -1,7 +1,7 @@
-// node-only: the test walks the repository (src/api/*.ts, src/runtime/runtime.ts, widecode.d.ts, PLUGINS.md) to compare the API's three sides.
+// node-only: the test walks the repository (src/api/*.ts, src/runtime/runtime.ts, lightcode.d.ts, PLUGINS.md) to compare the API's three sides.
 // The plugin API's three sides agree: every call the prelude makes (its built text, `call` and
 // `later`) has an answer in the runtime (a `case` in src/runtime/runtime.ts or src/api/*.ts), every
-// answer has a call, and every call's member is typed in widecode.d.ts (in its namespace's block of
+// answer has a call, and every call's member is typed in lightcode.d.ts (in its namespace's block of
 // the Api, or as a method of what it returns, a handle's).
 import { EXT_PRELUDE } from "../src/harness/ext/prelude.ts";
 import { PRELUDE } from "../src/runtime/prelude.ts";
@@ -60,8 +60,8 @@ for (const name of cases) {
 }
 eq("every namespace with an answer is routed", prefixes.filter((p: string) => !routed.includes(p)).join(", "), "");
 
-// The Api's namespaces in widecode.d.ts, and its members typed anywhere (a handle's methods).
-const dts = read("widecode.d.ts");
+// The Api's namespaces in lightcode.d.ts, and its members typed anywhere (a handle's methods).
+const dts = read("lightcode.d.ts");
 const apiAt = dts.indexOf("interface Api {");
 ok("the Api is typed", apiAt >= 0);
 const api = blockAt(dts, dts.indexOf("{", apiAt));
@@ -78,7 +78,7 @@ for (const name of calls) {
 }
 eq("every call's member is typed", untyped.join(", "), "");
 
-// The hooks: the host's table of them, widecode.d.ts's Hook union and PLUGINS.md's `on(hook, run)` row name the same ones.
+// The hooks: the host's table of them, lightcode.d.ts's Hook union and PLUGINS.md's `on(hook, run)` row name the same ones.
 const hostSource = read("src/host/hooks.ts");
 const hooks = namesIn(hostSource, /new NamedHook\("([a-zA-Z]+)"/g);
 const hookUnion = /type Hook = ([^;]*);/.exec(dts);
@@ -86,7 +86,7 @@ const typedHooks = hookUnion !== null ? namesIn(hookUnion[1], /"([a-zA-Z]+)"/g) 
 const docRow = /\| `on\(hook, run\)` \|([^\n]*)/.exec(read("PLUGINS.md"));
 const documented = docRow !== null ? namesIn(docRow[1], /`([a-zA-Z]+)`/g).filter((n: string) => hooks.includes(n) || /Changed$|Loaded$|Opened$|Shown$|Sending$/.test(n)) : [];
 ok("the host names its hooks", hooks.length > 5);
-eq("widecode.d.ts types them", typedHooks.join(","), hooks.join(","));
+eq("lightcode.d.ts types them", typedHooks.join(","), hooks.join(","));
 eq("PLUGINS.md documents them", documented.join(","), hooks.join(","));
 // Each hook a built-in plugin listens to is one of them.
 const listened: string[] = [];
@@ -108,7 +108,7 @@ eq(
   PANEL_SLOTS.join(","),
 );
 
-// The agent API's three sides agree: the harness prelude's agentFor and ctxOf, and widecode.d.ts's
+// The agent API's three sides agree: the harness prelude's agentFor and ctxOf, and lightcode.d.ts's
 // AgentApi, AgentContext and AgentUi.
 const interfaceNames = (name: string): string[] => {
   const at = dts.indexOf("interface " + name + " {");

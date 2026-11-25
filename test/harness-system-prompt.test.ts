@@ -32,21 +32,21 @@ eq("untrusted: the user's alone", contextFiles(sub, false, join(harness, "AGENTS
 const f = new SystemFacts();
 f.cwd = sub;
 f.platform = "linux";
-f.harnessText = "  You are running inside widecode.  ";
+f.harnessText = "  You are running inside lightcode.  ";
 f.trusted = true;
 f.harnessRoot = harness;
 const blocks = systemBlocks(f);
 eq("three blocks: the base, the project's text, the instructions and skills", String(blocks.length), "3");
-ok("the base names the folder and platform", blocks[0].startsWith("You are the harness, widecode's coding agent") && blocks[0].endsWith("\n\nThe folder: " + sub + "\nThe platform: linux"));
-eq("the project's text, trimmed", blocks[1], "You are running inside widecode.");
+ok("the base names the folder and platform", blocks[0].startsWith("You are the harness, lightcode's coding agent") && blocks[0].endsWith("\n\nThe folder: " + sub + "\nThe platform: linux"));
+eq("the project's text, trimmed", blocks[1], "You are running inside lightcode.");
 ok("the instructions in file tags, the user's last, then the skills", blocks[2].startsWith("The project's instructions, which you follow:\n\n<file path=\"" + join(repo, "AGENTS.md") + "\">\nRoot rules.\n</file>") && blocks[2].includes("<file path=\"" + join(harness, "AGENTS.md") + "\">\nThe user's own rules.\n</file>\n\nSkills: ") && blocks[2].endsWith("\n- tidy: Tidy the code"));
 f.harnessText = "";
 f.trusted = false;
 f.harnessRoot = "";
 eq("untrusted, no project text, no harness folder: the base alone", String(systemBlocks(f).length), "1");
 
-eq("the note in build mode: the date", turnNote("2026-10-25", "build", "mcp__widecode__PresentPlan"), "Today is 2026-10-25.");
-eq("in plan mode: what the mode allows, the plan's tool", turnNote("2026-10-25", "plan", "mcp__widecode__PresentPlan"), "Today is 2026-10-25. Plan mode: only the read-only tools are offered. Explore and think, change nothing, and when the plan is ready present it with mcp__widecode__PresentPlan and wait for the answer.");
+eq("the note in build mode: the date", turnNote("2026-10-25", "build", "mcp__lightcode__PresentPlan"), "Today is 2026-10-25.");
+eq("in plan mode: what the mode allows, the plan's tool", turnNote("2026-10-25", "plan", "mcp__lightcode__PresentPlan"), "Today is 2026-10-25. Plan mode: only the read-only tools are offered. Explore and think, change nothing, and when the plan is ready present it with mcp__lightcode__PresentPlan and wait for the answer.");
 eq("without one", String(turnNote("2026-10-25", "plan", "").endsWith("change nothing, and give the plan as your answer.")), "true");
 rmSync(root, { recursive: true, force: true });
 done();

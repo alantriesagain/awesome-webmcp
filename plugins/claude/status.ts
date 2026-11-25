@@ -1,4 +1,4 @@
-// The status Claude Code's status line gets (widecode.StatusFields) and the limit helpers: the
+// The status Claude Code's status line gets (lightcode.StatusFields) and the limit helpers: the
 // context, cache, rate limits, cost and tokens, and what a rate limit message says and when it
 // resets.
 
@@ -50,17 +50,17 @@ export const resetFrom = (text: string, now: number): number => {
   return 0;
 };
 
-// The status Claude Code's status line gets (widecode.StatusFields): the context of the latest
+// The status Claude Code's status line gets (lightcode.StatusFields): the context of the latest
 // main-thread request over the window a result reports, the cache's requests, misses and warmth,
 // the rate limits, cost, tokens, lines changed.
 
 export class Status {
-  f: Partial<widecode.StatusFields> = {};
+  f: Partial<lightcode.StatusFields> = {};
   /** Rate limits seen (else the ones kept from the last run stand). */
   limits = false;
   private messages = new Set<string>();
 
-  private add(key: keyof widecode.StatusFields, n: number): void {
+  private add(key: keyof lightcode.StatusFields, n: number): void {
     (this.f as Record<string, number>)[key] = ((this.f[key] as number | undefined) ?? 0) + n;
   }
 

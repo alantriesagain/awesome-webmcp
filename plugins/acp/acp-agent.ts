@@ -16,10 +16,10 @@ import type { Setting, Option } from "./settings.ts";
 import { TaskCalls } from "./tasks.ts";
 import { approve, pathsOf } from "./approval.ts";
 
-export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls: TaskCalls): widecode.AgentAdapter => {
+export const acpAgent = (api: lightcode.Api, id: string, entry: Entry, taskCalls: TaskCalls): lightcode.AgentAdapter => {
   const entries: Record<string, Entry> = {};
   entries[id] = entry;
-  let proc: widecode.ProcessHandle | null = null;
+  let proc: lightcode.ProcessHandle | null = null;
   /** The process answered initialize, and what it can do. */
   let initialized = false;
   let canLoad = false;
@@ -27,17 +27,17 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
   let canImages = false;
   let canList = false;
   let canMcp = false;
-  /** widecode's tools the agent was given, and the kind of call each is. */
+  /** lightcode's tools the agent was given, and the kind of call each is. */
   let own: { name: string; category: string }[] = [];
   /** Counts the readings of the agent's tools: a reading answers only while it is the last. */
   let toolReads = 0;
   let skillReads = 0;
-  /** What the harness is told in `_meta.widecode` with each session and prompt: the project's prompt text and whether the folder is trusted (an entry with `own`). */
+  /** What the harness is told in `_meta.lightcode` with each session and prompt: the project's prompt text and whether the folder is trusted (an entry with `own`). */
   let harnessPrompt = "";
-  /** widecode's _meta for its own agent: the project's prompt and trust, and `side` on a side question's fork. */
-  const metaOf = (side = false): Record<string, unknown> => (entry.own ? { _meta: { widecode: side ? { systemPrompt: harnessPrompt, trusted: api.harness.info().trusted, side: true } : { systemPrompt: harnessPrompt, trusted: api.harness.info().trusted } } } : {});
+  /** lightcode's _meta for its own agent: the project's prompt and trust, and `side` on a side question's fork. */
+  const metaOf = (side = false): Record<string, unknown> => (entry.own ? { _meta: { lightcode: side ? { systemPrompt: harnessPrompt, trusted: api.harness.info().trusted, side: true } : { systemPrompt: harnessPrompt, trusted: api.harness.info().trusted } } } : {});
   /** The sessions listed last, the folder and when, and whether a listing is under way. */
-  let listed: widecode.AgentSession[] = [];
+  let listed: lightcode.AgentSession[] = [];
   let listedFolder = "";
   let listedAt = 0;
   let listing = false;
@@ -87,7 +87,7 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
   let userMessage = "";
   let plans = 0;
   /** The calls the agent announced: their kind (a later update may leave it out) and whether their input made them a todo list or a subagent (an update of one it did not announce makes it). */
-  /** The calls seen: each one's kind, whether its facts are its input's (a todo list, a subagent, a skill, one of widecode's tools), and the tool it was announced as. */
+  /** The calls seen: each one's kind, whether its facts are its input's (a todo list, a subagent, a skill, one of lightcode's tools), and the tool it was announced as. */
   const calls = new Map<string, { kind: string; named: boolean; tool: string }>();
   /** The last input JSON emitted for each open call, so a repeated raw input sends no event again. */
   const inputs = new Map<string, string>();
@@ -213,14 +213,14 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
     const diffs = content.map(obj).filter((c): c is Msg => c !== null && c.type === "diff");
     const todos = list(input?.todos);
     const subagent = input !== null && typeof input.subagent_type === "string";
-    // One of widecode's tools, as the agent names it after the server (opencode's widecode_AskUser).
-    const tool = own.find((t) => title === t.name || title.endsWith("widecode_" + t.name.replace(/[^A-Za-z0-9_-]/g, "_"))) ?? null;
+    // One of lightcode's tools, as the agent names it after the server (opencode's lightcode_AskUser).
+    const tool = own.find((t) => title === t.name || title.endsWith("lightcode_" + t.name.replace(/[^A-Za-z0-9_-]/g, "_"))) ?? null;
     // The agent's skill tool (opencode's `skill`, the harness's `Skill`), the skill's name in its input.
     const announcedAs = announced && known === undefined ? title : (known?.tool ?? "");
     const skill = announcedAs.toLowerCase() === "skill" && input !== null ? str(input.name) : "";
     const named = todos.length > 0 || subagent || tool !== null || skill.length > 0 || (known?.named ?? false);
     calls.set(callId, { kind, named, tool: announcedAs });
-    const facts: widecode.CallFacts = {};
+    const facts: lightcode.CallFacts = {};
     // A call is announced with its tool's name as its title (opencode's bash, read, edit), then retitled.
     if (announced && known === undefined && title.length > 0) facts.tool = title;
     // What the update says anew: its kind, its line (a command's stays its command; a todo list's or
@@ -268,7 +268,7 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
       }
     }
     const status = str(u.status);
-    // A call of widecode's Task tool is in flight until it completes or fails: the Task tool runs
+    // A call of lightcode's Task tool is in flight until it completes or fails: the Task tool runs
     // under this card when its input is the one asked for here. Any call that ends is dropped, since
     // the agent may retitle it on the way.
     if (status === "completed" || status === "failed") {
@@ -404,7 +404,7 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
     }
     const m = obj(r?.modes);
     const ms = obj(r?.models);
-    const named = (v: unknown, key: string): widecode.AgentOption[] =>
+    const named = (v: unknown, key: string): lightcode.AgentOption[] =>
       list(v)
         .map((x) => ({ value: str(obj(x)?.[key]), name: str(obj(x)?.name) || str(obj(x)?.[key]) }))
         .filter((o) => o.value.length > 0);
@@ -413,7 +413,7 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
     announce();
   };
 
-  /** The agent's tools for its mode, from the entry's tools command, with widecode's it was given. */
+  /** The agent's tools for its mode, from the entry's tools command, with lightcode's it was given. */
   const readTools = (): void => {
     const seq = ++toolReads;
     const gen = generation;
@@ -421,17 +421,17 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
     const told = (listed: { names: string[]; rules: Rule[] } | null): void => {
       if (seq !== toolReads || gen !== generation) return;
       const rules = listed !== null ? listed.rules : [];
-      const facts = (id: string): widecode.AgentTool => {
+      const facts = (id: string): lightcode.AgentTool => {
         const a = rules.length > 0 ? accessOf(id, rules) : { access: "", scope: "" };
         return { ...(a.access.length > 0 ? { access: a.access as "asks" | "limited" | "denied" } : {}), ...(a.scope.length > 0 ? { scope: a.scope } : {}), name: id };
       };
       const theirs = listed !== null ? listed.names.map((name) => facts(name)) : [];
-      // widecode's, as the agent names them after the server.
+      // lightcode's, as the agent names them after the server.
       const ours = own.map((t) => {
-        const id = "widecode_" + t.name.replace(/[^A-Za-z0-9_-]/g, "_");
-        return { ...facts(id), name: t.name, server: "widecode", id };
+        const id = "lightcode_" + t.name.replace(/[^A-Za-z0-9_-]/g, "_");
+        return { ...facts(id), name: t.name, server: "lightcode", id };
       });
-      emit({ type: "tools", tools: [...theirs, ...ours], ...(own.length > 0 ? { servers: [{ name: "widecode", status: "connected" }] } : {}), partial: listed === null });
+      emit({ type: "tools", tools: [...theirs, ...ours], ...(own.length > 0 ? { servers: [{ name: "lightcode", status: "connected" }] } : {}), partial: listed === null });
       flush();
     };
     if (entry.tools.length === 0 || (mode.length === 0 && entry.tools.some((w) => w.includes("{mode}")))) return told(null);
@@ -497,13 +497,13 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
     pump();
   };
 
-  /** widecode's MCP server, for an agent that takes one over HTTP ([] else, or with no tools), then `then`. */
+  /** lightcode's MCP server, for an agent that takes one over HTTP ([] else, or with no tools), then `then`. */
   const withServers = (then: (servers: unknown[]) => void): void => {
     if (!canMcp) return then([]);
     api.tools.server().then(
       (s) => {
         own = s === null ? [] : s.tools;
-        then(s === null ? [] : [{ type: "http", name: "widecode", url: s.url, headers: s.headers }]);
+        then(s === null ? [] : [{ type: "http", name: "lightcode", url: s.url, headers: s.headers }]);
       },
       () => then([]),
     );
@@ -698,16 +698,16 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
     });
   };
 
-  /** A request from the agent: a permission asked, an extension UI dialog, else not something widecode offers. */
+  /** A request from the agent: a permission asked, an extension UI dialog, else not something lightcode offers. */
   const request = (m: Msg): void => {
     const method = str(m.method);
     const p = obj(m.params);
-    if (method === "_widecode/ui" && p !== null) {
+    if (method === "_lightcode/ui" && p !== null) {
       uiDialog(m, p);
       return;
     }
     if (method !== "session/request_permission" || p === null) {
-      send({ jsonrpc: "2.0", id: m.id, error: { code: -32601, message: "widecode does not offer " + method } });
+      send({ jsonrpc: "2.0", id: m.id, error: { code: -32601, message: "lightcode does not offer " + method } });
       return;
     }
     // A side question's session asks for nothing: it answers from what it knows.
@@ -777,7 +777,7 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
     for (const key of widgets.keys()) widgets.set(key, []);
   };
 
-  /** A `_widecode/ui` request: a select, confirm, input or editor dialog in the request panel. */
+  /** A `_lightcode/ui` request: a select, confirm, input or editor dialog in the request panel. */
   const uiDialog = (m: Msg, p: Msg): void => {
     const method = str(p.method);
     // A side question's session asks for nothing: it answers from what it knows.
@@ -808,7 +808,7 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
       question = title + (prefill.length > 0 ? "\n\n" + prefill : "");
       header = "Editor";
     } else {
-      send({ jsonrpc: "2.0", id: m.id, error: { code: -32601, message: "widecode does not offer _widecode/ui " + method } });
+      send({ jsonrpc: "2.0", id: m.id, error: { code: -32601, message: "lightcode does not offer _lightcode/ui " + method } });
       return;
     }
     const rid = "acp" + String(++uiSeq);
@@ -822,7 +822,7 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
   };
 
   /** Answer dialog `rid` with the user's reply: a value, a confirmation, or cancelled. */
-  const answerUi = (rid: string, reply: widecode.AgentReply): void => {
+  const answerUi = (rid: string, reply: lightcode.AgentReply): void => {
     const d = dialogs.get(rid);
     if (d === undefined || d.answered) return;
     d.answered = true;
@@ -836,7 +836,7 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
     emit({ type: "cancelRequest", id: rid, ...(reply.state === "answered" ? { state: "answered" } : {}) });
   };
 
-  /** A `_widecode/ui` notification: what the screen shows. */
+  /** A `_lightcode/ui` notification: what the screen shows. */
   const uiNotification = (p: Msg): void => {
     const method = str(p.method);
     if (method === "notify") {
@@ -857,7 +857,7 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
           name,
           draw: () => {
             const t = statuses.get(key) ?? "";
-            return t.length > 0 ? [{ text: t, fg: widecode.theme.dim }] : [];
+            return t.length > 0 ? [{ text: t, fg: lightcode.theme.dim }] : [];
           },
         });
       }
@@ -875,7 +875,7 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
           under: "chat",
           lines: () => {
             const current = widgets.get(key) ?? [];
-            return current.map((l) => ({ runs: [{ text: l, fg: widecode.theme.dim }] }));
+            return current.map((l) => ({ runs: [{ text: l, fg: lightcode.theme.dim }] }));
           },
         });
       }
@@ -887,7 +887,7 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
     }
     if (method === "set_editor_text") {
       const text = str(p.text);
-      api.composer.set(text.split("\n"), Math.max(0, text.split("\n").length - 1), widecode.util.graphemes(text.split("\n")[text.split("\n").length - 1] ?? "").length);
+      api.composer.set(text.split("\n"), Math.max(0, text.split("\n").length - 1), lightcode.util.graphemes(text.split("\n")[text.split("\n").length - 1] ?? "").length);
     }
   };
 
@@ -917,13 +917,13 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
             emit({ type: "aside", id: side.id, text: side.text });
           }
         } else if (u !== null && !dead.has(sid) && (sid === session || session.length === 0)) update(u);
-      } else if (m.method === "_widecode/ui") {
+      } else if (m.method === "_lightcode/ui") {
         const p = obj(m.params);
         if (p !== null) {
           const sid = str(p.sessionId);
           if (!sides.has(sid) && !dead.has(sid) && (sid === session || session.length === 0)) uiNotification(p);
         }
-      } else if (m.method === "_widecode/plugin") {
+      } else if (m.method === "_lightcode/plugin") {
         const p = obj(m.params);
         if (p !== null) {
           const sid = str(p.sessionId);
@@ -976,7 +976,7 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
     if (!p.started) return "cannot start " + command.join(" ");
     proc = p;
     emit({ type: "process", state: "running" });
-    rpc("initialize", { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false, _meta: { widecode: { ui: true } } }, clientInfo: { name: "widecode", version: String(widecode.version) } }, (result, error) => {
+    rpc("initialize", { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false, _meta: { lightcode: { ui: true } } }, clientInfo: { name: "lightcode", version: String(lightcode.version) } }, (result, error) => {
       if (error.length > 0) {
         notice(entry.name + " did not start", "error", error);
         failQueue();
@@ -1056,7 +1056,7 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
   };
 
   /** A listing read: kept, and said when it changed. */
-  const gotSessions = (folder: string, l: widecode.AgentSession[]): void => {
+  const gotSessions = (folder: string, l: lightcode.AgentSession[]): void => {
     listing = false;
     const changed = folder !== listedFolder || JSON.stringify(l) !== JSON.stringify(listed);
     listed = l;
@@ -1143,7 +1143,7 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
   return {
     id,
     name: entry.name,
-    // Its session starts with widecode: the models and efforts it offers are known before the first message.
+    // Its session starts with lightcode: the models and efforts it offers are known before the first message.
     eager: true,
     start(o) {
       const folder = o.cwd;
@@ -1178,7 +1178,7 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
     },
     toAgentPart(plugin, type, data) {
       if (proc === null || session.length === 0) return false;
-      notify("_widecode/plugin", { sessionId: session, plugin: plugin, type: type, data: data === undefined ? null : data });
+      notify("_lightcode/plugin", { sessionId: session, plugin: plugin, type: type, data: data === undefined ? null : data });
       flush();
       return true;
     },
@@ -1273,7 +1273,7 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
         if (v !== null) events.push(v);
       }
       if (events.length === 0) return false;
-      api.conversation.subagent(callId, events as widecode.ConversationEvent[], true);
+      api.conversation.subagent(callId, events as lightcode.ConversationEvent[], true);
       return true;
     },
     stop() {
@@ -1281,7 +1281,7 @@ export const acpAgent = (api: widecode.Api, id: string, entry: Entry, taskCalls:
     },
     kill() {
       if (proc === null) return;
-      // The session made and not written to is left (deleted when the agent starts again, here or in a later widecode).
+      // The session made and not written to is left (deleted when the agent starts again, here or in a later lightcode).
       fresh = "";
       proc.kill();
       exited(-1);

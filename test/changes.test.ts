@@ -16,7 +16,7 @@ import { openRepo, readStatus } from "@lightstart/workspace/git.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { Line } from "@lightstart/light/native/tui/lines.ts";
 import { marksOf } from "@lightstart/workspace/tree.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { Headless } from "@lightstart/test/headless.ts";
 
@@ -34,7 +34,7 @@ for (const k of parsed.keys()) {
 }
 eq("numstat: counts, a binary file, a rename's destination, a tab in a name", shown.join(" "), "src/a.js=+3-1 logo.png=bin new/x.js=+2-0 name\twith tab.txt=+1-1");
 
-const repo = mkdtempSync(join(tmpdir(), "widecode-changes-"));
+const repo = mkdtempSync(join(tmpdir(), "lightcode-changes-"));
 const git = (args: string[]): void => {
   const all = ["-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "-c", "init.defaultBranch=main"];
   for (const a of args) all.push(a);
@@ -80,7 +80,7 @@ const main = async (): Promise<void> => {
   // The app: the band under the columns.
   const W = 200;
   const H = 20;
-  const app = await openWidecode({ folder: repo });
+  const app = await openLightcode({ folder: repo });
   const conversation = app.host.conversation;
   app.shell.resize(W);
   const headless = new Headless(app.shell, W, H);
@@ -90,7 +90,7 @@ const main = async (): Promise<void> => {
   const side = app.shell.xOf("side");
   const code = app.shell.xOf("code");
   const split = band[0].indexOf("│ 6 files");
-  ok("the band: the session across the chat and tools, the changes across the files and code", band[0].startsWith(" ◆ widecode-changes-") && split === side && band[1].indexOf("│ no file open") === side);
+  ok("the band: the session across the chat and tools, the changes across the files and code", band[0].startsWith(" ◆ lightcode-changes-") && split === side && band[1].indexOf("│ no file open") === side);
   ok("the changes strip spans both columns' cells, not clipped at the files column", band[0].length > code && band[0].slice(code).trim().length > 0);
   let strip: JsBand | null = null;
   for (const b of app.host.screen.band) if (b.id === "changes" && b.view instanceof JsBand) strip = b.view;
@@ -170,15 +170,15 @@ const main = async (): Promise<void> => {
   eq("] [ in the files column, Alt+↑ ↓ anywhere, wrapping", walk.join(" "), "new-feature.ts controllers/catalog.js new-feature.ts old.js new-feature.ts controllers/catalog.js");
   ok("the bar follows the open file", screen().slice(H - 3)[1].includes("▸ catalog.js"));
   headless.unmount();
-  closeWidecode(app);
+  closeLightcode(app);
 
   // Outside a repository.
-  const plain = mkdtempSync(join(tmpdir(), "widecode-plain-"));
-  const other = await openWidecode({ folder: plain, load: true });
+  const plain = mkdtempSync(join(tmpdir(), "lightcode-plain-"));
+  const other = await openLightcode({ folder: plain, load: true });
   let lines: Line[] = [];
   for (const b of other.host.screen.band) if (b.id === "changes" && b.view instanceof JsBand) lines = b.view.lines(80);
   eq("outside a repository", lines.length > 0 ? textOf(lines[0]) : "", "│ not a git repository");
-  closeWidecode(other);
+  closeLightcode(other);
   rmSync(plain, { recursive: true, force: true });
   rmSync(repo, { recursive: true, force: true });
   done();

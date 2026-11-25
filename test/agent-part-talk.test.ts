@@ -1,36 +1,36 @@
 // ffi: @lightstart/plugins/native/ffi.json
-// A plugin's two parts talk: a `_widecode/plugin` message from the fake agent (test/fake-acp.mjs)
+// A plugin's two parts talk: a `_lightcode/plugin` message from the fake agent (test/fake-acp.mjs)
 // reaches the listener a user plugin registered with api.agentPart.on, only that plugin's, and
-// api.agentPart.send goes back to the agent as `_widecode/plugin` with the plugin's id.
+// api.agentPart.send goes back to the agent as `_lightcode/plugin` with the plugin's id.
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { done, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-agent-part-talk-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-agent-part-talk-"));
   const log = join(folder, "fake.log");
   const fake = join(process.cwd(), "test/fake-acp.mjs");
   const demo = [
-    'widecode.plugin({ id: "demo", activate(api) {',
+    'lightcode.plugin({ id: "demo", activate(api) {',
     '  api.agentPart.on("ping", (data) => { api.agentPart.send("pong", { echo: data.name }); });',
     "} });",
   ].join("\n");
   const other = [
-    'widecode.plugin({ id: "other", activate(api) {',
+    'lightcode.plugin({ id: "other", activate(api) {',
     '  api.agentPart.on("ping", (data) => { api.agentPart.send("other", { saw: data.name }); });',
     "} });",
   ].join("\n");
   const config: unknown = { acp: { agents: { fake: { name: "Fake", command: ["node", fake, "--log", log] } } } };
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     plugins: config,
     load: true,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.host.session.agentId.value = "fake";
       w.js.extra = [new PluginSource("demo.js", demo), new PluginSource("other.js", other)];
     },
@@ -44,11 +44,11 @@ const main = async (): Promise<void> => {
 
   ok(
     "the plugin's listener gets the agent's message and sends back",
-    await until(() => sent().includes('"method":"_widecode/plugin"') && sent().includes('"plugin":"demo"') && sent().includes('"type":"pong"') && sent().includes('"echo":"hello"') && idle() && c.model.turns.length > before),
+    await until(() => sent().includes('"method":"_lightcode/plugin"') && sent().includes('"plugin":"demo"') && sent().includes('"type":"pong"') && sent().includes('"echo":"hello"') && idle() && c.model.turns.length > before),
   );
   ok("another plugin's listener did not get it", !sent().includes('"type":"other"'));
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

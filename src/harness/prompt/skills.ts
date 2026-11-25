@@ -1,6 +1,6 @@
 // The skills the harness offers, in the Agent Skills format: a folder holding a SKILL.md whose
 // frontmatter names it and says what it is for. They are found in the folder's `.agents/skills`,
-// `.claude/skills` and `.pi/skills` and each plugin folder's `skills` under its `.widecode/plugins`
+// `.claude/skills` and `.pi/skills` and each plugin folder's `skills` under its `.lightcode/plugins`
 // (a trusted folder's), then the user's `~/.agents/skills`, `~/.claude/skills` and its synced
 // folders, pi's agent folder, each plugin folder's `skills` under the store's `plugins` and the
 // harness's own under the store; a name found twice is the first one's. pi's agent folder is
@@ -114,7 +114,7 @@ export const scanSkills = (cwd: string, trusted: boolean, home: string, harnessR
     scanDir(join(cwd, ".agents", "skills"), "project", "", out);
     scanDir(join(cwd, ".claude", "skills"), "project", "", out);
     scanDir(join(cwd, ".pi", "skills"), "project", "", out);
-    for (const plugin of pluginFolders(join(cwd, ".widecode", "plugins"))) scanDir(join(plugin, "skills"), "project", "", out);
+    for (const plugin of pluginFolders(join(cwd, ".lightcode", "plugins"))) scanDir(join(plugin, "skills"), "project", "", out);
   }
   if (home.length > 0) {
     scanDir(join(home, ".agents", "skills"), "user", "", out);

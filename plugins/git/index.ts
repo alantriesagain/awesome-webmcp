@@ -10,7 +10,7 @@
 // to the next base. The tab reads git again when the watcher sees the repository
 // change. Nothing here checks out, stages or commits: a fetch is the peers plugin's.
 
-type Run = widecode.Run;
+type Run = lightcode.Run;
 
 interface Row {
   kind: "compare" | "note" | "empty" | "section" | "more" | "branch" | "peer" | "rbranch" | "commit" | "file";
@@ -26,7 +26,7 @@ interface Row {
 type PeerRemote = { id: string; name: string; remote: string; online: boolean; lastSeenMs: number };
 type RemoteBranch = { name: string; ref: string; sha: string; commitMs: number; local: boolean; ahead: number; behind: number };
 
-const T = widecode.theme;
+const T = lightcode.theme;
 const BASES = ["head", "branch", "session", "peer"];
 const BASE_NAMES = ["HEAD", "branch", "session", "peer"];
 const COMPARE = " vs ";
@@ -38,17 +38,17 @@ const SESSION = T.think;
 const SELECTED_BG = T.selected;
 const MARK_COLORS = T.marks;
 
-widecode.plugin({
+lightcode.plugin({
   id: "git",
   activate(api) {
-    const u = widecode.util;
+    const u = lightcode.util;
     let base = "head";
     let baseNote = "";
-    let branches: widecode.Branch[] = [];
-    let commits: Required<widecode.Commit>[] = [];
+    let branches: lightcode.Branch[] = [];
+    let commits: Required<lightcode.Commit>[] = [];
     let logRef = "";
     let sessionBase = "";
-    const files = new Map<string, widecode.CommitFile[]>();
+    const files = new Map<string, lightcode.CommitFile[]>();
     const expanded = new Set<string>();
     const folded = new Set<string>();
     let allBranches = false;
@@ -115,7 +115,7 @@ widecode.plugin({
       panel.refresh();
     };
 
-    const line = (r: Row, index: number, width: number): widecode.Row => {
+    const line = (r: Row, index: number, width: number): lightcode.Row => {
       const bg = index === selected && r.kind !== "compare" ? SELECTED_BG : "";
       const now = Date.now();
       if (r.kind === "compare") {

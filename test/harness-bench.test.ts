@@ -127,7 +127,7 @@ const main = async (): Promise<void> => {
   cleanSpec.keep = true;
   const clean = await runTask(task, cleanSpec);
   const cleanSessions = join(clean.store, "harness", "sessions");
-  const userStore = (process.env["WIDECODE_HOME"] ?? "").length > 0 ? (process.env["WIDECODE_HOME"] ?? "") : join(process.env["HOME"] ?? "", ".widecode");
+  const userStore = (process.env["LIGHTCODE_HOME"] ?? "").length > 0 ? (process.env["LIGHTCODE_HOME"] ?? "") : join(process.env["HOME"] ?? "", ".lightcode");
   ok(
     "a clean run: its own store, the key linked not copied, its session there",
     clean.store.length > 0 &&

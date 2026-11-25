@@ -9,9 +9,9 @@ import { join } from "node:path";
 import { Agent } from "../src/conversation/agent.ts";
 import { SessionMeta } from "../src/conversation/session-store.ts";
 import { Store } from "../src/services/store.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { done, eq } from "@lightstart/test/assert.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
 class OtherAgent extends Agent {
   override id(): string {
@@ -29,14 +29,14 @@ const wait = (ms: number): Promise<void> =>
   });
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-reopen-"));
-  const home = mkdtempSync(join(tmpdir(), "widecode-home-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-reopen-"));
+  const home = mkdtempSync(join(tmpdir(), "lightcode-home-"));
   for (const f of ["a.txt", "b.txt", "c.txt"]) writeFileSync(join(folder, f), f + "\n");
   const store = new Store(home);
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     load: true,
-    before: async (w: Widecode) => {
+    before: async (w: Lightcode) => {
       await w.host.session.useStore(store);
     },
   });
@@ -101,7 +101,7 @@ const main = async (): Promise<void> => {
   const stamped = records.session("s11", folder);
   eq("a model change stamps the record with the agent it ran on", stamped !== null ? stamped.agent + " " + stamped.model : "(no record)", "other m1");
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   rmSync(home, { recursive: true, force: true });
   done();

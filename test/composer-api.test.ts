@@ -1,19 +1,19 @@
 // ffi: @lightstart/plugins/native/ffi.json
 // The composer from a plugin (api.composer, api.keys.run): its lines and caret read, set (the
 // caret clamped) and inserted into; whether it is empty, the suggestion strip shows or the request
-// panel is open; an action run by name with a count; the border title set; widecode.util.graphemes
+// panel is open; an action run by name with a count; the border title set; lightcode.util.graphemes
 // counting as the caret does; and a "*" action of the "input" scope in a layer, turned on, taking
 // every key before the composer's own (a vi mode's normal mode), turned off giving them back.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import type { Widecode } from "../src/compose.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import type { Lightcode } from "../src/compose.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { DEFAULT_STYLE, KeyEvent, TRoot, frames, layout, mount } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
-const plugin = `widecode.plugin({
+const plugin = `lightcode.plugin({
   id: "composer-test",
   activate(api) {
     const say = (v) => api.tell(JSON.stringify(v));
@@ -22,7 +22,7 @@ const plugin = `widecode.plugin({
     api.commands.add({ name: "/insert", run: (arg) => api.composer.insert(arg) });
     api.commands.add({ name: "/run", run: (arg) => { const [id, count] = arg.split(" "); say(api.keys.run(id, Number(count ?? 1))); } });
     api.commands.add({ name: "/label", run: (arg) => api.composer.setLabel(arg) });
-    api.commands.add({ name: "/graphemes", run: (arg) => say(widecode.util.graphemes(arg)) });
+    api.commands.add({ name: "/graphemes", run: (arg) => say(lightcode.util.graphemes(arg)) });
     let taken = [];
     api.keys.action({ id: "test.normal", scope: "input", run: (key) => { taken.push(key.spec); return true; } });
     const normal = api.keys.layer("normal", { input: { "*": "test.normal" } });
@@ -33,10 +33,10 @@ const plugin = `widecode.plugin({
 });`;
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-composer-api-"));
-  const w = await openWidecode({
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-composer-api-"));
+  const w = await openLightcode({
     folder,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.js.extra = [new PluginSource("composer.js", plugin)];
     },
   });
@@ -90,7 +90,7 @@ const main = async (): Promise<void> => {
   w.host.roles.chat.submit("/normal off");
   ok("off: the composer again", press("char", "a") && input.value() === "a" && said("/taken") === "[]");
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

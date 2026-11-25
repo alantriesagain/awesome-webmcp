@@ -6,7 +6,7 @@ import { request, type IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TOOL } from "../src/conversation/model.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { done, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
 
@@ -35,8 +35,8 @@ const alive = (pid: number): boolean => {
 };
 
 const main = async (): Promise<void> => {
-  process.env.WIDECODE_ACP_TEST_IDLE_MS = "2000";
-  const folder = mkdtempSync(join(tmpdir(), "widecode-task-process-"));
+  process.env.LIGHTCODE_ACP_TEST_IDLE_MS = "2000";
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-task-process-"));
   const log = join(folder, "fake.log");
   const pidFile = join(folder, "fake.pid");
   writeFileSync(pidFile, "");
@@ -46,7 +46,7 @@ const main = async (): Promise<void> => {
       tasks: { targets: { deepseek: { agent: "fake" } }, maxConcurrent: 2, timeoutMs: 1000 },
     },
   };
-  const w = await openWidecode({ folder, plugins: config, load: true });
+  const w = await openLightcode({ folder, plugins: config, load: true });
   const c = w.host.conversation;
   const url = await w.js.mcp.start();
   const token = w.js.mcp.tokenFor("claude");
@@ -100,8 +100,8 @@ const main = async (): Promise<void> => {
   ok("its process runs while it waits", alive(idlePid));
   ok("its process exits once it idles", await until(() => !alive(idlePid), 10000));
 
-  closeWidecode(w);
-  delete process.env.WIDECODE_ACP_TEST_IDLE_MS;
+  closeLightcode(w);
+  delete process.env.LIGHTCODE_ACP_TEST_IDLE_MS;
   rmSync(folder, { recursive: true, force: true });
   done();
 };

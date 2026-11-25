@@ -5,11 +5,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PluginSource } from "@lightstart/plugins/sources.ts";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { done, ok } from "@lightstart/test/assert.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 
-const gate = `widecode.plugin({
+const gate = `lightcode.plugin({
   id: "gate",
   agent(agent) {
     agent.on("tool_call", (event) => event.toolName === "Bash" ? { block: true, reason: "no" } : undefined);
@@ -17,12 +17,12 @@ const gate = `widecode.plugin({
 });`;
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-agent-part-"));
-  const make = (config: string): Promise<Widecode> =>
-    openWidecode({
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-agent-part-"));
+  const make = (config: string): Promise<Lightcode> =>
+    openLightcode({
       folder,
       plugins: JSON.parse(config),
-      before: (w: Widecode) => {
+      before: (w: Lightcode) => {
         w.js.extra = [new PluginSource("gate.js", gate)];
       },
     });
@@ -30,11 +30,11 @@ const main = async (): Promise<void> => {
   let w = await make("{}");
   ok("a plugin with only an agent part loads and is on", w.host.kernel.has("gate") && w.host.kernel.problems.length === 0 && w.js.errors.length === 0);
   ok("it registers nothing in the app", w.host.kernel.commands.find("/gate") === null);
-  closeWidecode(w);
+  closeLightcode(w);
 
   w = await make('{"gate": false}');
   ok("switched off by its section, without an error", !w.host.kernel.has("gate") && w.host.kernel.problems.length === 0 && w.js.errors.length === 0);
-  closeWidecode(w);
+  closeLightcode(w);
 
   rmSync(folder, { recursive: true, force: true });
   done();

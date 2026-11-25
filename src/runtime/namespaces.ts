@@ -1,4 +1,4 @@
-// The plugin API's JS side, as widecode's parts of it: the namespaces each beside its answers
+// The plugin API's JS side, as lightcode's parts of it: the namespaces each beside its answers
 // (src/api/<namespace>.ts), in the order the api object lists them, the namespace the runtime answers
 // itself (actions) declared here, and the members that are no namespace (on, tell, note, every,
 // after) as text where they sit. @lightstart/plugins builds the prelude around them.

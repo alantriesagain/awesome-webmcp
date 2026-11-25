@@ -11,15 +11,15 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Item, PROMPT, TEXT, Turn } from "../src/conversation/model.ts";
-import type { Widecode } from "../src/compose.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import type { Lightcode } from "../src/compose.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
 
 /** The chat's lines at 80 cells. */
-const chat = (w: Widecode): string[] => {
+const chat = (w: Lightcode): string[] => {
   const s = w.chat.pane.source;
   s.prepare(80);
   const out: string[] = [];
@@ -28,13 +28,13 @@ const chat = (w: Widecode): string[] => {
 };
 
 const said = (t: Turn): string => t.body.children.filter((i: Item) => i.kind === TEXT).map((i: Item) => i.text).join(" ");
-const up = (w: Widecode): void => {
+const up = (w: Lightcode): void => {
   w.host.screen.focus("chat");
   w.shell.handleKey(new KeyEvent("up", "", false, false, false));
 };
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-queue-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-queue-"));
   const fake = join(process.cwd(), "test/fake-acp.mjs");
   const forgotten = join(folder, "forgotten.txt");
   const config: unknown = {
@@ -45,11 +45,11 @@ const main = async (): Promise<void> => {
       },
     },
   };
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     plugins: config,
     load: true,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.host.session.agentId.value = "fake";
     },
   });
@@ -95,12 +95,12 @@ const main = async (): Promise<void> => {
   await until(idle);
   w.host.roles.chat.submit("/btw anything?");
   eq("says so", said_(), "Old cannot fork a session for a side question");
-  closeWidecode(w);
+  closeLightcode(w);
 
   // Claude Code: cancel_async_message and side_question.
-  const wc = await openWidecode({
+  const wc = await openLightcode({
     folder,
-    before: (wc: Widecode) => {
+    before: (wc: Lightcode) => {
       wc.host.conversation.executable = join(process.cwd(), "test/fake-claude.mjs");
       wc.host.conversation.extraArgs.push("--fixture", join(process.cwd(), "test/fixtures/turn.ndjson"));
     },
@@ -118,7 +118,7 @@ const main = async (): Promise<void> => {
   wc.host.roles.chat.submit("/btw and before that?");
   ok("the earlier side questions are its history", await until(() => chat(wc).includes("  │ Side answer to: and before that? (after 1)")));
   ok("none of it in the conversation", cc.model.turns.length === 1 && cc.model.pending.length === 0);
-  closeWidecode(wc);
+  closeLightcode(wc);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

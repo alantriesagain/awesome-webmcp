@@ -1,4 +1,4 @@
-// A read-only view of one start of widecode: the start's Host, its Shell and the widgets and JS
+// A read-only view of one start of lightcode: the start's Host, its Shell and the widgets and JS
 // plugins the plugins controller (controllers/plugins.ts) built. It holds nothing of its own and
 // does nothing: every member is a getter or a one-line delegation to where the work now is. It is
 // what src/run.ts, src/selftest.ts and the tests read; the app itself reaches the controllers.
@@ -14,7 +14,7 @@ import { ToolsWidget } from "./views/tools-widget.ts";
 import { Screen } from "@lightstart/light/native/tui";
 import { Shell } from "./views/shell.ts";
 
-export class Widecode {
+export class Lightcode {
   readonly host: Host;
   readonly shell: Shell;
 
@@ -87,5 +87,5 @@ export class Widecode {
   }
 }
 
-/** widecode over the start's `host` and `shell`, not started. */
-export const composeWidecode = (host: Host, shell: Shell): Widecode => new Widecode(host, shell);
+/** lightcode over the start's `host` and `shell`, not started. */
+export const composeLightcode = (host: Host, shell: Shell): Lightcode => new Lightcode(host, shell);

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
 import { setFlagsFromString } from "node:v8";
-import { closeWidecode, openWidecode } from "./app.ts";
+import { closeLightcode, openLightcode } from "./app.ts";
 
 const TURNS = 1900;
 const MID = 1600;
@@ -24,14 +24,14 @@ const turn = (i: number): string[] => [
 const main = async (): Promise<void> => {
   setFlagsFromString("--expose-gc");
   const gc = runInNewContext("gc") as () => void;
-  const folder = mkdtempSync(join(tmpdir(), "widecode-claude-memory-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-claude-memory-"));
   // The session as a fixture, the shape fake-claude.mjs replays; its lines are fed below.
   const records: string[] = [];
   for (let i = 0; i < TURNS; i++) for (const l of turn(i)) records.push(JSON.stringify({ dir: "out", raw: l }));
   writeFileSync(join(folder, "long.jsonl"), records.join("\n") + "\n");
   records.length = 0;
 
-  const app = await openWidecode({ folder });
+  const app = await openLightcode({ folder });
   const c = app.host.conversation;
   const heap = (): number => {
     gc();
@@ -44,7 +44,7 @@ const main = async (): Promise<void> => {
     if (i + 1 === MID) mid = heap();
   }
   const end = heap();
-  closeWidecode(app);
+  closeLightcode(app);
   rmSync(folder, { recursive: true, force: true });
   console.log("claude-memory: " + JSON.stringify({ turns: TURNS, mid, end, before }));
 };

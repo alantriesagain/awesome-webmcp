@@ -1,6 +1,6 @@
 // ffi: @lightstart/plugins/native/ffi.json
 // The app's built-in plugin sources evaluate at top level under the harness's prelude: they read
-// widecode.util, widecode.theme and widecode.version without throwing, so the daemon can load the
+// lightcode.util, lightcode.theme and lightcode.version without throwing, so the daemon can load the
 // same files the app does. The test reads them as the app's prepare step wrote them for a test run,
 // dist/plugins-test/<id>/,
 // and evaluates each as the harness does: its folder's files registered, its index.js an ES module.

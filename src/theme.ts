@@ -1,10 +1,10 @@
-// widecode's look as its plugins get it: the process's palette (@lightstart/tui) and the spinner as JSON
-// for the prelude (`widecode.theme`, themeJson). The core's views read the palette directly; the
+// lightcode's look as its plugins get it: the process's palette (@lightstart/tui) and the spinner as JSON
+// for the prelude (`lightcode.theme`, themeJson). The core's views read the palette directly; the
 // syntax colors are the tokenizers' own (@lightstart/highlight).
 import { SPINNER, TICK_MS } from "@lightstart/light/native/tui/ticks.ts";
 import { palette } from "@lightstart/tui/palette.ts";
 
-/** The theme as plugins get it, `widecode.theme` without its spinner function: JSON text for the prelude. */
+/** The theme as plugins get it, `lightcode.theme` without its spinner function: JSON text for the prelude. */
 export const themeJson = (): string => {
   const marks: string[] = [];
   for (const [mark, color] of palette.markColors()) marks.push(JSON.stringify(mark) + ":" + JSON.stringify(color));

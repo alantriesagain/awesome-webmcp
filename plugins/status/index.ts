@@ -10,7 +10,7 @@
 // says how to rename). The message cells read the status message as the core draws, so a new
 // message redraws the table by itself.
 
-type Run = widecode.Run;
+type Run = lightcode.Run;
 
 interface Spec {
   segment: string;
@@ -29,7 +29,7 @@ interface Cell {
   w: number;
 }
 
-const T = widecode.theme;
+const T = lightcode.theme;
 const DIM = T.dim;
 const OK = T.ok;
 const WARN = T.warn;
@@ -62,7 +62,7 @@ const COLOR = /^(#[0-9a-fA-F]{6}|[0-9]{1,3}|default|gray|grey|black|red|green|ye
 const run = (text: string, fg: string, more?: Partial<Run>): Run => ({ text, fg, ...more });
 const safeColor = (c: string): string => (COLOR.test(c) ? c : "");
 
-const { width, runsWidth, clip, clipRuns, tokens, elapsed } = widecode.util;
+const { width, runsWidth, clip, clipRuns, tokens, elapsed } = lightcode.util;
 const percentColor = (pct: number): string => (pct < 50 ? OK : pct < 80 ? WARN : BAD);
 const bar = (pct: number): Run[] => {
   const filled = Math.max(0, Math.min(8, Math.round((pct / 100) * 8)));
@@ -87,16 +87,16 @@ const limit = (label: string, pct: number, resets: number, now: number): Run[] =
   return out;
 };
 
-/** The session's segments, from the status line input (`ctx.info`, Claude Code's shape plus widecode's). */
-const SEGMENTS: Record<string, (ctx: widecode.SegmentContext) => Run[]> = {
+/** The session's segments, from the status line input (`ctx.info`, Claude Code's shape plus lightcode's). */
+const SEGMENTS: Record<string, (ctx: lightcode.SegmentContext) => Run[]> = {
   project: (ctx) =>
     ctx.busy
       ? [run(ctx.spinner, T.link, { bold: true, live: "spinner" }), run(" " + ctx.folderName, T.link, { bold: true })]
       : [run("◆ " + ctx.folderName, T.link, { bold: true })],
-  branch: (ctx) => (ctx.info.widecode.branch ? [run(ctx.info.widecode.branch, T.think)] : []),
+  branch: (ctx) => (ctx.info.lightcode.branch ? [run(ctx.info.lightcode.branch, T.think)] : []),
   effort: (ctx) => (ctx.info.effort.level ? [run(ctx.info.effort.level, DIM)] : []),
   mode: (ctx) => {
-    const mode = String(ctx.info.widecode.mode ?? "");
+    const mode = String(ctx.info.lightcode.mode ?? "");
     return mode === "plan" ? [run("plan mode", WARN)] : [run(mode === "bypassPermissions" || mode.length === 0 ? "bypass" : mode, DIM)];
   },
   title: (ctx) => (ctx.info.session_name ? [run(clip(String(ctx.info.session_name).replace(/\s+/g, " "), 48), "")] : []),
@@ -122,9 +122,9 @@ const SEGMENTS: Record<string, (ctx: widecode.SegmentContext) => Run[]> = {
     return out;
   },
   activity: (ctx) => {
-    const a = String(ctx.info.widecode.activity ?? "");
+    const a = String(ctx.info.lightcode.activity ?? "");
     if (a.length === 0) return [];
-    const ms = Number(ctx.info.widecode.activity_ms ?? -1);
+    const ms = Number(ctx.info.lightcode.activity_ms ?? -1);
     const clock = ms >= 0 ? [run(" " + elapsed(ms), WARN)] : [];
     if (a === "thinking" || a === "compacting") return [run("✻ " + a + "…", T.think, { italic: true }), ...clock];
     const space = a.indexOf(" ");
@@ -134,14 +134,14 @@ const SEGMENTS: Record<string, (ctx: widecode.SegmentContext) => Run[]> = {
     return [run("↳ " + tool, "", { bold: true }), ...clock, run(clip(rest, 40), DIM)];
   },
   tools: (ctx) => {
-    const w = ctx.info.widecode;
+    const w = ctx.info.lightcode;
     return [run("R ", DIM), run(String(w.reads), T.link), run(" W ", DIM), run(String(w.writes), WARN), run(" X ", DIM), run(String(w.execs), BAD), run(" A ", DIM), run(String(w.agents), T.think)];
   },
-  calls: (ctx) => [run(String(ctx.info.widecode.calls), ""), run(ctx.info.widecode.calls === 1 ? " call" : " calls", DIM)],
-  thinking: (ctx) => (ctx.info.widecode.thinking_tokens > 0 ? [run("think ", DIM), run(tokens(ctx.info.widecode.thinking_tokens), T.think)] : []),
+  calls: (ctx) => [run(String(ctx.info.lightcode.calls), ""), run(ctx.info.lightcode.calls === 1 ? " call" : " calls", DIM)],
+  thinking: (ctx) => (ctx.info.lightcode.thinking_tokens > 0 ? [run("think ", DIM), run(tokens(ctx.info.lightcode.thinking_tokens), T.think)] : []),
   cost: (ctx) => (ctx.info.cost.total_cost_usd > 0 ? [run("$" + Number(ctx.info.cost.total_cost_usd).toFixed(2), OK)] : []),
   duration: (ctx) => (ctx.info.cost.total_duration_ms > 0 ? [run(elapsed(ctx.info.cost.total_duration_ms), DIM)] : []),
-  queued: (ctx) => (ctx.info.widecode.queued > 0 ? [run(String(ctx.info.widecode.queued) + " queued", WARN)] : []),
+  queued: (ctx) => (ctx.info.lightcode.queued > 0 ? [run(String(ctx.info.lightcode.queued) + " queued", WARN)] : []),
   note: (ctx) => (ctx.note.length > 0 ? [run(ctx.note, DIM)] : []),
   message: (ctx) => (ctx.message.length > 0 ? [run(ctx.message, DIM)] : []),
 };
@@ -314,7 +314,7 @@ const layout = (rows: (Cell[] | Run[])[], separator: string, cells: number): Run
 };
 const isCells = (row: Cell[] | Run[]): row is Cell[] => row.length === 0 || "names" in row[0];
 
-widecode.plugin({
+lightcode.plugin({
   id: "status",
   defaults: () => ({
     separator: " │ ",
@@ -332,7 +332,7 @@ widecode.plugin({
     for (const name of Object.keys(SEGMENTS)) {
       const draw =
         name === "mode"
-          ? (ctx: widecode.SegmentContext): Run[] => {
+          ? (ctx: lightcode.SegmentContext): Run[] => {
               const approval = api.agent.approval();
               if (approval === "full") return [run("Full access", BAD)];
               if (approval === "plan") return [run("plan mode", WARN)];
@@ -381,7 +381,7 @@ widecode.plugin({
       const draw = (cells: number): Run[][] => {
         const now = Date.now();
         const info = api.state.info();
-        const ctx: widecode.SegmentContext = { info, folderName: api.state.active().folderName, message: api.state.message(), note: api.state.note(), busy: api.agent.running(), spinner: T.spinner(now), now };
+        const ctx: lightcode.SegmentContext = { info, folderName: api.state.active().folderName, message: api.state.message(), note: api.state.note(), busy: api.agent.running(), spinner: T.spinner(now), now };
         let index = 0;
         rows = [];
         for (const line of specs) {

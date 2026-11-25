@@ -175,7 +175,7 @@ const main = async (): Promise<void> => {
   fgm.closeTurn(null);
   eq("a foreground request closes with its turn", fgAsk.state, "cancelled");
 
-  // A result's size and who cut it are kept, from the event or from widecode's note in the text,
+  // A result's size and who cut it are kept, from the event or from lightcode's note in the text,
   // and a large cut result says both on its card's line while a small one adds nothing.
   const sized = new ChatModel();
   sized.openTurn("go", 0, true);
@@ -192,11 +192,11 @@ const main = async (): Promise<void> => {
   const notedCall = noted.block("", "tc-note", TOOL, "toolu-note", "Bash", "");
   ok("the noted call is made", notedCall !== null);
   if (notedCall !== null) {
-    const note = "[widecode cut this result: it was 50000 characters, over the 40000 it returns to an agent.]";
+    const note = "[lightcode cut this result: it was 50000 characters, over the 40000 it returns to an agent.]";
     applyEvents(noted, new StatusInfo(), [{ type: "result", id: "toolu-note", text: "H".repeat(30000) + "\n\n" + note + "\n\nT".repeat(8000) }]);
-    ok("widecode's note is read back as its cut and the full size", notedCall.result !== null && notedCall.result.truncated === "widecode" && notedCall.result.size === 50000);
+    ok("lightcode's note is read back as its cut and the full size", notedCall.result !== null && notedCall.result.truncated === "lightcode" && notedCall.result.size === 50000);
     const card = textOf(itemLines(notedCall, new RenderContext(), [], 80));
-    ok("the card shows both parts", card.includes("50k chars") && card.includes("cut by widecode"));
+    ok("the card shows both parts", card.includes("50k chars") && card.includes("cut by lightcode"));
   }
   const small = new ChatModel();
   small.openTurn("go", 0, true);

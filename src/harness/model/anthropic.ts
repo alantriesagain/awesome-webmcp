@@ -205,7 +205,7 @@ export class AnthropicClient {
     if (model === null || provider === null) return failed("no model " + req.model);
     const base = model.baseUrl.length > 0 ? model.baseUrl : provider.baseUrl;
     const key = this.auth.keyFor(provider);
-    if (key.length === 0) return failed("no key for " + provider.name + ": set " + provider.keyEnv + " or run widecode --harness-auth " + provider.id);
+    if (key.length === 0) return failed("no key for " + provider.name + ": set " + provider.keyEnv + " or run lightcode --harness-auth " + provider.id);
     const body = requestBody(req, model, provider);
     for (let attempt = 1; ; attempt++) {
       if (abort.aborted) return new StreamEnd(CANCELLED);
@@ -251,7 +251,7 @@ export class AnthropicClient {
         return reader.end;
       }
       const why = status > 0 ? errorOf(status, errorBody) : end.error;
-      return failed(why.includes("Model access is disabled") ? why + " (the model is not enabled for this key: widecode --harness-models marks the ones it has)" : why);
+      return failed(why.includes("Model access is disabled") ? why + " (the model is not enabled for this key: lightcode --harness-models marks the ones it has)" : why);
     }
   }
 }

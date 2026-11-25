@@ -7,10 +7,10 @@ import type { Msg } from "./json.ts";
 /** A call's kind as ACP names it, as the views know it, and its name on the call's line. */
 export const CATEGORY: Record<string, string> = { read: "read", edit: "edit", delete: "edit", move: "edit", search: "search", execute: "run", fetch: "fetch", switch_mode: "plan", think: "other", other: "other" };
 export const NAME: Record<string, string> = { read: "Read", edit: "Edit", delete: "Delete", move: "Move", search: "Search", execute: "Run", fetch: "Fetch", switch_mode: "Mode", think: "Think", other: "Tool" };
-/** What a call of one of widecode's tools is named in the Tools tab, by its kind (another kind: the tool's name). */
+/** What a call of one of lightcode's tools is named in the Tools tab, by its kind (another kind: the tool's name). */
 export const OWN_NAME: Record<string, string> = { question: "Ask", plan: "Plan" };
 
-/** A call of widecode's tool `tool`: its first question, its plan's first line, else the tool's name. */
+/** A call of lightcode's tool `tool`: its first question, its plan's first line, else the tool's name. */
 export const ownSummary = (tool: { name: string; category: string }, input: Msg | null): string => {
   if (tool.category === "question") {
     const q = str(obj(list(input?.questions)[0])?.question);
@@ -142,17 +142,17 @@ const CUT_TAIL = 16000;
 export const cutText = (text: string): { text: string; size: number; truncated: boolean } => {
   if (text.length <= CUT_AT) return { text, size: text.length, truncated: false };
   const cut = text.length - CUT_HEAD - CUT_TAIL;
-  return { text: text.slice(0, CUT_HEAD) + "\n[… " + String(cut) + " characters cut by widecode …]\n" + text.slice(text.length - CUT_TAIL), size: text.length, truncated: true };
+  return { text: text.slice(0, CUT_HEAD) + "\n[… " + String(cut) + " characters cut by lightcode …]\n" + text.slice(text.length - CUT_TAIL), size: text.length, truncated: true };
 };
 
 /**
  * A tool result's fields from its text and raw output: bounded when long, with the full size and
  * who cut it (the agent, when its raw output's metadata says it truncated the output itself, else
- * widecode).
+ * lightcode).
  */
-export const resultOf = (text: string, raw: unknown): { text: string; size?: number; truncated?: "agent" | "widecode" } => {
+export const resultOf = (text: string, raw: unknown): { text: string; size?: number; truncated?: "agent" | "lightcode" } => {
   const cut = cutText(text);
   const meta = obj(obj(raw)?.metadata);
   if (meta !== null && meta.truncated === true) return cut.truncated ? { text: cut.text, size: cut.size, truncated: "agent" } : { text: cut.text, truncated: "agent" };
-  return cut.truncated ? { text: cut.text, size: cut.size, truncated: "widecode" } : { text: cut.text };
+  return cut.truncated ? { text: cut.text, size: cut.size, truncated: "lightcode" } : { text: cut.text };
 };

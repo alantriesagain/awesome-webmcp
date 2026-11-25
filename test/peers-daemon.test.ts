@@ -9,14 +9,14 @@ import { join } from "node:path";
 import { DaemonClient, DaemonOptions, processAlive, readDaemonState, startDaemon } from "../src/peers/index.ts";
 import { done, eq, eqn, ok } from "@lightstart/test/assert.ts";
 
-const root = mkdtempSync(join(tmpdir(), "widecode-peers-daemon-"));
+const root = mkdtempSync(join(tmpdir(), "lightcode-peers-daemon-"));
 
 const main = async (): Promise<void> => {
   ok("this process is alive", processAlive(process.pid));
   ok("a pid nobody has is not", !processAlive(2147483000));
-  const line = DaemonClient.launchLine("/opt/widecode", ["--port", "0"]);
-  ok("the launch line detaches with setsid where there is one", line.includes("setsid -f '/opt/widecode' '--peers-daemon' '--port' '0' </dev/null >/dev/null 2>&1"));
-  ok("and with a subshell elsewhere", line.includes("else ('/opt/widecode' '--peers-daemon' '--port' '0' </dev/null >/dev/null 2>&1 &)"));
+  const line = DaemonClient.launchLine("/opt/lightcode", ["--port", "0"]);
+  ok("the launch line detaches with setsid where there is one", line.includes("setsid -f '/opt/lightcode' '--peers-daemon' '--port' '0' </dev/null >/dev/null 2>&1"));
+  ok("and with a subshell elsewhere", line.includes("else ('/opt/lightcode' '--peers-daemon' '--port' '0' </dev/null >/dev/null 2>&1 &)"));
 
   const storeA = join(root, "a");
   const storeB = join(root, "b");

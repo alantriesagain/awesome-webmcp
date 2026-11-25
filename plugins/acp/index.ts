@@ -5,10 +5,10 @@
 // output; a todo list or a subagent its input names), its plan as a todo list, its model, effort,
 // mode and commands (config options, or the older modes and models), a session it loads replayed as
 // turns, and the permissions it asks for, answered from the request panel. Its session starts with
-// widecode (and after /new), so the models and efforts it offers are known before the first
+// lightcode (and after /new), so the models and efforts it offers are known before the first
 // message; one made and never written to is deleted (the entry's "forget" command) when it is left,
-// at once or by the next widecode when this one quit. An agent that takes MCP
-// servers over HTTP gets widecode's (api.tools: AskUser, PresentPlan), whose calls show as their
+// at once or by the next lightcode when this one quit. An agent that takes MCP
+// servers over HTTP gets lightcode's (api.tools: AskUser, PresentPlan), whose calls show as their
 // requests. Esc cancels its turn. The Sessions
 // tab lists its sessions from session/list while it runs, when it offers that, else from the
 // entry's "sessions" command (it prints them as JSON). ACP does not say which tools an agent has:
@@ -22,8 +22,8 @@
 //   "tools": ["opencode", "debug", "agent", "{mode}"], "skills": ["opencode", "debug", "skill"] } } };
 // an entry with the id of a default replaces it.
 // Three agents ship: opencode, the DeepSeek Harness (`dsh`, the `dsh --profile acp` command), and
-// widecode's own, the harness (`{widecode} --harness`, the running binary, `own: true`: the
-// project's prompt and trust go to it in `_meta.widecode` with each session and prompt). An
+// lightcode's own, the harness (`{lightcode} --harness`, the running binary, `own: true`: the
+// project's prompt and trust go to it in `_meta.lightcode` with each session and prompt). An
 // agent that advertises session/load (opencode) replays a past session's turns; one that only
 // advertises session/resume (the DeepSeek Harness) reopens it without them.
 
@@ -51,7 +51,7 @@ const HISTORY_LOG_CHARS = 8 * 1024 * 1024;
 /** Log lines a run keeps in its persisted transcript, as the conversation keeps them under its call. */
 const MAX_LOG_LINES = 200;
 /**
- * The command a bwrap subagent runs in front of its agent when widecode offers it HostAction: it
+ * The command a bwrap subagent runs in front of its agent when lightcode offers it HostAction: it
  * listens on the run's MCP port inside the jail (the next one over when the box's proxy port takes
  * it) and forwards each connection through the box's proxy socket to the host's MCP server, as a
  * CONNECT tunnel. The proxy lets in the host's MCP port for the run; nothing else on the host's
@@ -97,7 +97,7 @@ function attempt(work: () => void): void {
 }
 
 /** End a process, killing it when stopping it throws. */
-function end(proc: widecode.ProcessHandle, ms: number): void {
+function end(proc: lightcode.ProcessHandle, ms: number): void {
   try {
     proc.stop(ms);
   } catch {
@@ -122,7 +122,7 @@ class Waiter {
  * and dies with it.
  */
 class SubagentRun {
-  private readonly api: widecode.Api;
+  private readonly api: lightcode.Api;
   private readonly entry: Entry;
   private readonly target: TaskTarget;
   private readonly box: BoxRunner | null;
@@ -137,8 +137,8 @@ class SubagentRun {
   private readonly timeoutMs: number;
   private readonly onDone: () => void;
   private readonly onIdle: (idle: boolean) => void;
-  private proc: widecode.ProcessHandle | null = null;
-  /** The MCP server port widecode's HostAction is served on (0 for none), its headers, and the URL this run's agent gets for it. */
+  private proc: lightcode.ProcessHandle | null = null;
+  /** The MCP server port lightcode's HostAction is served on (0 for none), its headers, and the URL this run's agent gets for it. */
   private mcpPort = 0;
   private mcpHeaders: { name: string; value: string }[] = [];
   private servedUrl = "";
@@ -179,7 +179,7 @@ class SubagentRun {
   private reject: (error: Error) => void = () => {};
   readonly promise: Promise<string>;
 
-  constructor(api: widecode.Api, entry: Entry, target: TaskTarget, box: BoxRunner | null, boxFolder: string, cwd: string, worktree: string, model: string, callId: string, description: string, synthetic: boolean, background: boolean, timeoutMs: number, onDone: () => void, onIdle: (idle: boolean) => void) {
+  constructor(api: lightcode.Api, entry: Entry, target: TaskTarget, box: BoxRunner | null, boxFolder: string, cwd: string, worktree: string, model: string, callId: string, description: string, synthetic: boolean, background: boolean, timeoutMs: number, onDone: () => void, onIdle: (idle: boolean) => void) {
     this.api = api;
     this.entry = entry;
     this.target = target;
@@ -231,7 +231,7 @@ class SubagentRun {
     const batch = this.out;
     this.out = [];
     for (const e of batch) this.keep(e as Ev);
-    this.api.conversation.subagent(this.callId, batch as widecode.ConversationEvent[]);
+    this.api.conversation.subagent(this.callId, batch as lightcode.ConversationEvent[]);
   }
 
   /** Keep this run's events under the project, so a later run can read its steps back. */
@@ -334,8 +334,8 @@ class SubagentRun {
 
   /** The box's proxy socket on the host: the path `box.mjs` binds into the jail. */
   private proxySocket(): string {
-    const dir = this.api.fs.env("WIDECODE_BOX_DIR");
-    return (dir.length > 0 ? dir : this.api.fs.home() + "/.cache/widecode/box") + "/proxy.sock";
+    const dir = this.api.fs.env("LIGHTCODE_BOX_DIR");
+    return (dir.length > 0 ? dir : this.api.fs.home() + "/.cache/lightcode/box") + "/proxy.sock";
   }
 
   /** The port an MCP URL names, 0 when it names none. */
@@ -348,7 +348,7 @@ class SubagentRun {
   }
 
   /**
-   * Find where widecode serves HostAction, for this run's agent: the server's port, its headers and
+   * Find where lightcode serves HostAction, for this run's agent: the server's port, its headers and
    * the URL, which the launch rewrites to the forwarded port the box gives it. A project with no
    * host action gets no server, as before.
    */
@@ -447,7 +447,7 @@ class SubagentRun {
       return this.promise;
     }
     this.proc = p;
-    this.rpc("initialize", { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: "widecode", version: String(widecode.version) } }, (_result, error) => {
+    this.rpc("initialize", { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: "lightcode", version: String(lightcode.version) } }, (_result, error) => {
       if (error.length > 0) {
         this.fail(error);
         return;
@@ -556,7 +556,7 @@ class SubagentRun {
   }
 
   private newSession(prompt: string): void {
-    const servers: unknown[] = this.mcpPort > 0 && this.servedUrl.length > 0 ? [{ type: "http", name: "widecode", url: this.servedUrl, headers: this.mcpHeaders }] : [];
+    const servers: unknown[] = this.mcpPort > 0 && this.servedUrl.length > 0 ? [{ type: "http", name: "lightcode", url: this.servedUrl, headers: this.mcpHeaders }] : [];
     this.rpc("session/new", { cwd: this.cwd, mcpServers: servers }, (result, error) => {
       if (result === null) {
         this.fail(error.length > 0 ? error : "no session");
@@ -700,7 +700,7 @@ class SubagentRun {
       return;
     }
     // A run hears no user: its dialogs are answered cancelled and the rest of the UI is ignored.
-    if (method === "_widecode/ui") {
+    if (method === "_lightcode/ui") {
       if (m.id !== undefined && m.id !== null && this.proc !== null) this.proc.write(JSON.stringify({ jsonrpc: "2.0", id: m.id, result: { cancelled: true } }));
       return;
     }
@@ -745,7 +745,7 @@ class SubagentRun {
     const input = obj(u.rawInput);
     const locations = list(u.locations).map((l) => str(obj(l)?.path)).filter((p) => p.length > 0);
     const summary = input !== null && kind === "execute" && str(input.command).length > 0 ? str(input.command).split("\n")[0] : title;
-    const facts: widecode.CallFacts = { category: CATEGORY[kind] ?? "other", summary, ...(locations.length > 0 && kind !== "execute" ? { paths: locations } : {}), ...(input !== null && typeof input.command === "string" ? { command: input.command } : {}) };
+    const facts: lightcode.CallFacts = { category: CATEGORY[kind] ?? "other", summary, ...(locations.length > 0 && kind !== "execute" ? { paths: locations } : {}), ...(input !== null && typeof input.command === "string" ? { command: input.command } : {}) };
     if (input !== null && typeof input.subagent_type === "string") {
       facts.category = "agent";
       facts.agentType = str(input.subagent_type);
@@ -871,12 +871,12 @@ let boxRunner: BoxRunner | null = null;
 /** The live Task runs, by id, so deactivation stops every process they started. */
 let liveRuns: Map<string, SubagentRun> = new Map();
 
-widecode.plugin({
+lightcode.plugin({
   id: "acp",
   defaults: () => ({ agents: DEFAULT_AGENTS }),
   activate(api) {
-    crashOnUpdate = api.fs.env("WIDECODE_ACP_TEST_CRASH") === "update";
-    const idleEnv = Number(api.fs.env("WIDECODE_ACP_TEST_IDLE_MS"));
+    crashOnUpdate = api.fs.env("LIGHTCODE_ACP_TEST_CRASH") === "update";
+    const idleEnv = Number(api.fs.env("LIGHTCODE_ACP_TEST_IDLE_MS"));
     idleMs = idleEnv > 0 ? idleEnv : IDLE_MS;
     const section = api.settings.section();
     const agents = agentsOf(section);
@@ -889,20 +889,20 @@ widecode.plugin({
       name: "box",
       draw: () => {
         if (tasks.targets.length === 0) return [];
-        if (tasks.box === null || tasks.targets.some((t) => t.box.length === 0)) return [{ text: "unboxed", fg: widecode.theme.warn }];
+        if (tasks.box === null || tasks.targets.some((t) => t.box.length === 0)) return [{ text: "unboxed", fg: lightcode.theme.warn }];
         let bwrap = false;
         let vm = false;
         for (const t of tasks.targets) {
           if (t.box === "vm") vm = true;
           else bwrap = true;
         }
-        return [{ text: bwrap && vm ? "boxed: mixed" : vm ? "boxed: vm" : "boxed: bwrap", fg: widecode.theme.ok }];
+        return [{ text: bwrap && vm ? "boxed: mixed" : vm ? "boxed: vm" : "boxed: bwrap", fg: lightcode.theme.ok }];
       },
     });
-    /** The ACP main's calls of widecode's Task tool that are in flight, which the Task tool runs under. */
+    /** The ACP main's calls of lightcode's Task tool that are in flight, which the Task tool runs under. */
     const taskCalls = new TaskCalls();
     for (const id of Object.keys(agents)) api.agents.register(acpAgent(api, id, agents[id], taskCalls));
-    // Sessions made and left by widecode processes gone (one quit without writing to its session).
+    // Sessions made and left by lightcode processes gone (one quit without writing to its session).
     sweep(api, agents, "");
     if (tasks.targets.length === 0) return;
     /** The live runs by id: a background run can be messaged or stopped after its call answered. */
@@ -988,7 +988,7 @@ widecode.plugin({
         if (isolation !== "worktree") return startRun(where, "", folder);
         const part = id.replace(/[^A-Za-z0-9_.-]/g, "_");
         const path = where + "/.worktrees/" + part;
-        const branch = "widecode/task-" + part;
+        const branch = "lightcode/task-" + part;
         preparing++;
         const made = (): void => {
           preparing--;
@@ -1032,8 +1032,8 @@ widecode.plugin({
             if (added.code !== 0) throw new Error("cannot make a worktree: " + (added.err.trim().length > 0 ? added.err.trim() : added.out.trim()));
             // The setup lines are the session folder's, so a worktree of another folder runs none.
             for (const setupLine of where === bare(folder) ? tasks.worktreeSetup : []) {
-              // In the worktree: process.run runs where widecode was started.
-              const command = "cd " + quote(path) + " && env WIDECODE_FOLDER=" + quote(folder) + " WIDECODE_WORKTREE=" + quote(path) + " sh -c " + quote(setupLine);
+              // In the worktree: process.run runs where lightcode was started.
+              const command = "cd " + quote(path) + " && env LIGHTCODE_FOLDER=" + quote(folder) + " LIGHTCODE_WORKTREE=" + quote(path) + " sh -c " + quote(setupLine);
               const done = await api.process.run(command, "", tasks.worktreeSetupTimeoutMs);
               if (cancelled) return "The subagent was stopped before it started.";
               if (done.code !== 0) {

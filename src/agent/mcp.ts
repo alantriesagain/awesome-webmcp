@@ -25,7 +25,7 @@ const MAX_BODY = 1048576;
  */
 export function capResult(text: string, max: number): string {
   if (text.length <= max) return text;
-  const note = "[widecode cut this result: it was " + String(text.length) + " characters, over the " + String(max) + " it returns to an agent. Ask again for less: a narrower question, a filter, fewer lines, or one part at a time.]";
+  const note = "[lightcode cut this result: it was " + String(text.length) + " characters, over the " + String(max) + " it returns to an agent. Ask again for less: a narrower question, a filter, fewer lines, or one part at a time.]";
   return text.slice(0, Math.floor(max * 0.75)) + "\n\n" + note + "\n\n" + text.slice(text.length - Math.floor(max * 0.2));
 }
 

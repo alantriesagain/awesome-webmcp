@@ -80,8 +80,8 @@ const main = async (): Promise<void> => {
   ctx.web.searxng = base;
   ctx.web.profileRoot = join(root, "profiles");
   ctx.web.order = searchOrder(["searxng"], ctx.web);
-  const found = await tools.run("WebSearch", '{"query":"widecode harness","limit":3}', ctx, new Abort(), null);
-  eq("WebSearch over the SearXNG", found.text + " " + String(found.isError), 'Results for "widecode harness" (searxng):\n\n1. Local result\n   http://127.0.0.1/page\n   Asked: widecode%20harness false');
+  const found = await tools.run("WebSearch", '{"query":"lightcode harness","limit":3}', ctx, new Abort(), null);
+  eq("WebSearch over the SearXNG", found.text + " " + String(found.isError), 'Results for "lightcode harness" (searxng):\n\n1. Local result\n   http://127.0.0.1/page\n   Asked: lightcode%20harness false');
   ctx.web.order = [];
   ok("no backend: an error saying how to have one", (await tools.run("WebSearch", '{"query":"x"}', ctx, new Abort(), null)).text.startsWith("no search backend here"));
 

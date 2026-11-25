@@ -1,6 +1,6 @@
 // The system prompt's blocks. The stable ones first, cached by a provider that caches: the base
 // text (who the agent is, how it works with its tools), the folder and platform, the project's
-// text the ACP client passes (widecode's fixed paragraph and the project's prompt.md), the
+// text the ACP client passes (lightcode's fixed paragraph and the project's prompt.md), the
 // project's instructions (AGENTS.md and the like, a trusted folder's) and the skills offered.
 // Then one small block that changes: the date and the mode's note, which the loop sends last and
 // uncached.
@@ -9,11 +9,11 @@ import { contextFiles, contextSection } from "./context-files.ts";
 import { scanSkills, skillsSection } from "./skills.ts";
 
 const BASE =
-  "You are the harness, widecode's coding agent, in the user's project folder from a terminal. " +
+  "You are the harness, lightcode's coding agent, in the user's project folder from a terminal. " +
   "Read before you change, keep changes small, and explain what you did in a few plain sentences. " +
   "Answer in terse markdown. Never claim to have done what you did not do.\n\n" +
   "Read before you Write over an existing file. Independent read-only calls in one reply run together. " +
-  "When a decision is the user's, ask with mcp__widecode__AskUser when you have it instead of guessing.";
+  "When a decision is the user's, ask with mcp__lightcode__AskUser when you have it instead of guessing.";
 
 /** What the stable blocks are made of. */
 export class SystemFacts {

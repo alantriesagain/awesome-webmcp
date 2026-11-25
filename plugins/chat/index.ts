@@ -8,7 +8,7 @@
 // and its end). The modes are the agent's (api.agent.choices()); the model and effort are the
 // models plugin's. Other plugins reach it through api.chat.
 
-widecode.plugin({
+lightcode.plugin({
   id: "chat",
   activate(api) {
     const send = (text: string): void => {
@@ -117,8 +117,8 @@ widecode.plugin({
         if (why.length > 0) api.tell(why);
       },
     });
-    api.commands.add({ name: "/quit", help: "leave widecode", run: () => api.actions.quit() });
-    api.commands.add({ name: "/exit", help: "leave widecode", run: () => api.actions.quit() });
+    api.commands.add({ name: "/quit", help: "leave lightcode", run: () => api.actions.quit() });
+    api.commands.add({ name: "/exit", help: "leave lightcode", run: () => api.actions.quit() });
     api.commands.add({ name: "/plan", help: "plan mode on, or the mode before it", run: togglePlan });
     api.commands.add({
       name: "/mode",

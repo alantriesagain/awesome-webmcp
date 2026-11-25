@@ -17,13 +17,13 @@ claude -p --input-format stream-json --output-format stream-json --verbose
 ```
 
 In the project folder, with `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT` removed from the environment.
-`--mcp-config` names a file (the user's alone) with widecode's MCP server and this agent's token, when
-widecode has a tool for Claude (PLUGINS.md, "widecode's own tools"); the tools come back in
-`system/init`'s `mcp_servers` and `tools` as `mcp__widecode__<name>`. Claude reads the list once, so a
+`--mcp-config` names a file (the user's alone) with lightcode's MCP server and this agent's token, when
+lightcode has a tool for Claude (PLUGINS.md, "lightcode's own tools"); the tools come back in
+`system/init`'s `mcp_servers` and `tools` as `mcp__lightcode__<name>`. Claude reads the list once, so a
 tool added while it runs is picked up at the turn's end: the CLI stops and the next message starts it
 again with `--resume`.
 `--append-system-prompt` carries the harness's text (PLUGINS.md, "The harness": a fixed paragraph,
-then the trusted project's `.widecode/prompt.md`). Claude Code records the system prompt once per
+then the trusted project's `.lightcode/prompt.md`). Claude Code records the system prompt once per
 session and gives a resumed session the recorded one; `--system-prompt-snapshot off` makes it take
 the prompt it starts with, so `prompt.md` edited reaches the session at the turn's end, through the
 same stop and `--resume` as a tool change.

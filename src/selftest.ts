@@ -4,11 +4,11 @@
 //   fake | live-turn  send a message (to the fake CLI replaying a recorded turn, or to Claude) and
 //                   see the answer on screen
 //   fake-acp        the fake ACP agent asks permission for a call; allow it with a key, the call runs;
-//                   then it asks a question over widecode's MCP server (AskUser), answered with a key
-//   harness         widecode's own agent, the binary's `--harness` on its fake model: a turn runs a
-//                   command and replies; then AskUser over widecode's MCP server, answered with a key
+//                   then it asks a question over lightcode's MCP server (AskUser), answered with a key
+//   harness         lightcode's own agent, the binary's `--harness` on its fake model: a turn runs a
+//                   command and replies; then AskUser over lightcode's MCP server, answered with a key
 //   live-acp        opencode over ACP runs a command and replies; the call and the reply on screen
-//   live-acp-ask    opencode asks a question with widecode's AskUser; answer it with a key; it repeats it
+//   live-acp-ask    opencode asks a question with lightcode's AskUser; answer it with a key; it repeats it
 //   live-acp-plan   opencode in plan mode presents a plan with PresentPlan; approved, it leaves plan
 //                   mode and the file changes
 //   live-interrupt  start a 30 s Bash call, interrupt it, see "Interrupted", then a second turn
@@ -28,7 +28,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { triggerCrash } from "@lightstart/lib/crash.ts";
 import { log, trail } from "@lightstart/lib/log.ts";
-import { Widecode } from "./compose.ts";
+import { Lightcode } from "./compose.ts";
 import { afterChange } from "./host/after-change.ts";
 import { AGENT, Item, NOTICE, RUN, TEXT, TOOL, Turn } from "./conversation/model.ts";
 import { KeyEvent } from "@lightstart/light/native/tui";
@@ -44,11 +44,11 @@ const lastText = (turn: Turn): string => {
 
 export class Selftest {
   readonly name: string;
-  readonly w: Widecode;
+  readonly w: Lightcode;
   /** The painted screen's text, for checks against what the user would see. */
   screen: (() => string) | null = null;
   /** The app running now: after an /open, the one started again over the other folder. */
-  current: () => Widecode;
+  current: () => Lightcode;
   private wroteAt = 0;
   private hunksBefore = -1;
   private step = 0;
@@ -56,7 +56,7 @@ export class Selftest {
   /** Stops the check of what the code column shows (the shell scenario). */
   private stopShown: (() => void) | null = null;
 
-  constructor(name: string, w: Widecode) {
+  constructor(name: string, w: Lightcode) {
     this.name = name;
     this.w = w;
     this.current = () => w;
@@ -104,11 +104,11 @@ export class Selftest {
     else if (this.name === "live-turn") this.w.host.roles.chat.submit("Reply with exactly: PONG");
     else if (this.name === "live-interrupt") this.w.host.roles.chat.submit("Use the Bash tool to run exactly: python3 -c \"import time; time.sleep(30)\" and then say finished.");
     else if (this.name === "live-ask") this.w.host.roles.chat.submit("Use the AskUserQuestion tool to ask me which color I prefer, with exactly two options: Red and Blue. After I answer, reply with just the color I chose.");
-    else if (this.name === "live-acp-ask") this.w.host.roles.chat.submit("Use the widecode_AskUser tool to ask me which color I prefer, with exactly two options: Red and Blue. After I answer, reply with just the color I chose.");
+    else if (this.name === "live-acp-ask") this.w.host.roles.chat.submit("Use the lightcode_AskUser tool to ask me which color I prefer, with exactly two options: Red and Blue. After I answer, reply with just the color I chose.");
     else if (this.name === "live-acp-plan") {
       // An ACP agent says its modes once its session is made: the mode goes with the first message.
       this.w.host.conversation.setMode("plan");
-      this.w.host.roles.chat.submit("Plan how to add a line 'delta' at the end of README.md. Keep the plan to one sentence and present it with the widecode_PresentPlan tool. After approval, make the change and say done.");
+      this.w.host.roles.chat.submit("Plan how to add a line 'delta' at the end of README.md. Keep the plan to one sentence and present it with the lightcode_PresentPlan tool. After approval, make the change and say done.");
     }
     else if (this.name === "live-plan") {
       this.w.shell.handleKey(new KeyEvent("tab", "", false, false, true));
@@ -121,7 +121,7 @@ export class Selftest {
 
   /** /open a new folder holding one file, then read the app started again over it. */
   private async open(): Promise<void> {
-    const folder = mkdtempSync(join(tmpdir(), "widecode-selftest-open-"));
+    const folder = mkdtempSync(join(tmpdir(), "lightcode-selftest-open-"));
     writeFileSync(join(folder, "only.txt"), "one\n");
     const agent = this.w.host.session.agentId.peek();
     this.step = 1;

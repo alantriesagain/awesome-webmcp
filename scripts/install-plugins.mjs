@@ -1,6 +1,6 @@
 // The built-in plugins installed with the binary (`light install`, as the native block's install
-// step): dist/plugins/<id>/ (the prepare step's) into the user's plugin folder, $WIDECODE_HOME/plugins
-// or ~/.widecode/plugins, each folder with .widecode-installed, the hash of what was written. A
+// step): dist/plugins/<id>/ (the prepare step's) into the user's plugin folder, $LIGHTCODE_HOME/plugins
+// or ~/.lightcode/plugins, each folder with .lightcode-installed, the hash of what was written. A
 // folder installed before and unchanged since is replaced; one the user edited since, or one of the
 // user's own with a built-in's id, is left as it is and named; an installed one no longer built in
 // and unchanged goes. Run by `light install` (LIGHT_INSTALLED names the binary) it first checks the
@@ -8,14 +8,23 @@
 // so a test running beside a build cannot install its plugins.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, relative } from "node:path";
 
-const MARK = ".widecode-installed";
-const STAMP = ".widecode-build";
+const MARK = ".lightcode-installed";
+/** The mark widecode wrote, read in place of MARK until the folder is installed again. */
+const OLD_MARK = ".widecode-installed";
+const STAMP = ".lightcode-build";
 const source = "dist/plugins";
-const home = (process.env.WIDECODE_HOME ?? "").length > 0 ? process.env.WIDECODE_HOME : join(homedir(), ".widecode");
+const ownHome = (process.env.LIGHTCODE_HOME ?? "").length === 0;
+const home = ownHome ? join(homedir(), ".lightcode") : process.env.LIGHTCODE_HOME;
+// lightcode was widecode: its store moves to the new name before anything is written there, as the
+// app does at start (src/services/rename.ts), so installing first does not leave it behind.
+if (ownHome && !existsSync(home) && existsSync(join(homedir(), ".widecode"))) {
+  renameSync(join(homedir(), ".widecode"), home);
+  console.log("moved ~/.widecode to " + home);
+}
 const target = join(home, "plugins");
 
 /** The files under `dir`, relative, by name, the mark left out. */
@@ -24,7 +33,7 @@ const filesIn = (dir, base = dir) => {
   for (const name of readdirSync(dir).sort()) {
     const path = join(dir, name);
     if (statSync(path).isDirectory()) out.push(...filesIn(path, base));
-    else if (name !== MARK) out.push(relative(base, path));
+    else if (name !== MARK && name !== OLD_MARK) out.push(relative(base, path));
   }
   return out;
 };
@@ -36,7 +45,10 @@ const hashOf = (dir) => {
   return h.digest("hex");
 };
 
-const markOf = (dir) => (existsSync(join(dir, MARK)) ? readFileSync(join(dir, MARK), "utf8").trim() : null);
+const markOf = (dir) => {
+  for (const name of [MARK, OLD_MARK]) if (existsSync(join(dir, name))) return readFileSync(join(dir, name), "utf8").trim();
+  return null;
+};
 
 if (!existsSync(source)) {
   console.error("install-plugins: no " + source + "; the prepare step writes it (node --no-warnings scripts/builtin-plugins.mjs)");
@@ -48,7 +60,7 @@ if (installed.length > 0) {
   let build = "";
   try {
     const out = execFileSync(installed, ["--version"], { encoding: "utf8" }).trim();
-    const found = /^widecode (\S+)/.exec(out);
+    const found = /^lightcode (\S+)/.exec(out);
     build = found !== null ? found[1] : "";
   } catch {
     build = "";

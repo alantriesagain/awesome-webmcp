@@ -8,20 +8,20 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Widecode } from "../src/compose.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import type { Lightcode } from "../src/compose.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { DEFAULT_STYLE, KeyEvent, TRoot, frames, layout, mount } from "@lightstart/light/native/tui";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-vi-"));
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-vi-"));
   const fake = join(process.cwd(), "test/fake-acp.mjs");
   const config: unknown = { acp: { agents: { fake: { name: "Fake", command: ["node", fake] } } } };
-  const w = await openWidecode({
+  const w = await openLightcode({
     folder,
     plugins: config,
-    before: (w: Widecode) => {
+    before: (w: Lightcode) => {
       w.host.session.agentId.value = "fake";
       w.host.keys.keymap.value = "vi";
     },
@@ -172,7 +172,7 @@ const main = async (): Promise<void> => {
   w.host.roles.chat.submit("/keymap vi");
   eq("back to vi: insert mode", pane.label.peek(), "-- INSERT --");
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

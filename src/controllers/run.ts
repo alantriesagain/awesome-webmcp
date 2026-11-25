@@ -32,7 +32,7 @@ export class RunController extends Controller {
     const run = new Run();
     run.folder = resolve(app.args.string("dir") ?? process.cwd());
     if (!existsSync(run.folder) || !statSync(run.folder).isDirectory()) {
-      console.error("widecode: not a folder: " + run.folder);
+      console.error("lightcode: not a folder: " + run.folder);
       process.exit(2);
     }
     // A development build's built-in plugins, beside it (dist/plugins); an installed binary's are in the plugin folder.

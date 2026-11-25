@@ -1,7 +1,7 @@
 // Prompt templates in pi's format: the args of a command line with shell-like quoting; each
 // placeholder form (`$1`, `$@`, `$ARGUMENTS`, `${1:-default}`, `${@:-default}`, `${@:N}`,
 // `${@:N:L}`) and a missing argument empty; the scan's folders in order (the folder's, its plugin
-// folders' under `.widecode/plugins`, the harness's, the store's plugin folders' under `plugins`,
+// folders' under `.lightcode/plugins`, the harness's, the store's plugin folders' under `plugins`,
 // pi's), first found wins by name, a plugin folder without `index.js` is not a plugin, only direct
 // `.md` children, the description from the frontmatter or the body's first line cut to 60
 // characters, the argument hint, pi's agent folder from `PI_CODING_AGENT_DIR` or `~/.pi/agent`, and
@@ -27,11 +27,11 @@ const plugin = (dir: string): void => {
   writeFileSync(join(dir, "index.js"), "// a plugin\n");
 };
 
-template(join(folder, ".widecode", "prompts"), "review", "---\ndescription: Review a change\nargument-hint: <path>\n---\nReview $1 in $2.\n");
+template(join(folder, ".lightcode", "prompts"), "review", "---\ndescription: Review a change\nargument-hint: <path>\n---\nReview $1 in $2.\n");
 template(join(folder, ".pi", "prompts"), "project", "---\ndescription: Pi project\n---\nProject it.\n");
-plugin(join(folder, ".widecode", "plugins", "beta"));
-template(join(folder, ".widecode", "plugins", "beta", "prompts"), "plugproject", "---\ndescription: Project plugin\n---\nProject plugin.\n");
-template(join(folder, ".widecode", "plugins", "nope", "prompts"), "ignored", "---\ndescription: Not a plugin\n---\nIgnored.\n");
+plugin(join(folder, ".lightcode", "plugins", "beta"));
+template(join(folder, ".lightcode", "plugins", "beta", "prompts"), "plugproject", "---\ndescription: Project plugin\n---\nProject plugin.\n");
+template(join(folder, ".lightcode", "plugins", "nope", "prompts"), "ignored", "---\ndescription: Not a plugin\n---\nIgnored.\n");
 template(join(harness, "prompts"), "review", "---\ndescription: Harness review\n---\nHarness review.\n");
 template(join(harness, "prompts"), "notes", "---\ndescription: Harness notes\n---\nTake notes.\n");
 plugin(join(root, "store", "plugins", "zeta"));
@@ -42,8 +42,8 @@ template(join(piAgent, "prompts"), "env", "---\ndescription: Env template\n---\n
 const long = "A description line much longer than sixty characters so that the fallback cuts it short";
 template(join(piAgent, "prompts"), "fallback", "\n\n  " + long + "\nA second line.\n");
 template(join(home, ".pi", "agent", "prompts"), "default", "---\ndescription: Default pi\n---\nDefault.\n");
-template(join(folder, ".widecode", "prompts", "nested"), "deep", "---\ndescription: Nested\n---\nDeep.\n");
-writeFileSync(join(folder, ".widecode", "prompts", "readme.txt"), "not a template\n");
+template(join(folder, ".lightcode", "prompts", "nested"), "deep", "---\ndescription: Nested\n---\nDeep.\n");
+writeFileSync(join(folder, ".lightcode", "prompts", "readme.txt"), "not a template\n");
 
 eq("the words of a command line", splitArgs('one "two three" \'four five\' six\\ seven ""').map((a) => "[" + a + "]").join("|"), "[one]|[two three]|[four five]|[six seven]|[]");
 eq("a backslash keeps the next character", splitArgs("a\\ b\tc").join("|"), "a b|c");

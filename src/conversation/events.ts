@@ -1,6 +1,6 @@
 // The conversation's changes as an agent's adapter plugin hands them over: a list of neutral events
 // (`api.conversation.apply(events)`, one call per batch of its agent's messages), applied here to
-// the model and the status. Each event names a call of the model (model.ts); widecode.d.ts types
+// the model and the status. Each event names a call of the model (model.ts); lightcode.d.ts types
 // them for plugins. A block is named by the parent call it is under ("" for the turn) and its key
 // (the adapter's own: a message and its index, a call's id).
 import { ChatModel, Item, TaskInfo, ToolResult, TurnResult, AGENT, EDIT, READ, RUN, SEARCH, TEXT, THINKING, TOOL } from "./model.ts";
@@ -240,12 +240,12 @@ const applyEvent = (model: ChatModel, info: StatusInfo, e: ConversationEvent): b
     result.isError = e.error;
     result.size = e.size !== null ? e.size : result.text.length;
     result.truncated = e.truncated;
-    // A result widecode's MCP server cut says so in its text, with the full size: read it back when
+    // A result lightcode's MCP server cut says so in its text, with the full size: read it back when
     // the agent's event does not.
     if (result.truncated.length === 0) {
-      const note = result.text.indexOf("[widecode cut this result:");
+      const note = result.text.indexOf("[lightcode cut this result:");
       if (note >= 0) {
-        result.truncated = "widecode";
+        result.truncated = "lightcode";
         const found = /it was (\d+) characters/.exec(result.text);
         if (found !== null && !e.hasSize) result.size = Number(found[1]);
       }

@@ -1,6 +1,6 @@
-// The daemon's plugins: widecode plugin files (one `widecode.plugin({ id, agent(agent) })` each, the
+// The daemon's plugins: lightcode plugin files (one `lightcode.plugin({ id, agent(agent) })` each, the
 // app's `activate` left to the app) from the built-ins the caller hands in, the store's `plugins/` and
-// a trusted folder's `.widecode/plugins/`, in the app's order: an id defined again replaces the earlier.
+// a trusted folder's `.lightcode/plugins/`, in the app's order: an id defined again replaces the earlier.
 // One QuickJS context per (folder, trusted) pair evaluates every file once, to learn which ids have an
 // agent part; none leaves no engine. A session evaluates the files of its agent parts again and calls
 // each `agent(agent)` with an api of its own; handlers, tools and commands are registered through the
@@ -247,7 +247,7 @@ export class Extensions extends HostHandler {
   /** The folders the plugin files are read from: the store's, and a trusted folder's. */
   private pluginDirs(): string[] {
     const out: string[] = [this.paths.pluginsDir()];
-    if (this.trusted && this.folder.length > 0) out.push(join(this.folder, ".widecode", "plugins"));
+    if (this.trusted && this.folder.length > 0) out.push(join(this.folder, ".lightcode", "plugins"));
     return out;
   }
 
@@ -324,7 +324,7 @@ export class Extensions extends HostHandler {
     const user = this.pluginsAt(this.paths.configPath());
     for (const id of Object.keys(user)) out[id] = user[id];
     if (this.trusted && this.folder.length > 0) {
-      const project = this.pluginsAt(join(this.folder, ".widecode", "config.json"));
+      const project = this.pluginsAt(join(this.folder, ".lightcode", "config.json"));
       for (const id of Object.keys(project)) out[id] = project[id];
     }
     return out;
@@ -707,7 +707,7 @@ export class Extensions extends HostHandler {
     return typeof r["value"] === "string" ? r["value"] : fallback;
   }
 
-  /** The `_widecode/ui` request a dialog sends. */
+  /** The `_lightcode/ui` request a dialog sends. */
   private dialogParams(sessionId: string, method: string, fields: Record<string, unknown>): Record<string, unknown> {
     const out: Record<string, unknown> = { sessionId, method, title: str(fields["title"]) };
     if (method === "select") {
@@ -722,7 +722,7 @@ export class Extensions extends HostHandler {
     return out;
   }
 
-  /** The `_widecode/ui` notification a ui call sends. */
+  /** The `_lightcode/ui` notification a ui call sends. */
   private uiParams(sessionId: string, method: string, args: unknown[]): Record<string, unknown> {
     const out: Record<string, unknown> = { sessionId, method };
     if (method === "notify") {
@@ -1369,7 +1369,7 @@ export class ExtSession {
     this.owner.cancelDialogs(sessionId);
   }
 
-  /** A `_widecode/plugin` message from the app to plugin `plugin`'s agent part in this instance. */
+  /** A `_lightcode/plugin` message from the app to plugin `plugin`'s agent part in this instance. */
   async receivePlugin(plugin: string, type: string, dataJson: string): Promise<void> {
     const id = this.owner.pluginDispatchId;
     if (id < 0) return;

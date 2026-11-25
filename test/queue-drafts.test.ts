@@ -7,13 +7,13 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Widecode } from "../src/compose.ts";
+import type { Lightcode } from "../src/compose.ts";
 import { Run } from "@lightstart/light/native/tui/lines.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 
 /** The Queue tab's rows at 40 cells, spaces trimmed at their end. */
-const rowsOf = (w: Widecode): string[] => {
+const rowsOf = (w: Lightcode): string[] => {
   const p = w.host.screen.findPanel("queue");
   if (p === null) return [];
   const s = p.view.source;
@@ -24,8 +24,8 @@ const rowsOf = (w: Widecode): string[] => {
 };
 
 const main = async (): Promise<void> => {
-  const folder = mkdtempSync(join(tmpdir(), "widecode-queue-drafts-"));
-  const w = await openWidecode({ folder, load: true });
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-queue-drafts-"));
+  const w = await openLightcode({ folder, load: true });
   const panel = w.host.screen.findPanel("queue");
   if (panel === null) {
     ok("the queue plugin mounted the Queue tab", false);
@@ -74,7 +74,7 @@ const main = async (): Promise<void> => {
   w.host.roles.chat.submit("/queue");
   eq("an empty composer: told there is nothing to queue, the queue unchanged", tell() + " " + badge(), "nothing to queue 1");
 
-  closeWidecode(w);
+  closeLightcode(w);
   rmSync(folder, { recursive: true, force: true });
   done();
 };

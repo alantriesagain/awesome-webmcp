@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @file A stand-in for the box script (`box/box.mjs`) in tests. It keeps the box's state in a JSON
- * file under `FAKE_BOX_DIR` (or `WIDECODE_BOX_DIR`, else a folder under the OS temp folder), and
+ * file under `FAKE_BOX_DIR` (or `LIGHTCODE_BOX_DIR`, else a folder under the OS temp folder), and
  * records each `up`, `proxy`, `ssh`, `jail` and `down` call, its arguments as JSON on a line, in
  * `FAKE_BOX_LOG` (else `fake-box.log` beside the state). `status --json` prints whether the box
  * runs, its projects and whether its proxy runs. `up` sets the box running with the folders it is
@@ -15,7 +15,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const dir = process.env.FAKE_BOX_DIR || process.env.WIDECODE_BOX_DIR || join(tmpdir(), "widecode-fake-box");
+const dir = process.env.FAKE_BOX_DIR || process.env.LIGHTCODE_BOX_DIR || join(tmpdir(), "lightcode-fake-box");
 const statePath = join(dir, "fake-box.json");
 const logPath = process.env.FAKE_BOX_LOG || join(dir, "fake-box.log");
 

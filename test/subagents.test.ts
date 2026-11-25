@@ -1,5 +1,5 @@
 // ffi: @lightstart/plugins/native/ffi.json
-// /subagents: which subagents the session runs, Claude Code's own, widecode's Task over the acp
+// /subagents: which subagents the session runs, Claude Code's own, lightcode's Task over the acp
 // plugin's targets, or both. The choice comes from state.json, else from
 // `replaceClaudeSubagents` and `plugins.claude.keepSubagents`; it reaches Claude Code's start as
 // `--disallowedTools` and `--settings.env.CLAUDE_CODE_SUBAGENT_MODEL`, and is kept for the next
@@ -11,8 +11,8 @@ import { join } from "node:path";
 import { Conversation } from "../src/conversation/conversation.ts";
 import { Answer, Reply } from "../src/conversation/requests.ts";
 import { NoStateFile, StateFile } from "@lightstart/kernel/settings.ts";
-import type { Widecode } from "../src/compose.ts";
-import { closeWidecode, openWidecode } from "./support/app.ts";
+import type { Lightcode } from "../src/compose.ts";
+import { closeLightcode, openLightcode } from "./support/app.ts";
 import { Store } from "../src/services/store.ts";
 import { done, eq, ok } from "@lightstart/test/assert.ts";
 import { until } from "@lightstart/test/headless.ts";
@@ -29,29 +29,29 @@ interface Rec {
 
 const rec = (v: unknown): Rec | null => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Rec) : null);
 
-/** The config the acp plugin's tasks make: widecode's Task over one target, Claude's own replaced when `replace`. */
+/** The config the acp plugin's tasks make: lightcode's Task over one target, Claude's own replaced when `replace`. */
 const taskConfig = (replace: boolean): unknown => ({
   models: { list: ["opus[1m]", "fable[1m]"] },
   acp: { tasks: { replaceClaudeSubagents: replace, targets: { deepseek: { agent: "fake", model: "fake/large" } } } },
 });
 
 /** An app started on `plugins`, with Claude's CLI pointed at the fake and its arguments recorded in `argsFile`; `fixturePath` is the recording it replays. */
-const open = async (folder: string, plugins: unknown, state: StateFile, argsFile: string, withTask: boolean, fixturePath: string = fixture): Promise<{ c: Conversation; w: Widecode }> => {
-  const w = await openWidecode({ folder, plugins, state, load: true });
+const open = async (folder: string, plugins: unknown, state: StateFile, argsFile: string, withTask: boolean, fixturePath: string = fixture): Promise<{ c: Conversation; w: Lightcode }> => {
+  const w = await openLightcode({ folder, plugins, state, load: true });
   const c = w.host.conversation;
   c.executable = fake;
   c.extraArgs.push("--fixture", fixturePath, "--record-args", argsFile);
   if (withTask)
     await until(() => {
       const command = w.host.kernel.commands.find("/subagents");
-      return command !== null && command.onComplete !== null && command.onComplete("widecode").length > 0;
+      return command !== null && command.onComplete !== null && command.onComplete("lightcode").length > 0;
     }, 5000);
   else await new Promise<void>((resolve) => setTimeout(resolve, 100));
   return { c, w };
 };
 
-const quit = (app: { c: Conversation; w: Widecode }): void => {
-  closeWidecode(app.w);
+const quit = (app: { c: Conversation; w: Lightcode }): void => {
+  closeLightcode(app.w);
 };
 
 /** The arguments the fake recorded, one per line. */
@@ -75,7 +75,7 @@ const settingsOf = (args: string[]): Rec | null => {
   }
 };
 
-const said = (w: Widecode): string => w.host.screen.message.peek();
+const said = (w: Lightcode): string => w.host.screen.message.peek();
 
 /** Answer the first open request with its first option, so the fake's turn can end. */
 const answer = (c: Conversation): void => {
@@ -89,24 +89,24 @@ const answer = (c: Conversation): void => {
 };
 
 const main = async (): Promise<void> => {
-  // The config's default: Claude's own subagent tools step aside for widecode's Task.
-  const folder = mkdtempSync(join(tmpdir(), "widecode-subagents-"));
-  const app = await open(folder, taskConfig(true), new NoStateFile(), join(folder, "args-widecode.txt"), true);
+  // The config's default: Claude's own subagent tools step aside for lightcode's Task.
+  const folder = mkdtempSync(join(tmpdir(), "lightcode-subagents-"));
+  const app = await open(folder, taskConfig(true), new NoStateFile(), join(folder, "args-lightcode.txt"), true);
   app.w.host.roles.chat.submit("/subagents");
-  eq("the default says widecode's Task on the target", said(app.w), "subagents: deepseek via Task");
+  eq("the default says lightcode's Task on the target", said(app.w), "subagents: deepseek via Task");
   const command = app.w.host.kernel.commands.find("/subagents");
   const choices = command !== null && command.onComplete !== null ? command.onComplete("") : [];
   const values = choices.map((s) => s.value);
-  ok("the completion has Claude's own, the config's models, and both modes", values.join(",") === "claude,claude opus,claude sonnet,claude haiku,claude opus[1m],claude fable[1m],widecode,both");
-  eq("the current choice is marked", choices.find((s) => s.value === "widecode")?.detail ?? "", "now");
+  ok("the completion has Claude's own, the config's models, and both modes", values.join(",") === "claude,claude opus,claude sonnet,claude haiku,claude opus[1m],claude fable[1m],lightcode,both");
+  eq("the current choice is marked", choices.find((s) => s.value === "lightcode")?.detail ?? "", "now");
   eq("and a prefix narrows it", (command !== null && command.onComplete !== null ? command.onComplete("claude s") : []).map((s) => s.value).join(","), "claude sonnet");
   app.c.send("go", []);
-  const widecodeArgs = await recorded(join(folder, "args-widecode.txt"));
-  eq("widecode's Task starts without Claude's own subagent tools", after(widecodeArgs, "--disallowedTools"), "Task,Agent,TaskStop,SendMessage");
+  const lightcodeArgs = await recorded(join(folder, "args-lightcode.txt"));
+  eq("lightcode's Task starts without Claude's own subagent tools", after(lightcodeArgs, "--disallowedTools"), "Task,Agent,TaskStop,SendMessage");
   quit(app);
 
   // replaceClaudeSubagents off: both, with nothing disallowed.
-  const bothFolder = mkdtempSync(join(tmpdir(), "widecode-subagents-both-"));
+  const bothFolder = mkdtempSync(join(tmpdir(), "lightcode-subagents-both-"));
   const bothApp = await open(bothFolder, taskConfig(false), new NoStateFile(), join(bothFolder, "args.txt"), true);
   bothApp.w.host.roles.chat.submit("/subagents");
   eq("the config's other default is both", said(bothApp.w), "subagents: Claude's own and deepseek");
@@ -115,14 +115,14 @@ const main = async (): Promise<void> => {
   ok("both disallows neither", !bothArgs.includes("--disallowedTools"));
   quit(bothApp);
 
-  // Claude's own on a model: widecode's Task is hidden from Claude and its model goes in the settings.
-  const sonnetFolder = mkdtempSync(join(tmpdir(), "widecode-subagents-sonnet-"));
+  // Claude's own on a model: lightcode's Task is hidden from Claude and its model goes in the settings.
+  const sonnetFolder = mkdtempSync(join(tmpdir(), "lightcode-subagents-sonnet-"));
   const sonnetApp = await open(sonnetFolder, taskConfig(true), new NoStateFile(), join(sonnetFolder, "args.txt"), true);
   sonnetApp.w.host.roles.chat.submit("/subagents claude sonnet");
   eq("choosing Claude's own says it, and when it applies", said(sonnetApp.w), "subagents: Claude's own on sonnet");
   sonnetApp.c.send("go", []);
   const sonnetArgs = await recorded(join(sonnetFolder, "args.txt"));
-  eq("widecode's Task is hidden", after(sonnetArgs, "--disallowedTools"), "mcp__widecode__Task,mcp__widecode__TaskStop,mcp__widecode__SendMessage");
+  eq("lightcode's Task is hidden", after(sonnetArgs, "--disallowedTools"), "mcp__lightcode__Task,mcp__lightcode__TaskStop,mcp__lightcode__SendMessage");
   const sonnetSettings = settingsOf(sonnetArgs);
   const sonnetEnv = rec(sonnetSettings !== null ? sonnetSettings.env : null);
   eq("the subagent model reaches Claude Code", typeof sonnetEnv?.CLAUDE_CODE_SUBAGENT_MODEL === "string" ? sonnetEnv.CLAUDE_CODE_SUBAGENT_MODEL : "", "sonnet");
@@ -131,7 +131,7 @@ const main = async (): Promise<void> => {
   quit(sonnetApp);
 
   // Claude's own with no model: the variable is left out.
-  const inheritedFolder = mkdtempSync(join(tmpdir(), "widecode-subagents-inherit-"));
+  const inheritedFolder = mkdtempSync(join(tmpdir(), "lightcode-subagents-inherit-"));
   const inheritedApp = await open(inheritedFolder, taskConfig(true), new NoStateFile(), join(inheritedFolder, "args.txt"), true);
   inheritedApp.w.host.roles.chat.submit("/subagents claude");
   inheritedApp.c.send("go", []);
@@ -140,7 +140,7 @@ const main = async (): Promise<void> => {
   quit(inheritedApp);
 
   // Both chosen explicitly: neither is disallowed.
-  const pairFolder = mkdtempSync(join(tmpdir(), "widecode-subagents-pair-"));
+  const pairFolder = mkdtempSync(join(tmpdir(), "lightcode-subagents-pair-"));
   const pairApp = await open(pairFolder, taskConfig(true), new NoStateFile(), join(pairFolder, "args.txt"), true);
   pairApp.w.host.roles.chat.submit("/subagents both");
   eq("both is told", said(pairApp.w), "subagents: Claude's own and deepseek");
@@ -149,26 +149,26 @@ const main = async (): Promise<void> => {
   ok("both keeps both", !pairArgs.includes("--disallowedTools"));
   quit(pairApp);
 
-  // The choice is kept for the next widecode.
-  const home = mkdtempSync(join(tmpdir(), "widecode-subagents-home-"));
-  const keptFolder = mkdtempSync(join(tmpdir(), "widecode-subagents-kept-"));
+  // The choice is kept for the next lightcode.
+  const home = mkdtempSync(join(tmpdir(), "lightcode-subagents-home-"));
+  const keptFolder = mkdtempSync(join(tmpdir(), "lightcode-subagents-kept-"));
   const first = await open(keptFolder, taskConfig(true), new Store(home).stateFile(), join(keptFolder, "args.txt"), true);
   first.w.host.roles.chat.submit("/subagents claude sonnet");
   quit(first);
   const kept = await open(keptFolder, taskConfig(true), new Store(home).stateFile(), join(keptFolder, "args-kept.txt"), true);
   kept.w.host.roles.chat.submit("/subagents");
-  eq("the next widecode starts with it", said(kept.w), "subagents: Claude's own on sonnet");
+  eq("the next lightcode starts with it", said(kept.w), "subagents: Claude's own on sonnet");
   quit(kept);
 
   // No acp targets: only Claude's own are offered, whatever the config says.
-  const aloneFolder = mkdtempSync(join(tmpdir(), "widecode-subagents-alone-"));
+  const aloneFolder = mkdtempSync(join(tmpdir(), "lightcode-subagents-alone-"));
   const aloneApp = await open(aloneFolder, {}, new NoStateFile(), join(aloneFolder, "args.txt"), false);
   const aloneCommand = aloneApp.w.host.kernel.commands.find("/subagents");
   const aloneValues = aloneCommand !== null && aloneCommand.onComplete !== null ? aloneCommand.onComplete("").map((s) => s.value) : ["none"];
-  ok("without widecode's Task only Claude's own are listed", aloneValues.every((v) => v.startsWith("claude")) && !aloneValues.includes("widecode") && !aloneValues.includes("both"));
+  ok("without lightcode's Task only Claude's own are listed", aloneValues.every((v) => v.startsWith("claude")) && !aloneValues.includes("lightcode") && !aloneValues.includes("both"));
   aloneApp.w.host.roles.chat.submit("/subagents");
   eq("and the default is Claude's own", said(aloneApp.w), "subagents: Claude's own");
-  aloneApp.w.host.roles.chat.submit("/subagents widecode");
+  aloneApp.w.host.roles.chat.submit("/subagents lightcode");
   ok("a mode it does not offer is refused with the ones it does", said(aloneApp.w).startsWith("subagents: choose "));
   aloneApp.w.host.roles.chat.submit("/subagents claude haiku");
   aloneApp.c.send("go", []);
@@ -178,7 +178,7 @@ const main = async (): Promise<void> => {
 
   // A choice made while a turn is open waits for the turn's end, then restarts the CLI on the same
   // session with the new flags.
-  const openTurnFolder = mkdtempSync(join(tmpdir(), "widecode-subagents-open-turn-"));
+  const openTurnFolder = mkdtempSync(join(tmpdir(), "lightcode-subagents-open-turn-"));
   const openTurnArgs = join(openTurnFolder, "args.txt");
   const openTurnApp = await open(openTurnFolder, taskConfig(true), new NoStateFile(), openTurnArgs, true, askFixture);
   openTurnApp.c.send("go", []);
@@ -193,18 +193,18 @@ const main = async (): Promise<void> => {
   ok("at the turn's end the CLI stops to take the choice", await until(() => !openTurnApp.c.started, 10000));
   openTurnApp.c.send("again", []);
   const resumedArgs = await recorded(openTurnArgs);
-  eq("the next start resumes the session and hides widecode's Task", after(resumedArgs, "--resume") + " | " + after(resumedArgs, "--disallowedTools"), openTurnSid + " | mcp__widecode__Task,mcp__widecode__TaskStop,mcp__widecode__SendMessage");
+  eq("the next start resumes the session and hides lightcode's Task", after(resumedArgs, "--resume") + " | " + after(resumedArgs, "--disallowedTools"), openTurnSid + " | mcp__lightcode__Task,mcp__lightcode__TaskStop,mcp__lightcode__SendMessage");
   const resumedSettings = settingsOf(resumedArgs);
   const resumedEnv = rec(resumedSettings !== null ? resumedSettings.env : null);
   eq("and carries the subagent model", typeof resumedEnv?.CLAUDE_CODE_SUBAGENT_MODEL === "string" ? resumedEnv.CLAUDE_CODE_SUBAGENT_MODEL : "", "sonnet");
   quit(openTurnApp);
 
   // Any model alias or id is taken, but not one with a space.
-  const idFolder = mkdtempSync(join(tmpdir(), "widecode-subagents-id-"));
+  const idFolder = mkdtempSync(join(tmpdir(), "lightcode-subagents-id-"));
   const idArgsFile = join(idFolder, "args.txt");
   const idApp = await open(idFolder, taskConfig(true), new NoStateFile(), idArgsFile, true);
   idApp.w.host.roles.chat.submit("/subagents claude two words");
-  eq("a model with a space is refused with the choices", said(idApp.w), "subagents: choose claude, claude opus, claude sonnet, claude haiku, claude opus[1m], claude fable[1m], widecode, both");
+  eq("a model with a space is refused with the choices", said(idApp.w), "subagents: choose claude, claude opus, claude sonnet, claude haiku, claude opus[1m], claude fable[1m], lightcode, both");
   const idKept = rec(idApp.w.host.kernel.settings.state("claude"));
   eq("and nothing is kept", JSON.stringify(idKept !== null ? idKept.subagents : null), "null");
   idApp.w.host.roles.chat.submit("/subagents claude claude-sonnet-5");
@@ -217,8 +217,8 @@ const main = async (): Promise<void> => {
   quit(idApp);
 
   // Another main agent: /subagents says so and keeps the choice as it was.
-  const acpFolder = mkdtempSync(join(tmpdir(), "widecode-subagents-acp-"));
-  const acpHome = mkdtempSync(join(tmpdir(), "widecode-subagents-acp-home-"));
+  const acpFolder = mkdtempSync(join(tmpdir(), "lightcode-subagents-acp-"));
+  const acpHome = mkdtempSync(join(tmpdir(), "lightcode-subagents-acp-home-"));
   const acpApp = await open(
     acpFolder,
     { acp: { agents: { fake: { name: "Fake", command: ["node", fakeAcp] } }, tasks: { replaceClaudeSubagents: true, targets: { deepseek: { agent: "fake", model: "fake/large" } } } } },
@@ -239,7 +239,7 @@ const main = async (): Promise<void> => {
   quit(acpApp);
 
   // A new model while already in Claude's mode stops the CLI at once; the next message starts it.
-  const modelFolder = mkdtempSync(join(tmpdir(), "widecode-subagents-model-"));
+  const modelFolder = mkdtempSync(join(tmpdir(), "lightcode-subagents-model-"));
   const modelArgs = join(modelFolder, "args.txt");
   const modelApp = await open(modelFolder, taskConfig(true), new NoStateFile(), modelArgs, true, askFixture);
   modelApp.w.host.roles.chat.submit("/subagents claude sonnet");

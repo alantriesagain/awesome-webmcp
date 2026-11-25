@@ -1,4 +1,4 @@
-// The daemon: one per machine, the widecode binary run with --peers-daemon. It listens on the LAN
+// The daemon: one per machine, the lightcode binary run with --peers-daemon. It listens on the LAN
 // for peers (pairing without a token while a code is shown; everything else with one) and on the
 // loopback for the sessions of this machine (the control API behind its own token, in the state
 // file). It keeps the identity and the registry, computes a repository's id (its oldest root

@@ -6,16 +6,16 @@ import { obj, str, list } from "./json.ts";
 /** A setting the agent offers: its config option's id ("" for the older set_mode and set_model), its options and their values, the current one. */
 export interface Setting {
   id: string;
-  options: widecode.AgentOption[];
+  options: lightcode.AgentOption[];
   values: string[];
   current: string;
 }
 
-export const setting = (id: string, options: widecode.AgentOption[], current: string): Setting => ({ id, options, values: options.map((o) => o.value), current });
+export const setting = (id: string, options: lightcode.AgentOption[], current: string): Setting => ({ id, options, values: options.map((o) => o.value), current });
 
 /** A select's options, its groups' included. */
-export const optionsOf = (options: unknown): widecode.AgentOption[] => {
-  const out: widecode.AgentOption[] = [];
+export const optionsOf = (options: unknown): lightcode.AgentOption[] => {
+  const out: lightcode.AgentOption[] = [];
   for (const x of list(options)) {
     const o = obj(x);
     if (o === null) continue;
